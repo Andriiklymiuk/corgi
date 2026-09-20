@@ -147,3 +147,43 @@ func TestTunnelNamePerLaptopAndForeignCredentials(t *testing.T) {
 		t.Fatal("domainOf")
 	}
 }
+
+func TestCodexNotifyLineIsOursOnly(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	changed, theirs, err := enableCodexNotify(path, "/usr/local/bin/corgi")
+	if err != nil || !changed || theirs != "" {
+		t.Fatalf("%v %v %q", changed, err, theirs)
+	}
+	raw, _ := os.ReadFile(path)
+	if !strings.HasPrefix(string(raw), `notify = ["/usr/local/bin/corgi", "agent", "event", "stop", "--agent", "codex", "--notify"]`) {
+		t.Fatalf("%s", raw)
+	}
+	// Idempotent; a moved binary rewrites the line; a table stays below it.
+	_ = os.WriteFile(path, append(raw, []byte("[model_providers.x]\nname = \"x\"\n")...), 0o600)
+	if changed, _, _ := enableCodexNotify(path, "/usr/local/bin/corgi"); changed {
+		t.Fatal("same line twice is no change")
+	}
+	if changed, _, _ := enableCodexNotify(path, "/opt/corgi"); !changed {
+		t.Fatal("a new path rewrites our line")
+	}
+	raw, _ = os.ReadFile(path)
+	if strings.Count(string(raw), "notify =") != 1 || !strings.Contains(string(raw), "[model_providers.x]") {
+		t.Fatalf("%s", raw)
+	}
+	// Someone else's notify is left alone.
+	_ = os.WriteFile(path, []byte("notify = [\"say\", \"done\"]\n"), 0o600)
+	if changed, theirs, _ := enableCodexNotify(path, "/opt/corgi"); changed || theirs == "" {
+		t.Fatal("their notify stays")
+	}
+	if removed, _ := disableCodexNotify(path); removed {
+		t.Fatal("disable never removes theirs")
+	}
+	_ = os.WriteFile(path, []byte("notify = [\"/opt/corgi\", \"agent\", \"event\", \"stop\", \"--agent\", \"codex\", \"--notify\"]\nfoo = 1\n"), 0o600)
+	if removed, _ := disableCodexNotify(path); !removed {
+		t.Fatal("disable removes ours")
+	}
+	raw, _ = os.ReadFile(path)
+	if string(raw) != "foo = 1\n" {
+		t.Fatalf("%q", raw)
+	}
+}

@@ -35,6 +35,7 @@ corgi agent watch enable [flags]
   -h, --help                                  help for enable
       --interval string                       Poll interval, e.g. 3m; 0 means webhooks only
       --isolate                               Give every unattended run its own worktrees on a corgi/<ref> branch, so it never touches your checkout
+      --kind string                           The agent that runs here: claude (default) or codex; also what corgi agent claude opens in this workspace
       --labels string                         Only issues with one of these labels (comma-separated), e.g. bug,defect
       --lease                                 Claim a ticket on the tracker before working it, so a second machine watching the same board leaves it alone
       --lessons                               Write what the workspace learned the hard way — a review on a PR of mine, a check that stayed red, a bot that failed — one line each for every new session to read (corgi agent lesson list)

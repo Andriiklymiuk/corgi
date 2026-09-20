@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
-	"sort"
 	"strings"
 	"time"
 
@@ -68,11 +66,36 @@ The phone does the invite and join for you when it is paired with both.`,
 				state = "silent since " + ago(now.Sub(p.SeenAt))
 			}
 			fmt.Printf("  %s%s  %s  %s\n", p.Name, leadWord(p.Lead), state, p.URL)
+			if p.Unwell != "" {
+				fmt.Printf("    ⚠ cannot run fixes: %s\n", p.Unwell)
+			}
+			if p.Budget > 0 {
+				fmt.Printf("    %d%% of its five-hour window free\n", p.Budget)
+			}
 			if len(p.Watches) > 0 {
 				fmt.Printf("    watches %s\n", strings.Join(p.Watches, ", "))
 			}
+			working := 0
+			for _, s := range p.Sessions {
+				if s.Status == "working" || s.Status == "needs_input" {
+					working++
+					fmt.Printf("    %s %s%s\n", s.Status, firstNonEmpty(s.Display, s.Label), ticketWord(s.Ticket))
+				}
+			}
+			for _, r := range p.Runs {
+				if r.State == "failed" || r.State == "blocked" {
+					fmt.Printf("    %s %s: %s\n", r.State, r.Ref, r.Reason)
+				}
+			}
 		}
 	},
+}
+
+func ticketWord(t string) string {
+	if t == "" {
+		return ""
+	}
+	return " · " + t
 }
 
 func leadWord(lead bool) string {
@@ -343,34 +366,19 @@ func launchPeersPulseHandler(w http.ResponseWriter, r *http.Request) {
 		in.Watches = in.Watches[:200]
 	}
 	now := time.Now()
-	var out peers.Pulse
 	err = peers.Update(peers.Path(dir), func(s *peers.Store) {
 		for i := range s.Peers {
 			if strings.EqualFold(s.Peers[i].Name, device.Name) {
-				s.Peers[i].SeenAt, s.Peers[i].Watches, s.Peers[i].Lead, s.Peers[i].Version = now, in.Watches, in.Lead, in.Version
+				s.Peers[i].Absorb(in, now)
 			}
 		}
-		out = peers.Pulse{Name: peers.Me(), Version: APP_VERSION, Lead: s.Lead, At: now.UnixMilli()}
 	})
 	if err != nil {
 		writeLaunchError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	out.Watches = watchIdentitiesHere(dir)
-	writeLaunchJSON(w, out)
-}
-
-// watchIdentitiesHere is what this laptop watches, as the daemon published
-// it, so a peer's pulse gets an answer even between daemon ticks.
-func watchIdentitiesHere(dir string) []string {
-	raw, err := os.ReadFile(daemon.WatchIdentitiesPath(dir))
-	if err != nil {
-		return []string{}
-	}
-	var ids []string
-	if json.Unmarshal(raw, &ids) != nil {
-		return []string{}
-	}
-	sort.Strings(ids)
-	return ids
+	// The daemon reads the files it keeps; so does this answer, so a peer
+	// hears the board even between daemon ticks.
+	writeLaunchJSON(w, daemon.LocalPulse(dir, APP_VERSION))
+	nudgeDaemon(dir)
 }

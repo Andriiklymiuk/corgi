@@ -67,6 +67,9 @@ func (s *State) Unignore(key string) error {
 	return writeIgnored(s.agentDir, kept)
 }
 
+// IgnoredKeys is every ticket ignored on this laptop, for a peer to copy.
+func IgnoredKeys(agentDir string) []string { return readIgnored(agentDir) }
+
 func (s *State) IsIgnored(key string) bool {
 	return containsString(readIgnored(s.agentDir), key)
 }

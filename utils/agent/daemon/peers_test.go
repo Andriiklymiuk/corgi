@@ -2,6 +2,8 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -51,5 +53,39 @@ func TestWatchIdentitiesAndPeerGate(t *testing.T) {
 	}
 	if d.peerLeads(WatchSpec{Workspace: "docs"}) != "" {
 		t.Fatal("a workspace with no tracker is nobody's to share")
+	}
+}
+
+func TestLocalPulseAndAbsorb(t *testing.T) {
+	d := New("test", t.TempDir())
+	log := &watch.FixLog{Started: []watch.FixRecord{
+		{Key: "k1", Workspace: "api", Ref: "ENG-1", StartedAt: time.Now().Add(-2 * time.Hour), FinishedAt: time.Now().Add(-time.Hour), Failure: watch.FailureNoAuth, Error: "please run /login"},
+		{Key: "k2", Workspace: "api", Ref: "ENG-2", StartedAt: time.Now().Add(-10 * time.Minute)},
+	}}
+	runs := peerRunsOf(log, time.Now())
+	p := LocalPulse(d.Dir, "test")
+	p.Runs, p.Unwell = runs, unwellFrom(log, p.Budget, time.Now())
+	if p.Name == "" || len(p.Runs) != 2 || p.Runs[0].State != "running" || p.Runs[1].State != "failed" || p.Runs[1].Reason == "" {
+		t.Fatalf("%+v", p.Runs)
+	}
+	if p.Unwell != watch.FailureNoAuth {
+		t.Fatalf("the newest finished run wanted a login: %q", p.Unwell)
+	}
+	// A peer that ignored a ticket: ignored here too; its board lands on ours.
+	_ = peers.Update(peers.Path(d.Dir), func(s *peers.Store) {
+		s.Peers = []peers.Peer{{Name: "home", SeenAt: time.Now(), Ignored: []string{"linear:ENG-9"}, Sessions: []peers.PeerSession{{ID: "x", Label: "api", Status: "working", Ticket: "ENG-3"}}}}
+	})
+	d.watchState = watch.LoadState(d.Dir)
+	d.absorbPeers()
+	if !d.watchState.IsIgnored("linear:ENG-9") {
+		t.Fatal("a peer's ignore is ours")
+	}
+	st := d.Sessions.Snapshot(time.Now())
+	if len(st.Peers) != 1 || st.Peers[0].Name != "home" || len(st.Peers[0].Sessions) != 1 || !st.Peers[0].Alive {
+		t.Fatalf("board carries the peer: %+v", st.Peers)
+	}
+	raw, _ := json.Marshal(st)
+	if strings.Contains(string(raw), "token") {
+		t.Fatal("no secrets on the board")
 	}
 }

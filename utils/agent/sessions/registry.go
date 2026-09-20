@@ -1,6 +1,8 @@
 package sessions
 
 import (
+	"andriiklymiuk/corgi/utils/agent/peers"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -40,6 +42,7 @@ type Registry struct {
 	notice       string
 	noticeAt     time.Time
 	accounts     []Account
+	peers        []PeerBoard
 	ended        []Session
 	AutoContinue bool
 	mutedUntil   time.Time
@@ -65,6 +68,19 @@ type State struct {
 	Groups          []Group   `json:"groups,omitempty"`
 	Windows         []Window  `json:"windows,omitempty"`
 	Accounts        []Account `json:"accounts,omitempty"`
+	// Peers are the other laptops' boards, as their last pulse told them (2.29.1).
+	Peers []PeerBoard `json:"peers,omitempty"`
+}
+
+// PeerBoard is what another laptop is doing: never its token or key.
+type PeerBoard struct {
+	Name     string              `json:"name"`
+	Alive    bool                `json:"alive"`
+	Lead     bool                `json:"lead,omitempty"`
+	Budget   int                 `json:"budget,omitempty"`
+	SeenAt   time.Time           `json:"seenAt,omitempty"`
+	Sessions []peers.PeerSession `json:"sessions,omitempty"`
+	Runs     []peers.PeerRun     `json:"runs,omitempty"`
 }
 
 type Slot struct {
@@ -1132,6 +1148,20 @@ func (r *Registry) SetAccounts(accounts []Account) bool {
 	return true
 }
 
+// SetPeers replaces the other laptops' boards; true when anything changed.
+func (r *Registry) SetPeers(list []PeerBoard) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	a, _ := json.Marshal(r.peers)
+	b, _ := json.Marshal(list)
+	if bytes.Equal(a, b) {
+		return false
+	}
+	r.peers = list
+	r.touch()
+	return true
+}
+
 func sameAccounts(a, b []Account) bool {
 	if len(a) != len(b) {
 		return false
@@ -1559,6 +1589,7 @@ func (r *Registry) snapshotLocked(now time.Time) State {
 	st.Groups = Groups(st.Sessions)
 	st.Windows = r.sortedWindowsLocked()
 	st.Accounts = append([]Account(nil), r.accounts...)
+	st.Peers = append([]PeerBoard(nil), r.peers...)
 	st.Ended = append([]Session(nil), r.ended...)
 	if w, ok := r.frontWindowLocked(); ok {
 		st.FrontWindow = w.ID

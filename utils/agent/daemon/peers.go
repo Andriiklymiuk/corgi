@@ -6,12 +6,16 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/agent/peers"
+	"andriiklymiuk/corgi/utils/agent/sessions"
+	"andriiklymiuk/corgi/utils/agent/usage"
+	"andriiklymiuk/corgi/utils/agent/watch"
 	"andriiklymiuk/corgi/utils/atomicfile"
 )
 
@@ -88,7 +92,12 @@ func (d *Daemon) peerLeads(spec WatchSpec) string {
 	if err != nil || len(store.Peers) == 0 {
 		return ""
 	}
-	leader := peers.Leader(store, peers.Me(), ids, time.Now())
+	budget := freeBudget(spec.ConfigDir)
+	var log *watch.FixLog
+	if d.watchState != nil {
+		log = d.watchState.Fixes
+	}
+	leader := peers.LeaderAmong(store, peers.Me(), ids, budget, unwellFrom(log, budget, time.Now()), time.Now())
 	if leader == "" {
 		return ""
 	}
@@ -123,9 +132,12 @@ func (d *Daemon) pulsePeersOnce(ctx context.Context) {
 	path := peers.Path(d.Dir)
 	store, err := peers.Load(path)
 	if err != nil || len(store.Peers) == 0 {
+		d.absorbPeers()
 		return
 	}
-	mine := peers.Pulse{Name: peers.Me(), Version: d.Version, Watches: d.allWatchIdentities(), Lead: store.Lead, At: time.Now().UnixMilli()}
+	defer d.absorbPeers()
+	mine := LocalPulse(d.Dir, d.Version)
+	mine.Watches = d.allWatchIdentities()
 	var wg sync.WaitGroup
 	for _, p := range store.Peers {
 		p := p
@@ -142,11 +154,236 @@ func (d *Daemon) pulsePeersOnce(ctx context.Context) {
 			_ = peers.Update(path, func(s *peers.Store) {
 				for i := range s.Peers {
 					if strings.EqualFold(s.Peers[i].Name, p.Name) {
-						s.Peers[i].SeenAt, s.Peers[i].Watches, s.Peers[i].Lead, s.Peers[i].Version = now, heard.Watches, heard.Lead, heard.Version
+						s.Peers[i].Absorb(heard, now)
 					}
 				}
 			})
 		}()
 	}
 	wg.Wait()
+}
+
+// ---- what a pulse carries, and what this laptop does with what it hears --
+
+// LocalPulse is this laptop as its peers should see it, read from the
+// files the daemon keeps — so the MCP server answers a pulse the same way
+// the daemon sends one.
+func LocalPulse(dir, version string) peers.Pulse {
+	store, _ := peers.Load(peers.Path(dir))
+	p := peers.Pulse{Name: peers.Me(), Version: version, Watches: []string{}, At: time.Now().UnixMilli(), Budget: freeBudget(""), Ignored: watch.IgnoredKeys(dir)}
+	if store != nil {
+		p.Lead = store.Lead
+	}
+	if raw, err := os.ReadFile(WatchIdentitiesPath(dir)); err == nil {
+		_ = json.Unmarshal(raw, &p.Watches)
+	}
+	if raw, err := os.ReadFile(SessionsPath(dir)); err == nil {
+		var st sessions.State
+		if json.Unmarshal(raw, &st) == nil {
+			p.Sessions = peerSessionsOf(st.Sessions)
+		}
+	}
+	log := watch.LoadFixLog(dir)
+	p.Runs = peerRunsOf(log, time.Now())
+	p.Unwell = unwellFrom(log, p.Budget, time.Now())
+	if p.Ignored == nil {
+		p.Ignored = []string{}
+	}
+	return p
+}
+
+// freeBudget is the percent of the five-hour window still free for the
+// account in configDir ("" = the default one); -1 when unknown.
+func freeBudget(configDir string) int {
+	lim, ok := usage.ReadLimits(configDir)
+	if !ok || lim.FetchedAt.IsZero() || time.Since(lim.FetchedAt) > 2*time.Hour {
+		return -1
+	}
+	free := 100 - lim.FiveHour.Percent
+	if free < 1 {
+		free = 1
+	}
+	return free
+}
+
+// unwellFrom says why this laptop cannot run fixes: its newest finished
+// run of the day failed on a login or a permission and nothing has worked
+// since, or the five-hour window is all but spent.
+func unwellFrom(log *watch.FixLog, budget int, now time.Time) string {
+	if budget >= 0 && budget <= 2 {
+		return "limit"
+	}
+	if log == nil {
+		return ""
+	}
+	for i := len(log.Started) - 1; i >= 0; i-- {
+		r := log.Started[i]
+		if r.FinishedAt.IsZero() {
+			continue
+		}
+		if now.Sub(r.FinishedAt) > 24*time.Hour {
+			break
+		}
+		if watch.Blocking(r.Failure) {
+			return r.Failure
+		}
+		return ""
+	}
+	return ""
+}
+
+func peerSessionsOf(list []sessions.Session) []peers.PeerSession {
+	out := []peers.PeerSession{}
+	for _, s := range list {
+		if s.Status == sessions.StatusGone {
+			continue
+		}
+		ps := peers.PeerSession{ID: s.ID, Label: s.Label, Display: s.Display, Status: string(s.Status), Ticket: s.Ticket, Branch: s.Branch, Detail: s.Detail, Agent: s.Agent, Since: s.StartedAt.UnixMilli()}
+		if s.Pending != nil {
+			ps.Pending = strings.TrimSpace(s.Pending.Tool + " " + s.Pending.Subject)
+		}
+		out = append(out, ps)
+		if len(out) == 50 {
+			break
+		}
+	}
+	return out
+}
+
+// peerRunsOf is the last day of unattended runs: running, done, failed
+// (with why) or blocked, newest first.
+func peerRunsOf(log *watch.FixLog, now time.Time) []peers.PeerRun {
+	out := []peers.PeerRun{}
+	if log == nil {
+		return out
+	}
+	for i := len(log.Started) - 1; i >= 0 && len(out) < 50; i-- {
+		r := log.Started[i]
+		at := r.FinishedAt
+		if at.IsZero() {
+			at = r.StartedAt
+		}
+		if now.Sub(at) > 24*time.Hour {
+			continue
+		}
+		pr := peers.PeerRun{Ref: r.Ref, Workspace: r.Workspace, State: "done", At: at.UnixMilli()}
+		switch {
+		case r.FinishedAt.IsZero():
+			pr.State = "running"
+		case r.Failure != "" || r.Error != "":
+			pr.State = "failed"
+			pr.Reason = firstNonEmpty(r.Failure, r.Error)
+		}
+		if b, ok := log.Blocks[r.Workspace+"/"+r.Ref]; ok {
+			pr.State, pr.Reason = "blocked", b.Reason
+		}
+		out = append(out, pr)
+	}
+	return out
+}
+
+// absorbPeers is what this daemon does with what the peers last said:
+// their boards go on this board, their ignored tickets are ignored here,
+// a session on the same ticket or branch as one of theirs rings once, and
+// a run that failed over there is logged once.
+func (d *Daemon) absorbPeers() {
+	store, err := peers.Load(peers.Path(d.Dir))
+	if err != nil || len(store.Peers) == 0 {
+		if d.Sessions != nil {
+			d.Sessions.SetPeers(nil)
+		}
+		return
+	}
+	now := time.Now()
+	boards := make([]sessions.PeerBoard, 0, len(store.Peers))
+	for _, p := range store.Peers {
+		boards = append(boards, sessions.PeerBoard{Name: p.Name, Alive: p.Alive(now), Lead: p.Lead, Budget: p.Budget, SeenAt: p.SeenAt, Sessions: p.Sessions, Runs: p.Runs})
+		if !p.Alive(now) {
+			continue
+		}
+		if d.watchState != nil {
+			for _, key := range p.Ignored {
+				if !d.watchState.IsIgnored(key) {
+					_ = d.watchState.Ignore(key)
+				}
+			}
+		}
+		if p.Unwell != "" && d.rangOnce("unwell|"+p.Name+"|"+p.Unwell, now) {
+			why := "its agent wants a login"
+			if p.Unwell == "limit" {
+				why = "its five-hour window is spent"
+			}
+			go d.notifyAttention("corgi agent", p.Name+" cannot run fixes ("+why+") — this laptop leads the trackers you share until it can", "")
+		}
+		for _, r := range p.Runs {
+			if r.State != "failed" && r.State != "blocked" {
+				continue
+			}
+			if d.rangOnce("run|"+p.Name+"|"+r.Ref+"|"+r.State+"|"+strconv.FormatInt(r.At, 10), now) {
+				utils.Infof("agent: on %s, %s %s: %s\n", p.Name, r.Ref, r.State, r.Reason)
+			}
+		}
+		d.ringPeerCrossings(p, now)
+	}
+	if d.Sessions != nil {
+		d.Sessions.SetPeers(boards)
+	}
+}
+
+// ringPeerCrossings rings once when a session here and one on the peer
+// work the same ticket, or the same branch of the same repo.
+func (d *Daemon) ringPeerCrossings(p peers.Peer, now time.Time) {
+	if d.Sessions == nil {
+		return
+	}
+	for _, mine := range d.Sessions.Sessions() {
+		switch mine.Status {
+		case sessions.StatusWorking, sessions.StatusNeedsInput, sessions.StatusDone:
+		default:
+			continue
+		}
+		for _, theirs := range p.Sessions {
+			sameTicket := mine.Ticket != "" && strings.EqualFold(mine.Ticket, theirs.Ticket)
+			sameBranch := mine.Branch != "" && mine.Branch == theirs.Branch && strings.EqualFold(mine.Label, theirs.Label) && !isMainBranch(mine.Branch)
+			if !sameTicket && !sameBranch {
+				continue
+			}
+			what := "ticket " + mine.Ticket
+			if !sameTicket {
+				what = "branch " + mine.Branch
+			}
+			if d.rangOnce("cross|"+mine.ID+"|"+p.Name+"|"+theirs.ID, now) {
+				go d.notifyAttention(notifyTitlePrefix+label(mine), "crossing laptops: "+p.Name+" is also on "+what+" ("+firstNonEmpty(theirs.Display, theirs.Label)+", "+theirs.Status+")", mine.Folder)
+			}
+		}
+	}
+}
+
+func isMainBranch(b string) bool {
+	switch strings.ToLower(b) {
+	case "main", "master", "develop", "dev", "trunk":
+		return true
+	}
+	return false
+}
+
+var rangMu sync.Mutex
+var rang = map[string]time.Time{}
+
+// rangOnce is true the first time a key is seen (and again after a day).
+func (d *Daemon) rangOnce(key string, now time.Time) bool {
+	rangMu.Lock()
+	defer rangMu.Unlock()
+	if at, ok := rang[key]; ok && now.Sub(at) < 24*time.Hour {
+		return false
+	}
+	rang[key] = now
+	if len(rang) > 5000 {
+		for k, at := range rang {
+			if now.Sub(at) > 24*time.Hour {
+				delete(rang, k)
+			}
+		}
+	}
+	return true
 }
