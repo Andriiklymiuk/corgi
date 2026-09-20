@@ -358,6 +358,9 @@ func (d *Daemon) runDynamic(ctx context.Context, configs []supervisor.SpawnConfi
 	pulseDone := make(chan struct{})
 	go func() { defer close(pulseDone); d.pulse(ctx) }()
 	defer func() { <-pulseDone }()
+	peersDone := make(chan struct{})
+	go func() { defer close(peersDone); d.pulsePeers(ctx) }()
+	defer func() { <-peersDone }()
 
 	ticker := time.NewTicker(d.pollInterval(d.CommandTick))
 	defer ticker.Stop()

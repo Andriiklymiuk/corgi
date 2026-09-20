@@ -500,16 +500,25 @@ func TestRunAgentTunnelSetupSavesTheSettings(t *testing.T) {
 
 	runAgentTunnelSetup(tunnelSetupCmd(t, "cloudflared", false), []string{"corgi.example.com"})
 
+	// No name given: the tunnel is named after this laptop, so two laptops
+	// on one Cloudflare account never fight over "corgi-agent".
+	name := defaultTunnelName("")
 	saved := loadUpSettings(agentD)
-	if saved.TunnelHostname != "corgi.example.com" || saved.TunnelName != "corgi-agent" || saved.Provider != "cloudflared" {
+	if saved.TunnelHostname != "corgi.example.com" || saved.TunnelName != name || saved.Provider != "cloudflared" {
 		t.Fatalf("settings = %+v", saved)
 	}
 	joined := strings.Join(ran, "\n")
-	if !strings.Contains(joined, "tunnel create corgi-agent") {
+	if !strings.Contains(joined, "tunnel create "+name) {
 		t.Errorf("a tunnel missing from the list must be created:\n%s", joined)
 	}
-	if !strings.Contains(joined, "route dns corgi-agent corgi.example.com") {
+	if !strings.Contains(joined, "route dns "+name+" corgi.example.com") {
 		t.Errorf("the DNS route must run:\n%s", joined)
+	}
+	// A saved name stays the name.
+	ran = nil
+	runAgentTunnelSetup(tunnelSetupCmd(t, "cloudflared", false), []string{"corgi.example.com"})
+	if got := loadUpSettings(agentD).TunnelName; got != name {
+		t.Fatalf("second run keeps %q, got %q", name, got)
 	}
 }
 

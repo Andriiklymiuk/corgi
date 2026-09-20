@@ -874,13 +874,13 @@ func watchSpecOf(dir string, w workspace.Workspace, resolved config.Resolved) (d
 	wc := resolved.Watch
 	if wc == nil || !wc.Enabled {
 		if len(resolved.Routines) > 0 {
-			return daemon.WatchSpec{Workspace: w.ID, Dir: w.AbsPath, ConfigDir: expandTilde(resolved.ConfigDir),
+			return daemon.WatchSpec{Workspace: w.ID, Dir: w.AbsPath, ConfigDir: expandTilde(resolved.ConfigDir), Kind: resolved.Kind, Bin: expandTilde(resolved.Bin),
 				SkipPermissions: resolved.DangerouslySkipPermissions, Models: resolved.Models, Routines: resolved.Routines}, true
 		}
 		return daemon.WatchSpec{}, false
 	}
 	secrets := watch.LoadSecretsFor(dir, w.ID)
-	spec := daemon.WatchSpec{Workspace: w.ID, Dir: w.AbsPath, ConfigDir: expandTilde(resolved.ConfigDir), Project: wc.Project, Repos: wc.Repos,
+	spec := daemon.WatchSpec{Workspace: w.ID, Dir: w.AbsPath, ConfigDir: expandTilde(resolved.ConfigDir), Kind: resolved.Kind, Bin: expandTilde(resolved.Bin), Project: wc.Project, Repos: wc.Repos,
 		Rules:    watch.Rules{Enabled: true, Labels: wc.Labels, States: wc.States, Assignee: wc.Assignee, Comments: wc.Comments, PRs: wc.PRs, CI: wc.CI, Reviews: wc.Reviews, From: wc.From, Bots: wc.Bots},
 		Interval: 3 * time.Minute, Action: "notify", SkipPermissions: resolved.DangerouslySkipPermissions,
 		MaxFixesPerHour: wc.MaxFixesPerHour, MaxFixesPerDay: wc.MaxFixesPerDay, MaxFixesTotal: wc.MaxFixesTotal, CapSince: wc.CapSince, Quiet: wc.Quiet, FixKinds: wc.FixKinds, DoneWhen: wc.DoneWhen, PlanReview: wc.PlanReview, Lease: wc.Lease, Isolate: wc.Isolate, Slots: wc.Slots, Batch: wc.Batch, RerunCI: wc.RerunCI, Silent: wc.Silent, NoRetry: wc.NoRetry, ReviewStatus: wc.ReviewStatus, Approve: wc.Approve, Models: resolved.Models, Routines: resolved.Routines}

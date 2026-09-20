@@ -40,13 +40,17 @@ plugin mechanism it has:
   corgi agent event stop --agent codex --session $ID
   corgi agent event end --agent codex --session $ID
 
+Codex: in ~/.codex/config.toml set
+  notify = ["corgi", "agent", "event", "stop", "--agent", "codex", "--notify"]
+and every finished turn lands on the board (Codex appends its JSON as the last
+argument; --notify reads the thread id, cwd and last message from it).
 Without --session the id is the calling process — fine for an agent that runs
 one conversation per process. With - the event is read from stdin as JSON
 ({session_id, cwd, tool_name, tool_input}), the shape Claude Code's hooks use.
 The session shows on every surface with the agent's name; a permission with a
 risk word colours Allow like any other. Never prints, never fails: the agent
 is unaffected whatever corgi's state is.`,
-	Args: cobra.ExactArgs(1),
+	Args: cobra.RangeArgs(1, 2),
 	Run: func(cmd *cobra.Command, args []string) {
 		name, ok := eventNames[strings.ToLower(strings.TrimSpace(args[0]))]
 		if !ok {
@@ -60,6 +64,22 @@ is unaffected whatever corgi's state is.`,
 		input, _ := f.GetString("input")
 		message, _ := f.GetString("message")
 		fromStdin, _ := f.GetBool("stdin")
+		notify, _ := f.GetBool("notify")
+		if notify && len(args) == 2 {
+			// Codex's notify hook appends its JSON as the last argument.
+			var in struct {
+				Type    string `json:"type"`
+				Thread  string `json:"thread-id"`
+				Cwd     string `json:"cwd"`
+				Message string `json:"last-assistant-message"`
+			}
+			if json.Unmarshal([]byte(args[1]), &in) == nil {
+				session = firstNonEmpty(session, in.Thread)
+				cwd = firstNonEmpty(cwd, in.Cwd)
+				message = firstNonEmpty(message, in.Message)
+				agent = firstNonEmpty(agent, "codex")
+			}
+		}
 		if fromStdin {
 			var in struct {
 				SessionID string          `json:"session_id"`
@@ -138,6 +158,7 @@ func agentEvent(name, agent, session, cwd, tool, input, message string, getenv f
 func init() {
 	f := agentEventCmd.Flags()
 	f.String("agent", "", "The agent's name — codex, gemini, opencode — shown on the board")
+	f.Bool("notify", false, "The last argument is Codex's notify JSON (thread-id, cwd, last-assistant-message)")
 	f.String("session", "", "The agent's own session id; default: one per calling process")
 	f.String("cwd", "", "The directory the session works in; default: the current one")
 	f.String("tool", "", "The tool, for tool, done, fail and permission")

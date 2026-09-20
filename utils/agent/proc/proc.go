@@ -84,19 +84,39 @@ func Owner(chain []Process) (Process, bool) {
 
 func isClaude(name string) bool {
 	base := filepath.Base(name)
-	return base == "claude" || base == "node" || base == "bun"
+	return base == "claude" || base == "codex" || base == "node" || base == "bun"
+}
+
+// HarnessOf names the coding agent a process is — "claude", "codex" — or
+// "" when it is neither.
+func HarnessOf(p Process) string {
+	base := filepath.Base(p.Name)
+	if base == "codex" {
+		return "codex"
+	}
+	if base == "node" || base == "bun" {
+		for _, arg := range strings.Fields(strings.ToLower(p.Args)) {
+			if filepath.Base(arg) == "codex" {
+				return "codex"
+			}
+		}
+	}
+	if LooksLikeClaude(p) {
+		return "claude"
+	}
+	return ""
 }
 
 func LooksLikeClaude(p Process) bool {
 	base := filepath.Base(p.Name)
-	if base == "claude" {
+	if base == "claude" || base == "codex" {
 		return true
 	}
 	if base != "node" && base != "bun" {
 		return false
 	}
 	for _, arg := range strings.Fields(strings.ToLower(p.Args)) {
-		if filepath.Base(arg) == "claude" {
+		if b := filepath.Base(arg); b == "claude" || b == "codex" {
 			return true
 		}
 		for _, dir := range strings.Split(filepath.Dir(arg), "/") {

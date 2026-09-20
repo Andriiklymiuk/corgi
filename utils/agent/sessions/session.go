@@ -111,10 +111,12 @@ type Event struct {
 	TermSession  string         `json:"termSession,omitempty"`
 	TmuxPane     string         `json:"tmuxPane,omitempty"`
 	ClaudePID    int            `json:"claudePid,omitempty"`
-	Ancestors    []int          `json:"ancestors,omitempty"`
-	Names        []string       `json:"names,omitempty"`
-	TTY          uint64         `json:"tty,omitempty"`
-	At           time.Time      `json:"at"`
+	// Harness is the agent behind the session when it is not Claude Code ("codex").
+	Harness   string    `json:"harness,omitempty"`
+	Ancestors []int     `json:"ancestors,omitempty"`
+	Names     []string  `json:"names,omitempty"`
+	TTY       uint64    `json:"tty,omitempty"`
+	At        time.Time `json:"at"`
 }
 
 type Host struct {

@@ -402,7 +402,7 @@ func watchPairRequests(dir string, window *pairWindow) {
 		}
 		_ = os.Remove(req)
 		role := strings.TrimSpace(string(raw))
-		if role != pairing.RoleViewer {
+		if role != pairing.RoleViewer && role != pairing.RolePeer {
 			role = ""
 		}
 		session, code, err := pairing.NewSession()

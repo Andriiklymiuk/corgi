@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"andriiklymiuk/corgi/utils/agent/harness"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -29,9 +30,13 @@ var runClaudePrint = func(ctx context.Context, model, system, prompt string) (st
 	if err != nil {
 		return "", err
 	}
-	args := []string{"-p", "--output-format", "text", "--model", model, "--append-system-prompt", system}
-	cmd := exec.CommandContext(ctx, launch.Bin, args...)
-	cmd.Stdin = strings.NewReader(prompt)
+	h := harness.For(launch.Kind, launch.Bin)
+	if h.Name != harness.Claude {
+		// Codex has no haiku; its default model answers.
+		model = ""
+	}
+	cmd := exec.CommandContext(ctx, h.Bin, h.PrintArgs(harness.Print{Prompt: prompt, System: system, Model: model, Text: true})...)
+	cmd.Stdin = nil
 	for _, kv := range os.Environ() {
 		if !strings.HasPrefix(kv, "CLAUDECODE=") {
 			cmd.Env = append(cmd.Env, kv)

@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"andriiklymiuk/corgi/utils/agent/harness"
 	"context"
 	"fmt"
 	"os"
@@ -142,11 +143,11 @@ type botRun struct {
 }
 
 func (d *Daemon) botAttempt(ctx context.Context, run botRun, model string) ([]byte, runReceipt, error) {
-	args := botArgs(run, model)
-	cmd := claudeCommand(ctx, run.dir, run.env, args...)
+	h := run.spec.harness()
+	cmd := run.spec.runCommand(ctx, run.dir, run.env, h.PrintArgs(botPrint(run, model))...)
 	cmd.Stdin = nil
 	raw, err := cmd.Output()
-	out, rc := unwrapResult(raw)
+	out, rc := unwrapWith(h, raw)
 	run.log.Write(out)
 	if rc.ok {
 		fmt.Fprintf(run.log, "\n=== attempt on %s: $%.4f · %d tokens · %d turns\n", modelWord(model), rc.costUSD, rc.tokens, rc.turns)
@@ -154,20 +155,12 @@ func (d *Daemon) botAttempt(ctx context.Context, run botRun, model string) ([]by
 	return out, rc, err
 }
 
+func botPrint(run botRun, model string) harness.Print {
+	return harness.Print{Prompt: run.prompt, System: strings.TrimSpace(run.bot.Soul), Model: model, SkipPermissions: run.spec.SkipPermissions}
+}
+
 func botArgs(run botRun, model string) []string {
-	args := []string{"-p", run.prompt, "--output-format", "json"}
-	if soul := strings.TrimSpace(run.bot.Soul); soul != "" {
-		args = append(args, "--append-system-prompt", soul)
-	}
-	if model != "" {
-		args = append(args, "--model", model)
-	}
-	if run.spec.SkipPermissions {
-		args = append(args, "--dangerously-skip-permissions")
-	} else {
-		args = append(args, "--permission-mode", "acceptEdits")
-	}
-	return args
+	return harness.For("", "").PrintArgs(botPrint(run, model))
 }
 
 func nextModel(model string) string {

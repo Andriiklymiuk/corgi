@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -18,15 +17,19 @@ import (
 	"andriiklymiuk/corgi/utils/agent/config"
 	"andriiklymiuk/corgi/utils/agent/events"
 	"andriiklymiuk/corgi/utils/agent/handoff"
+	"andriiklymiuk/corgi/utils/agent/harness"
 	"andriiklymiuk/corgi/utils/agent/usage"
 	"andriiklymiuk/corgi/utils/agent/watch"
 )
 
 type WatchSpec struct {
-	Workspace       string
-	Dir             string
-	ConfigDir       string
-	AgentDir        string
+	Workspace string
+	Dir       string
+	ConfigDir string
+	AgentDir  string
+	// Kind and Bin pick the harness (claude, codex) that runs fixes here.
+	Kind            string
+	Bin             string
 	Isolate         bool
 	PruneAfter      time.Duration
 	RerunCI         bool
@@ -225,13 +228,27 @@ func fixTimeoutFor(e watch.Event) time.Duration {
 }
 
 var claudeCommand = func(ctx context.Context, dir string, env []string, args ...string) *exec.Cmd {
-	cmd := exec.CommandContext(ctx, "claude", args...)
-	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), env...)
+	return harnessCommand(ctx, harness.For("", ""), dir, env, args...)
+}
+
+var harnessCommand = func(ctx context.Context, h harness.Harness, dir string, env []string, args ...string) *exec.Cmd {
+	cmd := h.Command(ctx, dir, env, args...)
 	killProcessGroup(cmd)
 	cmd.WaitDelay = 10 * time.Second
 	return cmd
 }
+
+// runCommand is one unattended run under the spec's harness. Claude goes
+// through claudeCommand so a test can stand in for it.
+func (s WatchSpec) runCommand(ctx context.Context, dir string, env []string, args ...string) *exec.Cmd {
+	h := s.harness()
+	if h.Name == harness.Claude {
+		return claudeCommand(ctx, dir, env, args...)
+	}
+	return harnessCommand(ctx, h, dir, env, args...)
+}
+
+func (s WatchSpec) harness() harness.Harness { return harness.For(s.Kind, s.Bin) }
 
 func (d *Daemon) loadWatchFiles() {
 	if d.watchState == nil {
@@ -287,6 +304,7 @@ func (d *Daemon) startWatches(ctx context.Context) {
 func (d *Daemon) refresh() {
 	d.rescan()
 	d.sampleAccounts(time.Now())
+	go d.pulsePeersOnce(context.Background())
 	for _, w := range d.watchers {
 		w.Nudge()
 	}
@@ -303,6 +321,9 @@ func (d *Daemon) handleWatchEvent(ctx context.Context, e watch.Event) {
 			}
 			if reason := fixDeferral(spec, d.watchState.Fixes, time.Now()); reason != "" {
 				utils.Infof("agent: routine %s waits: %s\n", e.Title, reason)
+				return
+			}
+			if d.peerLeads(spec) != "" {
 				return
 			}
 			if !d.claimFix(spec.Workspace, e.Ref) {
@@ -351,6 +372,11 @@ func (d *Daemon) watchSink(spec WatchSpec) watch.Sink {
 			return
 		}
 		if d.watchState.IsIgnored(e.Key) {
+			return
+		}
+		// Another laptop leads this tracker: it fixes and rings; here the
+		// event is on record and nothing more.
+		if d.peerLeads(spec) != "" {
 			return
 		}
 		body := watchBody(e)
@@ -427,7 +453,7 @@ func quietNow(spec WatchSpec, now time.Time) bool {
 }
 
 func (d *Daemon) releaseHeld(spec WatchSpec, now time.Time) {
-	if d.watchState == nil || quietNow(spec, now) {
+	if d.watchState == nil || quietNow(spec, now) || d.peerLeads(spec) != "" {
 		return
 	}
 	held := d.watchState.TakeHeld(spec.Workspace)
@@ -461,7 +487,7 @@ func (d *Daemon) releaseHeld(spec WatchSpec, now time.Time) {
 }
 
 func (d *Daemon) retryDeferred(ctx context.Context, spec WatchSpec, now time.Time) {
-	if spec.NoRetry || spec.Action != "fix" || d.watchState == nil {
+	if spec.NoRetry || spec.Action != "fix" || d.watchState == nil || d.peerLeads(spec) != "" {
 		return
 	}
 	var queue []watch.Event
@@ -980,11 +1006,15 @@ func fixArgsWith(spec WatchSpec, e watch.Event, handover string) []string {
 		prompt += "\n\nAn earlier run on this stopped part-way. This is the last thing it said — " +
 			"treat it as notes, not as truth, and check anything it claims before building on it:\n" + handover
 	}
-	args := []string{"-p", prompt, "--output-format", "json"}
-	if spec.SkipPermissions {
-		return append(args, "--dangerously-skip-permissions")
-	}
-	return append(args, "--permission-mode", "acceptEdits")
+	return harness.For("", "").PrintArgs(harness.Print{Prompt: prompt, SkipPermissions: spec.SkipPermissions})
+}
+
+// fixPrint is the unattended run for one event, for whichever harness the
+// spec names; fixArgsWith is its Claude shape, kept for the tests that
+// read the prompt at index one.
+func fixPrint(spec WatchSpec, e watch.Event, handover string) harness.Print {
+	args := fixArgsWith(spec, e, handover)
+	return harness.Print{Prompt: args[1], SkipPermissions: spec.SkipPermissions}
 }
 
 var prLink = regexp.MustCompile(`https://(?:github\.com/[^\s)]+/pull/\d+|[^\s)]+/-/merge_requests/\d+)`)
@@ -1052,9 +1082,9 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 	before, hadBefore := usage.ReadLimits(spec.ConfigDir)
 	handover := d.watchState.Fixes.LastHandover(spec.Workspace, e.Ref)
 	started := time.Now()
-	args := fixArgsWith(spec, e, handover)
+	print := fixPrint(spec, e, handover)
 	if model := fixModel(spec, e, d.watchState.Fixes.FailedInARow(spec.Workspace, e.Ref)); model != "" {
-		args = append(args, "--model", model)
+		print.Model = model
 		fmt.Fprintf(logFile, "=== model: %s\n", model)
 	}
 	if spec.Isolate && d.Isolate != nil {
@@ -1068,13 +1098,17 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 			return
 		}
 		d.watchState.Fixes.SetBranch(e.Key, branch)
-		args[1] += IsolationNote(branch, trees)
+		print.Prompt += IsolationNote(branch, trees)
 		fmt.Fprintf(logFile, "=== worktrees on %s: %s\n", branch, strings.Join(trees, ", "))
 	}
-	cmd := claudeCommand(ctx, spec.Dir, env, args...)
+	h := spec.harness()
+	if h.Name != harness.Claude {
+		fmt.Fprintf(logFile, "=== harness: %s\n", h.Name)
+	}
+	cmd := spec.runCommand(ctx, spec.Dir, env, h.PrintArgs(print)...)
 	cmd.Stdin = nil
 	raw, runErr := cmd.Output()
-	out, receipt := unwrapResult(raw)
+	out, receipt := unwrapWith(h, raw)
 	logFile.Write(out)
 	if receipt.ok {
 		fmt.Fprintf(logFile, "\n=== cost: $%.4f · %d tokens · %d turns\n", receipt.costUSD, receipt.tokens, receipt.turns)
@@ -1510,29 +1544,11 @@ type runReceipt struct {
 	turns   int
 }
 
-func unwrapResult(raw []byte) ([]byte, runReceipt) {
-	trimmed := bytes.TrimSpace(raw)
-	if len(trimmed) == 0 || trimmed[0] != '{' {
-		return raw, runReceipt{}
-	}
-	var env struct {
-		Type     string  `json:"type"`
-		Result   string  `json:"result"`
-		CostUSD  float64 `json:"total_cost_usd"`
-		NumTurns int     `json:"num_turns"`
-		Usage    struct {
-			Input      int64 `json:"input_tokens"`
-			Output     int64 `json:"output_tokens"`
-			CacheRead  int64 `json:"cache_read_input_tokens"`
-			CacheWrite int64 `json:"cache_creation_input_tokens"`
-		} `json:"usage"`
-	}
-	if json.Unmarshal(trimmed, &env) != nil || env.Type != "result" {
-		return raw, runReceipt{}
-	}
-	u := env.Usage
-	return []byte(env.Result), runReceipt{ok: true, costUSD: env.CostUSD, turns: env.NumTurns,
-		tokens: u.Input + u.Output + u.CacheRead + u.CacheWrite}
+func unwrapResult(raw []byte) ([]byte, runReceipt) { return unwrapWith(harness.For("", ""), raw) }
+
+func unwrapWith(h harness.Harness, raw []byte) ([]byte, runReceipt) {
+	out, r := h.Unwrap(raw)
+	return out, runReceipt{ok: r.OK, costUSD: r.CostUSD, tokens: r.Tokens, turns: r.Turns}
 }
 
 func fixModel(spec WatchSpec, e watch.Event, failedBefore int) string {

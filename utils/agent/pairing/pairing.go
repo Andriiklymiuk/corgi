@@ -44,9 +44,14 @@ type Device struct {
 
 const RoleViewer = "viewer"
 
+// RolePeer is another laptop: it may only pulse and join, never read the board.
+const RolePeer = "peer"
+
 func (d Device) Encrypted() bool { return strings.TrimSpace(d.PubKey) != "" }
 
 func (d Device) Viewer() bool { return d.Role == RoleViewer }
+
+func (d Device) Peer() bool { return d.Role == RolePeer }
 
 func (d Device) Expired(now time.Time) bool {
 	return !d.ExpiresAt.IsZero() && !now.Before(d.ExpiresAt)
@@ -334,8 +339,8 @@ func PairWithKey(storePath string, session *Session, code, deviceName, pubKey st
 }
 
 func PairWithRole(storePath string, session *Session, code, deviceName, pubKey, role string) (string, error) {
-	if role != "" && role != RoleViewer {
-		return "", fmt.Errorf("%w: role is viewer or nothing", ErrBadRequest)
+	if role != "" && role != RoleViewer && role != RolePeer {
+		return "", fmt.Errorf("%w: role is viewer, peer or nothing", ErrBadRequest)
 	}
 	deviceName = strings.TrimSpace(deviceName)
 	if deviceName == "" {
