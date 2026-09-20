@@ -120,6 +120,16 @@ func runAgentTrackEnable(cmd *cobra.Command, _ []string) {
 		}
 		utils.Infof("✓ sessions under %s are tracked (%s)\n", cfgDir, path)
 	}
+	if codexInstalled() {
+		switch changed, theirs, err := enableCodexNotify(codexConfigPath(), bin); {
+		case err != nil:
+			utils.Infof("codex: could not write %s: %v\n", codexConfigPath(), err)
+		case theirs != "":
+			utils.Infof("codex: %s already has a notify of its own; codex runs one, so its turns stay off the board (%s)\n", codexConfigPath(), theirs)
+		case changed:
+			utils.Infof("✓ codex turns land on the board too (%s)\n", codexConfigPath())
+		}
+	}
 	utils.Info("new sessions report from their next event; `corgi agent sessions` shows the board")
 	if !noTab {
 		utils.Info("VS Code shows the tab titles once terminal.integrated.tabs.title is \"${sequence}\" (the corgi extension offers this)")
@@ -144,6 +154,9 @@ func runAgentTrackDisable(cmd *cobra.Command, _ []string) {
 		} else {
 			utils.Infof("%s had no tracking hooks\n", path)
 		}
+	}
+	if removed, err := disableCodexNotify(codexConfigPath()); err == nil && removed {
+		utils.Infof("✓ removed corgi's notify from %s\n", codexConfigPath())
 	}
 }
 

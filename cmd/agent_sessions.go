@@ -382,6 +382,48 @@ func printBoard(rep boardReport, now time.Time) {
 	for _, sl := range rep.Slots {
 		fmt.Println(formatSlot(sl))
 	}
+	printPeerBoards(rep.Peers)
+}
+
+// printPeerBoards is the other laptops' boards, one line per live session,
+// after this laptop's own.
+func printPeerBoards(list []sessions.PeerBoard) {
+	for _, p := range list {
+		state := "asleep"
+		if p.Alive {
+			state = "awake"
+		}
+		lead := ""
+		if p.Lead {
+			lead = ", leads"
+		}
+		fmt.Printf("\non %s (%s%s):\n", p.Name, state, lead)
+		n := 0
+		for _, s := range p.Sessions {
+			if s.Status == "gone" || s.Status == "ended" {
+				continue
+			}
+			n++
+			line := "  " + s.Status + "  " + firstNonEmpty(s.Display, s.Label)
+			if s.Ticket != "" {
+				line += " · " + s.Ticket
+			}
+			if s.Pending != "" {
+				line += " — waiting on " + s.Pending
+			} else if s.Detail != "" {
+				line += " — " + s.Detail
+			}
+			fmt.Println(line)
+		}
+		for _, r := range p.Runs {
+			if r.State == "failed" || r.State == "blocked" {
+				fmt.Printf("  %s %s: %s\n", r.State, r.Ref, r.Reason)
+			}
+		}
+		if n == 0 {
+			fmt.Println("  no sessions")
+		}
+	}
 }
 
 func formatSlot(sl sessions.Slot) string {

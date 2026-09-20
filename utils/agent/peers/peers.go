@@ -51,6 +51,39 @@ type Peer struct {
 	Watches []string  `json:"watches,omitempty"`
 	Lead    bool      `json:"lead,omitempty"`
 	Version string    `json:"version,omitempty"`
+	// Budget is the percent of the five-hour window still free there; -1 unknown.
+	Budget int `json:"budget,omitempty"`
+	// Unwell is why the peer cannot run fixes right now ("no-credential":
+	// its agent wants a login, "limit": its window is spent); "" when fine.
+	Unwell   string        `json:"unwell,omitempty"`
+	Sessions []PeerSession `json:"sessions,omitempty"`
+	Runs     []PeerRun     `json:"runs,omitempty"`
+	Ignored  []string      `json:"ignored,omitempty"`
+}
+
+// PeerSession is one row of the other laptop's board, enough to show it
+// and to notice two laptops on the same ticket or branch.
+type PeerSession struct {
+	ID      string `json:"id"`
+	Label   string `json:"label"`
+	Display string `json:"display,omitempty"`
+	Status  string `json:"status"`
+	Ticket  string `json:"ticket,omitempty"`
+	Branch  string `json:"branch,omitempty"`
+	Pending string `json:"pending,omitempty"`
+	Detail  string `json:"detail,omitempty"`
+	Agent   string `json:"agent,omitempty"`
+	Since   int64  `json:"since,omitempty"`
+}
+
+// PeerRun is an unattended run the other laptop started lately: running,
+// done, failed or blocked, so this laptop knows what broke over there.
+type PeerRun struct {
+	Ref       string `json:"ref"`
+	Workspace string `json:"workspace"`
+	State     string `json:"state"`
+	Reason    string `json:"reason,omitempty"`
+	At        int64  `json:"at"`
 }
 
 // Alive is whether the peer pulsed recently enough to count.
@@ -166,23 +199,48 @@ func Me() string {
 // to lead, else the first by name. An empty answer means nobody else
 // competes and this laptop acts.
 func Leader(s *Store, me string, mine []string, now time.Time) string {
+	return LeaderWithBudget(s, me, mine, -1, now)
+}
+
+// LeaderWithBudget is Leader with this laptop's own free budget in hand.
+func LeaderWithBudget(s *Store, me string, mine []string, myBudget int, now time.Time) string {
+	return LeaderAmong(s, me, mine, myBudget, "", now)
+}
+
+// LeaderAmong is the full rule: a laptop that cannot work right now (its
+// agent wants a login, its window is spent) never leads while another can,
+// however it was marked — a laptop alone in a room for weeks must not
+// hold the lead with an expired login. myUnwell is this laptop's own state.
+func LeaderAmong(s *Store, me string, mine []string, myBudget int, myUnwell string, now time.Time) string {
 	type cand struct {
-		name string
-		lead bool
+		name   string
+		lead   bool
+		budget int
+		unwell bool
 	}
-	cands := []cand{{me, s.Lead}}
+	cands := []cand{{me, s.Lead, myBudget, myUnwell != ""}}
 	for _, p := range s.Peers {
 		if !p.Alive(now) || !shares(p.Watches, mine) {
 			continue
 		}
-		cands = append(cands, cand{p.Name, p.Lead})
+		cands = append(cands, cand{p.Name, p.Lead, p.Budget, p.Unwell != ""})
 	}
 	if len(cands) == 1 {
 		return ""
 	}
+	// Able first; then asked to lead; else the one with clearly more of its
+	// five-hour window left (a ten-point gap, so the lead does not flap);
+	// else by name.
 	sort.Slice(cands, func(i, j int) bool {
+		if cands[i].unwell != cands[j].unwell {
+			return !cands[i].unwell
+		}
 		if cands[i].lead != cands[j].lead {
 			return cands[i].lead
+		}
+		bi, bj := cands[i].budget, cands[j].budget
+		if bi > 0 && bj > 0 && abs(bi-bj) >= 10 {
+			return bi > bj
 		}
 		return strings.ToLower(cands[i].name) < strings.ToLower(cands[j].name)
 	})
@@ -190,6 +248,13 @@ func Leader(s *Store, me string, mine []string, now time.Time) string {
 		return ""
 	}
 	return cands[0].name
+}
+
+func abs(n int) int {
+	if n < 0 {
+		return -n
+	}
+	return n
 }
 
 func shares(a, b []string) bool {
@@ -210,6 +275,28 @@ type Pulse struct {
 	Watches []string `json:"watches"`
 	Lead    bool     `json:"lead,omitempty"`
 	At      int64    `json:"at"`
+	// Since 2.29.1: the board, the runs, the ignored tickets and the
+	// budget travel too; an older peer sends none and that is fine.
+	Budget   int           `json:"budget,omitempty"`
+	Unwell   string        `json:"unwell,omitempty"`
+	Sessions []PeerSession `json:"sessions,omitempty"`
+	Runs     []PeerRun     `json:"runs,omitempty"`
+	Ignored  []string      `json:"ignored,omitempty"`
+}
+
+// Absorb records what a pulse said about the peer that sent it.
+func (p *Peer) Absorb(in Pulse, now time.Time) {
+	p.SeenAt, p.Watches, p.Lead, p.Version = now, in.Watches, in.Lead, in.Version
+	p.Budget, p.Unwell, p.Sessions, p.Runs, p.Ignored = in.Budget, in.Unwell, in.Sessions, in.Runs, in.Ignored
+	if len(p.Sessions) > 50 {
+		p.Sessions = p.Sessions[:50]
+	}
+	if len(p.Runs) > 50 {
+		p.Runs = p.Runs[:50]
+	}
+	if len(p.Ignored) > 500 {
+		p.Ignored = p.Ignored[:500]
+	}
 }
 
 // Client talks to one peer as a paired device: bearer token, sealed body.

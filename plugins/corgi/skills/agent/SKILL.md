@@ -1075,6 +1075,32 @@ per laptop — those are not shared work.
   first-by-name.
 - `corgi agent peers rm <name>` — forget one (run it on both).
 
+What the pulse carries (2.29.1): each laptop's board (sessions, tickets,
+branches, what waits), its unattended runs of the day (running, failed with
+why, blocked), the tickets it ignored, how much of its five-hour window is
+free, and whether it can work at all. So:
+
+- `corgi agent sessions` and `/launch/board` (`peers[]`) show the other
+  laptop's sessions under "on <name>" and what failed there — never its token.
+- **Who leads, in order:** a laptop that can work (login fine, window not
+  spent) before one that cannot; then the one marked `peers lead`; then the
+  one with clearly more budget (a ten-point gap); then the first by name. A
+  laptop left alone for weeks whose Claude login lapses stops leading on its
+  next pulse, the other rings once "home cannot run fixes (its agent wants a
+  login)", and takes over. When it can again, it leads again.
+- `corgi agent watch ignore ENG-5` on one laptop ignores it on both.
+- Same ticket, or same branch of the same repo, open on both laptops →
+  "crossing laptops" rings once.
+
+**A laptop alone for weeks** (see also `corgi agent doctor --away`): keep it
+plugged in with the lid open or `corgi agent awake`; turn off automatic
+macOS restarts (a reboot lands on the FileVault password screen and nothing
+runs until someone types it); `corgi agent install` so the daemon returns
+after a crash; tunnel credentials (cloudflared, ngrok) and peer tokens do not
+expire; a Claude login that does lapse takes only that laptop out of the
+lead — the other keeps working, and `corgi agent profile add` there gives it
+a second account to fall back on.
+
 How it holds together: a peer is a device in the other laptop's
 `devices.json` with role `peer` — a bearer token plus the same end-to-end key
 a phone gets — and that token opens only `/launch/peers/pulse` and
@@ -1089,7 +1115,10 @@ URL the other can reach: a tunnel each, or the same Wi-Fi.
 Codex there: `corgi agent claude` opens `codex` (permission modes map:
 `acceptEdits` → `--full-auto`, `bypassPermissions` → no sandbox), and the
 daemon's fixes, bots and routines run `codex exec --json` and read its
-receipt (thread id, tokens). `corgi agent claude --kind codex` is a one-off.
+receipt (thread id, tokens). `corgi agent claude --kind codex` is a one-off; `corgi agent watch enable
+--kind codex` sets the workspace's kind for good. `corgi agent track enable`
+writes Codex's `notify` line when codex is installed (and leaves a notify of
+someone else's alone, since Codex runs one).
 `configDir` moves `CODEX_HOME`; `OPENAI_API_KEY` is the credential. Codex has
 no permission hooks: a Codex session shows on the board by its process
 (`agent: codex`), and with `notify = ["corgi", "agent", "event", "stop",

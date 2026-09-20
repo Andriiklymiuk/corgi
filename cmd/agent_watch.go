@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"andriiklymiuk/corgi/utils/agent/harness"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
@@ -283,12 +284,22 @@ var agentWatchEnableCmd = &cobra.Command{
 				wc.DaysOff = append(wc.DaysOff, strings.ToLower(d.String()[:3]))
 			}
 		}
+		if flags.Changed("kind") {
+			kind, _ := flags.GetString("kind")
+			if kind != "" && !harness.Known(kind) {
+				return fmt.Errorf("--kind is one of %s", strings.Join(harness.Names(), ", "))
+			}
+			entry.Kind = kind
+		}
 		entry.Watch = wc
 		user.Workspaces[id] = entry
 		if err := writeUserConfig(path, user); err != nil {
 			return err
 		}
 		utils.Infof("watching %s — %s\n", id, describeWatch(wc))
+		if entry.Kind != "" && entry.Kind != harness.Claude {
+			utils.Infof("agent: unattended runs here go through %s\n", entry.Kind)
+		}
 		if wc.Action == "fix" && !entry.DangerouslySkipPermissions && !user.Defaults.DangerouslySkipPermissions {
 			utils.Info("note: fix runs with --permission-mode acceptEdits; a Bash step that needs approval will stall. `corgi agent init --dangerously-skip-permissions` lets it run unattended.")
 		}
@@ -1256,6 +1267,7 @@ func init() {
 	f.String(watchFlagReviewStatus, "", "Column a ticket moves to once a run opened a pull request for it, e.g. \"In Review\"")
 	f.Bool("lease", false, "Claim a ticket on the tracker before working it, so a second machine watching the same board leaves it alone")
 	f.Bool("isolate", false, "Give every unattended run its own worktrees on a corgi/<ref> branch, so it never touches your checkout")
+	f.String("kind", "", "The agent that runs here: claude (default) or codex; also what corgi agent claude opens in this workspace")
 	f.String(watchFlagPruneAfter, "", "Remove an isolated run's worktrees this long after it finished, e.g. 7d; the branch stays, a dirty worktree stays (empty keeps them until `watch undo` or `watch prune`)")
 	f.Bool(watchFlagNoRetry, false, "Leave deferred fixes to a manual `watch run` instead of starting them when the budget returns")
 	f.Bool("reviews", false, "Also pull requests someone asked me to review — theirs, not mine")

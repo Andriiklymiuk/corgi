@@ -50,3 +50,30 @@ func TestStoreRoundTrip(t *testing.T) {
 		t.Fatal("remove")
 	}
 }
+
+func TestLeaderSkipsUnwellAndPrefersBudget(t *testing.T) {
+	now := time.Now()
+	s := &Store{Lead: true, Peers: []Peer{{Name: "work", SeenAt: now, Watches: []string{"linear/api"}, Budget: 80}}}
+	// home asked to lead but its login expired: work leads.
+	if got := LeaderAmong(s, "home", []string{"linear/api"}, 90, "no-credential", now); got != "work" {
+		t.Fatalf("an unwell laptop never leads while another can: %q", got)
+	}
+	if got := LeaderAmong(s, "home", []string{"linear/api"}, 90, "", now); got != "" {
+		t.Fatalf("well again, home leads as asked: %q", got)
+	}
+	s.Peers[0].Unwell = "limit"
+	if got := LeaderAmong(s, "home", []string{"linear/api"}, 90, "no-credential", now); got != "" {
+		t.Fatalf("both unwell: back to the usual rule, got %q", got)
+	}
+	s.Peers[0].Unwell = ""
+	s.Lead = false
+	if got := LeaderWithBudget(s, "zzz", []string{"linear/api"}, 95, now); got != "" {
+		t.Fatalf("clearly more budget beats the name: %q", got)
+	}
+	if got := LeaderWithBudget(s, "zzz", []string{"linear/api"}, 85, now); got != "work" {
+		t.Fatalf("within ten points the name decides: %q", got)
+	}
+	if got := LeaderWithBudget(s, "zzz", []string{"linear/api"}, -1, now); got != "work" {
+		t.Fatalf("unknown budget: the name decides: %q", got)
+	}
+}
