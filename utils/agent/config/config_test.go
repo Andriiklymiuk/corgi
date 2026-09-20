@@ -379,3 +379,29 @@ func TestPlanReviewPolicy(t *testing.T) {
 		t.Fatal("PlanReviewRequired")
 	}
 }
+
+func TestAgentOrderIsAgentsThenKindThenClaude(t *testing.T) {
+	if got := (WorkspaceConfig{}).AgentOrder(); len(got) != 1 || got[0] != "claude" {
+		t.Fatalf("%v", got)
+	}
+	if got := (WorkspaceConfig{Kind: "codex"}).AgentOrder(); len(got) != 1 || got[0] != "codex" {
+		t.Fatalf("%v", got)
+	}
+	if got := (WorkspaceConfig{Kind: "custom"}).AgentOrder(); got[0] != "claude" {
+		t.Fatalf("a custom bin is claude's shape: %v", got)
+	}
+	w := WorkspaceConfig{Kind: "codex", Agents: []string{"Claude", "codex", "claude"}}
+	if got := w.AgentOrder(); len(got) != 2 || got[0] != "claude" || got[1] != "codex" {
+		t.Fatalf("agents win over kind, lowercased, no repeats: %v", got)
+	}
+	if fb := w.Fallbacks(); len(fb) != 1 || fb[0] != "codex" {
+		t.Fatalf("%v", fb)
+	}
+	user := &UserConfig{Defaults: WorkspaceConfig{Agents: []string{"claude", "codex"}}, Workspaces: map[string]WorkspaceConfig{"api": {Kind: "codex"}, "web": {}}}
+	if got := Resolve("web", nil, user).AgentOrder(); len(got) != 2 {
+		t.Fatalf("defaults reach a workspace without its own: %v", got)
+	}
+	if got := Resolve("api", nil, user).AgentOrder(); len(got) != 1 || got[0] != "codex" {
+		t.Fatalf("a workspace's own kind is its whole order: %v", got)
+	}
+}

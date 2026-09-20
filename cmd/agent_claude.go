@@ -293,6 +293,17 @@ func resolveClaudeLaunch(dir, profile string, extra []string) (claudeLaunch, err
 	}
 	if k := strings.TrimSpace(kindOverride); k != "" {
 		resolved.Kind = k
+	} else if order := resolved.AgentOrder(); len(order) > 1 {
+		// The first agent that is installed opens; a person hears why.
+		for _, name := range order {
+			if harness.For(name, "").Installed() {
+				if name != order[0] {
+					utils.Info(fmt.Sprintf("corgi: %s is not installed here — %s opens", order[0], name))
+				}
+				resolved.Kind = name
+				break
+			}
+		}
 	}
 	kind, err := supervisor.KindFor(supervisor.SpawnConfig{Kind: resolved.Kind, ConfigDirEnv: resolved.ConfigDirEnv, CredentialEnv: resolved.CredentialEnv})
 	if err != nil {

@@ -579,7 +579,7 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 		${card({ name: "web", path: "…/dev/web", branch: "· feat/search*", dot: "ready", meta: '<span class="live">online · no session</span><span>up 2h</span><span>work account</span>', btn: "Start" })}`;
 
 	const app = (tab, extra = "") => `<div class="app">
-		<div class="brand"><div class="logo">🐕</div><div><h1>corgi</h1><small>andrii-mbp · corgi 2.29.4 · daemon up</small></div><span class="chip" style="margin-left:auto">↻</span></div>
+		<div class="brand"><div class="logo">🐕</div><div><h1>corgi</h1><small>andrii-mbp · corgi 2.30.0 · daemon up</small></div><span class="chip" style="margin-left:auto">↻</span></div>
 		${tabs(tab.replace("→", ""))}
 		<div class="pane">${tab.endsWith("inbox") ? inbox(extra === "moved" ? "moved" : "", extra === "aim") : tab.endsWith("sessions") ? sessions : stacks}</div>
 		</div>`;
@@ -1006,9 +1006,10 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 // ---- codex as the harness: the same board, the same watch, another agent ----
 {
 	const s = [
-		"{g}${/} {B}corgi agent watch enable --kind codex --prs --ci --action fix --auto-for reviews,comments,ci{/}",
-		"watching acme-stack — assigned to me · PR reviews and comments → fix, at most 3/h 10/day",
-		"agent: unattended runs here go through codex",
+		"{g}${/} {B}corgi agent workspaces agents acme-stack claude,codex{/}",
+		"acme-stack: claude → codex",
+		"agents claude → codex: claude opens and runs the fixes; codex takes a run when it cannot",
+		"  (not installed, login lapsed, window spent — checked at every run, nothing is remembered)",
 		"restart the daemon to pick it up: corgi agent restart",
 		"",
 		"{g}${/} {B}corgi agent track enable{/}",
@@ -1016,17 +1017,22 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 		"✓ codex turns land on the board too (/Users/me/.codex/config.toml)",
 		"new sessions report from their next event; `corgi agent sessions` shows the board",
 		"",
-		"{g}${/} {B}corgi agent codex{/}",
-		"corgi: codex for acme-stack",
-		"{d}# codex opens in the workspace's checkout; a run from the phone or the tracker goes through codex exec{/}",
-		"",
-		"{d}# 13:31 — a reviewer comments on your PR{/}",
+		"{d}# 13:31 — a reviewer comments on your PR; claude fixes it{/}",
 		"{y}🔔 corgi agent · acme-stack{/}  max commented on acme/api#412: please cover the empty-path case",
 		"{g}🔔 corgi agent · acme-stack{/}  fixed acme/api#412 — https://github.com/acme/api/pull/412",
 		"",
+		"{d}# 16:02 — claude's five-hour window is spent. The next comment does not wait.{/}",
+		"{d}agent: acme-stack: claude is at its limit — this run goes through codex{/}",
+		"{y}🔔 corgi agent{/}  acme-stack: claude is at its limit — this run goes through codex",
+		"{g}🔔 corgi agent · acme-stack{/}  fixed acme/api#418 — https://github.com/acme/api/pull/418",
+		"{d}# nothing is remembered: claude takes the next run the moment its window opens{/}",
+		"",
+		"{g}${/} {B}corgi agent codex{/}",
+		"corgi: codex for acme-stack",
+		"",
 		"{d}# the next agent is one more entry in utils/agent/harness — not a search for \"claude\" through the daemon{/}",
 	];
-	scene("codex", grow(s, [1, 4, 6, 9, 12, 13, 16, 19]).map((l, i) => page(term("corgi agent — codex as the harness", l, { rows: s.length, cursor: i < 7 }))));
+	scene("codex", grow(s, [1, 5, 7, 10, 13, 14, 16, 19, 20, 22, s.length]).map((l, i) => page(term("corgi agent — claude first, codex when it cannot", l, { rows: s.length, cursor: i < 10 }))));
 }
 
 

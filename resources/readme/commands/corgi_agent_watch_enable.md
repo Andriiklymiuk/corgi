@@ -14,6 +14,7 @@ corgi agent watch enable [flags]
       --action string                         notify (default) or fix — fix starts a headless claude with the matching skill, draft PRs only
       --after-merge corgi agent watch board   Move the ticket to this column once every pull request of its run is merged — a name from corgi agent watch board; empty leaves it where it is
       --after-merge-subtasks string           Where a subtask goes instead when its pull request merges (Done, say); empty means the same column as --after-merge
+      --agents strings                        The agents to try in order, e.g. claude,codex: the next takes a run when the first cannot
       --approve                               An unattended review of a pull request I was asked to review may approve it when nothing blocks and the risk card allows
       --assignee string                       me (default) or any
       --auto                                  Shorthand for --action fix --prs --comments (not --reviews: reviewing someone else's PR is a separate ask): work on what arrives without being asked, draft PRs only

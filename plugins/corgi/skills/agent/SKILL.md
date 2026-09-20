@@ -1121,7 +1121,22 @@ Codex there: `corgi agent claude` opens `codex` (permission modes map:
 `acceptEdits` → `--full-auto`, `bypassPermissions` → no sandbox), and the
 daemon's fixes, bots and routines run `codex exec --json` and read its
 receipt (thread id, tokens). `corgi agent codex` opens it once (`corgi agent claude --kind codex` is the same); `corgi agent watch enable
---kind codex` sets the workspace's kind for good. `corgi agent track enable`
+--kind codex` sets the workspace's kind for good.
+
+**An order of agents** (`agents: [claude, codex]` on a workspace or under
+`defaults`; `corgi agent workspaces agents <id> claude,codex`, `--default`,
+`corgi agent init --agents`, `watch enable --agents`) is what runs when the
+first cannot. `utils/agent/daemon/harnesses.go`: every unattended run calls
+`pickHarness` — the first agent that is installed, whose window is not spent
+(claude's `usage` limits) and whose newest finished run of the day in this
+workspace did not fail on a login, a permission or a limit (`FixRecord.Harness`
+tags each run, `watch.Sidelining`). Nothing is remembered between runs. A
+fallback drops `CLAUDE_CONFIG_DIR` (its own home, its own login). A spent
+window is no reason to defer (`fixDeferral`) when a fallback can run, and the
+peers hear `unwell` only when every agent is out (`laptopUnwell`; the MCP-side
+pulse reads `watch/agents.json`). The daemon logs the pick and rings once a day
+per workspace and agent. `corgi agent claude` opens the first installed agent
+of the order; `--kind` overrides. `corgi agent doctor` has an `agents` check. `corgi agent track enable`
 writes Codex's `notify` line when codex is installed (and leaves a notify of
 someone else's alone, since Codex runs one).
 `configDir` moves `CODEX_HOME`; `OPENAI_API_KEY` is the credential. Codex has

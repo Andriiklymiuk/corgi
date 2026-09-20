@@ -143,8 +143,8 @@ type botRun struct {
 }
 
 func (d *Daemon) botAttempt(ctx context.Context, run botRun, model string) ([]byte, runReceipt, error) {
-	h := run.spec.harness()
-	cmd := run.spec.runCommand(ctx, run.dir, run.env, h.PrintArgs(botPrint(run, model))...)
+	h := d.pickHarnessFor(run.spec)
+	cmd := run.spec.runCommand(ctx, h, run.dir, harnessEnv(run.spec, h, run.env), h.PrintArgs(botPrint(run, model))...)
 	cmd.Stdin = nil
 	raw, err := cmd.Output()
 	out, rc := unwrapWith(h, raw)

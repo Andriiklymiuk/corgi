@@ -19,6 +19,7 @@ import (
 	"andriiklymiuk/corgi/utils/agent/command"
 	"andriiklymiuk/corgi/utils/agent/config"
 	"andriiklymiuk/corgi/utils/agent/daemon"
+	"andriiklymiuk/corgi/utils/agent/harness"
 	"andriiklymiuk/corgi/utils/agent/push"
 	"andriiklymiuk/corgi/utils/agent/sessions"
 	"andriiklymiuk/corgi/utils/agent/supervisor"
@@ -834,12 +835,53 @@ func runAgentWorkspacesList(_ *cobra.Command, _ []string) {
 		fmt.Println("No workspaces registered. Run `corgi agent init` in a stack, or `corgi agent scan <dir>`.")
 		return
 	}
+	user := loadUserConfigQuietly()
 	for _, w := range registry.Sorted() {
 		fmt.Printf("%-20s %-12s %s\n", w.ID, w.Status, w.AbsPath)
 		if len(w.Aliases) > 0 {
 			fmt.Printf("%-20s also known as: %v\n", "", w.Aliases)
 		}
+		if line := workspaceSettingsLine(user, w.ID); line != "" {
+			fmt.Printf("%-20s %s\n", "", line)
+		}
 	}
+}
+
+func loadUserConfigQuietly() *config.UserConfig {
+	dir, err := agentDir()
+	if err != nil {
+		return nil
+	}
+	user, err := config.LoadUser(agentUserConfigPath(dir))
+	if err != nil {
+		return nil
+	}
+	return user
+}
+
+// workspaceSettingsLine is what the user config says about a workspace,
+// the parts a person checks: agents, account, permissions, autostart.
+func workspaceSettingsLine(user *config.UserConfig, id string) string {
+	if user == nil {
+		return ""
+	}
+	resolved := config.Resolve(id, nil, user)
+	parts := []string{agentsWord(resolved.AgentOrder())}
+	for _, name := range resolved.AgentOrder() {
+		if !harness.For(name, "").Installed() {
+			parts = append(parts, name+" not installed")
+		}
+	}
+	if resolved.ConfigDir != "" {
+		parts = append(parts, "account "+filepath.Base(resolved.ConfigDir))
+	}
+	if resolved.DangerouslySkipPermissions {
+		parts = append(parts, "permissions skipped")
+	}
+	if resolved.Autostart != nil && !*resolved.Autostart {
+		parts = append(parts, "paused")
+	}
+	return strings.Join(parts, " · ")
 }
 
 var agentWorkspacesPauseCmd = &cobra.Command{

@@ -36,6 +36,7 @@ corgi agent workspaces [flags]
 ### SEE ALSO
 
 * [corgi agent](corgi_agent)	 - Keep Claude Code Remote Control running for your corgi workspaces
+* [corgi agent workspaces agents](corgi_agent_workspaces_agents)	 - The agents a workspace tries, in order: the first runs, the next takes over when it cannot
 * [corgi agent workspaces forget](corgi_agent_workspaces_forget)	 - Remove a workspace from the registry
 * [corgi agent workspaces list](corgi_agent_workspaces_list)	 - List registered workspaces
 * [corgi agent workspaces pause](corgi_agent_workspaces_pause)	 - Stop supervising a workspace (autostart: false): no device at login, no restarts; it stays registered
