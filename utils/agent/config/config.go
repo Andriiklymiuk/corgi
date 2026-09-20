@@ -56,7 +56,11 @@ type WorkspaceConfig struct {
 	Autostart        *bool  `yaml:"autostart"`
 	AutostartSession *bool  `yaml:"autostartSession"`
 	Kind             string `yaml:"kind"`
-	Bin              string `yaml:"bin"`
+	// Agents is the order to try: the first is the one this workspace runs;
+	// when it cannot work (not installed, login lapsed, window spent) an
+	// unattended run goes through the next. Kind alone means one agent.
+	Agents []string `yaml:"agents,omitempty"`
+	Bin    string   `yaml:"bin"`
 	// Trusted config only: argv picks what code runs, a committed repo file must never reach it.
 	Args                       []string     `yaml:"args"`
 	ConfigDirEnv               string       `yaml:"configDirEnv"`
@@ -123,6 +127,41 @@ func LoadUser(path string) (*UserConfig, error) {
 		c.Workspaces = map[string]WorkspaceConfig{}
 	}
 	return &c, nil
+}
+
+// AgentOrder is the agents to try, first choice first: agents when set,
+// else kind, else claude. Names are lowercased and never repeat.
+func (w WorkspaceConfig) AgentOrder() []string {
+	var out []string
+	add := func(name string) {
+		name = strings.ToLower(strings.TrimSpace(name))
+		if name == "" || name == "custom" {
+			name = "claude"
+		}
+		for _, have := range out {
+			if have == name {
+				return
+			}
+		}
+		out = append(out, name)
+	}
+	if len(w.Agents) > 0 {
+		for _, a := range w.Agents {
+			add(a)
+		}
+	} else {
+		add(w.Kind)
+	}
+	return out
+}
+
+// Fallbacks are the agents after the first.
+func (w WorkspaceConfig) Fallbacks() []string {
+	order := w.AgentOrder()
+	if len(order) < 2 {
+		return nil
+	}
+	return order[1:]
 }
 
 type Resolved struct {
@@ -440,6 +479,11 @@ func overlayLaunch(base, over WorkspaceConfig) WorkspaceConfig {
 	}
 	if over.Kind != "" {
 		base.Kind = over.Kind
+		// a workspace's own kind is its whole order; inherited agents step aside
+		base.Agents = nil
+	}
+	if len(over.Agents) > 0 {
+		base.Agents = append([]string(nil), over.Agents...)
 	}
 	if over.Bin != "" {
 		base.Bin = over.Bin

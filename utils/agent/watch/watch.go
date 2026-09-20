@@ -818,6 +818,9 @@ type FixRecord struct {
 	Tokens       int64     `json:"tokens,omitempty"`
 	Retry        string    `json:"retry,omitempty"`
 	SpentPercent int       `json:"spentPercent,omitempty"`
+	// Harness is the agent that ran it (claude when empty), so a failure
+	// sidelines that agent and not the next one in the workspace's order.
+	Harness string `json:"harness,omitempty"`
 }
 
 func (r FixRecord) Done() bool { return !r.FinishedAt.IsZero() }
@@ -1195,6 +1198,7 @@ const (
 	FailureNone       = ""
 	FailureNoAuth     = "no-credential"
 	FailurePermission = "permission"
+	FailureLimit      = "limit"
 	FailureTimeout    = "timeout"
 	FailureOther      = "other"
 )
@@ -1209,6 +1213,8 @@ func ClassifyFailure(reason, output string) string {
 		return FailureNoAuth
 	case containsAny(text, "permission denied", "403", "forbidden", "not permitted", "requires approval"):
 		return FailurePermission
+	case containsAny(text, "usage limit", "rate limit", "limit reached", "429", "quota exceeded", "insufficient_quota"):
+		return FailureLimit
 	case containsAny(text, "context deadline exceeded", "timed out", "timeout", "signal: killed"):
 		return FailureTimeout
 	}
@@ -1217,6 +1223,12 @@ func ClassifyFailure(reason, output string) string {
 
 func Blocking(kind string) bool {
 	return kind == FailureNoAuth || kind == FailurePermission
+}
+
+// Sidelining says a failure of this kind is the agent's, not the ticket's:
+// the next agent in the workspace's order gets the run instead.
+func Sidelining(kind string) bool {
+	return Blocking(kind) || kind == FailureLimit
 }
 
 func containsAny(text string, needles ...string) bool {
@@ -1270,6 +1282,18 @@ func (l *FixLog) SetBranch(key, branch string) {
 	for i := len(l.Started) - 1; i >= 0; i-- {
 		if l.Started[i].Key == key {
 			l.Started[i].Branch = branch
+			_ = l.save()
+			return
+		}
+	}
+}
+
+func (l *FixLog) SetHarness(key, name string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for i := len(l.Started) - 1; i >= 0; i-- {
+		if l.Started[i].Key == key {
+			l.Started[i].Harness = name
 			_ = l.save()
 			return
 		}

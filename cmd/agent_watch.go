@@ -290,6 +290,16 @@ var agentWatchEnableCmd = &cobra.Command{
 				return fmt.Errorf("--kind is one of %s", strings.Join(harness.Names(), ", "))
 			}
 			entry.Kind = kind
+			entry.Agents = nil
+		}
+		if flags.Changed("agents") {
+			raw, _ := flags.GetStringSlice("agents")
+			order, err := parseAgents(raw)
+			if err != nil {
+				return err
+			}
+			entry.Agents = order
+			entry.Kind = ""
 		}
 		entry.Watch = wc
 		user.Workspaces[id] = entry
@@ -297,8 +307,8 @@ var agentWatchEnableCmd = &cobra.Command{
 			return err
 		}
 		utils.Infof("watching %s — %s\n", id, describeWatch(wc))
-		if entry.Kind != "" && entry.Kind != harness.Claude {
-			utils.Infof("agent: unattended runs here go through %s\n", entry.Kind)
+		if order := entry.AgentOrder(); len(order) > 1 || order[0] != harness.Claude {
+			utils.Infof("agent: unattended runs here go through %s\n", agentsWord(order))
 		}
 		if wc.Action == "fix" && !entry.DangerouslySkipPermissions && !user.Defaults.DangerouslySkipPermissions {
 			utils.Info("note: fix runs with --permission-mode acceptEdits; a Bash step that needs approval will stall. `corgi agent init --dangerously-skip-permissions` lets it run unattended.")
@@ -885,13 +895,13 @@ func watchSpecOf(dir string, w workspace.Workspace, resolved config.Resolved) (d
 	wc := resolved.Watch
 	if wc == nil || !wc.Enabled {
 		if len(resolved.Routines) > 0 {
-			return daemon.WatchSpec{Workspace: w.ID, Dir: w.AbsPath, ConfigDir: expandTilde(resolved.ConfigDir), Kind: resolved.Kind, Bin: expandTilde(resolved.Bin),
+			return daemon.WatchSpec{Workspace: w.ID, Dir: w.AbsPath, ConfigDir: expandTilde(resolved.ConfigDir), Kind: resolved.Kind, Agents: resolved.AgentOrder(), Bin: expandTilde(resolved.Bin),
 				SkipPermissions: resolved.DangerouslySkipPermissions, Models: resolved.Models, Routines: resolved.Routines}, true
 		}
 		return daemon.WatchSpec{}, false
 	}
 	secrets := watch.LoadSecretsFor(dir, w.ID)
-	spec := daemon.WatchSpec{Workspace: w.ID, Dir: w.AbsPath, ConfigDir: expandTilde(resolved.ConfigDir), Kind: resolved.Kind, Bin: expandTilde(resolved.Bin), Project: wc.Project, Repos: wc.Repos,
+	spec := daemon.WatchSpec{Workspace: w.ID, Dir: w.AbsPath, ConfigDir: expandTilde(resolved.ConfigDir), Kind: resolved.Kind, Agents: resolved.AgentOrder(), Bin: expandTilde(resolved.Bin), Project: wc.Project, Repos: wc.Repos,
 		Rules:    watch.Rules{Enabled: true, Labels: wc.Labels, States: wc.States, Assignee: wc.Assignee, Comments: wc.Comments, PRs: wc.PRs, CI: wc.CI, Reviews: wc.Reviews, From: wc.From, Bots: wc.Bots},
 		Interval: 3 * time.Minute, Action: "notify", SkipPermissions: resolved.DangerouslySkipPermissions,
 		MaxFixesPerHour: wc.MaxFixesPerHour, MaxFixesPerDay: wc.MaxFixesPerDay, MaxFixesTotal: wc.MaxFixesTotal, CapSince: wc.CapSince, Quiet: wc.Quiet, FixKinds: wc.FixKinds, DoneWhen: wc.DoneWhen, PlanReview: wc.PlanReview, Lease: wc.Lease, Isolate: wc.Isolate, Slots: wc.Slots, Batch: wc.Batch, RerunCI: wc.RerunCI, Silent: wc.Silent, NoRetry: wc.NoRetry, ReviewStatus: wc.ReviewStatus, Approve: wc.Approve, Models: resolved.Models, Routines: resolved.Routines}
@@ -1268,6 +1278,7 @@ func init() {
 	f.Bool("lease", false, "Claim a ticket on the tracker before working it, so a second machine watching the same board leaves it alone")
 	f.Bool("isolate", false, "Give every unattended run its own worktrees on a corgi/<ref> branch, so it never touches your checkout")
 	f.String("kind", "", "The agent that runs here: claude (default) or codex; also what corgi agent claude opens in this workspace")
+	f.StringSlice("agents", nil, "The agents to try in order, e.g. claude,codex: the next takes a run when the first cannot")
 	f.String(watchFlagPruneAfter, "", "Remove an isolated run's worktrees this long after it finished, e.g. 7d; the branch stays, a dirty worktree stays (empty keeps them until `watch undo` or `watch prune`)")
 	f.Bool(watchFlagNoRetry, false, "Leave deferred fixes to a manual `watch run` instead of starting them when the budget returns")
 	f.Bool("reviews", false, "Also pull requests someone asked me to review — theirs, not mine")

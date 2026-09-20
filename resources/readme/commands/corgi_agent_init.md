@@ -21,11 +21,13 @@ corgi agent init [flags]
 ### Options
 
 ```
+      --agents strings                 The agents to try in order, e.g. claude,codex: the next takes an unattended run when the first cannot
       --alias strings                  Extra names this workspace answers to, e.g. --alias 'recipe app'
       --config-dir string              CLAUDE_CONFIG_DIR for this workspace, so it runs under a specific Claude account
       --dangerously-skip-permissions   Run this workspace's sessions with permission prompts OFF (--permission-mode bypassPermissions). Removes the gate you answer from your phone — off by default.
   -h, --help                           help for init
       --id string                      Workspace id (defaults to the directory name)
+      --kind string                    The one agent this workspace runs (claude, codex); --agents lists several
       --sensitive                      Never open a public tunnel for this workspace
 ```
 

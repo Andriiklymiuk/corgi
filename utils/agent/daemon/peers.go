@@ -75,6 +75,47 @@ func (d *Daemon) publishWatchIdentities() {
 	data, _ := json.Marshal(ids)
 	_ = os.MkdirAll(filepath.Dir(WatchIdentitiesPath(d.Dir)), 0o700)
 	_ = atomicfile.Write(WatchIdentitiesPath(d.Dir), data, 0o600)
+	d.publishWatchAgents()
+}
+
+// WatchAgentsPath is each watched workspace's agent order and config dir,
+// so a pulse answered from the files knows whether a fallback agent could
+// take the runs a spent window keeps claude from.
+func WatchAgentsPath(dir string) string { return filepath.Join(dir, "watch", "agents.json") }
+
+type watchAgents struct {
+	Agents    []string `json:"agents"`
+	ConfigDir string   `json:"configDir,omitempty"`
+}
+
+func (d *Daemon) publishWatchAgents() {
+	out := map[string]watchAgents{}
+	for _, spec := range d.Watches {
+		out[spec.Workspace] = watchAgents{Agents: spec.agents(), ConfigDir: spec.ConfigDir}
+	}
+	data, _ := json.Marshal(out)
+	_ = atomicfile.Write(WatchAgentsPath(d.Dir), data, 0o600)
+}
+
+// unwellFromFiles is laptopUnwell for a pulse answered outside the daemon:
+// the first agent's reason, unless some watched workspace has another
+// agent that can take its runs.
+func unwellFromFiles(dir string, log *watch.FixLog, budget int, now time.Time) string {
+	why := unwellFrom(log, budget, now)
+	if why == "" {
+		return ""
+	}
+	var specs map[string]watchAgents
+	if raw, err := os.ReadFile(WatchAgentsPath(dir)); err != nil || json.Unmarshal(raw, &specs) != nil {
+		return why
+	}
+	for ws, a := range specs {
+		spec := WatchSpec{Workspace: ws, Agents: a.Agents, ConfigDir: a.ConfigDir}
+		if len(spec.agents()) > 1 && hasFallback(spec, log, now) {
+			return ""
+		}
+	}
+	return why
 }
 
 // peerNotes is what the daemon remembers about its peers between ticks:
@@ -113,7 +154,7 @@ func (d *Daemon) peerLeads(spec WatchSpec) string {
 	if d.watchState != nil {
 		log = d.watchState.Fixes
 	}
-	leader := peers.LeaderAmong(store, peers.Me(), ids, budget, unwellFrom(log, budget, time.Now()), time.Now())
+	leader := peers.LeaderAmong(store, peers.Me(), ids, budget, laptopUnwell(spec, log, time.Now()), time.Now())
 	if leader == "" {
 		return ""
 	}
@@ -233,7 +274,7 @@ func LocalPulse(dir, version string) peers.Pulse {
 	}
 	log := watch.LoadFixLog(dir)
 	p.Runs = peerRunsOf(log, time.Now())
-	p.Unwell = unwellFrom(log, p.Budget, time.Now())
+	p.Unwell = unwellFromFiles(dir, log, p.Budget, time.Now())
 	if p.Ignored == nil {
 		p.Ignored = []string{}
 	}

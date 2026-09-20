@@ -315,9 +315,17 @@ corgi agent tunnel setup <yours>.ngrok-free.dev --provider ngrok
 
 <p align="center"><img src="docs/media/peers.gif" width="760" alt="corgi agent peers: the home laptop leads, a fix rings once; corgi agent sessions shows the other laptop's board; the lead moves when the home laptop's window runs out; corgi agent peers lead pins it; doctor --away checks the peers"></p>
 
-**Codex instead of Claude Code.** `corgi agent codex` opens Codex in this folder's workspace the way `corgi agent claude` opens Claude Code — same checkout, same flags. `kind: codex` on a workspace (or a profile) makes it the default there and runs that workspace's fixes, bots and routines through `codex exec`; `corgi agent watch enable --kind codex` sets it. `corgi agent track enable` writes Codex's `notify` hook too, so its turns land on the same board — coarser than Claude's rows, since Codex has one hook where Claude Code has many. The next agent is one more entry in the harness table.
+**More than one agent.** A workspace names the agents it tries, in order:
 
-<p align="center"><img src="docs/media/codex.gif" width="760" alt="corgi agent watch enable --kind codex, track enable hooking Codex's notify, corgi agent codex, and a PR comment fixed through codex exec"></p>
+```bash
+corgi agent workspaces agents acme-stack claude,codex   # claude runs; codex when claude cannot
+corgi agent workspaces agents --default claude,codex    # every workspace without an order of its own
+corgi agent init --agents claude,codex                  # from the start
+```
+
+Claude Code is the default. With an order, every unattended run — a fix, a bot, a routine — picks the first agent that can work *right now*: installed, logged in, window not spent. When Claude's five-hour window runs out the next comment does not wait until it resets; Codex takes that run, under its own login, and your phone hears once a day that the work moved. The pick is not remembered, so Claude gets the next run back the moment its window opens. Two laptops see it too: a laptop with a fallback that can run never tells its peer it is unwell. `corgi agent workspaces` shows each order and what is not installed; `corgi agent doctor` fails when a first choice is missing. `corgi agent codex` opens Codex in this folder's workspace the way `corgi agent claude` opens Claude Code — same checkout, same flags — and `corgi agent claude` itself opens the first agent of the order that is installed. `corgi agent track enable` writes Codex's `notify` hook, so its turns land on the same board — coarser than Claude's rows, since Codex has one hook where Claude Code has many. The next agent is one more entry in the harness table.
+
+<p align="center"><img src="docs/media/codex.gif" width="760" alt="corgi agent workspaces agents claude,codex; track enable hooks Codex's notify; a PR comment fixed by claude, the next one by codex when claude's window is spent; corgi agent codex"></p>
 
 `corgi agent down` turns everything off, and nothing runs again until you start it. macOS and Linux — a headless server too, where the phone and Telegram are the screen ([running it on a server](docs/agent.md#running-it-on-a-server)). With the plugin, `/corgi-remote` walks you through the whole setup. Full guide: [docs/agent.md](docs/agent.md).
 
@@ -328,7 +336,7 @@ Claude phone app — the whole stack as 52 tools, behind your own sign-in:
 
 ```text
 $ corgi agent status
-corgi agent running (pid 84639, version 2.29.4)
+corgi agent running (pid 84639, version 2.30.0)
   launcher   https://<host>/app
   connector  https://<host>/mcp   add in Claude: Connect, or No sign-in + Authorization: Bearer <device token>
 ```

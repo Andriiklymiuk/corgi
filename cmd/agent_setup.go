@@ -15,6 +15,7 @@ import (
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/agent/config"
 	"andriiklymiuk/corgi/utils/agent/daemon"
+	"andriiklymiuk/corgi/utils/agent/harness"
 	"andriiklymiuk/corgi/utils/agent/sessions"
 	"andriiklymiuk/corgi/utils/agent/supervisor"
 	"andriiklymiuk/corgi/utils/agent/watch"
@@ -47,8 +48,16 @@ func runAgentInit(cmd *cobra.Command, _ []string) {
 	configDir, _ := cmd.Flags().GetString("config-dir")
 	sensitive, _ := cmd.Flags().GetBool("sensitive")
 	skipPerms, _ := cmd.Flags().GetBool("dangerously-skip-permissions")
+	rawAgents, _ := cmd.Flags().GetStringSlice("agents")
+	if kind, _ := cmd.Flags().GetString("kind"); kind != "" {
+		rawAgents = append([]string{kind}, rawAgents...)
+	}
+	agents, err := parseAgents(rawAgents)
+	if err != nil {
+		exitWithError("agent_init", err, 2)
+	}
 
-	id, err = registerWorkspace(cwd, id, aliases, configDir, sensitive, skipPerms)
+	id, err = registerWorkspace(cwd, id, aliases, configDir, sensitive, skipPerms, agents)
 	if err != nil {
 		var re *registerError
 		if errors.As(err, &re) {
@@ -59,6 +68,11 @@ func runAgentInit(cmd *cobra.Command, _ []string) {
 
 	utils.Infof("registered %s (%s) and enabled it\n", id, cwd)
 	utils.Info("wrote .corgi/agent.yml — safe to commit, it holds identity only")
+	if len(agents) > 0 {
+		agentsNotice(agents)
+	} else if harness.For(harness.Codex, "").Installed() {
+		utils.Info("runs through claude; `corgi agent init --agents claude,codex` lets codex take a run when claude cannot")
+	}
 	if skipPerms {
 		utils.Info("⚠ permissions: SKIPPED for this workspace — its remote sessions run without the prompts you answer from your phone.")
 		utils.Infof("  to undo: remove `dangerouslySkipPermissions: true` for %s from %s\n", id, agentUserConfigPath(mustAgentDir()))
@@ -81,7 +95,7 @@ type registerError struct {
 func (e *registerError) Error() string { return e.err.Error() }
 func (e *registerError) Unwrap() error { return e.err }
 
-func registerWorkspace(dir, id string, aliases []string, configDir string, sensitive, skipPerms bool) (string, error) {
+func registerWorkspace(dir, id string, aliases []string, configDir string, sensitive, skipPerms bool, agents []string) (string, error) {
 	if !dirIsWorkspace(dir) {
 		return "", &registerError{"agent_no_workspace", 2,
 			fmt.Errorf("nothing to register here — run this in a corgi stack or a git repository (or `corgi agent scan <dir>` to find stacks)")}
@@ -119,6 +133,11 @@ func registerWorkspace(dir, id string, aliases []string, configDir string, sensi
 
 	if err := enableWorkspace(id, configDir, skipPerms); err != nil {
 		return "", &registerError{"agent_write_user_config", 1, err}
+	}
+	if len(agents) > 0 {
+		if err := setAgents(id, agents, false); err != nil {
+			return "", &registerError{"agent_write_user_config", 1, err}
+		}
 	}
 	return id, nil
 }
@@ -447,7 +466,7 @@ func collectAgentChecks() []agentCheck {
 	if err != nil {
 		return append(checks, agentCheck{Name: "data directory", Detail: err.Error()})
 	}
-	checks = append(checks, checkUserConfigPermissions(agentUserConfigPath(dir)), checkRegisteredWorkspaces(), checkDaemonRunning(dir))
+	checks = append(checks, checkUserConfigPermissions(agentUserConfigPath(dir)), checkRegisteredWorkspaces(), checkAgents(), checkDaemonRunning(dir))
 	if c, ok := checkMacOSFileAccess(); ok {
 		checks = append(checks, c)
 	}
@@ -681,6 +700,46 @@ func checkRegisteredWorkspaces() agentCheck {
 	return agentCheck{Name: "workspaces", OK: true, Detail: detail}
 }
 
+// checkAgents: every agent a workspace names is installed; a fallback that
+// is missing is a warning, a first choice that is missing fails.
+func checkAgents() agentCheck {
+	const name = "agents"
+	user := loadUserConfigQuietly()
+	registry, _ := mustLoadRegistry()
+	if user == nil || len(registry.Workspaces) == 0 {
+		return agentCheck{Name: name, OK: true, Detail: "claude"}
+	}
+	var missingFirst, missingNext []string
+	orders := map[string]bool{}
+	for _, w := range registry.Sorted() {
+		order := config.Resolve(w.ID, nil, user).AgentOrder()
+		orders[agentsWord(order)] = true
+		for i, a := range order {
+			if harness.For(a, "").Installed() {
+				continue
+			}
+			if i == 0 {
+				missingFirst = append(missingFirst, w.ID+" wants "+a)
+			} else {
+				missingNext = append(missingNext, w.ID+" falls back to "+a)
+			}
+		}
+	}
+	words := make([]string, 0, len(orders))
+	for k := range orders {
+		words = append(words, k)
+	}
+	sort.Strings(words)
+	if len(missingFirst) > 0 {
+		return agentCheck{Name: name, Detail: "not installed: " + strings.Join(missingFirst, ", "), Fix: "install it, or `corgi agent workspaces agents <id> claude`"}
+	}
+	detail := strings.Join(words, "; ")
+	if len(missingNext) > 0 {
+		detail += " — not installed: " + strings.Join(missingNext, ", ")
+	}
+	return agentCheck{Name: name, OK: true, Detail: detail}
+}
+
 func checkDaemonRunning(dir string) agentCheck {
 	info, err := daemon.ReadInfo(dir)
 	if err != nil {
@@ -701,6 +760,8 @@ func init() {
 	agentInitCmd.Flags().StringSlice("alias", nil, "Extra names this workspace answers to, e.g. --alias 'recipe app'")
 	agentInitCmd.Flags().String("config-dir", "", "CLAUDE_CONFIG_DIR for this workspace, so it runs under a specific Claude account")
 	agentInitCmd.Flags().Bool("sensitive", false, "Never open a public tunnel for this workspace")
+	agentInitCmd.Flags().StringSlice("agents", nil, "The agents to try in order, e.g. claude,codex: the next takes an unattended run when the first cannot")
+	agentInitCmd.Flags().String("kind", "", "The one agent this workspace runs (claude, codex); --agents lists several")
 	agentInitCmd.Flags().Bool("dangerously-skip-permissions", false,
 		"Run this workspace's sessions with permission prompts OFF (--permission-mode bypassPermissions). Removes the gate you answer from your phone — off by default.")
 

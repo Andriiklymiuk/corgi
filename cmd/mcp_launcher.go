@@ -25,6 +25,7 @@ import (
 	"andriiklymiuk/corgi/utils/agent/config"
 	"andriiklymiuk/corgi/utils/agent/daemon"
 	"andriiklymiuk/corgi/utils/agent/events"
+	"andriiklymiuk/corgi/utils/agent/harness"
 	"andriiklymiuk/corgi/utils/agent/pairing"
 	"andriiklymiuk/corgi/utils/agent/push"
 	"andriiklymiuk/corgi/utils/agent/sessions"
@@ -62,6 +63,7 @@ type launchWorkspace struct {
 	Usage        *usage.Report     `json:"usage,omitempty"`
 	LastEvent    *launchLastEvent  `json:"lastEvent,omitempty"`
 	Profiles     []string          `json:"profiles,omitempty"`
+	Agents       []string          `json:"agents,omitempty"`
 }
 
 type launchTopSession struct {
@@ -121,7 +123,7 @@ func launchRegisterWorkspace(w http.ResponseWriter, r *http.Request) {
 		writeLaunchError(w, http.StatusBadRequest, "path must be absolute")
 		return
 	}
-	id, err := registerWorkspace(path, strings.TrimSpace(req.ID), nil, "", false, false)
+	id, err := registerWorkspace(path, strings.TrimSpace(req.ID), nil, "", false, false, nil)
 	if err != nil {
 		writeLaunchError(w, http.StatusBadRequest, err.Error())
 		return
@@ -195,6 +197,19 @@ type wsRunState struct {
 	remark    string
 }
 
+// workspaceAgents is the order a workspace tries, when it is more than claude.
+func workspaceAgents(id string) []string {
+	user := loadUserConfigQuietly()
+	if user == nil {
+		return nil
+	}
+	order := config.Resolve(id, nil, user).AgentOrder()
+	if len(order) == 1 && order[0] == harness.Claude {
+		return nil
+	}
+	return order
+}
+
 func buildLaunchWorkspaces(registry *workspace.Registry, status *daemon.Status) []launchWorkspace {
 	running := launchRunStates(status)
 	profiles := launchProfileNames()
@@ -210,6 +225,7 @@ func buildLaunchWorkspaces(registry *workspace.Registry, status *daemon.Status) 
 			PID: s.pid, LastCause: s.lastCause,
 			DeviceOnly: s.device, Remark: s.remark,
 		}
+		row.Agents = workspaceAgents(ws.ID)
 		row.Branch, row.Dirty = workspaceCheckout(ws.ID, ws.AbsPath)
 		row.Live, row.TopSession, row.LastEvent = workspaceActivity(ws.ID, ws.AbsPath, s.profile)
 		row.Usage = workspaceUsage(ws.ID, ws.AbsPath, s.profile)

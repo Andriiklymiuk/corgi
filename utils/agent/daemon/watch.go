@@ -27,8 +27,10 @@ type WatchSpec struct {
 	Dir       string
 	ConfigDir string
 	AgentDir  string
-	// Kind and Bin pick the harness (claude, codex) that runs fixes here.
+	// Kind and Bin pick the harness (claude, codex) that runs fixes here;
+	// Agents is the order to try when it cannot (utils/agent/daemon/harnesses.go).
 	Kind            string
+	Agents          []string
 	Bin             string
 	Isolate         bool
 	PruneAfter      time.Duration
@@ -238,17 +240,14 @@ var harnessCommand = func(ctx context.Context, h harness.Harness, dir string, en
 	return cmd
 }
 
-// runCommand is one unattended run under the spec's harness. Claude goes
+// runCommand is one unattended run under the picked harness. Claude goes
 // through claudeCommand so a test can stand in for it.
-func (s WatchSpec) runCommand(ctx context.Context, dir string, env []string, args ...string) *exec.Cmd {
-	h := s.harness()
+func (s WatchSpec) runCommand(ctx context.Context, h harness.Harness, dir string, env []string, args ...string) *exec.Cmd {
 	if h.Name == harness.Claude {
 		return claudeCommand(ctx, dir, env, args...)
 	}
 	return harnessCommand(ctx, h, dir, env, args...)
 }
-
-func (s WatchSpec) harness() harness.Harness { return harness.For(s.Kind, s.Bin) }
 
 func (d *Daemon) loadWatchFiles() {
 	if d.watchState == nil {
@@ -299,6 +298,11 @@ func (d *Daemon) startWatches(ctx context.Context) {
 		}
 	}
 	utils.Infof("agent: watching %d workspace(s) — tracker and review events\n", len(d.Watches))
+	for _, spec := range d.Watches {
+		if order := spec.agents(); len(order) > 1 {
+			utils.Infof("agent: %s runs through %s; %s when it cannot\n", spec.Workspace, order[0], strings.Join(order[1:], ", then "))
+		}
+	}
 }
 
 func (d *Daemon) refresh() {
@@ -727,7 +731,7 @@ func fixDeferral(spec WatchSpec, log *watch.FixLog, now time.Time) string {
 	if lowDisk(now, firstNonEmpty(spec.AgentDir, ".")) {
 		return "low disk"
 	}
-	if pct, ok := limitUsed(spec.ConfigDir, now); ok {
+	if pct, ok := limitUsed(spec.ConfigDir, now); ok && !hasFallback(spec, log, now) {
 		if pct >= limitRefusePercent {
 			return fmt.Sprintf("limit %d%%", pct)
 		}
@@ -993,6 +997,22 @@ func headlessEnv(configDir, omit string) []string {
 	return append(env, "CORGI_OMIT="+strings.Join(append(keys, "useAwsVpn"), ","), "DISABLE_AUTOUPDATER=1")
 }
 
+// harnessEnv drops the first agent's config dir when another agent takes
+// the run: CLAUDE_CONFIG_DIR means nothing to codex, and its own home has
+// its own login.
+func harnessEnv(spec WatchSpec, h harness.Harness, env []string) []string {
+	if h.Name == spec.agents()[0] || spec.ConfigDir == "" {
+		return env
+	}
+	out := env[:0:0]
+	for _, kv := range env {
+		if !strings.HasPrefix(kv, "CLAUDE_CONFIG_DIR=") {
+			out = append(out, kv)
+		}
+	}
+	return out
+}
+
 func fixArgs(spec WatchSpec, e watch.Event) []string {
 	return fixArgsWith(spec, e, "")
 }
@@ -1101,11 +1121,13 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 		print.Prompt += IsolationNote(branch, trees)
 		fmt.Fprintf(logFile, "=== worktrees on %s: %s\n", branch, strings.Join(trees, ", "))
 	}
-	h := spec.harness()
+	h := d.pickHarnessFor(spec)
 	if h.Name != harness.Claude {
 		fmt.Fprintf(logFile, "=== harness: %s\n", h.Name)
 	}
-	cmd := spec.runCommand(ctx, spec.Dir, env, h.PrintArgs(print)...)
+	d.watchState.Fixes.SetHarness(e.Key, h.Name)
+	env = harnessEnv(spec, h, env)
+	cmd := spec.runCommand(ctx, h, spec.Dir, env, h.PrintArgs(print)...)
 	cmd.Stdin = nil
 	raw, runErr := cmd.Output()
 	out, receipt := unwrapWith(h, raw)
