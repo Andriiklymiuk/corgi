@@ -48,7 +48,11 @@ The phone does the invite and join for you when it is paired with both.`,
 		now := time.Now()
 		me := peers.Me()
 		if utils.JSONOutput {
-			utils.PrintJSON(map[string]any{"me": me, "lead": store.Lead, "peers": store.Peers})
+			list := make([]map[string]any, 0, len(store.Peers))
+			for _, p := range store.Peers {
+				list = append(list, p.Public())
+			}
+			utils.PrintJSON(map[string]any{"me": me, "lead": store.Lead, "peers": list})
 			return
 		}
 		if len(store.Peers) == 0 {
@@ -253,10 +257,9 @@ func launchPeersHandler(w http.ResponseWriter, r *http.Request) {
 			writeLaunchError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		now := time.Now()
 		list := make([]map[string]any, 0, len(store.Peers))
 		for _, p := range store.Peers {
-			list = append(list, map[string]any{"name": p.Name, "url": p.URL, "alive": p.Alive(now), "seenAt": p.SeenAt, "lead": p.Lead, "watches": p.Watches, "since": p.Since})
+			list = append(list, p.Public())
 		}
 		writeLaunchJSON(w, map[string]any{"me": peers.Me(), "lead": store.Lead, "peers": list})
 	case http.MethodDelete:
@@ -382,3 +385,82 @@ func launchPeersPulseHandler(w http.ResponseWriter, r *http.Request) {
 	writeLaunchJSON(w, daemon.LocalPulse(dir, APP_VERSION))
 	nudgeDaemon(dir)
 }
+
+// peersText is the one-screen summary Telegram and the doctor share.
+func peersText(dir string) string {
+	store, err := peers.Load(peers.Path(dir))
+	if err != nil || len(store.Peers) == 0 {
+		return "no peer laptops — pair the phone with both and it introduces them"
+	}
+	now := time.Now()
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s%s (this laptop)\n", peers.Me(), leadWord(store.Lead))
+	for _, p := range store.Peers {
+		state := "silent"
+		if p.Alive(now) {
+			state = "awake"
+		} else if !p.SeenAt.IsZero() {
+			state = "silent since " + ago(now.Sub(p.SeenAt))
+		}
+		fmt.Fprintf(&b, "%s%s · %s", p.Name, leadWord(p.Lead), state)
+		if p.Budget > 0 {
+			fmt.Fprintf(&b, " · %d%% free", p.Budget)
+		}
+		if p.Unwell != "" {
+			fmt.Fprintf(&b, " · ⚠ %s", p.Unwell)
+		}
+		b.WriteString("\n")
+		for _, s := range p.Sessions {
+			if s.Status == "working" || s.Status == "needs_input" {
+				fmt.Fprintf(&b, "  %s %s%s\n", s.Status, firstNonEmpty(s.Display, s.Label), ticketWord(s.Ticket))
+			}
+		}
+		for _, r := range p.Runs {
+			if r.State == "failed" || r.State == "blocked" {
+				fmt.Fprintf(&b, "  %s %s: %s\n", r.State, r.Ref, r.Reason)
+			}
+		}
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
+// checkPeers is the away doctor's line: are the other laptops reachable,
+// and can this one still work.
+func checkPeers(dir string) agentCheck {
+	const name = "peers"
+	store, err := peers.Load(peers.Path(dir))
+	if err != nil || len(store.Peers) == 0 {
+		return agentCheck{Name: name, OK: true, Detail: "no peer laptops — this one acts alone"}
+	}
+	now := time.Now()
+	var awake, silent, unwell []string
+	for _, p := range store.Peers {
+		switch {
+		case p.Alive(now) && p.Unwell != "":
+			unwell = append(unwell, p.Name+" ("+p.Unwell+")")
+		case p.Alive(now):
+			awake = append(awake, p.Name)
+		default:
+			silent = append(silent, p.Name)
+		}
+	}
+	c := agentCheck{Name: name, OK: true, Detail: fmt.Sprintf("%d awake, %d silent", len(awake), len(silent))}
+	if len(unwell) > 0 {
+		c.OK = false
+		c.Detail = "cannot run fixes: " + strings.Join(unwell, ", ")
+		c.Fix = "log Claude in there (claude → /login), or let this laptop lead: corgi agent peers lead"
+	} else if len(awake) == 0 {
+		c.OK = false
+		c.Detail = "every peer is silent: " + strings.Join(silent, ", ")
+		c.Fix = "is the other laptop on and its tunnel up? corgi agent status there"
+	}
+	if me := LocalPulseUnwell(dir); me != "" {
+		c.OK = false
+		c.Detail += " — and this laptop cannot run fixes (" + me + ")"
+		c.Fix = "claude → /login here, or wait for the window to reset"
+	}
+	return c
+}
+
+// LocalPulseUnwell is this laptop's own reason it cannot run fixes, or "".
+func LocalPulseUnwell(dir string) string { return daemon.LocalPulse(dir, APP_VERSION).Unwell }

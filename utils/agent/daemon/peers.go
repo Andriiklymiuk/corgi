@@ -77,8 +77,23 @@ func (d *Daemon) publishWatchIdentities() {
 	_ = atomicfile.Write(WatchIdentitiesPath(d.Dir), data, 0o600)
 }
 
-var peerLogMu sync.Mutex
-var peerLogged = map[string]time.Time{}
+// peerNotes is what the daemon remembers about its peers between ticks:
+// who led each workspace, when that changed, what was rung. One per
+// daemon, so a test daemon starts blank.
+type peerNotes struct {
+	mu            sync.Mutex
+	logged        map[string]time.Time
+	leaderWas     map[string]string
+	leaderChanged map[string]time.Time
+	rang          map[string]time.Time
+}
+
+func (d *Daemon) notes() *peerNotes {
+	d.peerOnce.Do(func() {
+		d.peer = &peerNotes{logged: map[string]time.Time{}, leaderWas: map[string]string{}, leaderChanged: map[string]time.Time{}, rang: map[string]time.Time{}}
+	})
+	return d.peer
+}
 
 // peerLeads is the name of the peer that leads this spec's trackers, or ""
 // when this laptop acts. Logged once an hour per tracker so the log does
@@ -90,6 +105,7 @@ func (d *Daemon) peerLeads(spec WatchSpec) string {
 	}
 	store, err := peers.Load(peers.Path(d.Dir))
 	if err != nil || len(store.Peers) == 0 {
+		d.noteLeader(spec.Workspace, "")
 		return ""
 	}
 	budget := freeBudget(spec.ConfigDir)
@@ -101,15 +117,44 @@ func (d *Daemon) peerLeads(spec WatchSpec) string {
 	if leader == "" {
 		return ""
 	}
-	key := spec.Workspace + "|" + leader
-	peerLogMu.Lock()
-	last, ok := peerLogged[key]
-	if !ok || time.Since(last) > time.Hour {
-		peerLogged[key] = time.Now()
-		utils.Infof("agent: %s leads %s — this laptop stays quiet there\n", leader, spec.Workspace)
-	}
-	peerLogMu.Unlock()
+	d.noteLeader(spec.Workspace, leader)
 	return leader
+}
+
+// noteLeader logs a leader once an hour, and rings once when the lead
+// moves — to a peer, or back to this laptop — so a traveller knows which
+// machine is working the tracker now.
+func (d *Daemon) noteLeader(workspace, leader string) {
+	n := d.notes()
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	prev, seen := n.leaderWas[workspace]
+	n.leaderWas[workspace] = leader
+	if seen && prev != leader {
+		who := leader
+		if who == "" {
+			who = "this laptop"
+		}
+		was := prev
+		if was == "" {
+			was = "this laptop"
+		}
+		// A lead that flaps (a laptop dozing on and off) is logged, not rung.
+		if time.Since(n.leaderChanged[workspace]) > 15*time.Minute {
+			go d.notifyAttention("corgi agent", who+" leads "+workspace+" now (was "+was+")", workspace)
+		} else {
+			utils.Infof("agent: %s leads %s now (was %s)\n", who, workspace, was)
+		}
+		n.leaderChanged[workspace] = time.Now()
+	}
+	if leader == "" {
+		return
+	}
+	key := workspace + "|" + leader
+	if last, ok := n.logged[key]; !ok || time.Since(last) > time.Hour {
+		n.logged[key] = time.Now()
+		utils.Infof("agent: %s leads %s — this laptop stays quiet there\n", leader, workspace)
+	}
 }
 
 // pulsePeers runs for the daemon's life: once a minute, every peer hears
@@ -182,6 +227,9 @@ func LocalPulse(dir, version string) peers.Pulse {
 		if json.Unmarshal(raw, &st) == nil {
 			p.Sessions = peerSessionsOf(st.Sessions)
 		}
+	}
+	if until := MutedUntil(dir); !until.IsZero() {
+		p.MutedUntil = until.UnixMilli()
 	}
 	log := watch.LoadFixLog(dir)
 	p.Runs = peerRunsOf(log, time.Now())
@@ -301,6 +349,14 @@ func (d *Daemon) absorbPeers() {
 		if !p.Alive(now) {
 			continue
 		}
+		// A mute set over there quiets this laptop for the same span; a
+		// longer mute here stays.
+		if p.MutedUntil > 0 {
+			if until := time.UnixMilli(p.MutedUntil); until.After(now) && until.After(MutedUntil(d.Dir).Add(time.Minute)) {
+				_ = SetMute(d.Dir, until)
+				utils.Infof("agent: muted until %s, as %s is\n", until.Local().Format("15:04"), p.Name)
+			}
+		}
 		if d.watchState != nil {
 			for _, key := range p.Ignored {
 				if !d.watchState.IsIgnored(key) {
@@ -367,21 +423,19 @@ func isMainBranch(b string) bool {
 	return false
 }
 
-var rangMu sync.Mutex
-var rang = map[string]time.Time{}
-
 // rangOnce is true the first time a key is seen (and again after a day).
 func (d *Daemon) rangOnce(key string, now time.Time) bool {
-	rangMu.Lock()
-	defer rangMu.Unlock()
-	if at, ok := rang[key]; ok && now.Sub(at) < 24*time.Hour {
+	n := d.notes()
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if at, ok := n.rang[key]; ok && now.Sub(at) < 24*time.Hour {
 		return false
 	}
-	rang[key] = now
-	if len(rang) > 5000 {
-		for k, at := range rang {
+	n.rang[key] = now
+	if len(n.rang) > 5000 {
+		for k, at := range n.rang {
 			if now.Sub(at) > 24*time.Hour {
-				delete(rang, k)
+				delete(n.rang, k)
 			}
 		}
 	}

@@ -1152,14 +1152,25 @@ func (r *Registry) SetAccounts(accounts []Account) bool {
 func (r *Registry) SetPeers(list []PeerBoard) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	a, _ := json.Marshal(r.peers)
-	b, _ := json.Marshal(list)
+	// SeenAt moves every minute; it alone does not republish the board.
+	a, _ := json.Marshal(withoutSeen(r.peers))
+	b, _ := json.Marshal(withoutSeen(list))
 	if bytes.Equal(a, b) {
+		r.peers = list
 		return false
 	}
 	r.peers = list
 	r.touch()
 	return true
+}
+
+func withoutSeen(list []PeerBoard) []PeerBoard {
+	out := make([]PeerBoard, len(list))
+	for i, p := range list {
+		p.SeenAt = time.Time{}
+		out[i] = p
+	}
+	return out
 }
 
 func sameAccounts(a, b []Account) bool {

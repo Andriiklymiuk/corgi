@@ -101,6 +101,8 @@ type Daemon struct {
 	Isolate          func(dir, branch string) ([]string, error)
 	Events           *events.Log
 	CaptureBrief     func(brief.Params) *brief.Brief
+	peer             *peerNotes
+	peerOnce         sync.Once
 	ResolveWorkspace func(workspaceID, profile, name string) (supervisor.SpawnConfig, error)
 	CommandTick      time.Duration
 	IdleTick         time.Duration

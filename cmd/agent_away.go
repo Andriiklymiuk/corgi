@@ -79,7 +79,7 @@ func awayChecks(dir string) []agentCheck {
 	if runtime.GOOS == "darwin" {
 		checks = append(checks, checkMacUpdates(), checkLid(), checkPower(), checkFileVault(), checkHeat())
 	}
-	checks = append(checks, checkDisk(dir), checkNetwork(), checkPulse(dir), checkTunnel(dir), checkPhone(dir))
+	checks = append(checks, checkDisk(dir), checkNetwork(), checkPulse(dir), checkTunnel(dir), checkPhone(dir), checkPeers(dir))
 	if user, err := config.LoadUser(agentUserConfigPath(dir)); err == nil && user != nil {
 		checks = append(checks, digestChecks(user)...)
 		checks = append(checks, isolationChecks(user)...)
