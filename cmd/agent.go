@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -827,15 +828,15 @@ func runAgentWorkspacesList(_ *cobra.Command, _ []string) {
 	registry.Reconcile(dirIsWorkspace)
 	_ = workspace.Save(path, registry)
 
+	user := loadUserConfigQuietly()
 	if utils.JSONOutput {
-		utils.PrintJSON(registry.Sorted())
+		utils.PrintJSON(workspacesWithAgents(registry.Sorted(), user))
 		return
 	}
 	if len(registry.Workspaces) == 0 {
 		fmt.Println("No workspaces registered. Run `corgi agent init` in a stack, or `corgi agent scan <dir>`.")
 		return
 	}
-	user := loadUserConfigQuietly()
 	for _, w := range registry.Sorted() {
 		fmt.Printf("%-20s %-12s %s\n", w.ID, w.Status, w.AbsPath)
 		if len(w.Aliases) > 0 {
@@ -845,6 +846,25 @@ func runAgentWorkspacesList(_ *cobra.Command, _ []string) {
 			fmt.Printf("%-20s %s\n", "", line)
 		}
 	}
+}
+
+// workspacesWithAgents is the registry rows plus each one's agent order,
+// when it is more than claude — the surfaces read the list as JSON.
+func workspacesWithAgents(list []workspace.Workspace, user *config.UserConfig) []map[string]any {
+	out := make([]map[string]any, 0, len(list))
+	for _, w := range list {
+		row := map[string]any{}
+		if raw, err := json.Marshal(w); err == nil {
+			_ = json.Unmarshal(raw, &row)
+		}
+		if user != nil {
+			if order := config.Resolve(w.ID, nil, user).AgentOrder(); len(order) > 1 || order[0] != harness.Claude {
+				row["agents"] = order
+			}
+		}
+		out = append(out, row)
+	}
+	return out
 }
 
 func loadUserConfigQuietly() *config.UserConfig {
