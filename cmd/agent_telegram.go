@@ -168,6 +168,8 @@ func (t *telegramControl) handle(text, replyTo string) {
 		t.send(t.boardText())
 	case "usage", "limits":
 		t.send(t.usageText())
+	case "peers", "laptops":
+		t.send(peersText(t.agentIn))
 	case "allow", "yes":
 		t.answer(arg, "allow")
 	case "always":
@@ -366,6 +368,7 @@ func (t *telegramControl) usageText() string {
 
 const telegramHelp = `corgi commands:
 /status            what is registered and running
+/peers             the other laptops: awake, leading, what they are on
 /start <workspace> start a session there
 /stop <workspace>  stop it
 /sessions          the board: every Claude session and what it is doing

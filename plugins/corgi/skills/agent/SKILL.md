@@ -1088,7 +1088,12 @@ free, and whether it can work at all. So:
   laptop left alone for weeks whose Claude login lapses stops leading on its
   next pulse, the other rings once "home cannot run fixes (its agent wants a
   login)", and takes over. When it can again, it leads again.
-- `corgi agent watch ignore ENG-5` on one laptop ignores it on both.
+- `corgi agent watch ignore ENG-5` on one laptop ignores it on both;
+  `corgi agent mute 60` on one mutes both for the hour.
+- The lead moving (a laptop went silent, or came back) rings once — unless
+  it flapped within fifteen minutes, then it is only logged.
+- `corgi agent doctor --away` has a `peers` line; Telegram `/peers` prints
+  the same summary. `corgi agent peers --json` never prints tokens.
 - Same ticket, or same branch of the same repo, open on both laptops →
   "crossing laptops" rings once.
 

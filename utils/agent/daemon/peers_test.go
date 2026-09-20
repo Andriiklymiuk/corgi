@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -87,5 +88,41 @@ func TestLocalPulseAndAbsorb(t *testing.T) {
 	raw, _ := json.Marshal(st)
 	if strings.Contains(string(raw), "token") {
 		t.Fatal("no secrets on the board")
+	}
+}
+
+func TestLeadChangeRingsOnceAndMuteFollowsThePeer(t *testing.T) {
+	d := New("test", t.TempDir())
+	var mu sync.Mutex
+	var rang []string
+	d.Notify = func(title, body string) { mu.Lock(); rang = append(rang, body); mu.Unlock() }
+	count := func() int { mu.Lock(); defer mu.Unlock(); return len(rang) }
+	waitFor := func(n int) {
+		for i := 0; i < 100 && count() < n; i++ {
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+	spec := WatchSpec{Workspace: "api", Project: "ENG", Sources: []watch.Source{namedSource{"linear"}}}
+	d.peerLeads(spec) // first look: nothing to compare with
+	_ = peers.Update(peers.Path(d.Dir), func(s *peers.Store) {
+		s.Peers = []peers.Peer{{Name: "aaa-home", SeenAt: time.Now(), Watches: []string{"linear/eng"}, MutedUntil: time.Now().Add(30 * time.Minute).UnixMilli()}}
+	})
+	if d.peerLeads(spec) != "aaa-home" {
+		t.Fatal("home leads")
+	}
+	waitFor(1)
+	mu.Lock()
+	if len(rang) != 1 || !strings.Contains(rang[0], "aaa-home leads api now") {
+		t.Fatalf("one ring for the hand-over: %v", rang)
+	}
+	mu.Unlock()
+	d.peerLeads(spec)
+	time.Sleep(50 * time.Millisecond)
+	if count() != 1 {
+		t.Fatal("no ring while nothing changes")
+	}
+	d.absorbPeers()
+	if MutedUntil(d.Dir).IsZero() {
+		t.Fatal("the peer's mute is ours too")
 	}
 }

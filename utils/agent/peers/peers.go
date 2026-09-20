@@ -59,6 +59,15 @@ type Peer struct {
 	Sessions []PeerSession `json:"sessions,omitempty"`
 	Runs     []PeerRun     `json:"runs,omitempty"`
 	Ignored  []string      `json:"ignored,omitempty"`
+	// MutedUntil is the peer's mute, as unix millis; a mute set on one
+	// laptop quiets the other too.
+	MutedUntil int64 `json:"mutedUntil,omitempty"`
+}
+
+// Public is the peer without its token and key: what a listing prints.
+func (p Peer) Public() map[string]any {
+	return map[string]any{"name": p.Name, "url": p.URL, "since": p.Since, "seenAt": p.SeenAt, "alive": p.Alive(time.Now()), "watches": p.Watches, "lead": p.Lead,
+		"version": p.Version, "budget": p.Budget, "unwell": p.Unwell, "sessions": p.Sessions, "runs": p.Runs, "ignored": p.Ignored, "mutedUntil": p.MutedUntil}
 }
 
 // PeerSession is one row of the other laptop's board, enough to show it
@@ -277,17 +286,18 @@ type Pulse struct {
 	At      int64    `json:"at"`
 	// Since 2.29.1: the board, the runs, the ignored tickets and the
 	// budget travel too; an older peer sends none and that is fine.
-	Budget   int           `json:"budget,omitempty"`
-	Unwell   string        `json:"unwell,omitempty"`
-	Sessions []PeerSession `json:"sessions,omitempty"`
-	Runs     []PeerRun     `json:"runs,omitempty"`
-	Ignored  []string      `json:"ignored,omitempty"`
+	Budget     int           `json:"budget,omitempty"`
+	Unwell     string        `json:"unwell,omitempty"`
+	Sessions   []PeerSession `json:"sessions,omitempty"`
+	Runs       []PeerRun     `json:"runs,omitempty"`
+	Ignored    []string      `json:"ignored,omitempty"`
+	MutedUntil int64         `json:"mutedUntil,omitempty"`
 }
 
 // Absorb records what a pulse said about the peer that sent it.
 func (p *Peer) Absorb(in Pulse, now time.Time) {
 	p.SeenAt, p.Watches, p.Lead, p.Version = now, in.Watches, in.Lead, in.Version
-	p.Budget, p.Unwell, p.Sessions, p.Runs, p.Ignored = in.Budget, in.Unwell, in.Sessions, in.Runs, in.Ignored
+	p.Budget, p.Unwell, p.Sessions, p.Runs, p.Ignored, p.MutedUntil = in.Budget, in.Unwell, in.Sessions, in.Runs, in.Ignored, in.MutedUntil
 	if len(p.Sessions) > 50 {
 		p.Sessions = p.Sessions[:50]
 	}
