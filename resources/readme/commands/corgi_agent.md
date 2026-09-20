@@ -64,6 +64,7 @@ Getting started:
 * [corgi agent claim](corgi_agent_claim)	 - Say which files this session is on, so another session in the repository is told
 * [corgi agent claims](corgi_agent_claims)	 - Who holds which files, across the board
 * [corgi agent claude](corgi_agent_claude)	 - Run Claude Code the way this folder's workspace is configured
+* [corgi agent codex](corgi_agent_codex)	 - Run Codex the way this folder's workspace is configured
 * [corgi agent continue](corgi_agent_continue)	 - Let the daemon continue a limited session when its limit is over
 * [corgi agent cost](corgi_agent_cost)	 - What the agents cost: tokens by repo, by day, or by bot
 * [corgi agent dashboard](corgi_agent_dashboard)	 - Open the dashboard in this machine's browser

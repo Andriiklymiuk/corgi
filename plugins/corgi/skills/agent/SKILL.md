@@ -1120,7 +1120,7 @@ URL the other can reach: a tunnel each, or the same Wi-Fi.
 Codex there: `corgi agent claude` opens `codex` (permission modes map:
 `acceptEdits` → `--full-auto`, `bypassPermissions` → no sandbox), and the
 daemon's fixes, bots and routines run `codex exec --json` and read its
-receipt (thread id, tokens). `corgi agent claude --kind codex` is a one-off; `corgi agent watch enable
+receipt (thread id, tokens). `corgi agent codex` opens it once (`corgi agent claude --kind codex` is the same); `corgi agent watch enable
 --kind codex` sets the workspace's kind for good. `corgi agent track enable`
 writes Codex's `notify` line when codex is installed (and leaves a notify of
 someone else's alone, since Codex runs one).
