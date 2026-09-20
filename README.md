@@ -28,7 +28,7 @@ A feature is rarely one repo. It's an API change, a web change, a mobile change,
 
 <p align="center"><img src="docs/media/stories.gif" width="760" alt="An agent takes a ticket across three repos and opens three draft PRs"></p>
 
-<p align="center"><img src="docs/media/phone.gif" width="900" alt="corgi agent up prints a QR; the phone scans it and opens on the inbox — a ticket worked on from its sheet, the board, a session's permission allowed from its row, a stack started, settings, and the lock screen with the widget and the Live Activity"></p>
+<p align="center"><img src="docs/media/phone.gif" width="900" alt="corgi agent up prints a QR; the phone scans it and opens on the inbox — a ticket worked on from its sheet, the board, a session's permission allowed from its row, a stack started, settings with both laptops, and the lock screen where Allow on the Live Activity answers the laptop the session is on"></p>
 
 Video: [2-minute showcase](https://youtu.be/rlMCjs4EoFs?si=o3SQaymM55zxBCUY).
 
@@ -311,9 +311,13 @@ corgi agent tunnel setup <yours>.ngrok-free.dev --provider ngrok
 
 `agent tunnel setup` stores the choice, so plain `corgi agent up` keeps using it after that. Because the origin stops changing, the phone stays paired across restarts and reboots — save `https://<your-host>/app` to the home screen and it keeps working.
 
-**Two laptops, one phone.** Each laptop gets a tunnel and a hostname of its own (`home.yourdomain.com`, `work.yourdomain.com` — one Cloudflare account, one domain; `tunnel setup` names the tunnel after the laptop). Pair the phone with both and it introduces them to each other; from then on the two daemons pulse each other every minute and, for every tracker both watch, **one leads** — it starts the fixes and rings you, the other stays quiet and takes over when the leader sleeps. `corgi agent peers` shows who is awake, who leads, and what the other laptop is on or failed at; a laptop whose login lapsed or whose window is spent never leads while the other can, and the one with more budget wins a tie. `corgi agent peers lead` pins it. By hand: `corgi agent peers invite` on one, `corgi agent peers join <url> <code>` on the other.
+**Two laptops, one phone.** Each laptop gets a tunnel and a hostname of its own (`home.yourdomain.com`, `work.yourdomain.com` — one Cloudflare account, one domain; `tunnel setup` names the tunnel after the laptop). Pair the phone with both and it introduces them to each other; from then on the two daemons pulse each other every minute and, for every tracker both watch, **one leads** — it starts the fixes and rings you, the other stays quiet and takes over when the leader sleeps. `corgi agent peers` shows who is awake, who leads, and what the other laptop is on or failed at; `corgi agent sessions` lists the other laptop's sessions under your own. A laptop whose login lapsed or whose window is spent never leads while the other can, and the one with more budget wins a tie — so the laptop that sits at home for weeks keeps working, or hands over, without you. `corgi agent peers lead` pins it (the phone has the same switch in Settings). By hand: `corgi agent peers invite` on one, `corgi agent peers join <url> <code>` on the other. A peer's token opens two routes on the other laptop — its pulse and the pair-back — nothing else.
 
-**Codex instead of Claude Code.** `kind: codex` on a workspace (or a profile) opens Codex from `corgi agent claude`, and runs that workspace's fixes, bots and routines through `codex exec`; `corgi agent claude --kind codex` does it once. Sessions still get tracked coarsely — Codex has no hooks, so the board shows less about them.
+<p align="center"><img src="docs/media/peers.gif" width="760" alt="corgi agent peers: the home laptop leads, a fix rings once; corgi agent sessions shows the other laptop's board; the lead moves when the home laptop's window runs out; corgi agent peers lead pins it; doctor --away checks the peers"></p>
+
+**Codex instead of Claude Code.** `kind: codex` on a workspace (or a profile) opens Codex from `corgi agent claude`, and runs that workspace's fixes, bots and routines through `codex exec`; `corgi agent watch enable --kind codex` sets it, `corgi agent claude --kind codex` does it once. `corgi agent track enable` writes Codex's `notify` hook too, so its turns land on the same board — coarser than Claude's rows, since Codex has one hook where Claude Code has many. The next agent is one more entry in the harness table.
+
+<p align="center"><img src="docs/media/codex.gif" width="760" alt="corgi agent watch enable --kind codex, track enable hooking Codex's notify, corgi agent claude --kind codex, and a PR comment fixed through codex exec"></p>
 
 `corgi agent down` turns everything off, and nothing runs again until you start it. macOS and Linux — a headless server too, where the phone and Telegram are the screen ([running it on a server](docs/agent.md#running-it-on-a-server)). With the plugin, `/corgi-remote` walks you through the whole setup. Full guide: [docs/agent.md](docs/agent.md).
 
@@ -324,7 +328,7 @@ Claude phone app — the whole stack as 52 tools, behind your own sign-in:
 
 ```text
 $ corgi agent status
-corgi agent running (pid 84639, version 2.29.0)
+corgi agent running (pid 84639, version 2.29.3)
   launcher   https://<host>/app
   connector  https://<host>/mcp   add in Claude: Connect, or No sign-in + Authorization: Bearer <device token>
 ```

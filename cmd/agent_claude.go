@@ -160,7 +160,11 @@ the corgi VS Code extension's "+" key runs it in a new terminal.
 			return
 		}
 		if launch.Workspace != "" {
-			utils.Info(fmt.Sprintf("corgi: claude for %s%s", launch.Workspace, launch.accountSuffix()))
+			word := "claude"
+			if launch.Kind == supervisor.KindCodex {
+				word = "codex"
+			}
+			utils.Info(fmt.Sprintf("corgi: %s for %s%s", word, launch.Workspace, launch.accountSuffix()))
 		}
 		env := os.Environ()
 		for k, v := range launch.Env {

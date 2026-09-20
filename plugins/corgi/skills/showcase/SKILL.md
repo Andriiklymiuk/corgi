@@ -42,6 +42,17 @@ a UI change and the README is current again.
    `max`; tickets `ABC-123`. Never a client's real name, path, token or URL.
 8. **A script in the repo, a make target, a note in the README.** The next
    person redraws with one command.
+9. **Re-check old scenes when a new one lands.** Output drifts: a summary
+   line grows a suffix (`→ fix` became `→ fix, at most 3/h 10/day`), a tab
+   is renamed (Sessions → Agents), a version string ages. Before adding a
+   scene, grep the current print statements for every line the existing
+   scenes show and fix what moved; the new gif next to a stale one makes
+   the stale one obvious.
+10. **Two machines are two names, one story.** A multi-laptop feature is
+    told from one terminal: the other laptop appears only as the product
+    prints it (`on home-mbp (awake, leads):`, a ring "by home-mbp"), never
+    as a second window — two terminals side by side are unreadable at
+    README width. Use `yourdomain.com` for hostnames a user would own.
 
 ## Layout of the work
 
@@ -89,13 +100,35 @@ show gaps.
 ### A phone
 
 ```css
-.phone{width:300px;height:620px;border-radius:44px;background:#0b0b0d;border:3px solid #2a2a2e;box-shadow:0 30px 80px rgba(0,0,0,.6);position:relative;overflow:hidden}
-.notch{position:absolute;left:50%;top:10px;transform:translateX(-50%);width:100px;height:26px;border-radius:14px;background:#000;z-index:3}
+.phone{width:300px;height:650px;border-radius:46px;background:#0b0b0d;border:4px solid #3a3a3e;box-shadow:0 40px 90px rgba(0,0,0,.65),inset 0 0 0 2px #000;position:relative;overflow:hidden}
+.notch{position:absolute;left:50%;top:11px;transform:translateX(-50%);width:92px;height:28px;border-radius:16px;background:#000;z-index:5}
+.sb{position:absolute;left:0;right:0;top:0;height:50px;z-index:4;display:flex;justify-content:space-between;align-items:center;padding:14px 26px 0 30px;font:600 14px/1 -apple-system,system-ui,sans-serif;color:#fff}
+.home{position:absolute;left:50%;bottom:7px;transform:translateX(-50%);width:120px;height:5px;border-radius:3px;background:rgba(255,255,255,.85);z-index:6}
 .screen{position:absolute;inset:0;overflow:hidden}
 ```
 
-Put the product's own page CSS inside `.screen` (copy its palette and card
-rules from the source), and a lock screen or camera frame for the "before".
+300 x 650 is an iPhone's ratio (393 x 852). Every phone gets the same
+three pieces of chrome — a status bar (time, signal, Wi-Fi, battery as
+inline SVG), the Dynamic Island, the home indicator — from one shared
+`statusBar` string, so a lock screen, a chat and the app look like the same
+device. Put the product's own page CSS inside `.screen` (copy its palette
+and card rules from the source), and a lock screen or camera frame for the
+"before".
+
+**The tab bar.** Read the app's tab layout (`app/(tabs)/_layout.tsx` in an
+Expo app) for the labels and the SF Symbol names, and draw those symbols as
+inline SVG paths — not Unicode box glyphs (▤ ▥ ▮), which read as broken. A
+system tab bar is a glass capsule: `border-radius:30px`, a translucent
+fill, a 1 px hairline, the selected tab a lighter pill. Content scrolls
+*under* it, so put a gradient (`transparent → page colour`, ~130 px) behind
+the bar, or the rows collide with it. A badge is a red pill in the tab's
+top-right corner.
+
+**A Live Activity with buttons** needs two rows on a 300 px phone — title
+and laptop on top, the ask and the buttons below — or everything truncates
+to "Login re…". Show the pressed state (a ring on the button) and the state
+after (the word the app writes, "allowed") as two more frames: the reader
+sees the answer land.
 
 ### A desktop app or menu bar
 
@@ -187,3 +220,8 @@ rm -rf $F
 - The hero gif is the first thing under the tagline; nothing side by side.
 - Frames of a gif share one size; the last frame lingers.
 - No real client names, paths, tokens or URLs anywhere in the media.
+- The phone's tab bar uses the app's own labels and symbols, drawn as SVG,
+  with a fade under it; the status bar, island and home indicator are on
+  every phone frame, lock screen included.
+- A long notification wraps onto a second line inside the terminal instead
+  of running off the right edge (check the still, not just the gif).

@@ -35,8 +35,11 @@ const css = `
   .body b{font-weight:600;color:#fff}
   .qr{font:13.5px/1 "Menlo",monospace;letter-spacing:0;color:#fff;white-space:pre;margin:2px 0}
   /* phone */
-  .phone{width:300px;height:620px;border-radius:44px;background:#0b0b0d;border:3px solid #2a2a2e;box-shadow:0 30px 80px rgba(0,0,0,.6),inset 0 0 0 2px #000;position:relative;overflow:hidden;flex:none}
-  .notch{position:absolute;left:50%;top:10px;transform:translateX(-50%);width:100px;height:26px;border-radius:14px;background:#000;z-index:3}
+  .phone{width:300px;height:650px;border-radius:46px;background:#0b0b0d;border:4px solid #3a3a3e;box-shadow:0 40px 90px rgba(0,0,0,.65),0 0 0 1px #111,inset 0 0 0 2px #000;position:relative;overflow:hidden;flex:none}
+  .notch{position:absolute;left:50%;top:11px;transform:translateX(-50%);width:92px;height:28px;border-radius:16px;background:#000;z-index:5}
+  .sb{position:absolute;left:0;right:0;top:0;height:50px;z-index:4;display:flex;justify-content:space-between;align-items:center;padding:14px 26px 0 30px;font:600 14px/1 -apple-system,system-ui,sans-serif;color:#fff;pointer-events:none}
+  .sb svg{display:block}
+  .home{position:absolute;left:50%;bottom:7px;transform:translateX(-50%);width:120px;height:5px;border-radius:3px;background:rgba(255,255,255,.85);z-index:6}
   .screen{position:absolute;inset:0;overflow:hidden;font-family:-apple-system,system-ui,sans-serif}
   .clock{color:#fff;text-align:center;margin-top:90px;font-size:64px;font-weight:200;letter-spacing:-2px}
   .date{color:#fff;text-align:center;font-size:17px;opacity:.85}
@@ -75,6 +78,8 @@ const term = (title, lines, { rows = lines.length, cursor = false, extra = "" } 
 };
 
 const page = (inner, width = 960) => `<!doctype html><meta charset="utf-8"><title>corgi</title><style>${css}</style><div class="stage" style="width:${width}px">${inner}</div>`;
+
+const statusBar = `<div class="sb"><span>13:04</span><span style="display:flex;gap:5px;align-items:center"><svg width="17" height="11" viewBox="0 0 17 11"><rect x="0" y="7" width="3" height="4" rx=".8" fill="#fff"/><rect x="4.5" y="5" width="3" height="6" rx=".8" fill="#fff"/><rect x="9" y="2.5" width="3" height="8.5" rx=".8" fill="#fff"/><rect x="13.5" y="0" width="3" height="11" rx=".8" fill="#fff"/></svg><svg width="16" height="11" viewBox="0 0 16 11"><path d="M8 10.5 5.7 8.2a3.3 3.3 0 0 1 4.6 0L8 10.5Zm-4-4A5.6 5.6 0 0 1 12 6.5l1.4-1.4a7.6 7.6 0 0 0-10.8 0L4 6.5Zm-2.6-2.6A9.3 9.3 0 0 1 14.6 3.9L16 2.5a11.3 11.3 0 0 0-16 0l1.4 1.4Z" fill="#fff"/></svg><svg width="27" height="12" viewBox="0 0 27 12"><rect x=".5" y=".5" width="22" height="11" rx="3" fill="none" stroke="#fff" stroke-opacity=".4"/><rect x="2" y="2" width="17" height="8" rx="1.6" fill="#fff"/><path d="M24 4v4a2 2 0 0 0 0-4Z" fill="#fff" fill-opacity=".4"/></svg></span></div>`;
 
 /** Frames that grow: the first n lines of the script at each cut. */
 const grow = (lines, cuts) => cuts.map((n) => lines.slice(0, n));
@@ -318,6 +323,7 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 	  .na .r .t{flex:1;min-width:0}
 	  .na .r .t .ti{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 	  .na .r .t .su{font-size:12px;color:#8a8f98;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+	  .na .r .t .su.two{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.3}
 	  .na .r .t .su code{font-family:Menlo,ui-monospace,monospace;font-size:11px;color:#62666e}
 	  .na .r .m{font-size:12px;color:#62666e;flex:none}
 	  .na .r .pri{color:#8a8f98;font-size:10px;font-weight:700;border:1px solid rgba(255,255,255,.12);border-radius:4px;padding:1px 4px}
@@ -341,12 +347,13 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 	  .na .fine{font-size:11px;color:#62666e;padding:6px 16px;line-height:1.4}
 	  .na .empty{color:#62666e;font-size:12px;padding:10px 16px}
 	  /* the system tab bar: a glass capsule at the bottom */
-	  .na .tabs{position:absolute;left:14px;right:14px;bottom:18px;height:56px;border-radius:30px;background:rgba(28,29,33,.78);border:1px solid rgba(255,255,255,.1);backdrop-filter:blur(18px);display:flex;align-items:center;justify-content:space-around;padding:0 6px;box-shadow:0 10px 30px rgba(0,0,0,.5)}
-	  .na .tab{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:9px;color:#8a8f98;width:48px;height:44px;justify-content:center;border-radius:22px;position:relative}
-	  .na .tab b{font-size:15px;line-height:1}
-	  .na .tab.on{color:#a1a8f5;background:rgba(94,106,210,.16)}
-	  .na .tab.tap{box-shadow:0 0 0 4px rgba(94,106,210,.45)}
-	  .na .tab i{position:absolute;top:2px;right:6px;font-style:normal;background:#eb5757;color:#fff;font-size:8px;font-weight:700;border-radius:8px;padding:1px 4px}
+	  .na .fade{position:absolute;left:0;right:0;bottom:0;height:130px;background:linear-gradient(to bottom,rgba(15,16,17,0),rgba(15,16,17,.92) 55%,#0f1011);pointer-events:none}
+	  .na .tabs{position:absolute;left:12px;right:12px;bottom:24px;height:58px;border-radius:30px;background:rgba(36,37,42,.72);border:1px solid rgba(255,255,255,.14);backdrop-filter:blur(22px) saturate(160%);display:flex;align-items:center;justify-content:space-between;padding:0 5px;box-shadow:0 14px 34px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.08)}
+	  .na .tab{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:9.5px;font-weight:500;color:#9a9fa8;width:50px;height:48px;justify-content:center;border-radius:24px;position:relative;letter-spacing:-.1px}
+	  .na .tab svg{width:20px;height:20px;display:block}
+	  .na .tab.on{color:#fff;background:rgba(255,255,255,.14);box-shadow:inset 0 1px 0 rgba(255,255,255,.12)}
+	  .na .tab.tap{box-shadow:0 0 0 4px rgba(94,106,210,.55)}
+	  .na .tab i{position:absolute;top:3px;right:7px;font-style:normal;background:#eb5757;color:#fff;font-size:8px;font-weight:700;border-radius:8px;padding:1px 4px;min-width:14px;text-align:center}
 	  .na .scrim{position:absolute;inset:0;background:rgba(0,0,0,.55)}
 	  .na .sheet{position:absolute;left:0;right:0;bottom:0;top:96px;background:#151618;border-radius:16px 16px 0 0;border-top:1px solid rgba(255,255,255,.1)}
 	  .na .grab{width:36px;height:5px;border-radius:3px;background:#3a3d44;margin:8px auto 4px}
@@ -358,18 +365,25 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 	  .na .swipe .r{flex:1;border-bottom:0}
 	  /* the lock screen with the widget and a Live Activity */
 	  .lk{position:absolute;inset:0;background:linear-gradient(160deg,#1a2352,#4b2a6e 60%,#a04a4a);color:#fff;font-family:-apple-system,system-ui,sans-serif}
-	  .lk .clock{margin-top:70px}
-	  .lk .la{position:absolute;left:14px;right:14px;top:300px;background:rgba(15,16,17,.92);border-radius:22px;padding:14px;display:flex;gap:12px;align-items:center;box-shadow:0 10px 30px rgba(0,0,0,.4)}
-	  .lk .la .dog{font-size:26px}
+	  .lk .clock{margin-top:76px}
+	  .lk .la{position:absolute;left:12px;right:12px;top:300px;background:rgba(15,16,17,.92);border-radius:22px;padding:12px 14px;display:flex;flex-direction:column;gap:9px;box-shadow:0 10px 30px rgba(0,0,0,.4)}
+	  .lk .la .row{display:flex;gap:10px;align-items:center}
+	  .lk .la .acts{justify-content:flex-end}
+	  .lk .la .ans{font-size:12px;font-weight:600;color:#8a8f98}
+	  .lk .la .dog{font-size:22px}
 	  .lk .la .t{flex:1;min-width:0}
 	  .lk .la .n{font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.lk .la .n small{font-weight:400;color:#8a8f98;font-size:11px;margin-left:6px}
-	  .lk .la .s{font-size:13px;color:#f17c7c;font-weight:600;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+	  .lk .la .s{font-size:12.5px;color:#f17c7c;font-weight:600;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 	  .lk .la .el{font-size:14px;color:#8a8f98;font-variant-numeric:tabular-nums}
-	  .lk .wg{position:absolute;left:14px;top:395px;width:130px;height:130px;background:#0f1011;border-radius:22px;padding:12px;display:flex;flex-direction:column}
+	  .lk .la .lab{font-size:13px;font-weight:600;color:#fff;background:#5e6ad2;border-radius:10px;padding:7px 18px;margin-left:8px;white-space:nowrap;flex:none}
+	  .lk .la .lab.d{background:transparent;border:1px solid rgba(255,255,255,.18);color:#f17c7c}
+	  .lk .la .lab.tap{box-shadow:0 0 0 4px rgba(94,106,210,.45)}
+	  .na .sw{width:40px;height:24px;border-radius:12px;background:#3a3d44;position:relative;flex:none}.na .sw::after{content:"";position:absolute;left:2px;top:2px;width:20px;height:20px;border-radius:50%;background:#fff}
+	  .lk .wg{position:absolute;left:14px;top:420px;width:130px;height:130px;background:#0f1011;border-radius:22px;padding:12px;display:flex;flex-direction:column}
 	  .lk .wg .h{display:flex;gap:5px;align-items:center;font-size:11px;font-weight:600;color:#8a8f98}
 	  .lk .wg .big{margin-top:auto;font-size:18px;font-weight:700;color:#eb5757;line-height:1.1;white-space:nowrap}
 	  .lk .wg .l2{font-size:11px;color:#8a8f98;margin-top:2px}
-	  .lk .wg2{position:absolute;left:156px;top:395px;width:130px;height:130px;background:#0f1011;border-radius:22px;padding:12px;font-size:11px;color:#8a8f98}
+	  .lk .wg2{position:absolute;left:156px;top:420px;width:130px;height:130px;background:#0f1011;border-radius:22px;padding:12px;font-size:11px;color:#8a8f98}
 	  .lk .wg2 .h{font-weight:600;margin-bottom:8px}
 	  .lk .wg2 .s{display:flex;gap:5px;align-items:center;margin:5px 0;color:#f2f3f5;font-size:11px}
 	  .lk .wg2 .s i{width:7px;height:7px;border-radius:50%;flex:none}
@@ -377,13 +391,23 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 	  .lk .wg2 .s span{margin-left:auto;color:#8a8f98;flex:none}
 	</style>`;
 
-	const tabs = (on, tap) => `<div class="tabs">` +
-		[["inbox", "Inbox", "▤", 3], ["board", "Board", "▥", 0], ["sessions", "Sessions", "▮", 1], ["stacks", "Stacks", "❒", 0], ["settings", "Settings", "⚙", 0]]
-			.map(([k, label, icon, n]) => `<div class="tab${on === k ? " on" : ""}${tap === k ? " tap" : ""}"><b>${icon}</b>${label}${n ? `<i>${n}</i>` : ""}</div>`)
+	// The app's own tab bar: SF Symbols tray.fill, rectangle.split.3x1.fill,
+	// terminal.fill, folder.fill, gearshape.fill, with the labels from
+	// app/(tabs)/_layout.tsx.
+	const sf = {
+		tray: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Zm0 10v4h16v-4h-4.2a3.8 3.8 0 0 1-7.6 0H4Z"/></svg>`,
+		board: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5Zm7 0a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2V5Zm7 0a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2V5Z"/></svg>`,
+		terminal: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 4h18a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Zm3.3 4.2-1.4 1.4L7.6 12l-2.7 2.4 1.4 1.4L10.6 12 6.3 8.2ZM11 15v2h7v-2h-7Z"/></svg>`,
+		folder: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M2 6a2 2 0 0 1 2-2h5l2 2h9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6Z"/></svg>`,
+		gear: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M10.3 2h3.4l.5 2.6c.6.2 1.2.5 1.7 1l2.5-.9 1.7 3-2 1.7c.1.6.1 1.3 0 1.9l2 1.7-1.7 3-2.5-.9c-.5.4-1.1.7-1.7 1l-.5 2.6h-3.4l-.5-2.6c-.6-.2-1.2-.5-1.7-1l-2.5.9-1.7-3 2-1.7a6.5 6.5 0 0 1 0-1.9l-2-1.7 1.7-3 2.5.9c.5-.4 1.1-.7 1.7-1L10.3 2ZM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z"/></svg>`,
+	};
+	const tabs = (on, tap) => `<div class="fade"></div><div class="tabs">` +
+		[["inbox", "Inbox", sf.tray, 3], ["board", "Board", sf.board, 0], ["sessions", "Agents", sf.terminal, 1], ["stacks", "Repos", sf.folder, 0], ["settings", "Settings", sf.gear, 0]]
+			.map(([k, label, icon, n]) => `<div class="tab${on === k ? " on" : ""}${tap === k ? " tap" : ""}">${icon}${label}${n ? `<i>${n}</i>` : ""}</div>`)
 			.join("") + `</div>`;
 	const head = (title, sub, { plus = true, seg = "" } = {}) => `<div class="hd"><div class="row1"><h1>${title}</h1><div style="display:flex;gap:8px;align-items:center"><span class="cap"><b></b>andrii-mbp ▾</span>${plus ? `<span class="ic">+</span>` : `<span class="ic">↻</span>`}</div></div>${sub ? `<div class="sub">${sub}</div>` : ""}</div>${seg}`;
 	const row = ({ g, ti, su, m, pri, tap, right }) => `<div class="r${tap ? " tap" : ""}"><span class="g ${g}">${g === "block" ? "!" : ""}</span>${pri ? `<span class="pri">${pri}</span>` : ""}<div class="t"><div class="ti">${ti}</div>${su ? `<div class="su">${su}</div>` : ""}</div>${right ?? (m ? `<span class="m">${m}</span>` : "")}</div>`;
-	const app = (tab, body, { tap, over = "" } = {}) => `<div class="na">${body}${tabs(tab, tap)}${over}</div>`;
+	const app = (tab, body, { tap, over = "" } = {}) => `<div class="na">${body}${tabs(tab, tap)}${over}<div class="home"></div></div>`;
 
 	// Inbox: waiting on a person, grouped by workspace; a row is the ticket.
 	const inbox = ({ tapRow, swipe, moved } = {}) => head("Inbox", "", { seg: `<div class="seg"><span class="on">Waiting ${moved ? 2 : 3}</span><span>Today 2</span></div>` }) +
@@ -417,7 +441,7 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 		`<div class="grp"><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#5e6ad2"></span>Done <i>12</i><span class="chev">›</span></div>`;
 
 	// Sessions: every Claude session on the laptop; a permission answered from the row.
-	const sessions = ({ answered, tapAllow } = {}) => head("Sessions", answered ? "3 working" : "1 needs you · 2 working", { plus: true }) +
+	const sessions = ({ answered, tapAllow } = {}) => head("Agents", answered ? "3 working" : "1 needs you · 2 working", { plus: true }) +
 		`<div class="sec"><div class="sh">acme-api <i>2</i></div>` +
 		(answered
 			? row({ g: "work", ti: "Login redirect loops after SSO", su: "Bash go test ./... · ctx 44%", m: "turn 2m" })
@@ -428,32 +452,33 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 		`<div class="fine">Swipe a row right to allow, left to deny. Tap for its sheet: open in the Claude app, send text, pin it to the lock screen.</div></div>`;
 
 	// Stacks: one row per registered workspace; Start / Stop on the right.
-	const stacks = ({ tapStart, started } = {}) => head("Stacks", "3 workspaces", { plus: false }) +
+	const stacks = ({ tapStart, started } = {}) => head("Repos", "3 workspaces on andrii-mbp", { plus: true }) +
 		`<div class="sec">` +
 		row({ g: "work", ti: "acme-api", su: "acme-api · main · 2 live · default", right: `<span class="btn">Stop</span>` }) +
 		row({ g: started ? "work" : "todo", ti: "acme-web", su: started ? "starting · feat/upload* · work" : "online · no session · feat/upload* · work", right: started ? `<span class="btn">Stop</span>` : `<span class="btn p${tapStart ? " tap" : ""}">Start</span>` }) +
 		row({ g: "back", ti: "recipe-app", su: "off · main · default", right: `<span class="btn p">Start</span>` }) +
 		`<div class="fine">Start opens a session the Claude app and this phone can reach; Face ID first. Tap a row for every session in it and where its link opens.</div></div>`;
 
-	// Settings: tab order, hidden workspaces, laptops.
+	// Settings: the laptops, the peers and who leads, tab order, hidden workspaces.
 	const settings = () => head("Settings", "", { plus: false }) +
-		`<div class="sec"><div class="sh">Laptops</div>` +
-		row({ g: "done", ti: "andrii-mbp", su: "blue-fox-42.trycloudflare.com · paired 2m ago", m: "active" }) +
+		`<div class="sec"><div class="sh">Laptops <i>2</i></div>` +
+		row({ g: "done", ti: "andrii-mbp", su: "work.yourdomain.com · paired 2m ago · end-to-end encrypted", m: "⋯" }) +
+		row({ g: "todo", ti: "home-mbp", su: "home.yourdomain.com · paired 1m ago · end-to-end encrypted", m: "⋯" }) +
 		row({ g: "back", ti: "Add a laptop", su: "on it: corgi agent up --fresh, then scan", m: "›" }) +
+		`<div class="r"><span style="font-size:15px;color:#8a8f98">⛬</span><div class="t"><div class="ti">andrii-mbp leads</div><div class="su two">the laptop that can work, then the one with more budget, then the first by name</div></div><span class="sw"></span></div>` +
+		`<div class="r"><span class="g done"></span><div class="t"><div class="ti">home-mbp · leads</div><div class="su two">awake · 41% of its window free · 1 session on ABC-7 · failed: ABC-9</div></div></div>` +
 		`<div class="sh" style="padding-top:12px">Tabs</div>` +
-		`<div class="kv"><span>Inbox</span><b>▲ ▼ · start here</b></div><div class="kv"><span>Board</span><b>▲ ▼</b></div><div class="kv"><span>Sessions</span><b>▲ ▼</b></div>` +
-		`<div class="sh" style="padding-top:12px">Hidden workspaces</div>` +
-		`<div class="kv"><span>client-app</span><b style="color:#a1a8f5">hidden on this phone</b></div>` +
+		`<div class="kv"><span>Inbox</span><b>▲ ▼ · start here</b></div><div class="kv"><span>Board</span><b>▲ ▼</b></div>` +
 		`<div class="sh" style="padding-top:12px">This phone</div>` +
-		`<div class="kv"><span>Approve from the lock screen</span><b style="color:#4cc38a">on</b></div><div class="kv"><span>Live Activity when a session waits</span><b style="color:#4cc38a">on</b></div></div>`;
+		`<div class="kv"><span>Approve from the lock screen</span><b style="color:#4cc38a">on</b></div></div>`;
 
 	// The lock screen: the Live Activity for the session that waits, and the widget.
-	const lockLive = `<div class="lk"><div class="clock">13:04</div><div class="date">Tuesday 9 September</div>
-		<div class="la"><span class="dog">🐕</span><div class="t"><div class="n">Login redirect loops<small>andrii-mbp</small></div><div class="s">needs you · Bash go test ./...</div></div><span class="el">02:14</span></div>
-		<div class="wg"><div class="h">🐕 andrii-mbp</div><div class="big">1 needs you</div><div class="l2">2 working · 3 in the inbox</div></div>
-		<div class="wg2"><div class="h">sessions</div><div class="s"><i style="background:#eb5757"></i><em>Login redirect</em><span>needs you</span></div><div class="s"><i style="background:#e0a52b"></i><em>acme-api</em><span>working</span></div><div class="s"><i style="background:#e0a52b"></i><em>web</em><span>working</span></div></div></div>`;
+	const lockLive = (answered) => `<div class="lk"><div class="clock">13:04</div><div class="date">Tuesday 9 September</div>
+		<div class="la"><div class="row"><span class="dog">🐕</span><div class="t"><div class="n">Login redirect loops<small>home-mbp</small></div><div class="s">needs you · Bash go test ./...</div></div></div><div class="row acts">${answered ? `<span class="ans">allowed</span>` : `<span class="lab${answered === false ? " tap" : ""}">Allow</span><span class="lab d">Deny</span>`}</div></div>
+		<div class="wg"><div class="h">🐕 andrii-mbp</div><div class="big" style="color:#e0a52b">2 working</div><div class="l2">3 in the inbox</div></div>
+		<div class="wg2"><div class="h">sessions</div><div class="s"><i style="background:#e0a52b"></i><em>acme-api</em><span>working</span></div><div class="s"><i style="background:#e0a52b"></i><em>web</em><span>working</span></div></div><div class="home" style="background:rgba(255,255,255,.85)"></div></div>`;
 
-	const phone = (screen) => `<div class="phone"><div class="notch"></div><div class="screen">${screen}</div></div>`;
+	const phone = (screen) => `<div class="phone"><div class="notch"></div>${statusBar}<div class="screen">${screen}</div></div>`;
 	const lock = `<div class="lock" style="position:absolute;inset:0"><div class="clock">13:04</div><div class="date">Tuesday 9 September</div></div>`;
 	const cam = `<div class="cam" style="position:absolute;inset:0"><div class="view"><div class="qr">${esc(qr.join("\n"))}</div></div><div class="frame"></div><div class="pill">Open in corgi</div><div class="shutter"></div></div>`;
 
@@ -477,7 +502,9 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 		[up, app("stacks", stacks({ tapStart: true })), false],
 		[up, app("stacks", stacks({ started: true }), { tap: "settings" }), false],
 		[up, app("settings", settings()), false],
-		[up, lockLive, false],
+		[up, lockLive(undefined), false],
+		[up, lockLive(false), false],
+		[up, lockLive(true), false],
 	];
 	scene("phone", frames.map(([l, screen, cur]) => page(nativeCss + term("corgi agent up", l, { rows: up.length, cursor: cur, extra: phone(screen) }), 1290)));
 }
@@ -505,8 +532,8 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 	];
 
 	// Every string below is one the page prints: cmd/mcp_launcher.go.
-	const tabs = (on, n = { inbox: 3, sessions: 3, stacks: 2, laptop: 0, settings: 0 }) => `<div class="tabs">` +
-		[["inbox", "Inbox"], ["sessions", "Sessions"], ["stacks", "Stacks"], ["laptop", "Laptop"], ["settings", "Settings"]]
+	const tabs = (on, n = { inbox: 3, kanban: 0, sessions: 3, stacks: 2, laptop: 0, settings: 0 }) => `<div class="tabs">` +
+		[["inbox", "Inbox"], ["kanban", "Board"], ["sessions", "Sessions"], ["stacks", "Stacks"], ["laptop", "Laptop"], ["settings", "Settings"]]
 			.map(([k, label]) => `<span class="tab${on === k ? " sel" : ""}${on === "→" + k ? " tap" : ""}">${label}${n[k] ? `<i>${n[k]}</i>` : ""}</span>`)
 			.join("") + `</div>`;
 
@@ -552,13 +579,13 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 		${card({ name: "web", path: "…/dev/web", branch: "· feat/search*", dot: "ready", meta: '<span class="live">online · no session</span><span>up 2h</span><span>work account</span>', btn: "Start" })}`;
 
 	const app = (tab, extra = "") => `<div class="app">
-		<div class="brand"><div class="logo">🐕</div><div><h1>corgi</h1><small>andrii-mbp · corgi 2.9.1 · daemon up</small></div><span class="chip" style="margin-left:auto">↻</span></div>
+		<div class="brand"><div class="logo">🐕</div><div><h1>corgi</h1><small>andrii-mbp · corgi 2.29.3 · daemon up</small></div><span class="chip" style="margin-left:auto">↻</span></div>
 		${tabs(tab.replace("→", ""))}
 		<div class="pane">${tab.endsWith("inbox") ? inbox(extra === "moved" ? "moved" : "", extra === "aim") : tab.endsWith("sessions") ? sessions : stacks}</div>
 		</div>`;
 
 	const withTap = (tab, extra) => app(tab, extra);
-	const phone = (screen, over = "") => `<div class="phone"><div class="notch"></div><div class="screen">${screen}${over}</div></div>`;
+	const phone = (screen, over = "") => `<div class="phone"><div class="notch"></div>${statusBar}<div class="screen">${screen}${over}</div><div class="home"></div></div>`;
 
 	const extraCss = `<style>
 	  .app{background:#08090a}
@@ -654,10 +681,10 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 	  .m.bot{background:#182533;align-self:flex-start;border-bottom-left-radius:3px}.m.me{background:#2b5278;align-self:flex-end;border-bottom-right-radius:3px}
 	  .m .t{display:block;text-align:right;font-size:9px;color:#8ba0b8;margin-top:2px}
 	  .m .q{border-left:2px solid #5eb5f7;padding-left:6px;color:#5eb5f7;font-size:10.5px;margin-bottom:4px}
-	  .tg .input{height:48px;background:#17212b;display:flex;align-items:center;padding:0 12px;gap:10px;color:#6c7883;font-size:12px}
+	  .tg .input{height:48px;background:#17212b;display:flex;align-items:center;padding:0 12px 0;gap:10px;color:#6c7883;font-size:12px;margin-bottom:20px}
 	  .tg .input span{flex:1;background:#242f3d;border-radius:16px;padding:7px 12px}
 	</style>`;
-	const phone = (n) => `<div class="phone"><div class="notch"></div><div class="screen"><div class="tg"><div class="hdr"><div class="av">🐶</div><div>corgi<small>bot</small></div></div><div class="list">${flow.slice(0, n).map((m) => msg(...m)).join("")}</div><div class="input"><span>Message</span><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6c7883" stroke-width="2" stroke-linecap="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v5M8 22h8"/></svg></div></div></div></div>`;
+	const phone = (n) => `<div class="phone"><div class="notch"></div>${statusBar}<div class="screen"><div class="tg"><div class="hdr"><div class="av">🐶</div><div>corgi<small>bot</small></div></div><div class="list">${flow.slice(0, n).map((m) => msg(...m)).join("")}</div><div class="input"><span>Message</span><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6c7883" stroke-width="2" stroke-linecap="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v5M8 22h8"/></svg></div></div></div><div class="home"></div></div>`;
 	const cuts = [1, 3, 5, 7, 9, 10];
 	scene("telegram", cuts.map((n) => page(css2 + phone(n), 380)));
 }
@@ -706,7 +733,7 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 {
 	const s = [
 		"{g}${/} {B}corgi agent watch enable --prs --ci --action fix --auto-for reviews,comments,ci{/}",
-		"watching acme-stack — assigned to me · issue comments · PR reviews and comments → fix",
+		"watching acme-stack — assigned to me · issue comments · PR reviews and comments → fix, at most 3/h 10/day",
 		"restart the daemon to pick it up: corgi agent restart",
 		"",
 		"{g}${/} {B}corgi agent watch{/}",
@@ -741,7 +768,7 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 	const s = [
 		"{g}${/} {B}corgi agent watch enable --action fix --auto-for reviews,comments,ci \\{/}",
 		"    {B}--prs --ci --reviews --pickup \"In Progress\" --lease --quiet 23:00-07:00{/}",
-		"watching acme-stack — assigned to me · issue comments · PR reviews and comments → fix",
+		"watching acme-stack — assigned to me · issue comments · PR reviews and comments → fix, at most 3/h 10/day, quiet 23:00-07:00",
 		"restart the daemon to pick it up: corgi agent restart",
 		"",
 		"{d}# 09:04 — a reviewer leaves feedback on my PR. Worked on: it is scoped.{/}",
@@ -802,7 +829,7 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 		"{g}${/} {B}corgi agent watch enable --action fix \\{/}",
 		"    {B}--auto-for requests,reviews,comments,tickets \\{/}",
 		"    {B}--prs --reviews --pickup \"In Progress\" --review-status \"In Review\"{/}",
-		"watching acme-stack — assigned to me · issue comments · PR reviews and comments → fix",
+		"watching acme-stack — assigned to me · issue comments · PR reviews and comments → fix, at most 3/h 10/day",
 		"",
 		"{m}━━ 1 ━━  someone asks for my review{/}",
 		"{y}🔔{/} sam wants your review on acme/api!318 — Reconcile the stale user rows on connect",
@@ -935,6 +962,71 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 		"{d}# the phone's Board tab draws the same columns; Move… moves the ticket on the tracker{/}",
 	];
 	scene("kanban", grow(s, [1, 4, 7, 10, 12, 15, 17, 19]).map((l, i) => page(term("corgi agent kanban — nobody drags a card into Running", l, { rows: s.length, cursor: i < 7 }))));
+}
+
+
+// ---- two laptops on one tracker: one leads, the other stays quiet, the lead moves ----
+{
+	const s = [
+		"{g}${/} {B}corgi agent peers{/}",
+		"andrii-mbp",
+		"  home-mbp (leads)  awake · just now  https://home.yourdomain.com",
+		"    41% of its five-hour window free",
+		"    watches linear/acme, github/acme/api",
+		"    working acme-stack · ABC-7",
+		"",
+		"{d}# 13:07 — a bug lands in Linear. Both laptops watch it; one of them starts.{/}",
+		"{d}agent: home-mbp leads acme-stack — this laptop stays quiet there{/}",
+		"{g}🔔 corgi agent · acme-stack{/}  fixed ABC-7 — https://github.com/acme/api/pull/412   {d}rung once, by home-mbp{/}",
+		"",
+		"{g}${/} {B}corgi agent sessions{/}",
+		"2 session(s) on 6 keys",
+		" 1   ● acme-api           WORKING    Edit registry.go",
+		" 2   ● web                WORKING    Bash npm test",
+		"",
+		"on home-mbp (awake, leads):",
+		"  working  acme-stack · ABC-7 — Bash go test ./...",
+		"  failed ABC-9: no GITLAB_TOKEN for the web repo",
+		"",
+		"{d}# 15:40 — home-mbp's five-hour window runs out. The lead moves here, once.{/}",
+		"{y}🔔 corgi agent{/}  home-mbp cannot run fixes (its five-hour window is spent) — this laptop leads",
+		"                the trackers you share until it can",
+		"{g}🔔 corgi agent{/}  this laptop leads acme-stack now (was home-mbp)",
+		"",
+		"{d}# leaving for a trip: pin the lead on the laptop that stays{/}",
+		"{g}${/} {B}corgi agent peers lead{/}    {d}on home-mbp — or the switch in the phone's Settings{/}",
+		"This laptop leads. Peers hear it on the next pulse and go quiet on the trackers you share.",
+		"",
+		"{g}${/} {B}corgi agent doctor --away{/}",
+		"✓ peers                    1 awake, 0 silent",
+	];
+	scene("peers", grow(s, [1, 6, 8, 10, 12, 15, 19, 21, 24, 27, 31]).map((l, i) => page(term("corgi agent peers — two laptops, one tracker, one fix", l, { rows: s.length, cursor: i < 10 }))));
+}
+
+// ---- codex as the harness: the same board, the same watch, another agent ----
+{
+	const s = [
+		"{g}${/} {B}corgi agent watch enable --kind codex --prs --ci --action fix --auto-for reviews,comments,ci{/}",
+		"watching acme-stack — assigned to me · PR reviews and comments → fix, at most 3/h 10/day",
+		"agent: unattended runs here go through codex",
+		"restart the daemon to pick it up: corgi agent restart",
+		"",
+		"{g}${/} {B}corgi agent track enable{/}",
+		"✓ sessions under /Users/me/.claude are tracked (/Users/me/.claude/settings.json)",
+		"✓ codex turns land on the board too (/Users/me/.codex/config.toml)",
+		"new sessions report from their next event; `corgi agent sessions` shows the board",
+		"",
+		"{g}${/} {B}corgi agent claude --kind codex{/}",
+		"corgi: codex for acme-stack",
+		"{d}# codex opens in the workspace's checkout; a run from the phone or the tracker goes through codex exec{/}",
+		"",
+		"{d}# 13:31 — a reviewer comments on your PR{/}",
+		"{y}🔔 corgi agent · acme-stack{/}  max commented on acme/api#412: please cover the empty-path case",
+		"{g}🔔 corgi agent · acme-stack{/}  fixed acme/api#412 — https://github.com/acme/api/pull/412",
+		"",
+		"{d}# the next agent is one more entry in utils/agent/harness — not a search for \"claude\" through the daemon{/}",
+	];
+	scene("codex", grow(s, [1, 4, 6, 9, 12, 13, 16, 19]).map((l, i) => page(term("corgi agent — codex as the harness", l, { rows: s.length, cursor: i < 7 }))));
 }
 
 
