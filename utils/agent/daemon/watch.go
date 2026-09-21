@@ -1106,6 +1106,7 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 		defer d.releaseFix(spec.Workspace, r.Ref)
 	}
 	defer d.takeSlot(spec.Workspace)()
+	daemonCtx := ctx
 	ctx, cancel := context.WithTimeout(ctx, fixTimeoutFor(e))
 	defer cancel()
 
@@ -1183,6 +1184,12 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 	if receipt.ok {
 		fmt.Fprintf(logFile, "\n=== cost: $%.4f · %d tokens · %d turns\n", receipt.costUSD, receipt.tokens, receipt.turns)
 		d.watchState.Fixes.SetCost(e.Key, receipt.costUSD, receipt.tokens)
+	}
+	if runErr != nil && daemonCtx.Err() != nil {
+		// The daemon is stopping, not the run failing: the record stays open
+		// and the next start offers the event again. Nothing rings.
+		fmt.Fprintf(logFile, "\n=== interrupted: the daemon stopped mid-run; offered again at the next start\n")
+		return
 	}
 	if runErr != nil {
 		fmt.Fprintf(logFile, "\n=== failed: %v\n", runErr)
