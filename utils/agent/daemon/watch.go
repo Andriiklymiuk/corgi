@@ -1155,7 +1155,7 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 		print.Model = model
 		fmt.Fprintf(logFile, "=== model: %s\n", model)
 	}
-	if spec.Isolate && d.Isolate != nil {
+	if spec.Isolate && d.Isolate != nil && !watch.ReadOnlyRoutine(e) {
 		branch := FixBranch(e.Ref)
 		trees, err := d.Isolate(spec.Dir, branch)
 		if err != nil {

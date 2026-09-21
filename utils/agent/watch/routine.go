@@ -14,10 +14,11 @@ type RoutineKind struct {
 	What    string
 	Prompt  string
 	Default string
+	Reads   bool // only reads: runs in the checkout, no worktrees
 }
 
 var Catalog = []RoutineKind{
-	{Name: "digest", What: "what happened here since yesterday, in five bullets", Default: "daily 08:30",
+	{Name: "digest", Reads: true, What: "what happened here since yesterday, in five bullets", Default: "daily 08:30",
 		Prompt: "Write the morning digest for this workspace: pull requests opened, merged or gone red since yesterday, tickets that moved, anything stalled more than two days. Use gh/glab and the tracker MCP tools; read, do not change. At most five bullets, each one line, the most important first. Summarise, do not itemise. Start your answer with a one-line headline."},
 	{Name: "babysit-pr", What: "keep my open pull requests moving: CI, reviews, at most three rounds", Default: "every 2h",
 		Prompt: "For every open pull request of mine in this stack: check CI and the review comments. Fix what is real on the branch and push (at most three rounds per PR), reply to and dismiss what is not with one sentence saying why, and list what needs a person. Never merge, never force-push, never flip a draft to ready. Start your answer with a one-line headline: how many PRs are green, red, waiting."},
@@ -25,12 +26,21 @@ var Catalog = []RoutineKind{
 		Prompt: "Look at every open dependency-bump pull request (renovate, dependabot) in this stack. For each, say SAFE (patch or minor, changelog clean, CI green), DEAD (superseded, or the dependency is unused — say where you looked) or VERIFY (major, security, or a behaviour change — name the change). Read only: change nothing, merge nothing. Start with a one-line headline: counts per class."},
 	{Name: "release-notes", What: "draft release notes since the last tag", Default: "weekly Fri 16:00",
 		Prompt: "Draft release notes for this stack since the last git tag in each repository: merged pull requests grouped by the tickets they close, in words a user of the product understands, breaking changes first. Open one draft pull request per repository on a branch release-notes/<date> with the notes as the changelog entry; do not tag, do not publish. Start with a one-line headline."},
-	{Name: "flaky", What: "find tests that pass and fail without a change", Default: "daily 03:00",
+	{Name: "flaky", Reads: true, What: "find tests that pass and fail without a change", Default: "daily 03:00",
 		Prompt: "Run the test suite of every service twice (corgi test, or each service's own command). Report every test whose result differed between the two runs, with the failing output. Open one ticket per flaky test on the tracker with the evidence, unless one already exists — search first. Change no code. Start with a one-line headline: how many flaky tests."},
-	{Name: "suggest", What: "one thing worth building next, with the evidence, as a task on the board", Default: "weekly Mon 09:30",
+	{Name: "suggest", Reads: true, What: "one thing worth building next, with the evidence, as a task on the board", Default: "weekly Mon 09:30",
 		Prompt: "Be the proactive engineer for this stack: find the one thing worth building next and put it on the board. Read what is here first: corgi context --json, the READMEs, the routes and screens, the tests, git log since last week, .corgi/memory if present, corgi agent kanban --json for what is already planned or blocked, corgi suggest-history list --json for what was proposed before. Look for a feature the product almost does and a user would feel, or a thing a developer here trips on every day. Pick ONE, with evidence you can point at: a file and line, a promise the README makes that the code does not keep, a path with no test, a step done by hand. Skip anything already on the board, in the history, or rejected in memory. Then run corgi agent task add \"<title>\" --body \"<why now, the evidence, the change in three lines, how you will know it worked>\" and corgi suggest-history record --slug <slug> --status proposed --title \"<title>\". Change no code, open no pull request, file nothing on the tracker. Start your answer with a one-line headline: the idea and why."},
 	{Name: "doc-drift", What: "docs that name what changed on main this week", Default: "weekly Mon 10:00",
 		Prompt: "Run `corgi docs check --base $(git describe --tags --abbrev=0 2>/dev/null || echo HEAD~30)` in this workspace. For every doc it lists, read the doc and the change it names, fix the doc if it is wrong now, and open one draft pull request with the doc fixes. Fix stale CLAUDE.md pointers too. Start with a one-line headline: docs touched."},
+}
+
+// ReadOnlyRoutine is a catalog routine that only reads — it needs no worktrees.
+func ReadOnlyRoutine(e Event) bool {
+	if e.Kind != KindRoutine {
+		return false
+	}
+	k, ok := CatalogKind(e.Title)
+	return ok && k.Reads && strings.TrimSpace(e.Body) == strings.TrimSpace(k.Prompt)
 }
 
 func CatalogKind(name string) (RoutineKind, bool) {
