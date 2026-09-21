@@ -254,7 +254,7 @@ func (s WatchSpec) runCommand(ctx context.Context, h harness.Harness, dir string
 func (d *Daemon) loadWatchFiles() {
 	if d.watchState == nil {
 		d.watchState = watch.LoadState(d.Dir)
-		if keys := d.watchState.Fixes.Interrupted("interrupted — the daemon stopped mid-run", time.Now()); len(keys) > 0 {
+		if keys := d.watchState.Fixes.Interrupted(watch.InterruptedReason, time.Now()); len(keys) > 0 {
 			for _, key := range keys {
 				d.watchState.Unsee(key)
 				if e, ok := watch.FindEvent(d.Dir, key); ok {
