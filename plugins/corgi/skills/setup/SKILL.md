@@ -282,7 +282,8 @@ corgi agent watch enable --auto --quiet 18:00-09:00
 
 Draft PRs only, never a merge. One run at a time per ticket, nothing done
 twice (an event key is handled once across polls and webhooks), at most
-3/hour and 10/day, and nothing above 95% of a usage window. `--quiet
+3/hour and 10/day, and nothing above 95% of a usage window (`--limit-ceiling
+100` lifts that for a workspace that may spend the account down). `--quiet
 HH:MM-HH:MM` closes a window completely: no fix starts **and nothing
 buzzes** — what arrived is recorded, shows in the inbox, and is delivered as
 one summary when the window opens. A run the daemon was killed in the middle
