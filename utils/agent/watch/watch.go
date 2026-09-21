@@ -873,27 +873,52 @@ const (
 
 func blockKey(workspace, ref string) string { return workspace + "/" + strings.TrimSpace(ref) }
 
+func (l *FixLog) blocksPath() string { return filepath.Join(filepath.Dir(l.path), "blocks.json") }
+
+func (l *FixLog) loadBlocks() map[string]Block {
+	out := map[string]Block{}
+	if data, err := os.ReadFile(l.blocksPath()); err == nil {
+		_ = json.Unmarshal(data, &out)
+		return out
+	}
+	for k, b := range l.Blocks {
+		out[k] = b
+	}
+	return out
+}
+
+func (l *FixLog) saveBlocks(blocks map[string]Block) error {
+	data, err := json.MarshalIndent(blocks, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(l.path), 0o700); err != nil {
+		return err
+	}
+	return atomicfile.Write(l.blocksPath(), data, 0o600)
+}
+
 func (l *FixLog) Block(workspace, ref, reason, by string, now time.Time) {
 	if strings.TrimSpace(ref) == "" {
 		return
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if l.Blocks == nil {
-		l.Blocks = map[string]Block{}
-	}
-	l.Blocks[blockKey(workspace, ref)] = Block{Reason: strings.TrimSpace(reason), By: by, At: now}
-	_ = l.save()
+	blocks := l.loadBlocks()
+	blocks[blockKey(workspace, ref)] = Block{Reason: strings.TrimSpace(reason), By: by, At: now}
+	_ = l.saveBlocks(blocks)
 }
 
 func (l *FixLog) Unblock(workspace, ref string) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	key := blockKey(workspace, ref)
-	if _, ok := l.Blocks[key]; !ok {
+	blocks := l.loadBlocks()
+	if _, ok := blocks[key]; !ok {
 		return false
 	}
-	delete(l.Blocks, key)
+	delete(blocks, key)
+	_ = l.saveBlocks(blocks)
 	for i := range l.Started {
 		if l.Started[i].Workspace == workspace && l.Started[i].Ref == ref && l.Started[i].Done() {
 			l.Started[i].Forgiven = true
@@ -906,8 +931,14 @@ func (l *FixLog) Unblock(workspace, ref string) bool {
 func (l *FixLog) Blocked(workspace, ref string) (Block, bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	b, ok := l.Blocks[blockKey(workspace, ref)]
+	b, ok := l.loadBlocks()[blockKey(workspace, ref)]
 	return b, ok
+}
+
+func (l *FixLog) AllBlocks() map[string]Block {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.loadBlocks()
 }
 
 func (l *FixLog) FailedInARow(workspace, ref string) int {

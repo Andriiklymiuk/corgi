@@ -346,6 +346,7 @@ func peerRunsOf(log *watch.FixLog, now time.Time) []peers.PeerRun {
 	if log == nil {
 		return out
 	}
+	blocks := log.AllBlocks()
 	for i := len(log.Started) - 1; i >= 0 && len(out) < 50; i-- {
 		r := log.Started[i]
 		at := r.FinishedAt
@@ -363,7 +364,7 @@ func peerRunsOf(log *watch.FixLog, now time.Time) []peers.PeerRun {
 			pr.State = "failed"
 			pr.Reason = firstNonEmpty(r.Failure, r.Error)
 		}
-		if b, ok := log.Blocks[r.Workspace+"/"+r.Ref]; ok {
+		if b, ok := blocks[r.Workspace+"/"+r.Ref]; ok {
 			pr.State, pr.Reason = "blocked", b.Reason
 		}
 		out = append(out, pr)
