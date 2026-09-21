@@ -89,7 +89,7 @@ func (r Rules) Why(e Event) string {
 	if !r.Enabled {
 		return "watch is off here"
 	}
-	if !r.matchesKind(e.Kind) {
+	if !r.matchesKind(e.Kind) && !r.underMyReviewPost(e) {
 		switch e.Kind {
 		case KindIssueComment:
 			return "issue comments need --comments"
@@ -262,6 +262,12 @@ func orNone(list []string) string {
 		return "none"
 	}
 	return strings.Join(list, ", ")
+}
+
+// A reply under my own post in a review channel is review traffic, not a
+// mention: it counts whenever the channel is listened to, --mentions or not.
+func (r Rules) underMyReviewPost(e Event) bool {
+	return e.Kind == KindChatMention && e.Mine && len(e.Links) > 0 && containsFold(r.Channels, e.State)
 }
 
 func (r Rules) matchesKind(k Kind) bool {
