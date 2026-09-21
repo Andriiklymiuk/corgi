@@ -256,6 +256,9 @@ func (d *Daemon) loadWatchFiles() {
 		if keys := d.watchState.Fixes.Interrupted("interrupted — the daemon stopped mid-run", time.Now()); len(keys) > 0 {
 			for _, key := range keys {
 				d.watchState.Unsee(key)
+				if e, ok := watch.FindEvent(d.Dir, key); ok {
+					d.watchState.Fixes.Defer(e)
+				}
 			}
 			utils.Infof("agent: watch: %d fix(es) were interrupted; their events will be offered again\n", len(keys))
 		}
@@ -573,8 +576,6 @@ func (d *Daemon) stillWorthFixing(ctx context.Context, spec WatchSpec, e watch.E
 	return ""
 }
 
-// sessionOnTicket names the live session — here or on a peer laptop — whose
-// ticket or branch is ref, so an unattended run never doubles a person's work.
 func (d *Daemon) sessionOnTicket(ref string) string {
 	if d.Sessions == nil || ref == "" {
 		return ""
@@ -1187,8 +1188,6 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 		d.watchState.Fixes.SetCost(e.Key, receipt.costUSD, receipt.tokens)
 	}
 	if runErr != nil && daemonCtx.Err() != nil {
-		// The daemon is stopping, not the run failing: the record stays open
-		// and the next start offers the event again. Nothing rings.
 		fmt.Fprintf(logFile, "\n=== interrupted: the daemon stopped mid-run; offered again at the next start\n")
 		return
 	}

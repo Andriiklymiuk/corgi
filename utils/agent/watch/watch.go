@@ -146,6 +146,9 @@ func (r Rules) Why(e Event) string {
 		if e.Kind != KindPRReview && IsAcknowledgement(e.Body) {
 			return "it is a thank-you or a sign-off, not a request"
 		}
+		if approvingVerdict.MatchString(e.Body) {
+			return "it approves — nothing to change"
+		}
 		if e.Bot && !r.Bots {
 			return "it is from a bot; --bots makes those count"
 		}
@@ -186,7 +189,6 @@ var deadStates = map[string]string{
 	"rejected": "rejected",
 }
 
-// Columns where a ticket already has hands on it: a person's, or a run's.
 var activeStates = map[string]bool{
 	"in progress": true, "in development": true, "in dev": true, "doing": true, "started": true,
 	"in review": true, "review": true, "code review": true, "in code review": true,
@@ -206,9 +208,11 @@ var closedStates = map[string]string{
 	"on production": "in production", "live": "live", "qa passed": "past QA", "tested": "tested",
 }
 
+var approvingVerdict = regexp.MustCompile(`(?im)^\W*verdict:?\W*approved?\b`)
+
 var (
 	ackWords = regexp.MustCompile(`(?i)\b(thanks?|thank you|thx|ty|ok|okay|lgtm|works?|working|good|great|perfect|nice|awesome|approved?|merged|done|confirmed|verified|passed|passing|green|fixed|resolved|all good|looks good)\b|👍|✅|🙏|🎉|👌`)
-	askWords = regexp.MustCompile(`(?i)\?|\b(could|can|would|please|pls|should|need|needs|must|why|how|what|when|where|fix|change|update|add|remove|revert|still|but|however|not|doesn't|does not|isn't|is not|broken|fails?|failing|error|bug|wrong|missing)\b`)
+	askWords = regexp.MustCompile(`(?i)\?|\b(could|can|would|please|pls|should|need|needs|must|why|how|what|when|where|fix|change|changes|request_changes|blockers?|update|add|remove|revert|still|but|however|not|doesn't|does not|isn't|is not|broken|fails?|failing|error|bug|wrong|missing)\b`)
 )
 
 func IsAcknowledgement(body string) bool {
@@ -264,8 +268,6 @@ func orNone(list []string) string {
 	return strings.Join(list, ", ")
 }
 
-// A reply under my own post in a review channel is review traffic, not a
-// mention: it counts whenever the channel is listened to, --mentions or not.
 func (r Rules) underMyReviewPost(e Event) bool {
 	return e.Kind == KindChatMention && e.Mine && len(e.Links) > 0 && containsFold(r.Channels, e.State)
 }

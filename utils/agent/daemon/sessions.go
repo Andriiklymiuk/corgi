@@ -26,7 +26,6 @@ var (
 	sweepInterval = time.Minute
 )
 
-// A cold `open -a` from launchd takes over 1.5s, which used to kill the raise.
 const focusBudget = 5 * time.Second
 
 const liftEpisode = 10 * time.Minute
@@ -81,6 +80,10 @@ func (d *Daemon) handleSessionCommand(ctx context.Context, c command.Command) bo
 		d.sendToSession(ctx, c.SessionID, c.Text, c.Enter)
 	case command.ActionWatch:
 		if c.WatchEvent != nil {
+			if c.Retry && d.watchState != nil {
+				d.watchState.Unsee(c.WatchEvent.Key)
+				d.watchState.Fixes.DropDeferred(c.WatchEvent.Key)
+			}
 			d.handleWatchEvent(ctx, *c.WatchEvent)
 		}
 	case command.ActionPlan:

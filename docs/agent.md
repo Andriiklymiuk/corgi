@@ -1115,6 +1115,7 @@ corgi agent watch auth linear --token lin_api_…               # or LINEAR_API_
 corgi agent watch auth jira --url https://acme.atlassian.net --email me@acme.io --token …
 corgi agent watch                                            # tokens, watched workspaces, last polls, fix budget
 corgi agent watch run                                        # poll once, now; hands deferred fixes back to the daemon
+corgi agent watch retry acme/api#42                          # run the newest row on a ticket or PR again, past the once-only guard
 corgi agent watch test issue.comment --body "still needed?"  # one made-up event through the pipeline, no claude run
 corgi agent restart
 ```
@@ -1459,6 +1460,7 @@ Worth knowing, because these look like the watch being broken:
   says who has it.
 - **several comments on one pull request** in one poll — one notification.
 - a ticket **another machine has claimed** (`--lease`).
+- a review summary whose verdict is **approve** — nothing to change.
 - anything, once the same wall — a missing credential, a refused permission —
   has failed **twice in two hours**.
 - a run that would cost more of the five-hour window than is left. Each run

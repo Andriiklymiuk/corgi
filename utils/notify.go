@@ -105,8 +105,6 @@ func NotifyWithLink(title, body, link string) {
 	Notify(title, body)
 }
 
-// NotifyWithCommand runs argv when the notification is clicked (macOS with
-// terminal-notifier); elsewhere the click opens link, as NotifyWithLink does.
 func NotifyWithCommand(title, body string, argv []string, link string) {
 	notifyCommand = argv
 	notifyLink = link

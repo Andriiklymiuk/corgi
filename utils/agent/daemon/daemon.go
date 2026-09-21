@@ -617,8 +617,6 @@ func (d *Daemon) notifyAttentionFull(title, body, workspaceID, link, key, sessio
 	}
 }
 
-// focusableSession picks the session a notification click should bring forward:
-// the one named, else the newest live one in a window under the workspace folder.
 func (d *Daemon) focusableSession(sessionID, workspaceID string) string {
 	if d.Sessions == nil {
 		return ""

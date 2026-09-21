@@ -14,7 +14,7 @@ type RoutineKind struct {
 	What    string
 	Prompt  string
 	Default string
-	Reads   bool // only reads: runs in the checkout, no worktrees
+	Reads   bool
 }
 
 var Catalog = []RoutineKind{
@@ -34,7 +34,6 @@ var Catalog = []RoutineKind{
 		Prompt: "Run `corgi docs check --base $(git describe --tags --abbrev=0 2>/dev/null || echo HEAD~30)` in this workspace. For every doc it lists, read the doc and the change it names, fix the doc if it is wrong now, and open one draft pull request with the doc fixes. Fix stale CLAUDE.md pointers too. Start with a one-line headline: docs touched."},
 }
 
-// ReadOnlyRoutine is a catalog routine that only reads — it needs no worktrees.
 func ReadOnlyRoutine(e Event) bool {
 	if e.Kind != KindRoutine {
 		return false

@@ -314,7 +314,6 @@ func (s *Slack) event(ctx context.Context, cursor Cursor, m slackMessage, c slac
 		title += ": " + first
 	}
 	if kind == KindChatMessage && s.isReviewChannel(c) && len(links) > 0 {
-		// A reply under my own post is a word on my pull request, not one to review.
 		kind = KindReviewRequested
 		if parentMine {
 			kind = KindChatMention
