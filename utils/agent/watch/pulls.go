@@ -3,6 +3,7 @@ package watch
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -141,4 +142,28 @@ func checksVerdict(conclusions []string, running int) string {
 		return "none"
 	}
 	return "passing"
+}
+
+type ReviewOutcome struct {
+	Approved         bool
+	ChangesRequested bool
+	Comments         int
+}
+
+func (o ReviewOutcome) Line() string {
+	switch {
+	case o.Approved:
+		return "approved ✅"
+	case o.ChangesRequested && o.Comments > 0:
+		return fmt.Sprintf("changes requested (%d comments)", o.Comments)
+	case o.ChangesRequested:
+		return "changes requested"
+	case o.Comments > 0:
+		return fmt.Sprintf("comments added (%d)", o.Comments)
+	}
+	return "nothing posted"
+}
+
+type ReviewTeller interface {
+	MyReviewSince(ctx context.Context, ref string, since time.Time) (ReviewOutcome, bool)
 }

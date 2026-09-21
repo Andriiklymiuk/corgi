@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/agent/watch"
@@ -132,25 +133,54 @@ func (d *Daemon) chatMark(ctx context.Context, spec WatchSpec, e watch.Event) st
 	return "white_check_mark"
 }
 
-func (d *Daemon) chatReviewReply(ctx context.Context, spec WatchSpec, e watch.Event) string {
+func (d *Daemon) chatReviewReply(ctx context.Context, spec WatchSpec, e watch.Event, since time.Time) (string, watch.ReviewOutcome, bool) {
 	var lines []string
+	var total watch.ReviewOutcome
 	for _, link := range e.Links {
 		ref := watch.PullRef(link)
 		if ref == "" {
 			continue
 		}
-		said := "not known"
+		said := "reviewed"
+		told := false
 		for _, src := range spec.Sources {
-			asker, ok := src.(watch.PullAsker)
+			teller, ok := src.(watch.ReviewTeller)
 			if !ok {
 				continue
 			}
-			if st, ok := asker.PullStatus(ctx, ref); ok {
-				said = firstNonEmpty(st.Review, "reviewed")
+			if o, ok := teller.MyReviewSince(ctx, ref, since); ok {
+				said = o.Line()
+				total.Approved = total.Approved || o.Approved
+				total.ChangesRequested = total.ChangesRequested || o.ChangesRequested
+				total.Comments += o.Comments
+				told = true
 				break
+			}
+		}
+		if !told {
+			for _, src := range spec.Sources {
+				if asker, ok := src.(watch.PullAsker); ok {
+					if st, ok := asker.PullStatus(ctx, ref); ok && st.Review == "approved" {
+						said, total.Approved = "approved ✅", true
+					}
+					break
+				}
 			}
 		}
 		lines = append(lines, ref+" — "+said)
 	}
-	return strings.Join(lines, "\n")
+	if len(lines) == 0 {
+		return "", total, false
+	}
+	return strings.Join(lines, "\n"), total, true
+}
+
+func reviewMark(o watch.ReviewOutcome) string {
+	switch {
+	case o.Approved:
+		return "white_check_mark"
+	case o.Comments > 0 || o.ChangesRequested:
+		return "speech_balloon"
+	}
+	return "eyes"
 }

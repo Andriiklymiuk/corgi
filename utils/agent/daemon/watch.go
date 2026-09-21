@@ -994,13 +994,19 @@ var fixPrompts = map[watch.Kind]func(e watch.Event) string{
 	watch.KindChatMention: chatPrompt,
 	watch.KindChatMessage: chatPrompt,
 	watch.KindReviewRequested: func(e watch.Event) string {
+		links := []string{e.URL}
+		asked := " asked me to review: "
 		if e.Source == "slack" {
-			return chatPrompt(e)
+			links = e.Links
+			asked = " posted in " + firstNonEmpty(e.State, "the review channel") + " for review: "
 		}
-		return "Review this pull request, which " + firstNonEmpty(e.Author, "a colleague") +
-			" asked me to review: " + e.URL + ". It is THEIR branch — read the diff and post a review " +
-			"(a summary and inline comments). Do not push commits to it, do not resolve their threads" +
-			approveClause + ". If it is good, say so and say why. /corgi:review " + e.URL
+		noun := "this pull request"
+		if len(links) > 1 {
+			noun = "these pull requests"
+		}
+		return "Review " + noun + ", which " + firstNonEmpty(e.Author, "a colleague") + asked + strings.Join(links, " ") +
+			". Not my branches — read each diff and post a review on it (a summary and inline comments). " +
+			"Do not push commits, do not resolve their threads" + approveClause + ". If it is good, say so and say why. /corgi:review " + strings.Join(links, " ")
 	},
 	watch.KindCIFailed: func(e watch.Event) string {
 		return "A build went red in " + e.Ref + ": " + e.Title + ". " +
@@ -1063,12 +1069,18 @@ func fixPrompt(e watch.Event) string {
 }
 
 func unattendedSuffix(spec WatchSpec, e watch.Event) string {
+	if e.Kind == watch.KindReviewRequested {
+		return "\n\nNobody is reading this run as it happens. Never ask a question, never offer options or wait for a choice: " +
+			"decide as the skill says and go on. Change no code and push nothing. " +
+			"If you truly cannot proceed, leave a handoff with `corgi agent handoff --ref " + e.Ref + " --blocked <reason>` and stop. " +
+			"End with one line per pull request saying what you posted on it: approved, comments (how many), or nothing."
+	}
 	s := "\n\nNobody is reading this run as it happens. Never ask a question, never offer options or wait for a choice: " +
 		"pick the recommended option yourself, say which you picked and why, and go on. " +
 		"If you truly cannot proceed, leave a handoff with `--blocked <reason>` (the question goes in `--uncertain`) and stop.\n" +
 		"Before you finish: review your own diff the way you would review someone else's, " +
 		"and fix what you find — nobody has looked at this but you. "
-	ownPR := e.Kind != watch.KindReviewRequested
+	ownPR := true
 	if ownPR {
 		trail := "corgi watch · " + spec.Workspace + " · " + string(e.Kind) + " " + e.Ref
 		if e.URL != "" {
@@ -1215,7 +1227,7 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 		print.Model = model
 		fmt.Fprintf(logFile, "=== model: %s\n", model)
 	}
-	if spec.Isolate && d.Isolate != nil && !watch.ReadOnlyRoutine(e) {
+	if spec.Isolate && d.Isolate != nil && !watch.ReadOnlyRoutine(e) && e.Kind != watch.KindReviewRequested {
 		branch := FixBranch(e.Ref)
 		trees, err := d.Isolate(spec.Dir, branch)
 		if err != nil {
@@ -1297,10 +1309,11 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 	}
 	if e.Source == "slack" {
 		said := chatOutcome(links, note, "")
-		if lines := d.chatReviewReply(ctx, spec, e); lines != "" {
-			said = lines
+		mark := d.chatMark(ctx, spec, e)
+		if lines, outcome, ok := d.chatReviewReply(ctx, spec, e, started); ok {
+			said, mark = lines, reviewMark(outcome)
 		}
-		d.say(ctx, spec, e, said, d.chatMark(ctx, spec, e))
+		d.say(ctx, spec, e, said, mark)
 	}
 	target := e.URL
 	if len(links) > 0 {

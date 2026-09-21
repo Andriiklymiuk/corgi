@@ -1169,8 +1169,11 @@ ticket listing the pull requests, the reviewer answering in the thread. Put
 that channel in `--review-channel` and a post carrying links becomes **one**
 review — `/corgi:review` over every link at once, which is what reviewing a
 corgi workspace means — answered in the thread with a line per pull request.
-The ✅ goes on the post only when the forge itself says every one is
-approved, never because the run said so. The author's later "@you updated"
+The reply under the post says what landed on each pull request — `approved
+✅`, `comments added (2)`, `changes requested` — read back from the forge,
+never from what the run said; the post gets ✅ on an approval and 💬 when
+comments went up. A review request runs `/corgi:review <links>` plainly, the
+same prompt a person types, in the checkout, no worktrees. The author's later "@you updated"
 in the thread arrives as a mention carrying the parent's links, so the
 second pass reviews at the new head. **Your own post** is not a review for
 you — those are your pull requests — and a colleague's reply under it is a
