@@ -325,6 +325,13 @@ corgi agent doctor                                        # no ✗ — `security
   enable` once more — the hooks live in the Claude config and an upgrade
   can leave them behind.
 
+**Codex as an agent** (`corgi agent init --agents claude,codex`, or `--kind
+codex`): Codex has no plugin, so give it the skills — `corgi agent skills
+install` copies them into `~/.codex/skills` with the `_shared` files they
+read; `corgi agent doctor` reports when that copy is behind, and `install`
+again after `corgi upd` brings it up. `corgi agent track enable` wires its
+`notify` hook the same way as Claude's.
+
 **Two clients on one laptop**: tokens `--local` per workspace, `--tracker`
 and `--repos` set explicitly in each, and a look at `corgi agent watch` to
 see one token row per workspace. `corgi agent doctor` and `corgi agent watch

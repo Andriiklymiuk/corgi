@@ -782,6 +782,7 @@ func checkUnattended(dir string) []agentCheck {
 	user, _ := config.LoadUser(agentUserConfigPath(dir))
 	var dirs []string
 	fixing := map[string]bool{}
+	codexFixes := false
 	for _, ws := range registry.Sorted() {
 		if ws.AbsPath != "" {
 			dirs = append(dirs, ws.AbsPath)
@@ -791,6 +792,9 @@ func checkUnattended(dir string) []agentCheck {
 		}
 		if wc, ok := user.Workspaces[ws.ID]; ok && wc.Watch != nil && wc.Watch.Enabled && wc.Watch.Action == "fix" {
 			fixing[claudeConfigDirOf(wc.ConfigDir)] = true
+			if wc.Kind == "codex" || containsFold(wc.Agents, "codex") {
+				codexFixes = true
+			}
 		}
 	}
 	if len(dirs) == 0 {
@@ -814,7 +818,28 @@ func checkUnattended(dir string) []agentCheck {
 		sort.Strings(missing)
 		checks = append(checks, pluginCheck(missing))
 	}
+	if codexFixes {
+		checks = append(checks, codexSkillsCheck())
+	}
 	return checks
+}
+
+func codexSkillsCheck() agentCheck {
+	const name = "corgi skills · codex"
+	dst := codexSkillsDir()
+	m, ok := readCodexSkillsManifest(dst)
+	if !ok {
+		return agentCheck{Name: name, Detail: "codex takes runs here but has no corgi skills in " + dst + " — a fix runs $stories and $review, which live there",
+			Fix: "`corgi agent skills install`"}
+	}
+	src, err := corgiSkillsSource("")
+	if err != nil {
+		return agentCheck{Name: name, OK: true, Detail: fmt.Sprintf("%d skills, installed by corgi %s (no plugin to compare with)", len(m.Skills), m.Version)}
+	}
+	if stale := codexSkillsStale(src, dst); len(stale) > 0 {
+		return agentCheck{Name: name, Detail: "behind the plugin: " + strings.Join(stale, ", "), Fix: "`corgi agent skills install`"}
+	}
+	return agentCheck{Name: name, OK: true, Detail: fmt.Sprintf("%d skills, current", len(m.Skills))}
 }
 
 func lookPathOK(name string) (string, bool) {
