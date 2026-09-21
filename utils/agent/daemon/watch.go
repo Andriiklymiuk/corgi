@@ -974,7 +974,9 @@ var fixPrompts = map[watch.Kind]func(e watch.Event) string{
 			e.Ref, strings.TrimSpace(e.Title), body, e.Ref, e.Ref, e.Ref, e.Ref)
 	},
 	watch.KindIssueNew: func(e watch.Event) string {
-		p := "I approve all changes; ship it and open draft PRs, then watch CI to green. /corgi:stories " + strings.Join(e.Refs(), " ") + storyMode(e)
+		p := "I approve all changes; ship it and open draft PRs, then watch CI to green. " +
+			"Build it whole — the design, the tests, the error paths — the way you would for a colleague's review, not the shortest diff that passes. " +
+			"/corgi:stories " + strings.Join(e.Refs(), " ") + storyMode(e)
 		if e.Parent != "" {
 			p += fmt.Sprintf("\n%s is a subtask of %s (%q). Read the parent for context — the bug report, the acceptance criteria, "+
 				"the earlier pull requests — but the change is scoped to %s alone.", e.Ref, e.Parent, e.ParentTitle, e.Ref)
