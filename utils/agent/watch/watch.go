@@ -1042,12 +1042,14 @@ func (l *FixLog) RunThatOpened(workspace, link string) (FixRecord, bool) {
 	return FixRecord{}, false
 }
 
+const InterruptedReason = "interrupted — the daemon stopped mid-run"
+
 func (l *FixLog) StartedSince(workspace string, since time.Time) int {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	n := 0
 	for _, r := range l.Started {
-		if r.Workspace == workspace && !r.StartedAt.Before(since) {
+		if r.Workspace == workspace && !r.StartedAt.Before(since) && r.Error != InterruptedReason {
 			n++
 		}
 	}
