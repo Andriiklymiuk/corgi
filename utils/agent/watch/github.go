@@ -386,3 +386,66 @@ func (g *GitHub) PullStatus(ctx context.Context, ref string) (PullStatus, bool) 
 	out.Checks = checksVerdict(conclusions, running)
 	return out, true
 }
+
+func (g *GitHub) login(ctx context.Context) string {
+	if g.Me != "" {
+		return g.Me
+	}
+	var user struct {
+		Login string `json:"login"`
+	}
+	if resp, err := g.get(ctx, "/user", ""); err == nil && githubDecode(resp, &user) == nil {
+		g.Me = user.Login
+	}
+	return g.Me
+}
+
+func (g *GitHub) MyReviewSince(ctx context.Context, ref string, since time.Time) (ReviewOutcome, bool) {
+	repo, num, ok := strings.Cut(ref, "#")
+	if !ok || g.Token == "" {
+		return ReviewOutcome{}, false
+	}
+	me := g.login(ctx)
+	if me == "" {
+		return ReviewOutcome{}, false
+	}
+	var out ReviewOutcome
+	var reviews []struct {
+		State       string `json:"state"`
+		SubmittedAt string `json:"submitted_at"`
+		User        struct {
+			Login string `json:"login"`
+		} `json:"user"`
+	}
+	resp, err := g.get(ctx, "/repos/"+repo+"/pulls/"+num+"/reviews?per_page=100", "")
+	if err != nil || githubDecode(resp, &reviews) != nil {
+		return ReviewOutcome{}, false
+	}
+	for _, r := range reviews {
+		if r.User.Login != me || trackerTime(r.SubmittedAt).Before(since) {
+			continue
+		}
+		switch r.State {
+		case "APPROVED":
+			out.Approved = true
+		case "CHANGES_REQUESTED":
+			out.ChangesRequested = true
+		}
+	}
+	for _, path := range []string{"/repos/" + repo + "/pulls/" + num + "/comments?per_page=100", "/repos/" + repo + "/issues/" + num + "/comments?per_page=100"} {
+		var comments []struct {
+			CreatedAt string `json:"created_at"`
+			User      struct {
+				Login string `json:"login"`
+			} `json:"user"`
+		}
+		if resp, err := g.get(ctx, path, ""); err == nil && githubDecode(resp, &comments) == nil {
+			for _, c := range comments {
+				if c.User.Login == me && !trackerTime(c.CreatedAt).Before(since) {
+					out.Comments++
+				}
+			}
+		}
+	}
+	return out, true
+}

@@ -405,9 +405,11 @@ finding whose `anchorText` matches no diffed line has no anchor → goes in the
 summary (P5). See `../_shared/forge-commands.md` §2.
 
 Plus a **2–4 sentence human summary per PR** written above the findings list. When
-the ticket enumerates acceptance criteria, the summary ends with one row per
-criterion — met / unmet → finding / not verifiable — so the author sees what stands
-between the PR and done, not only what is wrong.
+the ticket enumerates acceptance criteria, say where they stand in **one plain
+sentence** — "All four acceptance criteria met." — and name only the ones that are
+**unmet or not verifiable**, each as one short line with the finding it points to.
+Never a table, never a row per criterion that is met: the author wants to know what
+stands between the PR and done, not to read a checklist of things that are fine.
 
 **Token discipline (stories model):**
 - **Spend the budget on evidence, not on standards.** Twenty neighbour files opened
@@ -811,9 +813,9 @@ helps — a few sharp comments beat many; drop low-value nits rather than pad th
 A posted **summary body** is plain prose — a few short sentences, at most a couple of
 bullets, the way a person types into the PR box. Not a structured document: no `##`
 section headers, no long numbered-question lists, no pasted spec / code-map dumps.
-That report shape belongs in the terminal output (P6), never in the comment. One
-exception: the acceptance-criteria rows (P3) when the ticket enumerates criteria — a
-short table, one line per criterion, nothing else structured.
+That report shape belongs in the terminal output (P6), never in the comment. No
+tables in a comment, acceptance criteria included (P3): met criteria are one
+sentence, an unmet one is one line.
 **Never suggest adding a comment to the code.** The reviewer's job is to remove
 the ones that do not earn their place, not to plant more — if a line needs
 explaining, the fix in the suggestion is a clearer name or a smaller function.
