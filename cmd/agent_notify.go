@@ -74,6 +74,16 @@ func loopbackAddr(addr string) string {
 	return net.JoinHostPort(host, port)
 }
 
+// focusCommand is what a clicked desktop notification runs: the daemon's own
+// binary, so the click works even when corgi is not on the notifier's PATH.
+func focusCommand(sessionID string) []string {
+	self, err := os.Executable()
+	if err != nil {
+		self = "corgi"
+	}
+	return []string{self, "agent", "focus", sessionID}
+}
+
 func preferLocalLink(link string) string {
 	if link == "" || link != launcherURL() {
 		return link

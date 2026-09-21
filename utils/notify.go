@@ -105,7 +105,17 @@ func NotifyWithLink(title, body, link string) {
 	Notify(title, body)
 }
 
+// NotifyWithCommand runs argv when the notification is clicked (macOS with
+// terminal-notifier); elsewhere the click opens link, as NotifyWithLink does.
+func NotifyWithCommand(title, body string, argv []string, link string) {
+	notifyCommand = argv
+	notifyLink = link
+	defer func() { notifyCommand = nil; notifyLink = "" }()
+	Notify(title, body)
+}
+
 var notifyLink string
+var notifyCommand []string
 
 var sendNotificationOverride func(title, body string)
 
@@ -131,20 +141,7 @@ func sendNotification(title, body string) {
 	switch runtime.GOOS {
 	case "darwin":
 		if path, err := exec.LookPath("terminal-notifier"); err == nil {
-			args := []string{
-				"-title", title,
-				"-message", body,
-				"-group", "com.andriiklymiuk.corgi",
-			}
-			if icon := notifyIconPath(); icon != "" {
-				args = append(args, "-appIcon", icon, "-contentImage", icon)
-			}
-			if link := safeNotifyLink(notifyLink); link != "" {
-				args = append(args, "-open", link)
-			} else {
-				args = append(args, "-sender", "com.apple.Terminal")
-			}
-			cmd = exec.Command(path, args...)
+			cmd = exec.Command(path, terminalNotifierArgs(title, body, notifyIconPath(), notifyLink, notifyCommand)...)
 			_ = runNotifyCommand(cmd)
 			return
 		}
@@ -183,6 +180,45 @@ func IsNotificationsEnabled() bool {
 func powershellQuote(s string) string {
 	escaped := strings.ReplaceAll(s, "'", "''")
 	return fmt.Sprintf("'%s'", escaped)
+}
+
+func terminalNotifierArgs(title, body, icon, link string, command []string) []string {
+	args := []string{
+		"-title", title,
+		"-message", body,
+		"-group", "com.andriiklymiuk.corgi",
+	}
+	if icon != "" {
+		args = append(args, "-appIcon", icon, "-contentImage", icon)
+	}
+	switch {
+	case len(command) > 0:
+		quoted := make([]string, len(command))
+		for i, word := range command {
+			quoted[i] = shellQuote(word)
+		}
+		args = append(args, "-execute", strings.Join(quoted, " "))
+	case safeNotifyLink(link) != "":
+		args = append(args, "-open", safeNotifyLink(link))
+	}
+	return args
+}
+
+func shellQuote(word string) string {
+	if word == "" {
+		return "''"
+	}
+	safe := true
+	for _, r := range word {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("/._-+:@%", r)) {
+			safe = false
+			break
+		}
+	}
+	if safe {
+		return word
+	}
+	return "'" + strings.ReplaceAll(word, "'", `'\''`) + "'"
 }
 
 func safeNotifyLink(raw string) string {

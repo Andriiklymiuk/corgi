@@ -249,9 +249,10 @@ back into a transcript, a commit, or a PR.
   that posts to the URL is `corgi agent notify test`.
 
 **On the laptop itself**, a desktop toast is clickable when `terminal-notifier`
-is installed (`brew install terminal-notifier`) — it opens that workspace's
-session, or the launcher when corgi has no session URL for it. Without it macOS
-falls back to `osascript`, which cannot carry a click target.
+is installed (`brew install terminal-notifier`) — it brings the session's window
+forward (VS Code, iTerm, Terminal or tmux, as `corgi agent focus` does); a session
+with no window on this Mac opens its session URL, or the launcher when corgi has
+none. Without it macOS falls back to `osascript`, which cannot carry a click target.
 
 ### The launcher page
 

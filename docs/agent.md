@@ -605,8 +605,11 @@ corgi drops that one: a notification for a session that wants nothing is how
 people learn to ignore all of them. `corgi agent hooks enable --idle` keeps it.
 Notifications go to the machine running corgi — **set `notifyUrl` to reach your
 phone**, or the hooks only reach the desk you were trying to leave. On macOS with
-`terminal-notifier` installed, clicking the desktop toast opens that workspace's
-session (or the launcher when corgi does not know a session URL for it).
+`terminal-notifier` installed, clicking the desktop toast brings the session's own
+window forward — the VS Code window, iTerm or Terminal tab, or tmux pane it runs
+in, the same as `corgi agent focus`. A session with no window on this Mac (one the
+daemon runs headless, or a workspace with nothing open) opens its session URL
+instead, or the launcher when corgi does not know one.
 
 The toast is read at the machine corgi runs on, so the launcher it opens is the
 one served from **localhost**, not the public tunnel URL: no round trip out to

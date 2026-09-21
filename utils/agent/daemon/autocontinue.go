@@ -73,7 +73,7 @@ func (d *Daemon) resumeSession(ctx context.Context, s sessions.Session) {
 	}
 	utils.Infof("agent: %s: continuing after %s limit (try %d)\n", s.Display, s.Limit, s.Resumes+1)
 	d.sendToSession(ctx, s.ID, "continue", true)
-	go d.notifyAttention(notifyTitlePrefix+label(s), "limit should be over — continued for you", s.Folder)
+	go d.notifySession(notifyTitlePrefix+label(s), "limit should be over — continued for you", s)
 }
 
 func maxResumes(kind sessions.LimitKind) int {
