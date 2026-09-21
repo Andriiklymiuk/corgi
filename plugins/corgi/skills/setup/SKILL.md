@@ -230,17 +230,34 @@ for d in */; do git -C "$d" remote get-url origin 2>/dev/null; done \
 **24 hours ago** on an empty cursor, so the first poll reports a day of
 tickets. Say so before enabling, or the first notification looks like a bug.
 
-**Filter new issues by state, or the backlog arrives every time.** Ask the
-tracker for its real status names instead of inventing them — a state that
-does not exist matches nothing:
+**Prove each token is the right person before going further.** A token that
+works but belongs to another account sees nothing as "mine", and that looks
+exactly like a quiet week:
 
 ```bash
-# Jira: the project's own statuses (Basic auth, same token)
-curl -su "$EMAIL:$TOKEN" "$JIRA_URL/rest/api/3/project/<KEY>/statuses" \
-  | python3 -c 'import json,sys;print(sorted({s["name"] for t in json.load(sys.stdin) for s in t["statuses"]}))'
-
-corgi agent watch enable --states "Ready for dev,In Progress,In Review"
+corgi agent watch board            # columns · `you <email>` — the tracker's idea of who holds the token
+gh auth status                     # the GitHub account the feed reads as
+corgi agent watch run --dry-run    # every source polls once, nothing moves
 ```
+
+If `you` is not the person whose tickets these are, redo `watch auth` with
+that person's key (or `--local` for this workspace) before anything else.
+
+**Filter new issues by state, or the backlog arrives every time.** Take the
+names from `corgi agent watch board` — it reads the tracker's real columns
+(Linear and Jira alike); a state you invented matches nothing. Name only the
+**ready** column:
+
+```bash
+corgi agent watch enable --states "Ready for dev"
+```
+
+With no `--states` the watch takes every open ticket **except the ones in
+flight** — In Progress, Code review, QA and the like, which someone already
+has (2.30.4). Naming such a column in `--states` takes it anyway, so "In
+Progress" belongs there only when the team parks ready work in it. A ticket
+a live session is on — its ticket or its branch names it, on this laptop or a
+peer — is never picked, whatever the column.
 
 The state filter applies to **new issues only**. Comments on your issues and
 reviews on your PRs come through whatever the state is — those are already
@@ -279,6 +296,40 @@ and the VS Code status bar.
 `--action fix` (and so `--auto`) runs unattended only after `corgi agent init
 --dangerously-skip-permissions`; say that before enabling it. Suggest quiet
 hours at the same time — an unattended agent with no window acts at 3am.
+
+**Turning fix mode on, in order** — each line answers a question the user
+will otherwise ask after the first run:
+
+```bash
+corgi agent watch board                                   # the columns, read once
+corgi agent watch enable --action fix \
+  --states "Ready" --pickup "In Progress" --review-status "Code review" \
+  --isolate --hand-over --max-per-hour 2 --max-per-day 6 --quiet 17:00-09:00 --days-off sat,sun
+corgi agent harden                                        # deny rules for secrets, force-push, reset --hard
+corgi agent init --dangerously-skip-permissions           # only after saying what it means
+corgi agent restart
+corgi agent doctor                                        # no ✗ — `security · <ws>` names the workspace to harden
+```
+
+- `--isolate` keeps every run in worktrees of its own; without it a fix
+  edits the checkout a person may be typing in.
+- `--hand-over` types a review comment, a red build or a colleague's word in
+  the review channel into the session already on that branch instead of
+  starting a second one.
+- `--pickup` / `--review-status` move the ticket as the run goes, so the
+  board tells the team what the agent has.
+- A post of **your own** in the review channel is never a review for you; a
+  reply under it is feedback on your work. A merge waits for the forge's
+  approval and green checks (`--auto-merge`), never for a "LGTM" in Slack.
+- After every `corgi upd`: `corgi agent restart`, then `corgi agent track
+  enable` once more — the hooks live in the Claude config and an upgrade
+  can leave them behind.
+
+**Two clients on one laptop**: tokens `--local` per workspace, `--tracker`
+and `--repos` set explicitly in each, and a look at `corgi agent watch` to
+see one token row per workspace. `corgi agent doctor` and `corgi agent watch
+prune --dry-run` are the check for leftovers; `git worktree list` in each
+repo shows what prune does not track (a worktree a skill made in /tmp).
 
 **Webhooks** (instant instead of every three minutes): `corgi agent watch
 hooks` prints one URL per service and a shared secret. A named tunnel
@@ -333,6 +384,8 @@ URL), and the manual checklist that is still open.
 
 - `corgi agent doctor` has no ✗.
 - `corgi agent status` lists the workspace online.
+- `corgi agent watch board` says `you <the right person>` in every watched
+  workspace, and `watch run --dry-run` polled every source without an error.
 - The user has the launcher link and, if they wanted it, got a test
   notification on the phone.
 - The remaining manual steps are listed, each with its command or click.
