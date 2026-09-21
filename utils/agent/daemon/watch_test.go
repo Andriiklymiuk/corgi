@@ -506,7 +506,7 @@ func TestAReviewRequestApprovesOnlyWhenTheWorkspaceSaysSo(t *testing.T) {
 func TestFixDeferralTripCap(t *testing.T) {
 	log := watch.LoadFixLog(t.TempDir())
 	now := time.Date(2026, 9, 18, 12, 0, 0, 0, time.UTC)
-	spec := WatchSpec{Workspace: "w", MaxFixesTotal: 2, CapSince: now.Add(-time.Hour), MaxFixesPerHour: 10, MaxFixesPerDay: 10}
+	spec := WatchSpec{Workspace: "w", ConfigDir: t.TempDir(), MaxFixesTotal: 2, CapSince: now.Add(-time.Hour), MaxFixesPerHour: 10, MaxFixesPerDay: 10}
 	log.Start("w", "a", now.Add(-50*time.Minute))
 	log.Start("w", "b", now.Add(-40*time.Minute))
 	if got := fixDeferral(spec, log, now); got != "trip cap 2" {

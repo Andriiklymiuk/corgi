@@ -80,6 +80,7 @@ type Command struct {
 	Answer     string          `json:"answer,omitempty"`
 	Tokens     int64           `json:"tokens,omitempty"`
 	WatchEvent *watch.Event    `json:"watchEvent,omitempty"`
+	Retry      bool            `json:"retry,omitempty"`
 	Command    string          `json:"command,omitempty"`
 }
 
