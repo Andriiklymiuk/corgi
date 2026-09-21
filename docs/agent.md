@@ -1467,7 +1467,12 @@ Worth knowing, because these look like the watch being broken:
 - a run that would cost more of the five-hour window than is left. Each run
   records what it spent, and the cap is the median of those rather than a
   count: ten comment fixes and ten whole tickets are the same number and
-  nowhere near the same money.
+  nowhere near the same money. The wall is 95% of any usage window;
+  `--limit-ceiling 100` on a workspace takes it down (only the caps and quiet
+  hours hold then), a lower number moves it.
+- review feedback on **several pull requests of one story** (the ticket key
+  in their titles) settles into **one run** over the set — `/corgi:review
+  ABC-123` addresses them together, one checkout per repo, one pass.
 
 Every unattended run also reviews its own diff before it reports, and stamps
 the pull request with the workspace, the kind and the ticket it came from.

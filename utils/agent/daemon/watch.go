@@ -59,6 +59,7 @@ type WatchSpec struct {
 	SkipPermissions bool
 	MaxFixesPerHour int
 	MaxFixesPerDay  int
+	LimitCeiling    int
 	MaxFixesTotal   int
 	CapSince        time.Time
 	Quiet           string
@@ -641,6 +642,14 @@ func (d *Daemon) startFix(ctx context.Context, spec WatchSpec, e watch.Event) st
 		}
 		return "a fix for it is already running"
 	}
+	for i := 0; i < len(e.Riders); i++ {
+		if d.claimFix(spec.Workspace, e.Riders[i].Ref) {
+			continue
+		}
+		d.queueFollowUp(spec, e.Riders[i])
+		e.Riders = append(e.Riders[:i], e.Riders[i+1:]...)
+		i--
+	}
 	if spec.Batch > 1 && e.Kind == watch.KindIssueNew && e.Source != "slack" {
 		if n := d.holdForBatch(ctx, spec, e); n > 0 {
 			return fmt.Sprintf("waits %s for tickets to batch (%d so far)", batchSettle, n)
@@ -648,6 +657,9 @@ func (d *Daemon) startFix(ctx context.Context, spec WatchSpec, e watch.Event) st
 		return ""
 	}
 	d.watchState.Fixes.StartFor(e, now)
+	for _, r := range e.Riders {
+		d.watchState.Fixes.StartFor(r, now)
+	}
 	d.spawnFix(ctx, spec, e)
 	return ""
 }
@@ -705,22 +717,52 @@ func isFeedback(kind watch.Kind) bool {
 	return kind == watch.KindPRComment || kind == watch.KindPRReview || kind == watch.KindIssueComment
 }
 
+var storyInTitle = regexp.MustCompile(`\b([A-Z][A-Z0-9]{1,9}-\d{1,6})\b`)
+
+func storyOf(e watch.Event) string {
+	if e.Kind != watch.KindPRComment && e.Kind != watch.KindPRReview {
+		return ""
+	}
+	if m := storyInTitle.FindStringSubmatch(e.Title); m != nil {
+		return m[1]
+	}
+	return ""
+}
+
 func (d *Daemon) settleFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 	key := spec.Workspace + "/" + e.Ref
+	if story := storyOf(e); story != "" {
+		key = spec.Workspace + "/story/" + story
+	}
 	d.attentionMu.Lock()
 	defer d.attentionMu.Unlock()
 	if d.fixSettle == nil {
 		d.fixSettle = map[string]*time.Timer{}
+		d.fixSettled = map[string][]watch.Event{}
 	}
 	if t := d.fixSettle[key]; t != nil {
 		t.Stop()
 	}
+	kept := d.fixSettled[key][:0]
+	for _, other := range d.fixSettled[key] {
+		if other.Ref != e.Ref {
+			kept = append(kept, other)
+		}
+	}
+	d.fixSettled[key] = append(kept, e)
 	d.fixSettle[key] = time.AfterFunc(commentSettle, func() {
 		d.attentionMu.Lock()
 		delete(d.fixSettle, key)
+		batch := d.fixSettled[key]
+		delete(d.fixSettled, key)
 		d.attentionMu.Unlock()
-		if note := d.startFix(ctx, spec, e); note != "" {
-			utils.Infof("agent: watch %s: %s: %s\n", spec.Workspace, e.Ref, note)
+		if len(batch) == 0 {
+			return
+		}
+		leader := batch[0]
+		leader.Riders = append([]watch.Event(nil), batch[1:]...)
+		if note := d.startFix(ctx, spec, leader); note != "" {
+			utils.Infof("agent: watch %s: %s: %s\n", spec.Workspace, strings.Join(leader.Refs(), " + "), note)
 		}
 	})
 }
@@ -780,16 +822,22 @@ func fixDeferral(spec WatchSpec, log *watch.FixLog, now time.Time) string {
 	if lowDisk(now, firstNonEmpty(spec.AgentDir, ".")) {
 		return "low disk"
 	}
-	if pct, ok := limitUsed(spec.ConfigDir, now); ok && !hasFallback(spec, log, now) {
-		if pct >= limitRefusePercent {
+	ceiling := spec.LimitCeiling
+	if ceiling <= 0 {
+		ceiling = limitRefusePercent
+	}
+	if pct, ok := readUsageLimits(spec.ConfigDir, now); ok && ceiling < 100 && !hasFallback(spec, log, now) {
+		if pct >= ceiling {
 			return fmt.Sprintf("limit %d%%", pct)
 		}
-		if typical := log.TypicalSpend(spec.Workspace); typical > 0 && pct+typical > limitRefusePercent {
+		if typical := log.TypicalSpend(spec.Workspace); typical > 0 && pct+typical > ceiling {
 			return fmt.Sprintf("a run here costs about %d%% and %d%% is used", typical, pct)
 		}
 	}
 	return ""
 }
+
+var readUsageLimits = limitUsed
 
 type FixBudget struct {
 	Hour     int       `json:"hour"`
@@ -964,6 +1012,15 @@ var fixPrompts = map[watch.Kind]func(e watch.Event) string{
 }
 
 func reviewFeedbackPrompt(e watch.Event) string {
+	if story := storyOf(e); story != "" && len(e.Riders) > 0 {
+		urls := []string{e.URL}
+		for _, r := range e.Riders {
+			urls = append(urls, r.URL)
+		}
+		return "Address the review feedback on my own pull requests for " + story + " (" + strings.Join(urls, ", ") + ") — one pass over the set, do not start a fresh review: " +
+			"where a pull request conflicts with its base, merge the base into the branch and resolve that first; then " +
+			"apply the valid comments, push back on the wrong ones, reply and resolve the threads, push each branch. /corgi:review " + story
+	}
 	return "Address the review feedback on my own PR " + e.URL + " — do not start a fresh review of it: " +
 		"if the pull request conflicts with its base, merge the base into the branch and resolve that first; then " +
 		"apply the valid comments, push back on the wrong ones, reply and resolve the threads, push the fixes. /corgi:review " + e.URL

@@ -234,6 +234,7 @@ type WatchConfig struct {
 	Action          string      `yaml:"action"`
 	MaxFixesPerHour int         `yaml:"maxFixesPerHour,omitempty"`
 	MaxFixesPerDay  int         `yaml:"maxFixesPerDay,omitempty"`
+	LimitCeiling    int         `yaml:"limitCeiling,omitempty"`
 	MaxFixesTotal   int         `yaml:"maxFixesTotal,omitempty"`
 	CapSince        time.Time   `yaml:"capSince,omitempty"`
 	Quiet           string      `yaml:"quiet,omitempty"`
