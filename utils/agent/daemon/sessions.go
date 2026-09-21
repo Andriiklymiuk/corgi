@@ -26,7 +26,8 @@ var (
 	sweepInterval = time.Minute
 )
 
-const focusBudget = 1500 * time.Millisecond
+// A cold `open -a` from launchd takes over 1.5s, which used to kill the raise.
+const focusBudget = 5 * time.Second
 
 const liftEpisode = 10 * time.Minute
 
@@ -264,11 +265,11 @@ func (d *Daemon) onSessionTransition(s sessions.Session, from, to sessions.Statu
 			if !still || recent {
 				return
 			}
-			d.notifyAttention(notifyTitlePrefix+label, d.liftWord(s), s.Folder)
+			d.notifySession(notifyTitlePrefix+label, d.liftWord(s), s)
 		})
 	}
 	if rested != "" {
-		go d.notifyAttention(notifyTitlePrefix+label, "the turn resumed after the limit"+d.accountWord(s)+" is "+rested, s.Folder)
+		go d.notifySession(notifyTitlePrefix+label, "the turn resumed after the limit"+d.accountWord(s)+" is "+rested, s)
 	}
 }
 
@@ -738,7 +739,7 @@ func (d *Daemon) scheduleLiftClock(s sessions.Session, label string, now time.Ti
 		}
 		d.liftRang[id] = time.Now()
 		d.attentionMu.Unlock()
-		d.notifyAttention(notifyTitlePrefix+label, d.liftWord(s), s.Folder)
+		d.notifySession(notifyTitlePrefix+label, d.liftWord(s), s)
 	})
 }
 

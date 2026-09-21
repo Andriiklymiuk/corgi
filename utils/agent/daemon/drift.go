@@ -211,11 +211,11 @@ func (d *Daemon) recordDrift(s sessions.Session, m measure, overlap []sessions.O
 		d.ringClaims(s, m.files, now)
 	}
 	if _, crossed := d.Sessions.SetChanges(s.ID, changesOf(m, now), overlap); crossed && !resting {
-		go d.notifyAttention(notifyTitlePrefix+label(s), "crossing streams: "+sessions.OverlapLine(overlap), s.Folder)
+		go d.notifySession(notifyTitlePrefix+label(s), "crossing streams: "+sessions.OverlapLine(overlap), s)
 	}
 	loud, quiet := driftReasonsFrom(s, m.lines, m.files, m.ok)
 	if _, began := d.Sessions.SetDrift(s.ID, append(loud, quiet...)); began && len(loud) > 0 && !resting {
-		go d.notifyAttention(notifyTitlePrefix+label(s), "drifting: "+loud[0], s.Folder)
+		go d.notifySession(notifyTitlePrefix+label(s), "drifting: "+loud[0], s)
 	}
 }
 
@@ -362,5 +362,5 @@ func (d *Daemon) ringClaims(s sessions.Session, touched []string, now time.Time)
 	if label == "" {
 		label = s.Label
 	}
-	go d.notifyAttention(notifyTitlePrefix+label, "editing a claimed file: "+strings.Join(names, ", "), s.Folder)
+	go d.notifySession(notifyTitlePrefix+label, "editing a claimed file: "+strings.Join(names, ", "), s)
 }

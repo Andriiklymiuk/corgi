@@ -450,7 +450,7 @@ func (d *Daemon) ringPeerCrossings(p peers.Peer, now time.Time) {
 				what = "branch " + mine.Branch
 			}
 			if d.rangOnce("cross|"+mine.ID+"|"+p.Name+"|"+theirs.ID, now) {
-				go d.notifyAttention(notifyTitlePrefix+label(mine), "crossing laptops: "+p.Name+" is also on "+what+" ("+firstNonEmpty(theirs.Display, theirs.Label)+", "+theirs.Status+")", mine.Folder)
+				go d.notifySession(notifyTitlePrefix+label(mine), "crossing laptops: "+p.Name+" is also on "+what+" ("+firstNonEmpty(theirs.Display, theirs.Label)+", "+theirs.Status+")", mine)
 			}
 		}
 	}

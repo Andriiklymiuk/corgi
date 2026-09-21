@@ -429,7 +429,7 @@ Writes two Claude Code hooks into the repo's `.claude/settings.local.json` (neve
 - Only the permission prompt notifies by default. `--turns` adds one on every finished turn — noisy once several workspaces are busy, so it is opt-in. Re-running without `--turns` takes it back out.
 - `--all` does every registered workspace in one go, from anywhere.
 - `corgi agent hooks disable [--all]` removes only corgi's hooks, leaving your own alone.
-- Notifications land on the machine running corgi; on macOS with `terminal-notifier` a click opens that workspace's session.
+- Notifications land on the machine running corgi; on macOS with `terminal-notifier` a click brings the session's window forward (as `corgi agent focus`), or opens its session URL when it has no window here.
 
 ### `corgi agent track enable`
 

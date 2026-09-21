@@ -91,6 +91,7 @@ type Daemon struct {
 	Start            supervisor.Starter
 	Notify           func(title, body string)
 	NotifyWithLink   func(title, body, link string)
+	NotifyFocus      func(title, body, sessionID, link string)
 	LinkFor          func(workspaceID string) string
 	Pickup           func(workspace string, e watch.Event)
 	ClaimTicket      func(workspace string, e watch.Event) (ok bool, holder string, err error)
@@ -568,7 +569,15 @@ func (d *Daemon) notifyAttentionAt(title, body, workspaceID, link string) {
 	d.notifyAttentionKey(title, body, workspaceID, link, "")
 }
 
+func (d *Daemon) notifySession(title, body string, s sessions.Session) {
+	d.notifyAttentionFull(title, body, s.Folder, "", "", s.ID)
+}
+
 func (d *Daemon) notifyAttentionKey(title, body, workspaceID, link, key string) {
+	d.notifyAttentionFull(title, body, workspaceID, link, key, "")
+}
+
+func (d *Daemon) notifyAttentionFull(title, body, workspaceID, link, key, sessionID string) {
 	if d.muted() {
 		utils.Infof("agent: (muted) %s: %s\n", title, body)
 		return
@@ -593,6 +602,12 @@ func (d *Daemon) notifyAttentionKey(title, body, workspaceID, link, key string) 
 		}
 		go d.Push(push.Message{Title: title, Body: body, Category: "inbox", Data: data, Thread: workspaceID})
 	}
+	if d.NotifyFocus != nil {
+		if id := d.focusableSession(sessionID, workspaceID); id != "" {
+			d.NotifyFocus(title, body, id, link)
+			return
+		}
+	}
 	if link != "" && d.NotifyWithLink != nil {
 		d.NotifyWithLink(title, body, link)
 		return
@@ -600,6 +615,44 @@ func (d *Daemon) notifyAttentionKey(title, body, workspaceID, link, key string) 
 	if d.Notify != nil {
 		d.Notify(title, body)
 	}
+}
+
+// focusableSession picks the session a notification click should bring forward:
+// the one named, else the newest live one in a window under the workspace folder.
+func (d *Daemon) focusableSession(sessionID, workspaceID string) string {
+	if d.Sessions == nil {
+		return ""
+	}
+	var best sessions.Session
+	for _, s := range d.Sessions.Sessions() {
+		if !inWindow(s) {
+			continue
+		}
+		if sessionID != "" {
+			if s.ID == sessionID {
+				return s.ID
+			}
+			continue
+		}
+		if workspaceID == "" || !sessions.Within(s.Cwd, workspaceID) && s.Folder != workspaceID {
+			continue
+		}
+		if best.ID == "" || s.LastActivity.After(best.LastActivity) {
+			best = s
+		}
+	}
+	return best.ID
+}
+
+func inWindow(s sessions.Session) bool {
+	if s.Status == sessions.StatusGone {
+		return false
+	}
+	switch s.Host.Kind {
+	case sessions.HostVSCodeTerminal, sessions.HostVSCodePanel, sessions.HostITerm, sessions.HostTerminalApp, sessions.HostTmux:
+		return true
+	}
+	return false
 }
 
 func (d *Daemon) silenced(workspaceID string) bool {

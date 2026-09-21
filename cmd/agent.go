@@ -235,6 +235,9 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 	d.NotifyWithLink = func(title, body, link string) {
 		utils.NotifyWithLink(title, body, preferLocalLink(link))
 	}
+	d.NotifyFocus = func(title, body, sessionID, link string) {
+		utils.NotifyWithCommand(title, body, focusCommand(sessionID), preferLocalLink(link))
+	}
 	if user, uerr := config.LoadUser(agentUserConfigPath(dir)); uerr == nil && user != nil && user.NotifyUrl != "" {
 		hook := webhookNotifier(user.NotifyUrl, nil)
 		linked := webhookLinkNotifier(user.NotifyUrl, nil)
@@ -249,6 +252,11 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 				if desktop != nil {
 					desktop(title, body, link)
 				}
+				linked(title, body, link)
+			}
+			focus := d.NotifyFocus
+			d.NotifyFocus = func(title, body, sessionID, link string) {
+				focus(title, body, sessionID, link)
 				linked(title, body, link)
 			}
 		}
