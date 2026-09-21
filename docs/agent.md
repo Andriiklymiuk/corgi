@@ -1172,8 +1172,10 @@ approved, never because the run said so. The author's later "@you updated"
 in the thread arrives as a mention carrying the parent's links, so the
 second pass reviews at the new head. **Your own post** is not a review for
 you — those are your pull requests — and a colleague's reply under it is a
-word on your work: it rings, and with `--hand-over` it is typed into the
-session on that branch. A merge still waits for the forge's approval and
+word on your work: it rings (with or without `--mentions`; the channel is
+opted in), and with `--hand-over` it is typed into the session on that
+branch. A fix for review feedback merges the base branch in first when the
+pull request conflicts. A merge still waits for the forge's approval and
 green checks (`--auto-merge`), never for a "LGTM" in the thread.
 
 **A mention can start a run**, and that is the one place a stranger could

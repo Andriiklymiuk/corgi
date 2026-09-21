@@ -72,3 +72,16 @@ func TestAChatWordOnMyPullRequestHandsOverToTheSessionOnIt(t *testing.T) {
 		t.Fatal("a mention with no pull request has no branch to go to")
 	}
 }
+
+func TestAWordUnderMyReviewPostCountsWithMentionsOff(t *testing.T) {
+	rules := Rules{Enabled: true, Reviews: true, Channels: []string{"#code-review"}}
+	reply := Event{Kind: KindChatMention, Source: "slack", Ref: "slack-2", Author: "@utm", Body: "Comments sent", State: "#code-review",
+		Links: []string{"https://github.com/acme/api/pull/519"}, Mine: true}
+	if why := rules.Why(reply); why != "" {
+		t.Fatalf("the review channel is opted in, a reply under my post there is review traffic: %q", why)
+	}
+	chatter := Event{Kind: KindChatMention, Source: "slack", Ref: "slack-3", Author: "@utm", Body: "do you have access?", State: "#dev-team", Mine: true}
+	if why := rules.Why(chatter); !strings.Contains(why, "--mentions") {
+		t.Fatalf("a mention elsewhere still needs --mentions: %q", why)
+	}
+}

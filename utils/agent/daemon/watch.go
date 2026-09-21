@@ -964,6 +964,7 @@ var fixPrompts = map[watch.Kind]func(e watch.Event) string{
 
 func reviewFeedbackPrompt(e watch.Event) string {
 	return "Address the review feedback on my own PR " + e.URL + " — do not start a fresh review of it: " +
+		"if the pull request conflicts with its base, merge the base into the branch and resolve that first; then " +
 		"apply the valid comments, push back on the wrong ones, reply and resolve the threads, push the fixes. /corgi:review " + e.URL
 }
 

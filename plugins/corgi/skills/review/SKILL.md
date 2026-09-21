@@ -773,7 +773,15 @@ P4 order) and cross-link the two replies. Then one combined report (6).
 3. **Checkout the PR's OWN branch → fix → gate.** Clean tree → `gh pr checkout <n>` /
    `glab mr checkout <n>` (its head — **not** a new branch off base). Dirty tree →
    `git worktree add` off the fetched head so the user's work is untouched (`stories`
-   P3 worktree rules). Gate: `corgi test --service` / `corgi exec` + scoped self-review
+   P3 worktree rules). **Conflicts first**: `gh pr view <n> --json mergeable,mergeStateStatus`
+   (`glab mr view <n>` → `has_conflicts`) — `CONFLICTING` / `DIRTY` means the branch
+   cannot land whatever the threads say. `git merge origin/<base>` on the PR's own
+   branch (a merge, not a rebase: the reviewer's comment anchors survive), resolve
+   keeping both sides' intent, run the gate, commit `Merge <base> into <branch>`;
+   only then the threads. A conflict you cannot resolve with confidence — two
+   sides changed the same logic differently — is a **needs you** in the report, and
+   the threads still get addressed on top of the unmerged branch.
+   Gate: `corgi test --service` / `corgi exec` + scoped self-review
    (`stories` P3.5). **Minimum diff — only what the threads ask.**
 4. **Reply + resolve per thread** (§5) — what changed (commit/line), or why you pushed
    back. **Reply INSIDE the reviewer's thread** — GitHub `in_reply_to`, GitLab
