@@ -18,6 +18,7 @@ import (
 	"andriiklymiuk/corgi/utils/agent/events"
 	"andriiklymiuk/corgi/utils/agent/handoff"
 	"andriiklymiuk/corgi/utils/agent/harness"
+	"andriiklymiuk/corgi/utils/agent/sessions"
 	"andriiklymiuk/corgi/utils/agent/usage"
 	"andriiklymiuk/corgi/utils/agent/watch"
 )
@@ -540,6 +541,9 @@ func (d *Daemon) stillWorthFixing(ctx context.Context, spec WatchSpec, e watch.E
 	if e.Ref == "" {
 		return ""
 	}
+	if who := d.sessionOnTicket(e.Ref); who != "" {
+		return who + " is on it now"
+	}
 	states := watch.LoadStateLog(d.Dir)
 	if known, ok := states.Get(e.Key); ok {
 		if over := watch.Settled(e, known.Status); over != "" {
@@ -567,6 +571,50 @@ func (d *Daemon) stillWorthFixing(ctx context.Context, spec WatchSpec, e watch.E
 		break
 	}
 	return ""
+}
+
+// sessionOnTicket names the live session — here or on a peer laptop — whose
+// ticket or branch is ref, so an unattended run never doubles a person's work.
+func (d *Daemon) sessionOnTicket(ref string) string {
+	if d.Sessions == nil || ref == "" {
+		return ""
+	}
+	want := strings.ToUpper(strings.TrimSpace(ref))
+	for _, s := range d.Sessions.Sessions() {
+		if s.Status == sessions.StatusGone || s.Status == sessions.StatusStale {
+			continue
+		}
+		if ticketOf(s.Ticket, s.TicketKey, s.Branch) == want {
+			return firstNonEmpty(s.Display, s.Label)
+		}
+	}
+	for _, p := range d.Sessions.Peers() {
+		if !p.Alive {
+			continue
+		}
+		for _, s := range p.Sessions {
+			if s.Status == string(sessions.StatusGone) || s.Status == string(sessions.StatusStale) {
+				continue
+			}
+			if ticketOf(s.Ticket, "", s.Branch) == want {
+				return p.Name + "'s " + firstNonEmpty(s.Display, s.Label)
+			}
+		}
+	}
+	return ""
+}
+
+func ticketOf(ticket, key, branch string) string {
+	if t := strings.ToUpper(strings.TrimSpace(ticket)); t != "" {
+		return t
+	}
+	if k := strings.ToUpper(strings.TrimSpace(key)); k != "" {
+		if i := strings.LastIndex(k, ":"); i >= 0 {
+			return k[i+1:]
+		}
+		return k
+	}
+	return sessions.TicketInBranch(branch)
 }
 
 func (d *Daemon) startFix(ctx context.Context, spec WatchSpec, e watch.Event) string {

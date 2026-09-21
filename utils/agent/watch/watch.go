@@ -108,6 +108,9 @@ func (r Rules) Why(e Event) string {
 	}
 	switch e.Kind {
 	case KindReviewRequested:
+		if e.Self {
+			return "I posted it — my own pull requests are not mine to review"
+		}
 		if len(r.States) == 0 {
 			if over := finishedState(e.State); over != "" {
 				return "it is " + over + " — there is nothing to review"
@@ -156,6 +159,9 @@ func (r Rules) Why(e Event) string {
 				return "it is " + dead + " — nobody is going to act on it"
 			}
 		}
+		if len(r.States) == 0 && InFlight(e.State) {
+			return "it is in " + strings.TrimSpace(e.State) + " — someone is on it (--states names columns to take anyway)"
+		}
 		if r.Assignee != "any" && !e.Mine {
 			return "not assigned to me (--assignee any takes every issue)"
 		}
@@ -178,6 +184,17 @@ var deadStates = map[string]string{
 	"won't do": "not being done", "wont do": "not being done",
 	"not planned": "not planned", "obsolete": "obsolete",
 	"rejected": "rejected",
+}
+
+// Columns where a ticket already has hands on it: a person's, or a run's.
+var activeStates = map[string]bool{
+	"in progress": true, "in development": true, "in dev": true, "doing": true, "started": true,
+	"in review": true, "review": true, "code review": true, "in code review": true,
+	"in qa": true, "qa": true, "dev qa": true, "testing": true, "in testing": true,
+}
+
+func InFlight(state string) bool {
+	return activeStates[strings.ToLower(strings.TrimSpace(state))]
 }
 
 var closedStates = map[string]string{

@@ -631,6 +631,7 @@ func TestABatchFullStartsAtOnce(t *testing.T) {
 	t.Cleanup(func() { batchSettle = prev })
 	d.Watches = []WatchSpec{{Workspace: "acme", Dir: t.TempDir(), ConfigDir: t.TempDir(), Project: "ABC", Rules: watch.Rules{Enabled: true}, Action: "fix", SkipPermissions: true, Batch: 2}}
 	d.startWatches(context.Background())
+	t.Cleanup(func() { d.runs.Wait() })
 	for _, ref := range []string{"ABC-1", "ABC-2"} {
 		d.handleWatchEvent(context.Background(), watch.Event{Key: "linear:" + ref, Source: "linear", Kind: watch.KindIssueNew, Ref: ref, Mine: true, At: time.Now()})
 	}

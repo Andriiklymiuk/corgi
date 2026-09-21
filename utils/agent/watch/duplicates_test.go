@@ -19,7 +19,7 @@ func TestADuplicateOrCancelledTicketIsNotWorthAnyonesTime(t *testing.T) {
 			t.Errorf("state %q must say why it stopped", state)
 		}
 	}
-	for _, state := range []string{"In Progress", "Ready", "Backlog", "Duplicate detection", ""} {
+	for _, state := range []string{"Todo", "Ready", "Backlog", "Duplicate detection", ""} {
 		if !rules.Match(Event{Kind: KindIssueNew, Ref: "ABC-1", State: state, Mine: true}) {
 			t.Errorf("state %q is normal work", state)
 		}

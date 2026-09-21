@@ -291,11 +291,13 @@ func (s *Slack) event(ctx context.Context, cursor Cursor, m slackMessage, c slac
 	body := s.render(ctx, m.Text)
 	links := PullLinks(body)
 	parentTS := m.ThreadTS
+	parentMine := false
 	if parentTS != "" && parentTS != m.TS {
 		if parent, ok := s.parent(ctx, c.ID, parentTS); ok {
 			parentBody := s.render(ctx, parent.Text)
 			body = "In reply to " + s.handle(ctx, parent.User) + ": " + parentBody + "\n\n" + body
 			links = append(links, PullLinks(parentBody)...)
+			parentMine = parent.User != "" && parent.User == me
 		}
 	}
 	links = uniqueLinks(links)
@@ -312,7 +314,11 @@ func (s *Slack) event(ctx context.Context, cursor Cursor, m slackMessage, c slac
 		title += ": " + first
 	}
 	if kind == KindChatMessage && s.isReviewChannel(c) && len(links) > 0 {
+		// A reply under my own post is a word on my pull request, not one to review.
 		kind = KindReviewRequested
+		if parentMine {
+			kind = KindChatMention
+		}
 	}
 	return Event{
 		Key:    key,
