@@ -47,14 +47,18 @@ superpowers checkpoints.
 | **Bug**        | broken / regressed                                                | regression test **FAILS on base branch** before fix, passes after    |
 | **Feature**    | new behaviour, real design, or new/changed cross-service contract | hand to **superpowers** if installed, else equivalent inline (below) |
 
-**Tier ≠ span.** Complexity axis vs single/multi-service (Phase 4). Multi-service
-adjustment is still an adjustment. Most stories = adjustments → fastest path.
+**Tier ≠ span.** Complexity axis vs single/multi-service (Phase 4). A
+multi-service change is a **Feature** whatever its size: a contract crosses a
+boundary, and that is where the design lives.
 
 **How the tier is picked.** `--mode bug|feature|adjustment` in the invocation
 wins. Else the ticket's own words: type or labels `bug`, `defect`, `regression`,
-`incident`, `hotfix` → **Bug**; `feature`, `story`, `epic`, `design` → **Feature**;
-anything else → **Adjustment** until Phase 1 proves otherwise. If the diff fits
-one sentence, it is an adjustment whatever the label says.
+`incident`, `hotfix` → **Bug**. Everything else is a **Feature** until Phase 1
+**proves** it is an adjustment: one service, a surface you can name in one
+sentence before reading the code, no new behaviour, no contract. The proof is
+the investigation, never the ticket's brevity — a one-line ticket for "premium
+frequency" is a feature across four repos. When unsure, Feature rigor costs one
+plan; an adjustment that was a feature costs a rewrite.
 
 **Risk lane — always a plan, whatever the size.** A change that touches
 migrations, auth, sessions, permissions, payments, billing, secrets or a
@@ -69,11 +73,11 @@ against the running stack (`corgi run`, `corgi logs <svc> --errors-only`,
 regression test that fails on `<base>`, then the smallest fix. No plan file, no
 subagent fan-out: a bug is a straight line from the log to the test.
 
-**Express lane — small-surface adjustment.** An adjustment or bug in a single service
-with no cross-service contract, whose surface you can name up front (one component or
-a few files: an asset/copy/flag/style swap, small wiring), takes lighter machinery. An
-open design question (which variant? what scope?) does not change that — it only
-decides whether the Phase 2 gate pauses, and the express lane never skips the gate.
+**Express lane — small-surface adjustment.** Only a proven adjustment (above) in a
+single service with no cross-service contract, whose surface you can name up front
+(one component or a few files: an asset/copy/flag/style swap, small wiring), takes
+lighter machinery. An open design question (which variant? what scope?) takes it
+out of the express lane: that is a feature question, and it gets the feature path.
 Lighter steps, same guardrails:
 
 - **No `Explore` subagent** — grep + read the 2–3 files inline; a subagent returns a
@@ -86,8 +90,8 @@ Lighter steps, same guardrails:
   quickest way to know). Don't stack every proof.
 
 Still mandatory: gate sign-off, the spec comment (QA section folded in), branch, per-story review, draft
-PR, report. Unsure on scope → a quick inline grep settles it; don't default to the
-heavy path.
+PR, report. Unsure on scope → the full path; the express lane is for the change
+whose scope was never in doubt.
 
 **Bug sub-type — logic vs visual.** "FAILS on base" assumes a unit test can _see_
 it. **Visual/layout bug** (z-index/stacking, overflow, position, breakpoint, CSS
@@ -437,14 +441,16 @@ corgi agent scope set <issue-key> --path "api/limits/**" --path "web/src/limits/
 ```
 
 Paths are workspace-relative globs (`**` crosses directories; a directory
-covers what is in it). The line budget is the spec's honest guess at the diff
-(adjustment ≈ 60, bug ≈ 150, feature ≈ 400 per service) and the test budget one
-file per acceptance criterion, core flow first. From then on a write outside the
-paths is refused with the way to widen — `corgi agent scope add <key> --path …`
-— and widening is fine when the change needs it; say why in the PR. A diff over
-budget is reported once when the turn ends: trim it, or raise the budget on the
-record (`scope set --lines N`) with one line in the PR saying why. Never widen
-silently, never disable the hook.
+covers what is in it). The scope is a **tripwire for a run that wandered, not a
+target to build down to**: name every area the spec touches, and set the line
+budget at three times the spec's guess (adjustment ≈ 200, bug ≈ 400, feature ≈
+1200 per service), tests one file per acceptance criterion, core flow first.
+A write outside the paths is refused with the way to widen — `corgi agent scope
+add <key> --path …` — and widening is the normal thing to do the moment the
+code needs it; say why in one line of the PR. A diff over budget is reported
+once when the turn ends: raise the budget on the record (`scope set --lines N`)
+with one line saying why. **Never trim real work, tests or error handling to
+fit a number**, never widen silently, never disable the hook.
 
 **Get `<issue-key>` from the tracker, don't invent it** (auto-link token):
 
