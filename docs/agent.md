@@ -1170,7 +1170,11 @@ corgi workspace means — answered in the thread with a line per pull request.
 The ✅ goes on the post only when the forge itself says every one is
 approved, never because the run said so. The author's later "@you updated"
 in the thread arrives as a mention carrying the parent's links, so the
-second pass reviews at the new head.
+second pass reviews at the new head. **Your own post** is not a review for
+you — those are your pull requests — and a colleague's reply under it is a
+word on your work: it rings, and with `--hand-over` it is typed into the
+session on that branch. A merge still waits for the forge's approval and
+green checks (`--auto-merge`), never for a "LGTM" in the thread.
 
 **A mention can start a run**, and that is the one place a stranger could
 reach your machine, so it is gated on a list of people rather than on
@@ -1446,6 +1450,11 @@ Worth knowing, because these look like the watch being broken:
   request already **merged** — chatter, not work. `--states` naming that
   column overrides it.
 - a ticket closed as a **duplicate**, cancelled, won't-do or rejected.
+- a new ticket already **in flight** — In Progress, Code review, QA and the
+  like — someone is on it. `--states` naming that column takes it anyway.
+- a ticket a **live session is on**, here or on a peer laptop: one whose
+  ticket or branch names it. The run would double a person's work; the board
+  says who has it.
 - **several comments on one pull request** in one poll — one notification.
 - a ticket **another machine has claimed** (`--lease`).
 - anything, once the same wall — a missing credential, a refused permission —

@@ -20,6 +20,13 @@ type Group struct {
 
 var ticketInBranch = regexp.MustCompile(`\b([A-Z][A-Z0-9]{1,9}-\d{1,6})\b`)
 
+func TicketInBranch(branch string) string {
+	if m := ticketInBranch.FindStringSubmatch(strings.ToUpper(strings.TrimSpace(branch))); m != nil {
+		return m[1]
+	}
+	return ""
+}
+
 func GroupKey(s Session) string {
 	if k := strings.TrimSpace(s.TicketKey); k != "" {
 		return strings.ToUpper(k)

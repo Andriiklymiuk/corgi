@@ -1205,6 +1205,12 @@ func sameWindowForecast(a, b *usage.WindowForecast) bool {
 	return a == nil || (a.PercentPerHour == b.PercentPerHour && a.Safe == b.Safe && a.ExhaustAt.Equal(b.ExhaustAt))
 }
 
+func (r *Registry) Peers() []PeerBoard {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]PeerBoard(nil), r.peers...)
+}
+
 func (r *Registry) Sessions() []Session {
 	r.mu.Lock()
 	defer r.mu.Unlock()

@@ -90,6 +90,12 @@ func HandoverLine(e Event) string {
 		return "A review was asked for on " + e.Ref + from + ". Give the diff a last read, make sure the tests pass, and say when it is ready." + at
 	case KindCIFailed:
 		return "The build went red on " + e.Ref + ": " + e.Title + ". Read the failing job, fix it on this branch, and push." + at
+	case KindChatMention:
+		link := PullLinkOf(e)
+		if e.Body == "" || link == "" {
+			return ""
+		}
+		return firstOr(e.Author, "Someone") + " wrote about " + link + " in chat:\n" + e.Body + "\n\nTake it into account; a nit or an ask is work on this branch, an approval is not." + at
 	case KindIssueComment:
 		if e.Body == "" {
 			return ""
@@ -108,10 +114,22 @@ func PullLinkOf(e Event) string {
 	if i := indexByte(link, '#'); i > 0 {
 		link = link[:i]
 	}
-	if PullRef(link) == "" {
-		return ""
+	if PullRef(link) != "" {
+		return link
 	}
-	return link
+	for _, l := range e.Links {
+		if PullRef(l) != "" {
+			return l
+		}
+	}
+	return ""
+}
+
+func firstOr(s, fallback string) string {
+	if s == "" {
+		return fallback
+	}
+	return s
 }
 
 func indexByte(s string, b byte) int {
