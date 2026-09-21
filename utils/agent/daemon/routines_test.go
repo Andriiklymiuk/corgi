@@ -20,8 +20,12 @@ func TestRoutinesRunOnTheClockAndReportToTheInbox(t *testing.T) {
 	spec := WatchSpec{Workspace: "api", Dir: t.TempDir(), Action: "notify",
 		Routines: []config.Routine{{Name: "digest", Kind: "digest", Schedule: "daily 08:30"}, {Name: "off", Kind: "deps", Schedule: "daily 08:30", Off: true}}}
 	d.Watches = []WatchSpec{spec}
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
+	prev := claudeCommand
+	claudeCommand = func(ctx context.Context, dir string, env []string, args ...string) *exec.Cmd {
+		return exec.CommandContext(ctx, "false")
+	}
+	t.Cleanup(func() { claudeCommand = prev })
+	ctx := context.Background()
 
 	day := time.Date(2026, 9, 14, 0, 0, 0, 0, time.Local)
 	d.runRoutines(ctx, day.Add(8*time.Hour))

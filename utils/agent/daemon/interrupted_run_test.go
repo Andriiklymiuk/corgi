@@ -47,4 +47,3 @@ func TestARunKilledByTheDaemonStoppingIsNotAFailure(t *testing.T) {
 		t.Fatal("an interrupted run must not count toward the breaker")
 	}
 }
-
