@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"os"
 	"os/exec"
+	"regexp"
 	"sort"
 	"strings"
 )
@@ -221,11 +222,34 @@ func codexPrintArgs(p Print) []string {
 	} else {
 		args = append(args, "--full-auto")
 	}
-	prompt := p.Prompt
+	prompt := codexSkillPrompt(p.Prompt)
 	if s := strings.TrimSpace(p.System); s != "" {
 		prompt = s + "\n\n" + prompt
 	}
 	return append(args, "--", prompt)
+}
+
+var corgiSlashSkill = regexp.MustCompile(`/corgi:([a-z][a-z0-9-]*)`)
+
+func codexSkillPrompt(prompt string) string {
+	var names []string
+	seen := map[string]bool{}
+	out := corgiSlashSkill.ReplaceAllStringFunc(prompt, func(m string) string {
+		name := corgiSlashSkill.FindStringSubmatch(m)[1]
+		if !seen[name] {
+			seen[name] = true
+			names = append(names, name)
+		}
+		return "$" + name
+	})
+	if len(names) == 0 {
+		return prompt
+	}
+	var files []string
+	for _, n := range names {
+		files = append(files, "$"+n+" is ~/.codex/skills/"+n+"/SKILL.md")
+	}
+	return out + "\n\nSkills: " + strings.Join(files, "; ") + " — read it whole, then follow it."
 }
 
 func codexInteractiveArgs(mode string) []string {
