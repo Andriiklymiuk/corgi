@@ -1147,6 +1147,34 @@ no permission hooks: a Codex session shows on the board by its process
 turn lands as a stop; its approvals are answered on the laptop. Adding another agent is one more
 entry in `utils/agent/harness`.
 
+**One session, either harness (2.30.17).** `harness.Open` is what a person's
+session asks for — permission mode, model, instructions, resume, first
+prompt — and each harness spells it (`OpenArgs`): claude `--permission-mode
+bypassPermissions --model --append-system-prompt --resume --fork-session`,
+codex `resume <id> --dangerously-bypass-approvals-and-sandbox -m` with the
+instructions in front of the prompt. `corgi agent claude|codex` builds it in
+`resolveLaunch`, so a workspace's `dangerouslySkipPermissions: true` opens
+codex without approvals (what `codex --dangerously-bypass-approvals-and-sandbox`
+does by hand), and a bot's soul, model and last thread go through whichever
+opens. `configDir` reaches only the first agent of the order: codex under a
+claude account keeps its own `~/.codex` login. A model of the other harness
+(`opus`, `sonnet`, `opusplan` on codex; `gpt-*`, `o3` on claude) is dropped
+so the run goes ahead on the default (`Harness.Model`), which is how the
+daemon's model policy, written in claude's words, survives a codex fallback.
+`corgi agent new --agent codex` and `/launch/new {agent}` open a named harness
+from the editor or the phone.
+
+**Handing work across harnesses.** A conversation cannot cross harnesses, so
+`corgi agent carry <session> --to codex` (or `--to claude`) is always a fresh
+start: the handoff packet is written (`From.Harness` is the session's own),
+and `corgi agent codex --workspace <id> --prompt-id …` opens in the same
+workspace with the packet as its first prompt. Only an agent the workspace
+lists in its `agents` order may take it (`checkHandTarget`). A codex session
+carried to another account starts fresh too (its threads live in
+`~/.codex`), and cannot `--fork`. `POST /launch/carry {session, to | profile |
+fresh}` is the phone's route; the ended row keeps `agent`, so a headless turn
+for a gone codex session runs `codex exec resume <thread>`.
+
 ## Things not to do
 
 - **Do not weaken permissions on your own.** A `permissionMode: bypassPermissions`

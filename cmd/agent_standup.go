@@ -24,7 +24,7 @@ var agentStandupCmd = &cobra.Command{
 	Long: `Reads what every account's Claude Code was asked (its prompt history) and
 what landed in git under each registered workspace, and prints it grouped by
 workspace: the prompts as headlines, the commits as facts. Nothing leaves the
-machine unless --write is given, which hands the raw list to ` + "`claude -p`" + `
+machine unless --write is given, which hands the raw list to the agent (` + "`claude -p`" + `, or codex exec)
 for three plain sentences you can paste into a standup.
 
   corgi agent standup              # since 24h ago
@@ -370,17 +370,11 @@ func summarizeWithClaude(ctx context.Context, text string) (string, error) {
 	prompt := "Below is a list of what I asked an AI coding agent, what got committed, and what corgi's watch did unattended, per project. " +
 		"Write my standup update: three to five plain sentences, past tense, grouped by project, no headings, no bullet points, no preamble. " +
 		"Name concrete outcomes, say plainly when the watch opened a pull request on its own, skip the housekeeping.\n\n" + text
-	cmd := exec.CommandContext(ctx, "claude", "-p", prompt)
-	cmd.Stdin = nil
-	out, err := cmd.Output()
-	if err != nil {
-		return "", fmt.Errorf("claude -p: %w", err)
-	}
-	return strings.TrimSpace(string(out)), nil
+	return runClaudePrint(ctx, "", "", prompt)
 }
 
 func init() {
 	agentStandupCmd.Flags().String("since", "24h", "How far back to look")
-	agentStandupCmd.Flags().Bool("write", false, "Have claude -p turn the list into a few sentences")
+	agentStandupCmd.Flags().Bool("write", false, "Have the workspace's agent (claude -p, or codex exec) turn the list into a few sentences")
 	agentCmd.AddCommand(agentStandupCmd)
 }

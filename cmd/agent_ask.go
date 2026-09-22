@@ -52,7 +52,7 @@ var runClaudePrint = func(ctx context.Context, model, system, prompt string) (st
 		if msg == "" {
 			msg = err.Error()
 		}
-		return "", fmt.Errorf("claude: %s", firstLine(msg))
+		return "", fmt.Errorf("%s: %s", h.Name, firstLine(msg))
 	}
 	return strings.TrimSpace(out.String()), nil
 }

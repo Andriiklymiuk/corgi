@@ -1298,7 +1298,7 @@ func init() {
 	f.Bool("bots", false, "Comments from bot accounts count too (a review bot whose findings are to be fixed); off, a bot is not a person waiting")
 	f.Bool("approve", false, "An unattended review of a pull request I was asked to review may approve it when nothing blocks and the risk card allows")
 	f.Bool(watchFlagHandOver, false, "Type a review comment, a red build or an asked-for review into the session already on that branch")
-	f.Bool("headless", false, "Let a message for a session whose terminal is gone run as one headless turn (claude -p --resume, acceptEdits) in its own checkout, so the phone's chat keeps working")
+	f.Bool("headless", false, "Let a message for a session whose terminal is gone run as one headless turn (claude -p --resume, or codex exec resume; acceptEdits) in its own checkout, so the phone's chat keeps working")
 	f.Bool("silent", false, "Nothing about this workspace's watch rings — no toast, no phone push: fixes run, the inbox and the kanban fill, and you look when you like (--silent=false to ring again)")
 	f.Bool(watchFlagRerunCI, false, "Rerun the failed jobs of a red build once before it is worked on or handed over; a second red on the same run goes the usual way (GitHub)")
 	f.Bool(watchFlagAutoCarry, false, "Carry a session that hit its five-hour quota to another of the workspace's accounts with budget, once per limit (only profiles the accounts list names)")

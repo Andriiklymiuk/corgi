@@ -782,13 +782,16 @@ func checkUnattended(dir string) []agentCheck {
 	user, _ := config.LoadUser(agentUserConfigPath(dir))
 	var dirs []string
 	fixing := map[string]bool{}
-	codexFixes := false
+	codexFixes, codexAnywhere := false, false
 	for _, ws := range registry.Sorted() {
 		if ws.AbsPath != "" {
 			dirs = append(dirs, ws.AbsPath)
 		}
 		if user == nil {
 			continue
+		}
+		if containsFold(config.Resolve(ws.ID, nil, user).AgentOrder(), harness.Codex) {
+			codexAnywhere = true
 		}
 		if wc, ok := user.Workspaces[ws.ID]; ok && wc.Watch != nil && wc.Watch.Enabled && wc.Watch.Action == "fix" {
 			fixing[claudeConfigDirOf(wc.ConfigDir)] = true
@@ -821,7 +824,27 @@ func checkUnattended(dir string) []agentCheck {
 	if codexFixes {
 		checks = append(checks, codexSkillsCheck())
 	}
+	if codexAnywhere {
+		checks = append(checks, codexNotifyCheck())
+	}
 	return checks
+}
+
+// codexNotifyCheck: a workspace lists codex, so its sessions should reach
+// the board — that takes corgi's notify line in codex's config.
+func codexNotifyCheck() agentCheck {
+	const name = "codex sessions on the board"
+	if !codexInstalled() {
+		return agentCheck{Name: name, Detail: "a workspace lists codex, but codex is not on PATH", Fix: "install codex, or drop it from the workspace's agents"}
+	}
+	path := codexConfigPath()
+	raw, _ := os.ReadFile(path)
+	if m := codexNotifyRe.FindString(string(raw)); m == "" {
+		return agentCheck{Name: name, Detail: "codex has no notify hook in " + path + " — its sessions stay off the board", Fix: "`corgi agent track enable`"}
+	} else if !strings.Contains(m, `"agent", "event"`) {
+		return agentCheck{Name: name, Detail: "codex's notify hook in " + path + " is someone else's; codex runs one, so its sessions stay off the board"}
+	}
+	return agentCheck{Name: name, OK: true, Detail: "notify hook in " + path}
 }
 
 func codexSkillsCheck() agentCheck {

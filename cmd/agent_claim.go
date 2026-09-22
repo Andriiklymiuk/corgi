@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"andriiklymiuk/corgi/utils"
+	"andriiklymiuk/corgi/utils/agent/harness"
 	"andriiklymiuk/corgi/utils/agent/sessions"
 	"andriiklymiuk/corgi/utils/agent/watch"
 	"github.com/spf13/cobra"
@@ -17,9 +18,12 @@ func claimFor(st sessions.State, ref, cwd string) (sessions.Session, error) {
 	if ref != "" {
 		return findBoardSession(st, ref)
 	}
-	if id := strings.TrimSpace(os.Getenv("CLAUDE_SESSION_ID")); id != "" {
-		if s, err := findBoardSession(st, id); err == nil {
-			return s, nil
+	for _, name := range harness.Names() {
+		env := harness.For(name, "").SessionIDEnv
+		if id := strings.TrimSpace(os.Getenv(env)); env != "" && id != "" {
+			if s, err := findBoardSession(st, id); err == nil {
+				return s, nil
+			}
 		}
 	}
 	var best sessions.Session

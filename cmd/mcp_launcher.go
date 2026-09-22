@@ -3396,6 +3396,59 @@ func launchInterruptHandler(w http.ResponseWriter, r *http.Request) {
 	launchBoardCommand(w, command.Command{Action: command.ActionInterrupt, SessionID: session.ID, Source: "phone"})
 }
 
+// launchCarryHandler is corgi agent carry from the phone: another account
+// (profile), a fresh start (fresh), or another agent (to: claude, codex).
+func launchCarryHandler(w http.ResponseWriter, r *http.Request) {
+	setLaunchHeaders(w)
+	if r.Method != http.MethodPost {
+		writeLaunchError(w, http.StatusMethodNotAllowed, "POST {session, to | profile | fresh} to carry a session")
+		return
+	}
+	var req struct {
+		Session string `json:"session"`
+		To      string `json:"to"`
+		Profile string `json:"profile"`
+		Fresh   bool   `json:"fresh"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&req); err != nil {
+		writeLaunchError(w, http.StatusBadRequest, "could not read the request")
+		return
+	}
+	session, code, msg := launchSessionFor(req.Session)
+	if code != 0 {
+		writeLaunchError(w, code, msg)
+		return
+	}
+	to := strings.ToLower(strings.TrimSpace(req.To))
+	if to != "" && !harness.Known(to) {
+		writeLaunchError(w, http.StatusBadRequest, "to is one of "+strings.Join(harness.Names(), ", "))
+		return
+	}
+	profile := strings.TrimSpace(req.Profile)
+	if profile != "" && profile != "default" && (!profileNamePattern.MatchString(profile) || !containsString(launchProfileNames(), profile)) {
+		writeLaunchError(w, http.StatusBadRequest, "no such profile")
+		return
+	}
+	if to == "" && !req.Fresh && profile == "" {
+		writeLaunchError(w, http.StatusBadRequest, "say where: to (an agent), profile (an account) or fresh")
+		return
+	}
+	if profile == "" {
+		profile = firstNonEmpty(session.Profile, "default")
+	}
+	dir, err := agentDir()
+	if err != nil {
+		writeLaunchError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	packetPath, err := carrySessionTo(dir, session, profile, req.Fresh, to, "phone")
+	if err != nil {
+		writeLaunchError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeLaunchJSON(w, map[string]any{"ok": true, "done": "carrying " + session.Display, "handoff": packetPath, "to": to, "profile": profile})
+}
+
 func launchRefreshHandler(w http.ResponseWriter, r *http.Request) {
 	setLaunchHeaders(w)
 	if r.Method != http.MethodPost {
@@ -3576,6 +3629,9 @@ func launchNewHandler(w http.ResponseWriter, r *http.Request) {
 		Workspace string `json:"workspace"`
 		Isolate   bool   `json:"isolate"`
 		Bot       string `json:"bot"`
+		// Agent opens this harness (claude, codex) instead of the
+		// workspace's first; absent means the workspace decides.
+		Agent string `json:"agent"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&req); err != nil {
 		writeLaunchError(w, http.StatusBadRequest, "could not read the request")
@@ -3584,6 +3640,11 @@ func launchNewHandler(w http.ResponseWriter, r *http.Request) {
 	model := strings.TrimSpace(req.Model)
 	if model != "" && !validModel(model) {
 		writeLaunchError(w, http.StatusBadRequest, "model: letters, digits, dots and dashes only")
+		return
+	}
+	agent := strings.ToLower(strings.TrimSpace(req.Agent))
+	if agent != "" && !harness.Known(agent) {
+		writeLaunchError(w, http.StatusBadRequest, "agent is one of "+strings.Join(harness.Names(), ", "))
 		return
 	}
 	profile := strings.TrimSpace(req.Profile)
@@ -3655,7 +3716,7 @@ func launchNewHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		args = append(args, "--prompt-id", id)
 	}
-	launchBoardCommand(w, command.Command{Action: command.ActionNew, WindowID: window, Command: daemon.NewSessionCommand(args...), Source: "phone"})
+	launchBoardCommand(w, command.Command{Action: command.ActionNew, WindowID: window, Command: daemon.NewSessionCommandFor(agent, args...), Source: "phone"})
 }
 
 func containsString(list []string, s string) bool {

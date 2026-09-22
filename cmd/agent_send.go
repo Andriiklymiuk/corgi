@@ -100,10 +100,10 @@ the same through POST /launch/interrupt.`,
 
 var agentTurnCmd = &cobra.Command{
 	Use:   "turn <session> <message>",
-	Short: "One more turn for a session whose terminal is gone — claude -p --resume",
+	Short: "One more turn for a session whose terminal is gone — claude -p --resume, or codex exec resume",
 	Long: `The editor closed, the lid shut on a tab: the session's process is gone
 but its conversation is not. This runs one headless turn for it — claude -p
---resume <id> <message> — in its own checkout, under its own account, so the
+--resume <id> <message>, or codex exec resume for a codex session — in its own checkout, under its own account, so the
 conversation goes on and the phone's chat reads the answer. A session that
 still has a terminal is typed into (corgi agent send) and never resumed
 beside itself.

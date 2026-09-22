@@ -15,6 +15,7 @@ import (
 
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/agent/command"
+	"andriiklymiuk/corgi/utils/agent/harness"
 	"andriiklymiuk/corgi/utils/agent/proc"
 	"andriiklymiuk/corgi/utils/agent/push"
 	"andriiklymiuk/corgi/utils/agent/sessions"
@@ -665,12 +666,20 @@ func run(ctx context.Context, name string, args ...string) error {
 
 func newSessionCommand() string { return NewSessionCommand() }
 
-func NewSessionCommand(args ...string) string {
+func NewSessionCommand(args ...string) string { return NewSessionCommandFor("", args...) }
+
+// NewSessionCommandFor opens the named harness ("" leaves it to the
+// workspace: corgi agent claude picks its first installed agent).
+func NewSessionCommandFor(agent string, args ...string) string {
 	exe, err := os.Executable()
 	if err != nil {
 		exe = "corgi"
 	}
-	parts := []string{shellQuote(exe), "agent", "claude"}
+	sub := "claude"
+	if a := strings.ToLower(strings.TrimSpace(agent)); a != "" && harness.Known(a) {
+		sub = a
+	}
+	parts := []string{shellQuote(exe), "agent", sub}
 	for _, a := range args {
 		parts = append(parts, shellQuote(a))
 	}

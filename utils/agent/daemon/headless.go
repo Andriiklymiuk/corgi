@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"andriiklymiuk/corgi/utils"
+	"andriiklymiuk/corgi/utils/agent/harness"
 	"andriiklymiuk/corgi/utils/agent/sessions"
 )
 
@@ -70,8 +71,12 @@ func (d *Daemon) continueHeadless(ctx context.Context, ref, text string) {
 		}()
 		ctx, cancel := context.WithTimeout(ctx, headlessTimeout)
 		defer cancel()
+		h := harness.For(s.Agent, "")
 		env := headlessEnv(s.ConfigDir, os.Getenv("CORGI_OMIT"))
-		args := []string{"-p", text, "--resume", s.ID, "--output-format", "json", "--permission-mode", "acceptEdits"}
+		if h.Name != harness.Claude {
+			env = withoutClaudeHome(env)
+		}
+		args := h.PrintArgs(harness.Print{Prompt: text, Resume: s.ID})
 		logDir := filepath.Join(d.Dir, "watch", "runs")
 		_ = os.MkdirAll(logDir, 0o700)
 		logPath := filepath.Join(logDir, "continue-"+safeName(s.ID)+".log")
@@ -80,10 +85,10 @@ func (d *Daemon) continueHeadless(ctx context.Context, ref, text string) {
 			fmt.Fprintf(logFile, "=== %s headless turn: %s\n", time.Now().Format(time.RFC3339), firstLine(text))
 			defer logFile.Close()
 		}
-		cmd := claudeCommand(ctx, s.Cwd, env, args...)
+		cmd := WatchSpec{}.runCommand(ctx, h, s.Cwd, env, args...)
 		cmd.Stdin = nil
 		raw, runErr := cmd.Output()
-		out, receipt := unwrapResult(raw)
+		out, receipt := unwrapWith(h, raw)
 		if logFile != nil {
 			logFile.Write(out)
 			if receipt.ok {

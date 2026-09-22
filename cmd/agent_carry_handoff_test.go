@@ -77,3 +77,38 @@ func TestForkRefusesBadCounts(t *testing.T) {
 		t.Fatal("more prompts than forks accepted")
 	}
 }
+
+func TestHandoffToAnotherHarness(t *testing.T) {
+	ws := t.TempDir()
+	gitRepoOnBranch(t, ws, "feature/ABC-3/limits")
+	s := sessions.Session{ID: "s1", Cwd: ws, Profile: "work", Agent: "claude", Summary: "web next"}
+	p, _ := leaveCarryHandoffTo(ws, s, "work", "codex")
+	if p.From.Harness != "claude" || !strings.Contains(strings.Join(p.Decisions, " "), "handed from claude to codex") {
+		t.Fatalf("packet says who hands to whom: %+v", p)
+	}
+	s.Agent = "codex"
+	if p, _ := leaveCarryHandoffTo(ws, s, "work", ""); p.From.Harness != "codex" {
+		t.Fatalf("from is the session's own harness: %+v", p)
+	}
+
+	c := handCommand("/usr/local/bin/corgi", "codex", "api", "work", "p1")
+	if c != "/usr/local/bin/corgi agent codex --workspace api --profile work --prompt-id p1" {
+		t.Fatalf("command: %s", c)
+	}
+	if c := handCommand("corgi", "claude", "api", "", "p1"); c != "corgi agent claude --workspace api --prompt-id p1" {
+		t.Fatalf("no profile, no flag: %s", c)
+	}
+
+	if err := checkHandTarget("codex", "claude", []string{"claude"}); err == nil || !strings.Contains(err.Error(), "does not list codex") {
+		t.Fatalf("a workspace that does not list codex cannot hand to it: %v", err)
+	}
+	if err := checkHandTarget("codex", "codex", []string{"claude", "codex"}); err == nil || !strings.Contains(err.Error(), "already") {
+		t.Fatalf("same harness is not a handoff: %v", err)
+	}
+	if err := checkHandTarget("gemini", "claude", []string{"claude", "codex"}); err == nil {
+		t.Fatal("unknown harness refused")
+	}
+	if err := checkHandTarget("codex", "", []string{"claude", "codex"}); err != nil {
+		t.Fatalf("a session with no agent on record is claude: %v", err)
+	}
+}

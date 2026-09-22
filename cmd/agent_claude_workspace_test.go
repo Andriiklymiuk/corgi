@@ -125,3 +125,36 @@ func TestAgentCodexIsTheClaudeLaunchWithCodexAsTheHarness(t *testing.T) {
 		t.Fatal("--kind is implied on corgi agent codex")
 	}
 }
+
+func TestLaunchHonorsBypassAndKeepsClaudeHomeOffCodex(t *testing.T) {
+	agentD, _, client := claudeHome(t)
+	user := "version: 1\nworkspaces:\n  client:\n    configDir: " + filepath.Join(agentD, "claude-client") + "\n    dangerouslySkipPermissions: true\n    agents: [claude, codex]\n"
+	if err := os.WriteFile(agentUserConfigPath(agentD), []byte(user), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	launch, err := resolveLaunch(client, "", harness.Open{Model: "opus", System: "soul", Prompt: "hi"}, []string{"--verbose"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "--permission-mode bypassPermissions --model opus --append-system-prompt soul hi --verbose"
+	if got := strings.Join(launch.Args, " "); got != want {
+		t.Fatalf("claude:\n got %q\nwant %q", got, want)
+	}
+
+	defer func() { kindOverride = "" }()
+	kindOverride = harness.Codex
+	launch, err = resolveLaunch(client, "", harness.Open{Model: "gpt-5", System: "soul", Prompt: "hi"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want = "--dangerously-bypass-approvals-and-sandbox -m gpt-5 soul\n\nhi"
+	if got := strings.Join(launch.Args, " "); got != want {
+		t.Fatalf("codex:\n got %q\nwant %q", got, want)
+	}
+	if _, ok := launch.Env["CODEX_HOME"]; ok {
+		t.Fatalf("a claude config dir is not a codex home: %+v", launch.Env)
+	}
+	if _, ok := launch.Env["CLAUDE_CONFIG_DIR"]; ok {
+		t.Fatalf("codex gets no CLAUDE_CONFIG_DIR: %+v", launch.Env)
+	}
+}

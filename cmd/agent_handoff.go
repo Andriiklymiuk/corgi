@@ -10,6 +10,7 @@ import (
 
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/agent/handoff"
+	"andriiklymiuk/corgi/utils/agent/harness"
 	"andriiklymiuk/corgi/utils/agent/sessions"
 	"andriiklymiuk/corgi/utils/agent/usage"
 	"andriiklymiuk/corgi/utils/agent/workspace"
@@ -161,7 +162,7 @@ func runAgentHandoff(cmd *cobra.Command, _ []string) {
 
 	p := handoff.Packet{Ref: strings.ToUpper(strings.TrimSpace(ref)), Tracker: tracker, State: state, Blocked: blocked,
 		Where: where, Done: done, Remaining: remaining, Decisions: decisions, Uncertain: uncertain, Next: next,
-		From: handoff.From{Harness: "claude", Model: model, Host: hostname()}}
+		From: handoff.From{Harness: harnessHere(), Model: model, Host: hostname()}}
 	fillFromBoard(&p, sessionRef, cwd)
 
 	if verify, _ := f.GetString("verify"); verify != "" {
@@ -206,6 +207,7 @@ func fillFromBoard(p *handoff.Packet, sessionRef, cwd string) {
 	}
 	p.From.Session = match.ID
 	p.From.Account = match.Profile
+	p.From.Harness = sessionHarness(*match)
 	if p.From.Model == "" && match.Context != nil {
 		p.From.Model = match.Context.Model
 	}
@@ -289,4 +291,15 @@ func init() {
 	}
 	agentHandoffCmd.AddCommand(agentHandoffShowCmd, agentHandoffListCmd, agentHandoffVerifyCmd, agentHandoffRmCmd)
 	agentCmd.AddCommand(agentHandoffCmd)
+}
+
+// harnessHere is the agent this command runs inside, by the session id
+// each one sets in its environment; claude when nothing says.
+func harnessHere() string {
+	for _, name := range harness.Names() {
+		if env := harness.For(name, "").SessionIDEnv; env != "" && strings.TrimSpace(os.Getenv(env)) != "" {
+			return name
+		}
+	}
+	return harness.Claude
 }

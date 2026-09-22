@@ -14,6 +14,7 @@ import (
 	"andriiklymiuk/corgi/utils/agent/bots"
 	"andriiklymiuk/corgi/utils/agent/command"
 	"andriiklymiuk/corgi/utils/agent/daemon"
+	"andriiklymiuk/corgi/utils/agent/harness"
 	"andriiklymiuk/corgi/utils/agent/sessions"
 
 	"github.com/fsnotify/fsnotify"
@@ -113,7 +114,7 @@ var agentRescanCmd = &cobra.Command{
 
 var agentNewCmd = &cobra.Command{
 	Use:   "new",
-	Short: "Open a new Claude Code session in the editor window in front",
+	Short: "Open a new agent session (Claude Code, or codex with --agent) in the editor window in front",
 	Long: `Asks the corgi VS Code extension to open a fresh integrated terminal in
 an editor window and run claude in it: the window named with --window, else
 the one the last focus landed in, else the most recently connected. The new
@@ -126,16 +127,21 @@ session takes the lowest free key within a second. The "+" key on a deck.`,
 		bot, _ := cmd.Flags().GetString("bot")
 		model, _ := cmd.Flags().GetString("model")
 		profile, _ := cmd.Flags().GetString("profile")
+		agent, _ := cmd.Flags().GetString("agent")
+		agent = strings.ToLower(strings.TrimSpace(agent))
+		if agent != "" && !harness.Known(agent) {
+			exitWithError("agent_new", fmt.Errorf("--agent is one of %s", strings.Join(harness.Names(), ", ")), 2)
+		}
 		args, err := newSessionArgs(workspace, prompt, bot, model, profile, isolate)
 		if err != nil {
 			exitWithError("agent_new", err, 2)
 		}
 		var run string
-		if len(args) > 0 {
-			run = daemon.NewSessionCommand(args...)
+		if len(args) > 0 || agent != "" {
+			run = daemon.NewSessionCommandFor(agent, args...)
 		}
 		sendBoardCommand(command.Command{Action: command.ActionNew, WindowID: window, Command: run, Source: "cli"},
-			"asked the editor for a new Claude session — `corgi agent sessions` in a moment")
+			"asked the editor for a new "+firstNonEmpty(agent, "Claude")+" session — `corgi agent sessions` in a moment")
 	},
 }
 
@@ -566,8 +572,9 @@ func init() {
 	agentNewCmd.Flags().String("workspace", "", "Open it in this workspace's window, as `corgi agent workspaces` names them (default: the window in front)")
 	agentNewCmd.Flags().String("prompt", "", "The first prompt, typed once the session is up")
 	agentNewCmd.Flags().String("bot", "", "Open it as this bot: its workspace, account, model and soul (`corgi agent bot list`)")
-	agentNewCmd.Flags().String("model", "", "The model, as claude --model takes it")
+	agentNewCmd.Flags().String("model", "", "The model, as claude --model (or codex -m) takes it")
 	agentNewCmd.Flags().String("profile", "", "The account profile to run under (`corgi agent profiles`)")
+	agentNewCmd.Flags().String("agent", "", "Open this harness (claude, codex) instead of the workspace's first")
 	agentCmd.AddCommand(agentSessionsCmd, agentFocusCmd, agentPinCmd, agentDismissCmd, agentPageCmd, agentRescanCmd, agentRefreshCmd, agentWindowsCmd, agentNewCmd)
 }
 

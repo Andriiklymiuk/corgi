@@ -32,6 +32,19 @@ type claudeLaunch struct {
 	Bin       string
 	Args      []string
 	Env       map[string]string
+	// Open is what the session was asked for, in harness-neutral words;
+	// Extra is whatever came after "--". Args is the two spelled for Kind.
+	Open  harness.Open
+	Extra []string
+	// customArgs is a custom kind's own argv, in front of everything.
+	customArgs []string
+}
+
+// build spells Open and Extra as Kind's flags.
+func (l *claudeLaunch) build() {
+	args := append([]string(nil), l.customArgs...)
+	args = append(args, harness.For(l.Kind, "").OpenArgs(l.Open)...)
+	l.Args = append(args, l.Extra...)
 }
 
 var agentClaudeCmd = &cobra.Command{
@@ -123,11 +136,12 @@ the corgi VS Code extension's "+" key runs it in a new terminal.
 		if strings.EqualFold(strings.TrimSpace(model), "auto") {
 			model = autoModelFor(cwd)
 		}
+		open := harness.Open{}
 		if model != "" {
 			if !validModel(model) {
 				exitWithError("agent_claude", fmt.Errorf("model %q: letters, digits, dots and dashes only", model), 2)
 			}
-			args = append([]string{"--model", model}, args...)
+			open.Model = model
 		}
 		if promptID != "" {
 			dir, err := agentDir()
@@ -138,20 +152,19 @@ the corgi VS Code extension's "+" key runs it in a new terminal.
 			if err != nil {
 				exitWithError("agent_claude", err, 2)
 			}
-			args = append(args, text+isolation)
+			open.Prompt = text + isolation
 		}
 		if bot != nil {
-			if soul := strings.TrimSpace(bot.Soul); soul != "" {
-				args = append([]string{"--append-system-prompt", soul}, args...)
-			}
+			open.System = strings.TrimSpace(bot.Soul)
 		}
-		launch, err := resolveClaudeLaunch(cwd, profile, args)
+		launch, err := resolveLaunch(cwd, profile, open, args)
 		if err != nil {
 			exitWithError("agent_claude", err, 2)
 		}
-		if bot != nil && bot.LastSession != "" && !hasFlag(launch.Args, "--resume") && !hasFlag(launch.Args, "--continue") {
-			if transcriptExists(launch.Env, cwd, bot.LastSession) {
-				launch.Args = append([]string{"--resume", bot.LastSession}, launch.Args...)
+		if bot != nil && bot.LastSession != "" && !hasFlag(launch.Args, "--resume") && !hasFlag(launch.Args, "--continue") && !hasFlag(launch.Args, "resume") {
+			if launch.Kind == harness.Codex || transcriptExists(launch.Env, cwd, bot.LastSession) {
+				launch.Open.Resume = bot.LastSession
+				launch.build()
 				utils.Info(fmt.Sprintf("corgi: %s picks up where it left off", bot.Display()))
 			}
 		}
@@ -251,7 +264,15 @@ func runClaudeInPlace(bin string, args []string, env []string) error {
 var kindOverride string
 
 func resolveClaudeLaunch(dir, profile string, extra []string) (claudeLaunch, error) {
-	launch := claudeLaunch{Bin: harness.For(kindOverride, "").Bin, Args: append([]string(nil), extra...), Env: map[string]string{}}
+	return resolveLaunch(dir, profile, harness.Open{}, extra)
+}
+
+// resolveLaunch is the session for dir's workspace: its harness (the
+// workspace's first installed agent, or --kind), account and permission
+// mode, with open spelled in that harness's flags and extra after.
+func resolveLaunch(dir, profile string, open harness.Open, extra []string) (claudeLaunch, error) {
+	launch := claudeLaunch{Kind: harness.For(kindOverride, "").Name, Bin: harness.For(kindOverride, "").Bin, Open: open, Extra: append([]string(nil), extra...), Env: map[string]string{}}
+	launch.build()
 	registry, _, err := agentRegistry()
 	if err != nil {
 		return launch, nil
@@ -316,14 +337,28 @@ func resolveClaudeLaunch(dir, profile string, extra []string) (claudeLaunch, err
 		launch.Bin = kind.DefaultBin
 	}
 	if kind.Name == supervisor.KindCustom {
-		launch.Args = append(append([]string(nil), resolved.Args...), extra...)
+		launch.customArgs = append([]string(nil), resolved.Args...)
 	} else {
-		launch.Args = append(harness.For(kind.Name, "").InteractiveArgs(resolved.PermissionMode), extra...)
+		launch.Open.PermissionMode = permissionModeFor(resolved)
 	}
-	if cfg := strings.TrimSpace(resolved.ConfigDir); cfg != "" && kind.ConfigDirEnv != "" {
+	launch.build()
+	// configDir is the first agent's home (a Claude account); another
+	// harness keeps its own login, as the daemon's runs do.
+	first := resolved.AgentOrder()[0]
+	if cfg := strings.TrimSpace(resolved.ConfigDir); cfg != "" && kind.ConfigDirEnv != "" && (kind.Name == first || kind.Name == supervisor.KindCustom) {
 		launch.Env[kind.ConfigDirEnv] = expandTilde(cfg)
 	}
 	return launch, nil
+}
+
+// permissionModeFor is the mode a person's session opens with: the
+// workspace's bypass opt-in wins, else its permissionMode, else the
+// harness's own default.
+func permissionModeFor(resolved config.Resolved) string {
+	if resolved.DangerouslySkipPermissions {
+		return "bypassPermissions"
+	}
+	return strings.TrimSpace(resolved.PermissionMode)
 }
 
 func workspaceRoot(id string) (string, error) {
