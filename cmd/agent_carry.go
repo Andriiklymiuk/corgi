@@ -13,6 +13,7 @@ import (
 	"andriiklymiuk/corgi/utils/agent/command"
 	"andriiklymiuk/corgi/utils/agent/config"
 	"andriiklymiuk/corgi/utils/agent/handoff"
+	"andriiklymiuk/corgi/utils/agent/harness"
 	"andriiklymiuk/corgi/utils/agent/sessions"
 	"andriiklymiuk/corgi/utils/agent/usage"
 )
@@ -43,7 +44,14 @@ fork its own first message, in order; forks past the last --prompt start with
 none. Without --profile the forks run under the session's own account. The
 original keeps running.
 
-  corgi agent carry k3 --fork 3 --prompt "do the api side" --prompt "do the web side" --prompt "write the tests"`,
+--to codex (or --to claude) hands the work to another agent instead: the
+handoff is written, and a new terminal opens that agent in the same
+workspace with the handoff as its first prompt — a conversation cannot cross
+harnesses, so this is always a fresh start. Only an agent the workspace lists
+(corgi agent workspaces agents <id> claude,codex) can take it.
+
+  corgi agent carry k3 --fork 3 --prompt "do the api side" --prompt "do the web side" --prompt "write the tests"
+  corgi agent carry k3 --to codex`,
 	Args: cobra.ExactArgs(1),
 	Run:  runAgentCarry,
 }
@@ -52,6 +60,8 @@ func runAgentCarry(cmd *cobra.Command, args []string) {
 	profile, _ := cmd.Flags().GetString("profile")
 	profile = strings.TrimSpace(profile)
 	fresh, _ := cmd.Flags().GetBool("fresh")
+	to, _ := cmd.Flags().GetString("to")
+	to = strings.ToLower(strings.TrimSpace(to))
 	forks, _ := cmd.Flags().GetInt("fork")
 	prompts, _ := cmd.Flags().GetStringArray("prompt")
 	dir := mustAgentDir()
@@ -64,6 +74,9 @@ func runAgentCarry(cmd *cobra.Command, args []string) {
 		exitWithError("agent_carry", err, 1)
 	}
 	if forks > 0 || len(prompts) > 0 {
+		if to != "" {
+			exitWithError("agent_carry", fmt.Errorf("--fork continues the conversation; another agent cannot, so it cannot be combined with --to"), 2)
+		}
 		if fresh {
 			exitWithError("agent_carry", fmt.Errorf("--fork continues the conversation; it cannot be combined with --fresh"), 2)
 		}
@@ -80,13 +93,13 @@ func runAgentCarry(cmd *cobra.Command, args []string) {
 		}
 		return
 	}
-	if profile == "" && fresh {
+	if profile == "" && (fresh || to != "") {
 		profile = firstNonEmpty(s.Profile, "default")
 	}
 	if profile == "" {
-		exitWithError("agent_carry", fmt.Errorf("--profile is required: which account to carry to (or --fresh to restart under the same one)"), 2)
+		exitWithError("agent_carry", fmt.Errorf("--profile is required: which account to carry to (or --fresh to restart under the same one, or --to codex)"), 2)
 	}
-	packetPath, err := carrySession(dir, s, profile, fresh, "cli")
+	packetPath, err := carrySessionTo(dir, s, profile, fresh, to, "cli")
 	if err != nil {
 		code := 1
 		var ce *carryError
@@ -112,6 +125,20 @@ func (e *carryError) Error() string { return e.err.Error() }
 func (e *carryError) Unwrap() error { return e.err }
 
 func carrySession(dir string, s sessions.Session, profile string, fresh bool, source string) (packetPath string, err error) {
+	return carrySessionTo(dir, s, profile, fresh, "", source)
+}
+
+// carrySessionTo is carrySession with a harness to hand the work to: "" keeps
+// the session's own; another name means a fresh start under it, in the
+// same workspace, since a conversation cannot cross harnesses.
+func carrySessionTo(dir string, s sessions.Session, profile string, fresh bool, to, source string) (packetPath string, err error) {
+	if to != "" {
+		fresh = true
+	}
+	if !fresh && sessionHarness(s) != harness.Claude {
+		fresh = true
+		utils.Infof("%s threads cannot move between accounts — starting the new session clean, from the handoff\n", sessionHarness(s))
+	}
 	if !fresh && s.Context != nil && s.Context.Percent >= carryFreshAt {
 		fresh = true
 		utils.Infof("context is %d%% full — starting the new session clean, from the handoff\n", s.Context.Percent)
@@ -120,7 +147,12 @@ func carrySession(dir string, s sessions.Session, profile string, fresh bool, so
 	if err != nil {
 		return "", &carryError{err, 1}
 	}
-	packet, packetPath := leaveCarryHandoff(plan.Workspace, s, profile)
+	if to != "" {
+		if err := checkHandTarget(to, s.Agent, plan.Agents); err != nil {
+			return "", &carryError{err, 2}
+		}
+	}
+	packet, packetPath := leaveCarryHandoffTo(plan.Workspace, s, profile, to)
 	if fresh {
 		if packetPath == "" {
 			return "", &carryError{fmt.Errorf("a fresh start needs a handoff, and the branch %q names no ticket — say --ref on `corgi agent handoff` first", sessions.Branch(s.Cwd)), 2}
@@ -129,7 +161,11 @@ func carrySession(dir string, s sessions.Session, profile string, fresh bool, so
 		if err != nil {
 			return "", &carryError{err, 1}
 		}
-		plan.Command = fmt.Sprintf("%s agent claude --profile %s --prompt-id %s", shellQuote(plan.Exe), shellQuote(profile), id)
+		if to != "" {
+			plan.Command = handCommand(plan.Exe, to, plan.WorkspaceID, profile, id)
+		} else {
+			plan.Command = fmt.Sprintf("%s agent %s --profile %s --prompt-id %s", shellQuote(plan.Exe), sessionHarness(s), shellQuote(profile), id)
+		}
 	} else {
 		if err := os.MkdirAll(filepath.Dir(plan.To), 0o700); err != nil {
 			return "", &carryError{err, 1}
@@ -142,8 +178,11 @@ func carrySession(dir string, s sessions.Session, profile string, fresh bool, so
 	if fresh {
 		how = "a new terminal starts clean there, from the handoff"
 	}
-	sendBoardCommand(command.Command{Action: command.ActionNew, WindowID: s.Host.WindowID, Command: plan.Command, Source: source},
-		fmt.Sprintf("carrying %s to %s: %s", s.Display, profile, how))
+	said := fmt.Sprintf("carrying %s to %s: %s", s.Display, profile, how)
+	if to != "" {
+		said = fmt.Sprintf("handing %s to %s: a new terminal opens it there, from the handoff", s.Display, to)
+	}
+	sendBoardCommand(command.Command{Action: command.ActionNew, WindowID: s.Host.WindowID, Command: plan.Command, Source: source}, said)
 	if s.Status == sessions.StatusLimited || s.Status == sessions.StatusDone || s.Status == sessions.StatusStale {
 		_, _ = command.Write(dir, command.Command{Action: command.ActionDismiss, SessionID: s.ID, Source: source})
 	}
@@ -152,9 +191,43 @@ func carrySession(dir string, s sessions.Session, profile string, fresh bool, so
 
 const maxForks = 8
 
+// handCommand opens the other harness in the workspace, fresh, with the
+// handoff as its first prompt.
+func handCommand(exe, to, workspace, profile, promptID string) string {
+	c := fmt.Sprintf("%s agent %s --workspace %s", shellQuote(exe), to, shellQuote(workspace))
+	if profile != "" {
+		c += " --profile " + shellQuote(profile)
+	}
+	return c + " --prompt-id " + shellQuote(promptID)
+}
+
+// checkHandTarget says whether to may take the session's work: a known
+// harness, not the one it already runs through, and one the workspace
+// lists in its agents order.
+func checkHandTarget(to, from string, agents []string) error {
+	if !harness.Known(to) {
+		return fmt.Errorf("--to is one of %s, not %q", strings.Join(harness.Names(), ", "), to)
+	}
+	if from = strings.ToLower(strings.TrimSpace(from)); from == "" {
+		from = harness.Claude
+	}
+	if to == from {
+		return fmt.Errorf("the session already runs through %s", to)
+	}
+	for _, a := range agents {
+		if strings.EqualFold(a, to) {
+			return nil
+		}
+	}
+	return fmt.Errorf("the workspace does not list %s in its agents — corgi agent workspaces agents <id> %s,%s", to, strings.Join(agents, ","), to)
+}
+
 func forkSession(dir string, s sessions.Session, profile string, n int, prompts []string, source string) error {
 	if n < 2 || n > maxForks {
 		return &carryError{fmt.Errorf("--fork takes 2 to %d", maxForks), 2}
+	}
+	if h := sessionHarness(s); h != harness.Claude {
+		return &carryError{fmt.Errorf("%s cannot fork a conversation; corgi agent carry %s --to claude hands the work over instead", h, s.Display), 2}
 	}
 	if len(prompts) > n {
 		return &carryError{fmt.Errorf("%d prompts for %d forks — one --prompt per fork at most", len(prompts), n), 2}
@@ -277,11 +350,18 @@ type carryPlan struct {
 	Command   string
 	Exe       string
 	Workspace string
+	// WorkspaceID and Agents are the registered id and its agents order.
+	WorkspaceID string
+	Agents      []string
 }
 
 const carryFreshAt = 85
 
 func leaveCarryHandoff(workspaceDir string, s sessions.Session, profile string) (handoff.Packet, string) {
+	return leaveCarryHandoffTo(workspaceDir, s, profile, "")
+}
+
+func leaveCarryHandoffTo(workspaceDir string, s sessions.Session, profile, to string) (handoff.Packet, string) {
 	if workspaceDir == "" {
 		return handoff.Packet{}, ""
 	}
@@ -298,7 +378,7 @@ func leaveCarryHandoff(workspaceDir string, s sessions.Session, profile string) 
 	}
 	p := handoff.Packet{Ref: ref, State: handoff.StateInputRequired, Where: where, Draft: true,
 		Next: firstLineOf(s.Summary),
-		From: handoff.From{Harness: "claude", Session: s.ID, Account: s.Profile, Host: hostname()}}
+		From: handoff.From{Harness: sessionHarness(s), Session: s.ID, Account: s.Profile, Host: hostname()}}
 	if s.Context != nil {
 		p.From.Model = s.Context.Model
 		p.Budget.Context = s.Context.Percent
@@ -306,7 +386,13 @@ func leaveCarryHandoff(workspaceDir string, s sessions.Session, profile string) 
 	if l, ok := usage.ReadLimits(s.ConfigDir); ok {
 		p.Budget.FiveHour, p.Budget.SevenDay = l.FiveHour.Percent, l.SevenDay.Percent
 	}
-	if s.Status == sessions.StatusLimited {
+	if to != "" {
+		why := ""
+		if s.Status == sessions.StatusLimited {
+			why = ": " + p.From.Harness + " hit its limit"
+		}
+		p.Decisions = []string{fmt.Sprintf("handed from %s to %s%s", p.From.Harness, to, why)}
+	} else if s.Status == sessions.StatusLimited {
 		p.Decisions = []string{fmt.Sprintf("carried from %s to %s: the first account hit its limit", firstNonEmpty(s.Profile, "default"), profile)}
 	}
 	if err := handoff.Write(workspaceDir, p); err != nil {
@@ -382,9 +468,18 @@ func planCarry(agentD string, s sessions.Session, profile string, fresh bool) (c
 	if err != nil || exe == "" {
 		exe = "corgi"
 	}
-	plan.Exe, plan.Workspace = exe, ws.AbsPath
+	plan.Exe, plan.Workspace, plan.WorkspaceID, plan.Agents = exe, ws.AbsPath, ws.ID, resolved.AgentOrder()
 	plan.Command = fmt.Sprintf("%s agent claude --profile %s -- --resume %s", shellQuote(exe), shellQuote(profile), s.ID)
 	return plan, nil
+}
+
+// sessionHarness is the agent a session runs through; the board says
+// nothing for Claude Code.
+func sessionHarness(s sessions.Session) string {
+	if a := strings.ToLower(strings.TrimSpace(s.Agent)); a != "" {
+		return a
+	}
+	return harness.Claude
 }
 
 func accountAllowed(accounts []string, profile string) bool {
@@ -439,5 +534,6 @@ func init() {
 	agentCarryCmd.Flags().Int("fork", 0, "Open this many sessions that all continue the conversation (2 to 8); the original keeps running")
 	agentCarryCmd.Flags().StringArray("prompt", nil, "First message for the next fork, in order; repeat once per fork")
 	agentCarryCmd.Flags().Bool("fresh", false, "Start clean from the handoff instead of resuming the transcript (automatic past 85% context); without --profile, the same account")
+	agentCarryCmd.Flags().String("to", "", "Hand the work to another agent (claude, codex): a fresh session there, from the handoff; the workspace must list it in its agents")
 	agentCmd.AddCommand(agentCarryCmd)
 }

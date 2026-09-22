@@ -35,7 +35,7 @@ func registerPolicyMCPTools(s *server.MCPServer) {
 		mcp.WithBoolean("handOver", mcp.Description("Type feedback on a branch into the session on it")),
 		mcp.WithBoolean("autoCarry", mcp.Description("Carry a session at its five-hour quota to another of the workspace's accounts with budget, once per limit")),
 		mcp.WithBoolean("rerunCI", mcp.Description("Rerun a red build's failed jobs once before it is worked on or handed over (GitHub)")),
-		mcp.WithBoolean("headless", mcp.Description("Let a message for a session whose terminal is gone run as one headless turn (claude -p --resume)")),
+		mcp.WithBoolean("headless", mcp.Description("Let a message for a session whose terminal is gone run as one headless turn (claude -p --resume, or codex exec resume)")),
 		mcp.WithBoolean("autoMerge", mcp.Description("Merge a pull request of mine the moment it is ready")),
 		mcp.WithBoolean("approve", mcp.Description("An unattended review of a pull request I was asked to review may approve it when clean")),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {

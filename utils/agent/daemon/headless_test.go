@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"andriiklymiuk/corgi/utils/agent/command"
+	"andriiklymiuk/corgi/utils/agent/harness"
 	"andriiklymiuk/corgi/utils/agent/sessions"
 )
 
@@ -41,7 +42,7 @@ func TestAHeadlessTurnResumesAGoneSession(t *testing.T) {
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if len(ran) != 1 || !strings.HasPrefix(ran[0], "/tmp/acme-api CLAUDE_CONFIG_DIR=/tmp/cfg,CORGI_OMIT=useAwsVpn,DISABLE_AUTOUPDATER=1 -p run the tests --resume s1") {
+	if len(ran) != 1 || !strings.HasPrefix(ran[0], "/tmp/acme-api CLAUDE_CONFIG_DIR=/tmp/cfg,CORGI_OMIT=useAwsVpn,DISABLE_AUTOUPDATER=1 -p run the tests ") || !strings.Contains(ran[0], "--resume s1") || !strings.Contains(ran[0], "--permission-mode acceptEdits") {
 		t.Fatalf("one headless turn in the session's checkout under its account: %v", ran)
 	}
 	if s, _ := d.Sessions.LookupEnded("s1"); s.Headless == nil || s.Headless.Turns != 1 || s.Headless.At.IsZero() {
@@ -56,5 +57,36 @@ func TestAHeadlessTurnResumesAGoneSession(t *testing.T) {
 	d.runs.Wait()
 	if len(ran) != 1 {
 		t.Fatalf("a session with a terminal is typed into, not resumed: %v", ran)
+	}
+}
+
+func TestAHeadlessTurnSpeaksTheSessionsHarness(t *testing.T) {
+	d := trackingDaemon(t)
+	d.Sessions.Load()
+	var ran []string
+	var mu sync.Mutex
+	prev := harnessCommand
+	harnessCommand = func(ctx context.Context, h harness.Harness, dir string, env []string, args ...string) *exec.Cmd {
+		mu.Lock()
+		ran = append(ran, h.Name+" "+dir+" "+strings.Join(env, ",")+" "+strings.Join(args, " "))
+		mu.Unlock()
+		return exec.CommandContext(ctx, "echo", `{"type":"turn.completed","usage":{"input_tokens":1,"output_tokens":1}}`)
+	}
+	t.Cleanup(func() { harnessCommand = prev })
+	now := time.Now()
+	d.Sessions.Apply(sessions.Event{Name: "UserPromptSubmit", SessionID: "t1", Cwd: "/tmp/acme-api", ConfigDir: "/tmp/cfg", Agent: "codex", ClaudePID: 100, At: now})
+	d.Sessions.Apply(sessions.Event{Name: "SessionEnd", SessionID: "t1", At: now})
+	d.handleSessionCommand(context.Background(), command.Command{Action: command.ActionContinue, SessionID: "t1", Text: "run the tests"})
+	d.runs.Wait()
+	if n := d.Sessions.Snapshot(time.Now()).Notice; n != "" {
+		t.Fatalf("notice: %s", n)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(ran) != 1 || !strings.HasPrefix(ran[0], "codex /tmp/acme-api CORGI_OMIT=useAwsVpn,DISABLE_AUTOUPDATER=1 exec resume t1 ") || !strings.Contains(ran[0], "run the tests") {
+		t.Fatalf("a codex session resumes through codex exec, without claude's home: %v", ran)
+	}
+	if s, _ := d.Sessions.LookupEnded("t1"); s.Headless == nil || s.Headless.Turns != 1 {
+		t.Fatalf("the ended row says a headless turn ran: %+v", s.Headless)
 	}
 }

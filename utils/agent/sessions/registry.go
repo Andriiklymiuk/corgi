@@ -623,7 +623,7 @@ func (r *Registry) rememberEndedLocked(s *Session, now time.Time) {
 		return
 	}
 	kept := []Session{{ID: s.ID, Label: s.Label, Display: r.displayLocked(s), Cwd: s.Cwd, Folder: s.Folder, Profile: s.Profile, ConfigDir: s.ConfigDir,
-		Status: StatusGone, StatusSince: now, Title: s.Title, Branch: s.Branch, Summary: s.Summary, PR: s.PR, Ticket: s.Ticket, TicketKey: s.TicketKey, Bot: s.Bot, Home: s.Home, Headless: s.Headless}}
+		Status: StatusGone, StatusSince: now, Title: s.Title, Branch: s.Branch, Summary: s.Summary, PR: s.PR, Ticket: s.Ticket, TicketKey: s.TicketKey, Bot: s.Bot, Agent: s.Agent, Home: s.Home, Headless: s.Headless}}
 	for _, e := range r.ended {
 		if e.ID != s.ID && len(kept) < endedKeep {
 			kept = append(kept, e)

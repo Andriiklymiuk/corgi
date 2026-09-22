@@ -38,6 +38,24 @@ type Print struct {
 	Text bool
 }
 
+// Open is one interactive session for a person: how much it may do, which
+// model, what rides along as instructions, what it continues, and its
+// first message. Each harness spells it in its own flags.
+type Open struct {
+	// PermissionMode in claude's words: default, acceptEdits, plan,
+	// bypassPermissions; "" leaves the harness to its own default.
+	PermissionMode string
+	Model          string
+	// System is extra instructions (a bot's soul); a harness without a
+	// flag for it puts it in front of the prompt.
+	System string
+	// Resume continues an earlier session by id; Fork continues it as a
+	// new session where the harness can.
+	Resume string
+	Fork   bool
+	Prompt string
+}
+
 // Receipt is what a run cost and what it said, when the harness told us.
 type Receipt struct {
 	OK      bool
@@ -68,6 +86,8 @@ type Harness struct {
 	// (claude's words: default, acceptEdits, plan, bypassPermissions) and
 	// whatever else the caller adds.
 	InteractiveArgs func(permissionMode string) []string
+	// OpenArgs builds the argv for one interactive session.
+	OpenArgs func(Open) []string
 	// Hooks says whether the agent tells corgi what it is doing (Claude
 	// Code hooks); without them a session's board row is coarse.
 	Hooks bool
@@ -83,6 +103,7 @@ var table = map[string]Harness{
 		PrintArgs:       claudePrintArgs,
 		Unwrap:          claudeUnwrap,
 		InteractiveArgs: claudeInteractiveArgs,
+		OpenArgs:        claudeOpenArgs,
 		Hooks:           true,
 	},
 	Codex: {
@@ -94,7 +115,33 @@ var table = map[string]Harness{
 		PrintArgs:       codexPrintArgs,
 		Unwrap:          codexUnwrap,
 		InteractiveArgs: codexInteractiveArgs,
+		OpenArgs:        codexOpenArgs,
 	},
+}
+
+// A model name belongs to one harness; the other has no such model and
+// would refuse the run. A name the other harness owns is dropped, so the
+// run goes ahead on the harness's own default.
+var (
+	claudeModel = regexp.MustCompile(`(?i)^(opus|sonnet|haiku|opusplan|claude-)`)
+	codexModel  = regexp.MustCompile(`(?i)^(gpt-|o[0-9]|codex-)`)
+)
+
+// Model is the model to ask this harness for: name when it is its own,
+// or unknown to both; "" when it belongs to the other harness.
+func (h Harness) Model(name string) string {
+	name = strings.TrimSpace(name)
+	switch h.Name {
+	case Claude:
+		if codexModel.MatchString(name) {
+			return ""
+		}
+	case Codex:
+		if claudeModel.MatchString(name) {
+			return ""
+		}
+	}
+	return name
 }
 
 // For is the harness a config's kind names; "" and "custom" mean Claude
@@ -155,8 +202,8 @@ func claudePrintArgs(p Print) []string {
 	if p.System != "" {
 		args = append(args, "--append-system-prompt", p.System)
 	}
-	if p.Model != "" {
-		args = append(args, "--model", p.Model)
+	if m := (Harness{Name: Claude}).Model(p.Model); m != "" {
+		args = append(args, "--model", m)
 	}
 	if p.SkipPermissions {
 		args = append(args, "--dangerously-skip-permissions")
@@ -171,6 +218,26 @@ func claudeInteractiveArgs(mode string) []string {
 		return []string{"--permission-mode", mode}
 	}
 	return nil
+}
+
+func claudeOpenArgs(o Open) []string {
+	args := claudeInteractiveArgs(o.PermissionMode)
+	if m := (Harness{Name: Claude}).Model(o.Model); m != "" {
+		args = append(args, "--model", m)
+	}
+	if o.System != "" {
+		args = append(args, "--append-system-prompt", o.System)
+	}
+	if o.Resume != "" {
+		args = append(args, "--resume", o.Resume)
+		if o.Fork {
+			args = append(args, "--fork-session")
+		}
+	}
+	if o.Prompt != "" {
+		args = append(args, o.Prompt)
+	}
+	return args
 }
 
 func claudeUnwrap(raw []byte) ([]byte, Receipt) {
@@ -214,8 +281,8 @@ func codexPrintArgs(p Print) []string {
 	if !p.Text {
 		args = append(args, "--json")
 	}
-	if p.Model != "" {
-		args = append(args, "-m", p.Model)
+	if m := (Harness{Name: Codex}).Model(p.Model); m != "" {
+		args = append(args, "-m", m)
 	}
 	if p.SkipPermissions {
 		args = append(args, "--dangerously-bypass-approvals-and-sandbox")
@@ -263,6 +330,31 @@ func codexInteractiveArgs(mode string) []string {
 	default:
 		return []string{"-a", "on-request"}
 	}
+}
+
+// codex resume <id> continues a thread; there is no fork, so a fork is a
+// plain resume. Instructions ride in front of the prompt, as in exec.
+func codexOpenArgs(o Open) []string {
+	var args []string
+	if o.Resume != "" {
+		args = append(args, "resume", o.Resume)
+	}
+	args = append(args, codexInteractiveArgs(o.PermissionMode)...)
+	if m := (Harness{Name: Codex}).Model(o.Model); m != "" {
+		args = append(args, "-m", m)
+	}
+	prompt := o.Prompt
+	if s := strings.TrimSpace(o.System); s != "" {
+		if prompt != "" {
+			prompt = s + "\n\n" + prompt
+		} else {
+			prompt = s
+		}
+	}
+	if prompt != "" {
+		args = append(args, prompt)
+	}
+	return args
 }
 
 func codexUnwrap(raw []byte) ([]byte, Receipt) {

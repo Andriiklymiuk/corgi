@@ -63,3 +63,54 @@ func TestInteractiveArgs(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+func TestOpenArgsSpeakEachHarness(t *testing.T) {
+	o := Open{PermissionMode: "bypassPermissions", Model: "gpt-5", System: "be brief", Resume: "t1", Prompt: "do ABC-1"}
+	got := strings.Join(For("codex", "").OpenArgs(o), " ")
+	want := "resume t1 --dangerously-bypass-approvals-and-sandbox -m gpt-5 be brief\n\ndo ABC-1"
+	if got != want {
+		t.Fatalf("codex:\n got %q\nwant %q", got, want)
+	}
+	got = strings.Join(For("", "").OpenArgs(Open{PermissionMode: "acceptEdits", Model: "opus", System: "be brief", Resume: "s1", Prompt: "hi"}), " ")
+	want = "--permission-mode acceptEdits --model opus --append-system-prompt be brief --resume s1 hi"
+	if got != want {
+		t.Fatalf("claude:\n got %q\nwant %q", got, want)
+	}
+	if got := For("codex", "").OpenArgs(Open{}); got != nil {
+		t.Fatalf("empty open adds nothing: %q", got)
+	}
+	if got := strings.Join(For("codex", "").OpenArgs(Open{Fork: true, Resume: "t1"}), " "); got != "resume t1" {
+		t.Fatalf("codex has no fork, resumes plainly: %q", got)
+	}
+	if got := strings.Join(For("", "").OpenArgs(Open{Fork: true, Resume: "s1"}), " "); got != "--resume s1 --fork-session" {
+		t.Fatalf("claude forks: %q", got)
+	}
+}
+
+func TestPrintResumeAndBypass(t *testing.T) {
+	got := strings.Join(For("codex", "").PrintArgs(Print{Prompt: "go", Resume: "t1", SkipPermissions: true}), " ")
+	if !strings.HasPrefix(got, "exec resume t1 ") || !strings.Contains(got, "--dangerously-bypass-approvals-and-sandbox") {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestAModelOfTheOtherHarnessIsDropped(t *testing.T) {
+	codex := For("codex", "")
+	for _, m := range []string{"opus", "sonnet", "haiku", "opusplan", "claude-opus-5", "opus[1m]"} {
+		if got := strings.Join(codex.PrintArgs(Print{Prompt: "x", Model: m}), " "); strings.Contains(got, "-m ") {
+			t.Fatalf("codex must not be asked for %s: %q", m, got)
+		}
+	}
+	if got := strings.Join(codex.PrintArgs(Print{Prompt: "x", Model: "gpt-5-codex"}), " "); !strings.Contains(got, "-m gpt-5-codex") {
+		t.Fatalf("its own model stays: %q", got)
+	}
+	claude := For("", "")
+	for _, m := range []string{"gpt-5", "o3", "o4-mini", "gpt-5-codex", "codex-mini"} {
+		if got := strings.Join(claude.OpenArgs(Open{Model: m}), " "); strings.Contains(got, "--model") {
+			t.Fatalf("claude must not be asked for %s: %q", m, got)
+		}
+	}
+	if got := strings.Join(claude.OpenArgs(Open{Model: "opus"}), " "); got != "--model opus" {
+		t.Fatalf("its own model stays: %q", got)
+	}
+}

@@ -123,3 +123,22 @@ func TestLaunchBoardActionsNeedTheDaemon(t *testing.T) {
 		t.Fatalf("no daemon = %d", rec.Code)
 	}
 }
+
+func TestLaunchCarryChecksItsInputs(t *testing.T) {
+	phoneBoard(t, true, sessions.Session{ID: "s1", Display: "api", Status: sessions.StatusLimited, Cwd: t.TempDir()})
+	cases := []struct {
+		body string
+		want int
+	}{
+		{`{"session":""}`, 400},
+		{`{"session":"nope","to":"codex"}`, 404},
+		{`{"session":"s1","to":"gemini"}`, 400},
+		{`{"session":"s1"}`, 400},
+		{`{"session":"s1","to":"codex"}`, 400},
+	}
+	for _, c := range cases {
+		if rec := post(launchCarryHandler, "/launch/carry", c.body); rec.Code != c.want {
+			t.Errorf("%s: %d %s", c.body, rec.Code, rec.Body.String())
+		}
+	}
+}

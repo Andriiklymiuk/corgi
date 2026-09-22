@@ -1125,6 +1125,10 @@ func harnessEnv(spec WatchSpec, h harness.Harness, env []string) []string {
 	if h.Name == spec.agents()[0] || spec.ConfigDir == "" {
 		return env
 	}
+	return withoutClaudeHome(env)
+}
+
+func withoutClaudeHome(env []string) []string {
 	out := env[:0:0]
 	for _, kv := range env {
 		if !strings.HasPrefix(kv, "CLAUDE_CONFIG_DIR=") {

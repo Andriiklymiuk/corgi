@@ -23,7 +23,7 @@ not drift into yesterday evening.
 
   corgi agent today                # since midnight
   corgi agent today --since 72h    # a longer stretch
-  corgi agent today --write        # a few sentences from claude -p
+  corgi agent today --write        # a few sentences from the agent (claude -p, or codex exec)
   corgi agent today --json         # the same, machine readable`,
 	Run: runAgentToday,
 }
@@ -134,7 +134,7 @@ func formatToday(entries []standupEntry, totals todayTotals, since time.Time) st
 
 func init() {
 	agentTodayCmd.Flags().String("since", "", "A rolling window like 8h instead of since midnight")
-	agentTodayCmd.Flags().Bool("write", false, "Have claude -p turn the list into a few sentences")
+	agentTodayCmd.Flags().Bool("write", false, "Have the workspace's agent (claude -p, or codex exec) turn the list into a few sentences")
 	agentCmd.AddCommand(agentTodayCmd)
 }
 

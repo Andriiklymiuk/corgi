@@ -261,3 +261,23 @@ func TestWorkingOnSeveralIssuesAtOnce(t *testing.T) {
 		t.Fatalf("single review = %d: %s", rec.Code, rec.Body.String())
 	}
 }
+
+func TestLaunchNewOpensTheNamedAgent(t *testing.T) {
+	dir := phoneBoard(t, true)
+	st := sessions.State{Windows: []sessions.Window{{ID: "win-1", Folders: []string{"/home/me/acme-api"}}}}
+	raw, _ := json.Marshal(st)
+	os.WriteFile(daemon.SessionsPath(dir), raw, 0o600)
+
+	rec := post(launchNewHandler, "/launch/new", `{"window":"win-1","prompt":"hi","agent":"codex"}`)
+	if rec.Code != 200 {
+		t.Fatalf("new = %d: %s", rec.Code, rec.Body.String())
+	}
+	entries, _ := os.ReadDir(filepath.Join(dir, "commands"))
+	spooled, _ := os.ReadFile(filepath.Join(dir, "commands", entries[0].Name()))
+	if !strings.Contains(string(spooled), "agent codex --prompt-id ") {
+		t.Fatalf("codex opens: %s", spooled)
+	}
+	if rec := post(launchNewHandler, "/launch/new", `{"window":"win-1","prompt":"hi","agent":"gemini"}`); rec.Code != 400 {
+		t.Fatalf("an unknown agent is refused: %d %s", rec.Code, rec.Body.String())
+	}
+}
