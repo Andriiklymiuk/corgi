@@ -97,7 +97,7 @@ not average: a tiny, well-tested change to the auth middleware is still an auth 
 | **Blast radius** | many files/services, shared modules, public API, anything every request passes through |
 | **Reversibility** | data migrations, deletes, irreversible side effects (payments, emails, push, store submission), no flag to turn it off, a binary release rather than an OTA/deploy |
 | **Data & access** | auth, permissions, session, PII, secrets, crypto, input validation, new third-party data flows |
-| **Verification** | no tests for changed lines, tests deleted or skipped, CI red or absent, UI change with no screenshot, bug fix with no FAILS-on-base proof |
+| **Verification** | no tests for changed lines, tests deleted or skipped, CI red or absent, bug fix with no FAILS-on-base proof |
 | **Contract** | request/response or event shape changes, schema, shared types, merge-order dependency between repos |
 | **Operations** | CI/build/infra/env changes, background jobs, retries, concurrency, caching, timeouts, hot-path performance |
 | **Mobile & native** | native modules, ABI/SDK bumps, permissions (push, ATT, location), deep links, offline persistence, navigation stack, store metadata / IAP, app config, platform-specific code — see `references/checklists.md` |
@@ -138,7 +138,7 @@ Two rules on top of the sum:
 1. score ≤ 2 after floors and escalation;
 2. every CI check on head is green (and at least one check exists);
 3. every changed non-test line is exercised by a test in the diff or a named existing
-   test, or the change is copy/config with a screenshot;
+   test, or the change is copy/config/UI-only and the diff itself settles it;
 4. no contract, schema, auth, payment, migration, infra or native change;
 5. single service, no merge-order dependency;
 6. the diff does what the ticket says and nothing else (no scope creep);
@@ -146,6 +146,11 @@ Two rules on top of the sum:
 
 Otherwise `no — <first failing condition>`. "Auto-approve" here means a human may
 merge on the score alone; it never means the skill merges (nothing in corgi does).
+
+**Absent author evidence never decides a `no` on its own.** Screenshots, recordings
+and manual test plans are welcome proof when they are there, and are not owed when
+they are not — judge verification by the tests, the CI and the diff. A card whose
+only failing condition would be "no screenshot" is a `yes`.
 
 ## Phase 3 — Write the card
 Short, evidence-first, phone-readable. Exact shape:

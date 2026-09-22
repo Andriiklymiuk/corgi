@@ -179,11 +179,12 @@ per-repo note. Never re-fetch the same key per PR.
   bar.** View them and check the **diff** against them — layout values, spacing,
   colour, icons and copy in the code are what you compare. Screenshots the PR
   **does** carry are evidence: ones that visibly diverge from the design are a
-  **finding**. A PR with **no** screenshots is **not** a finding — screenshots are
-  not owed in this flow; review the code against the design, and ask for a screen
-  when the diff genuinely can't settle a visual question (name which one). **No
-  design on the ticket, or it explicitly waives one → not a finding:** review the
-  UI on standards alone; don't demand a design that was never promised. On **your
+  **finding**. A PR with **no** screenshots is **not** a finding, **not** a reason
+  to withhold or condition an approval, and **not** a line in the summary —
+  screenshots are not owed in this flow; review the code against the design, and
+  ask for a screen when the diff genuinely can't settle a visual question (name
+  which one). **No design on the ticket, or it explicitly waives one → not a
+  finding:** review the UI on standards alone; don't demand a design that was never promised. On **your
   own** PR (the Phase 4 fix path) screenshots are yours to add when they help or
   the user asked — the **`before-after`** skill (base built, same screen captured
   twice) is the tool for a restyle, and it puts them where the user said: the PR
@@ -647,7 +648,8 @@ LLM-generated title:**
    no "what I verified" essay — a wall of green text reads as noise, and it's
    the correction you'll be asked to unwind via the review-edit API.
 2. **Nits only, no blockers** — inline the nits; summary headline "No blockers,
-   N nits" so it doesn't read as alarming.
+   N nits" so it doesn't read as alarming. If approving was authorized, the
+   approval goes **with** them — a nit never holds it back.
 3. **Head moved during the gate** — re-fetch metadata (head SHA) right before
    posting. If it changed: warn, re-fetch the new diff, and **relocate each
    finding by its anchored source-line text + surrounding hunk context** → take
@@ -828,7 +830,17 @@ explaining, the fix in the suggestion is a clearer name or a smaller function.
   empty or one-line body; PR with findings → post the findings (summary + inline),
   approving alongside only when none are blocking **and** the risk card's last line is
   `auto-approve: yes`. A `no` there means findings only, never an approval, whatever the
-  prompt said. Never pair an approval with a
+  prompt said.
+- **Only a `blocking` finding you actually filed holds back the approval.** Absent
+  author evidence is not a finding and not a blocker: no screenshot, no before/after,
+  no test asserting a copy or layout change, no detail in the description — none of
+  these withhold an approval or earn a condition on one. Everything you found is a
+  nit → approve and leave the nits as notes. **Never post a conditional approval**
+  ("not approving yet, only because …", "add X and it's an easy yes") — that is a
+  request-for-changes wearing a friendly face, over something you had no standing to
+  ask for. A test that is genuinely owed (behaviour the diff changes, nothing covers
+  it) is a `blocking` finding on its own merits or it is nothing.
+- Never pair an approval with a
   verification write-up — the per-PR "what I checked" report belongs in the terminal
   (P6), not the approve body.
 - **Read-only on the repo.** Never touch the user's checkout or the PR branch; the
