@@ -45,7 +45,7 @@ handles any of these counts as touching it.
 ## Verification
 | Points | Evidence |
 |--------|----------|
-| 0 | tests in the diff cover the changed lines; CI green; bug fix has a FAILS-on-base test; UI change has a screenshot or recording |
+| 0 | tests in the diff cover the changed lines; CI green; bug fix has a FAILS-on-base test (a UI change needs no screenshot to sit here) |
 | 1 | tests exist for most changed lines; one gap named |
 | 2 | tests touch the area but not the new branch/edge; or CI has no check for this service |
 | 3 | no test for the changed lines; or a test was deleted, skipped, or loosened (`.skip`, `t.Skip`, weakened assertion) |
@@ -79,7 +79,7 @@ Only when a mobile app is in the set. See `checklists.md` for the specific check
 | Points | Evidence |
 |--------|----------|
 | 0 | JS/TS-only change to a screen with no navigation, persistence, or platform API |
-| 1 | new screen or navigation route; a copy or style change with a screenshot per platform |
+| 1 | new screen or navigation route; a copy or style change |
 | 2 | persistence or offline state change; a platform API used through an existing module; deep-link handling; a new permission *prompt* |
 | 3 | new native module or native SDK bump; `app.json` / `eas.json` / entitlements / manifest change; a new permission *entry*; push or background-fetch handling; IAP or store metadata |
 | 4 | Expo SDK / React Native / Gradle / Xcode toolchain bump, a binary-only change (cannot ship OTA), or anything in the app's startup/crash path (native splash, root navigator, error boundary, hydration) |
@@ -95,7 +95,7 @@ Only when a mobile app is in the set. See `checklists.md` for the specific check
 
 ## Worked examples
 
-**Copy fix in one screen, screenshot attached, CI green.**
+**Copy fix in one screen, CI green (screenshot or none — it doesn't move the score).**
 blast 0 · reversibility 0 · data 0 · verification 0 · contract 0 · ops 0 · mobile 1 ·
 novelty 0 → score **1** → trivial, auto-approve **yes** (all seven conditions visible).
 
@@ -111,9 +111,9 @@ floor "secret handling" → **8 high**. The same change with CI red: verificatio
 sum 5, floor 8, escalation +1 → **9 critical**.
 
 **Expo SDK 52 → 53 bump, lockfile only, no screenshots.**
-mobile 4 · reversibility 4 (binary release) · novelty 3 · verification 3 (no device
-proof) → highest 4 + three others = 7; floor "native SDK bumped" 6 applies, and
-verification is 3, so escalation adds 1 → **8 high**. Check list must include a device
+mobile 4 · reversibility 4 (binary release) · novelty 3 · verification 3 (no test
+exercises the new SDK) → highest 4 + three others = 7; floor "native SDK bumped" 6
+applies, and verification is 3, so escalation adds 1 → **8 high**. Check list must include a device
 launch log or screenshot per platform before submit (`mobile` skill).
 
 **Story target: "Let users delete their account."**
