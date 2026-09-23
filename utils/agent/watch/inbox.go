@@ -7,6 +7,7 @@ import "strings"
 // asks this one question, so a row leaves all of them at once:
 //   - the ticket moved to a finished state, or was picked up (Settled)
 //   - every pull request the row is about is merged or closed
+//   - I reviewed every pull request a review request is about, after it came
 //   - a run already handled it: the review is posted, the comment answered
 func InboxDone(e Event, current string, pulls *PullLog, fixes *FixLog) string {
 	if why := Settled(e, current); why != "" {
@@ -14,6 +15,9 @@ func InboxDone(e Event, current string, pulls *PullLog, fixes *FixLog) string {
 	}
 	if why := pullsFinished(e, pulls); why != "" {
 		return why
+	}
+	if reviewedByMe(e, pulls) {
+		return "reviewed"
 	}
 	if fixes != nil && handledByRun(e, fixes) {
 		return "handled"
@@ -88,4 +92,21 @@ func handledByRun(e Event, fixes *FixLog) bool {
 		}
 	}
 	return false
+}
+
+func reviewedByMe(e Event, pulls *PullLog) bool {
+	if e.Kind != KindReviewRequested || pulls == nil {
+		return false
+	}
+	refs := PullRefsOf(e)
+	if len(refs) == 0 {
+		return false
+	}
+	for _, ref := range refs {
+		st, ok := pulls.Get(ref)
+		if !ok || st.MyReviewAt.IsZero() || st.MyReviewAt.Before(e.At) {
+			return false
+		}
+	}
+	return true
 }

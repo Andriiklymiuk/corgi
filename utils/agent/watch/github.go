@@ -331,14 +331,18 @@ func (g *GitHub) PullStatus(ctx context.Context, ref string) (PullStatus, bool) 
 	}
 
 	var reviews []struct {
-		State string `json:"state"`
-		User  struct {
+		State       string    `json:"state"`
+		SubmittedAt time.Time `json:"submitted_at"`
+		User        struct {
 			Login string `json:"login"`
 		} `json:"user"`
 	}
 	if resp, err := g.get(ctx, "/repos/"+repo+"/pulls/"+num+"/reviews?per_page=100", ""); err == nil && githubDecode(resp, &reviews) == nil {
 		last := map[string]string{}
 		for _, r := range reviews {
+			if g.Me != "" && strings.EqualFold(r.User.Login, g.Me) && r.SubmittedAt.After(out.MyReviewAt) {
+				out.MyReviewAt = r.SubmittedAt
+			}
 			switch r.State {
 			case "APPROVED", "CHANGES_REQUESTED", "DISMISSED":
 				last[r.User.Login] = r.State

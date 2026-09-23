@@ -1135,7 +1135,7 @@ corgi agent restart
 the menu bar, the editor, `watch status`: a row goes when its ticket reaches
 a finished state or is picked up, when every pull request it is about is
 merged or closed (a chat review request counts the pull requests its message
-links), or when a run already handled it (the review is posted, the comment
+links), when you reviewed every pull request a review request is about after it came in, or when a run already handled it (the review is posted, the comment
 answered — a run on the same pull request that started after the comment
 counts). Anything else waits until you act or ignore it. `corgi agent watch
 ignore --all [--workspace ID]` clears what the inbox shows now; the phone's
