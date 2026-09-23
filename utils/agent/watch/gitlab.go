@@ -377,6 +377,12 @@ func (g *GitLab) PullStatus(ctx context.Context, ref string) (PullStatus, bool) 
 		} else {
 			out.Review = "pending"
 		}
+		for _, a := range approvals.ApprovedBy {
+			if isMe(g.Me, a.User.Username) {
+				// GitLab gives an approval no time: seen now is when it counts from.
+				out.MyReviewAt = out.At
+			}
+		}
 	}
 	return out, true
 }

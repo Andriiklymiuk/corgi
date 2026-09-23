@@ -49,3 +49,18 @@ func TestARowLeavesTheInboxWhenItsWorkIsOver(t *testing.T) {
 		t.Fatal("a finished ticket is settled as before")
 	}
 }
+
+func TestAReviewRequestIAnsweredLeaves(t *testing.T) {
+	dir := t.TempDir()
+	pulls := &PullLog{path: filepath.Join(dir, "pulls.json"), Pulls: map[string]PullStatus{}}
+	at := time.Date(2026, 9, 22, 18, 59, 0, 0, time.UTC)
+	ask := Event{Key: "slack:c:1", Kind: KindReviewRequested, Ref: "slack-1", At: at, Links: []string{"https://github.com/acme/api/pull/73"}}
+	_ = pulls.Set("acme/api#73", PullStatus{State: "open", Review: "approved", MyReviewAt: at.Add(-time.Hour)})
+	if InboxDone(ask, "#code-review", pulls, nil) != "" {
+		t.Fatal("a review from before the ask does not answer it")
+	}
+	_ = pulls.Set("acme/api#73", PullStatus{State: "open", Review: "approved", MyReviewAt: at.Add(90 * time.Minute)})
+	if InboxDone(ask, "#code-review", pulls, nil) != "reviewed" {
+		t.Fatal("my review after the ask answers it")
+	}
+}

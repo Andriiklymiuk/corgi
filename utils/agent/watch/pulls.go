@@ -20,8 +20,11 @@ type PullStatus struct {
 	Checks string `json:"checks,omitempty"`
 	Review string `json:"review,omitempty"`
 	// Mine says the forge names me as the author; only then may it merge on its own.
-	Mine bool      `json:"mine,omitempty"`
-	At   time.Time `json:"at"`
+	Mine bool `json:"mine,omitempty"`
+	// MyReviewAt is when I last reviewed it, so a review request I have
+	// answered leaves the inbox.
+	MyReviewAt time.Time `json:"myReviewAt,omitempty"`
+	At         time.Time `json:"at"`
 }
 
 func (p PullStatus) Facts() sessions.PullFacts {
