@@ -18,6 +18,8 @@ type HookInstall struct {
 	Action  string // created, updated, unchanged
 	Err     error
 	Missing string // the permission a failure points at
+	// ReadOnly says the token could not write at all, so another login may.
+	ReadOnly bool
 }
 
 // The events each forge sends that corgi parses. Everything else a forge can
@@ -41,7 +43,7 @@ func InstallGitHubHook(ctx context.Context, token, repo, hookURL, secret string)
 	}
 	base := strings.TrimRight(GitHubAPI, "/") + "/repos/" + repo + "/hooks"
 	if err := hookCall(ctx, http.MethodGet, base, githubHeaders(token), nil, &hooks); err != nil {
-		return failed(out, err, "admin on the repo (a token with admin:repo_hook)")
+		return githubHookRefused(ctx, token, repo, failed(out, err, "admin on the repo (a token with admin:repo_hook)"))
 	}
 	body := map[string]any{
 		"active": true,
@@ -63,6 +65,12 @@ func InstallGitHubHook(ctx context.Context, token, repo, hookURL, secret string)
 // InstallGitLabHook does the same for a GitLab project: comments only, with
 // the shared secret as its token.
 func InstallGitLabHook(ctx context.Context, baseURL, token, project, hookURL, secret string) HookInstall {
+	return InstallGitLabHookWith(ctx, baseURL, map[string]string{"PRIVATE-TOKEN": token}, project, hookURL, secret)
+}
+
+// InstallGitLabHookWith takes the auth headers, for a login that is not a
+// personal token (glab's OAuth session is a bearer token).
+func InstallGitLabHookWith(ctx context.Context, baseURL string, headers map[string]string, project, hookURL, secret string) HookInstall {
 	out := HookInstall{Repo: project}
 	if baseURL == "" {
 		baseURL = "https://gitlab.com"
@@ -72,7 +80,6 @@ func InstallGitLabHook(ctx context.Context, baseURL, token, project, hookURL, se
 		ID  int64  `json:"id"`
 		URL string `json:"url"`
 	}
-	headers := map[string]string{"PRIVATE-TOKEN": token}
 	if err := hookCall(ctx, http.MethodGet, base, headers, nil, &hooks); err != nil {
 		return failed(out, err, "Maintainer on the project (a token with the api scope)")
 	}
@@ -97,7 +104,10 @@ func githubHeaders(token string) map[string]string {
 
 func failed(out HookInstall, err error, missing string) HookInstall {
 	out.Action, out.Err = "", err
-	if strings.Contains(err.Error(), "HTTP 403") || strings.Contains(err.Error(), "HTTP 404") {
+	switch msg := err.Error(); {
+	case strings.Contains(msg, "insufficient_scope"), strings.Contains(msg, "HTTP 401"):
+		out.Missing, out.ReadOnly = "a token that can write (GitLab: the api scope; GitHub: admin:repo_hook)", true
+	case strings.Contains(msg, "HTTP 403"), strings.Contains(msg, "HTTP 404"):
 		out.Missing = missing
 	}
 	return out
@@ -142,4 +152,26 @@ func hookCall(ctx context.Context, method, endpoint string, headers map[string]s
 		return nil
 	}
 	return json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(into)
+}
+
+// githubHookRefused says which of the two GitHub needs is missing: the role
+// (only a repo admin may add a hook) or the token's admin:repo_hook scope.
+func githubHookRefused(ctx context.Context, token, repo string, out HookInstall) HookInstall {
+	var r struct {
+		Permissions struct {
+			Admin    bool `json:"admin"`
+			Maintain bool `json:"maintain"`
+		} `json:"permissions"`
+	}
+	if hookCall(ctx, http.MethodGet, strings.TrimRight(GitHubAPI, "/")+"/repos/"+repo, githubHeaders(token), nil, &r) != nil {
+		return out
+	}
+	owner, _, _ := strings.Cut(repo, "/")
+	switch {
+	case !r.Permissions.Admin:
+		out.Missing, out.ReadOnly = "repo admin (you are not) — an owner of "+owner+" can add one org webhook instead, covering every repo", false
+	default:
+		out.Missing, out.ReadOnly = "the admin:repo_hook scope — `gh auth refresh -s admin:repo_hook`", true
+	}
+	return out
 }

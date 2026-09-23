@@ -1163,7 +1163,11 @@ which forge, the URL on your tunnel, the shared secret. `--install` creates
 or updates the webhook on every GitHub and GitLab repo in `--repos` (GitLab:
 Maintainer, comments only; GitHub: repo admin, issue comments + reviews +
 review comments); running it again updates in place, and `--rotate
---install` pushes a new secret everywhere. Linear and Jira webhooks are one
+--install` pushes a new secret everywhere. The watch token only ever has to
+read; when it cannot write, `--install` uses your `glab` / `gh` login for
+the setup alone. A repo it cannot set up says why: the token's scope, or the
+role — on GitHub only a repo admin may add a hook, and an org owner can add
+one org webhook (same URL, secret and events) that covers every repo. Linear and Jira webhooks are one
 per organisation and are added by hand (the command prints the exact URL).
 Linear and GitHub payloads are checked against an HMAC of the body, GitLab
 against its secret token header, Jira against a token in the URL. A named
