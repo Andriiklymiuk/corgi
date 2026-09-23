@@ -1011,8 +1011,11 @@ var fixPrompts = map[watch.Kind]func(e watch.Event) string{
 			"Do not push commits, do not resolve their threads" + approveClause + ". If it is good, say so and say why. /corgi:review " + strings.Join(links, " ")
 	},
 	watch.KindCIFailed: func(e watch.Event) string {
-		return "A build went red in " + e.Ref + ": " + e.Title + ". " +
-			"Find the failing run (gh run list --repo " + e.Ref + " --status failure --limit 5, then gh run view --log-failed), " +
+		find := "Find the failing run (gh run list --repo " + e.Ref + " --status failure --limit 5, then gh run view --log-failed), "
+		if e.Source == "gitlab" {
+			find = "Find the failing pipeline of " + e.URL + " (glab ci view / glab ci trace on its branch, or the GitLab API with the saved token), "
+		}
+		return "A build went red in " + e.Ref + ": " + e.Title + ". " + find +
 			"read what actually failed, and fix the cause on the branch it failed on — not by weakening the test or skipping it. " +
 			"Push, then watch the run to green. If it is a flake or an outage rather than our bug, say so and change nothing. " +
 			"I approve all changes."

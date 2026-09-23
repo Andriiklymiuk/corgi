@@ -1138,13 +1138,21 @@ peers hear `unwell` only when every agent is out (`laptopUnwell`; the MCP-side
 pulse reads `watch/agents.json`). The daemon logs the pick and rings once a day
 per workspace and agent. `corgi agent claude` opens the first installed agent
 of the order; `--kind` overrides. `corgi agent doctor` has an `agents` check. `corgi agent track enable`
-writes Codex's `notify` line when codex is installed (and leaves a notify of
-someone else's alone, since Codex runs one).
-`configDir` moves `CODEX_HOME`; `OPENAI_API_KEY` is the credential. Codex has
-no permission hooks: a Codex session shows on the board by its process
-(`agent: codex`), and with `notify = ["corgi", "agent", "event", "stop",
-"--agent", "codex", "--notify"]` in `~/.codex/config.toml` every finished
-turn lands as a stop; its approvals are answered on the laptop. Adding another agent is one more
+writes Codex's hooks when the installed codex runs them (`codex features
+list` shows `hooks … true`): `~/.codex/hooks.json` (`CODEX_HOME`) gets
+SessionStart (emit + context), UserPromptSubmit, PreToolUse,
+PermissionRequest, PostToolUse, Stop (emit + budget) and SessionEnd, all
+`corgi agent hook emit --agent codex` — the same stdin JSON as Claude Code,
+so a codex row has its status, tool, risk word, TTY / tmux pane / window,
+context % (from the rollout's `token_count`) and a Stop summary (from
+`last_assistant_message`); corgi's old notify line is removed so a turn is not
+reported twice. Codex runs a hook only once the person trusts it in `/hooks`
+(the trust is a hash in `config.toml` under `hooks.state`) — corgi never
+writes that trust. An older codex keeps the `notify` line (someone else's
+notify is left alone, since Codex runs one). `configDir` moves `CODEX_HOME`;
+`OPENAI_API_KEY` is the credential. `pickHarness` reads codex's window from
+the newest rollouts' `rate_limits` (`usage.ReadCodexWindow`): 98 % or
+reached, before its reset, is `limit`, wherever codex stands in the order. Adding another agent is one more
 entry in `utils/agent/harness`.
 
 **One session, either harness (2.30.17).** `harness.Open` is what a person's

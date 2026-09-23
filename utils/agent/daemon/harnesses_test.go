@@ -21,7 +21,23 @@ func installedOnly(names ...string) func() {
 		}
 		return false
 	}
-	return func() { harnessInstalled = prev }
+	prevSpent := codexWindowSpent
+	codexWindowSpent = func(time.Time) bool { return false }
+	return func() { harnessInstalled, codexWindowSpent = prev, prevSpent }
+}
+
+func TestASpentCodexWindowHandsTheRunBack(t *testing.T) {
+	defer installedOnly("claude", "codex")()
+	codexWindowSpent = func(time.Time) bool { return true }
+	now := time.Now()
+	spec := WatchSpec{Workspace: "api", Agents: []string{"codex", "claude"}}
+	h, skipped := pickHarness(spec, &watch.FixLog{}, now)
+	if h.Name != "claude" || len(skipped) != 1 || skipped[0] != "codex is at its limit" {
+		t.Fatalf("claude should take it: %s %v", h.Name, skipped)
+	}
+	if hasFallback(WatchSpec{Workspace: "api", Agents: []string{"claude", "codex"}}, &watch.FixLog{}, now) {
+		t.Fatal("a spent codex is no fallback")
+	}
 }
 
 func TestTheNextAgentTakesARunWhenTheFirstCannot(t *testing.T) {

@@ -121,14 +121,7 @@ func runAgentTrackEnable(cmd *cobra.Command, _ []string) {
 		utils.Infof("✓ sessions under %s are tracked (%s)\n", cfgDir, path)
 	}
 	if codexInstalled() {
-		switch changed, theirs, err := enableCodexNotify(codexConfigPath(), bin); {
-		case err != nil:
-			utils.Infof("codex: could not write %s: %v\n", codexConfigPath(), err)
-		case theirs != "":
-			utils.Infof("codex: %s already has a notify of its own; codex runs one, so its turns stay off the board (%s)\n", codexConfigPath(), theirs)
-		case changed:
-			utils.Infof("✓ codex turns land on the board too (%s)\n", codexConfigPath())
-		}
+		trackCodex(bin)
 	}
 	utils.Info("new sessions report from their next event; `corgi agent sessions` shows the board")
 	if !noTab {
@@ -157,6 +150,9 @@ func runAgentTrackDisable(cmd *cobra.Command, _ []string) {
 	}
 	if removed, err := disableCodexNotify(codexConfigPath()); err == nil && removed {
 		utils.Infof("✓ removed corgi's notify from %s\n", codexConfigPath())
+	}
+	if removed, err := disableTrackingIn(codexHooksPath()); err == nil && removed {
+		utils.Infof("✓ removed corgi's hooks from %s\n", codexHooksPath())
 	}
 }
 
@@ -426,6 +422,8 @@ type hookInput struct {
 	Error            json.RawMessage `json:"error"`
 	ToolInput        json.RawMessage `json:"tool_input"`
 	TranscriptPath   string          `json:"transcript_path"`
+	// LastAssistantMessage is codex's Stop field: the reply the turn ended on.
+	LastAssistantMessage string `json:"last_assistant_message"`
 }
 
 func (in hookInput) readsTranscript() (context, title bool) {
@@ -488,6 +486,12 @@ func (in hookInput) errorMessage() string {
 }
 
 func runEmitHook(stdin io.Reader, getenv func(string) string, parent int) (sessions.Event, bool) {
+	return runEmitHookAs("", stdin, getenv, parent)
+}
+
+// runEmitHookAs is the emit hook for a named agent; codex's hooks pass
+// --agent codex, and a hook with no name still finds codex as its owner.
+func runEmitHookAs(agent string, stdin io.Reader, getenv func(string) string, parent int) (sessions.Event, bool) {
 	in, ok := readHookInput(stdin)
 	if !ok || in.AgentID != "" {
 		return sessions.Event{}, false
@@ -496,7 +500,7 @@ func runEmitHook(stdin io.Reader, getenv func(string) string, parent int) (sessi
 		return sessions.Event{}, false
 	}
 	ev := sessions.Event{
-		Name: in.Event, SessionID: in.SessionID, Cwd: in.Cwd,
+		Name: in.Event, SessionID: in.SessionID, Cwd: in.Cwd, Agent: strings.ToLower(strings.TrimSpace(agent)),
 		ConfigDir: getenv("CLAUDE_CONFIG_DIR"), Source: in.Source, Reason: in.Reason,
 		Tool: in.Tool, Notification: in.NotificationType, Message: truncateLine(in.errorMessage(), 160),
 		Error: in.errorType(), Window: getenv("CORGI_VSCODE_WINDOW"),
@@ -524,6 +528,10 @@ func runEmitHook(stdin io.Reader, getenv func(string) string, parent int) (sessi
 			}
 		}
 	}
+	if in.Event == "Stop" && ev.Summary == "" && strings.TrimSpace(in.LastAssistantMessage) != "" {
+		sum := usage.SummaryOfText(in.LastAssistantMessage)
+		ev.Summary, ev.PR = sum.Line, sum.PR
+	}
 	switch in.Event {
 	case "SessionStart", "UserPromptSubmit", "Stop", "CwdChanged":
 		ev.Branch = sessions.Branch(in.Cwd)
@@ -537,6 +545,11 @@ func runEmitHook(stdin io.Reader, getenv func(string) string, parent int) (sessi
 	if owner, ok := proc.Owner(chain); ok {
 		ev.ClaudePID = owner.PID
 		ev.TTY = owner.TTY
+		if ev.Agent == "" {
+			if h := proc.HarnessOf(owner); h != "" && h != "claude" {
+				ev.Agent = h
+			}
+		}
 	}
 	return ev, true
 }

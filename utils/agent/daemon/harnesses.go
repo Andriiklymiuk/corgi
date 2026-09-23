@@ -6,6 +6,7 @@ import (
 
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/agent/harness"
+	"andriiklymiuk/corgi/utils/agent/usage"
 	"andriiklymiuk/corgi/utils/agent/watch"
 )
 
@@ -16,6 +17,13 @@ import (
 
 // harnessInstalled is a seam for tests: whether the agent's binary is here.
 var harnessInstalled = func(h harness.Harness) bool { return h.Installed() }
+
+// codexWindowSpent is a seam for tests: codex's own rate-limit reading, from
+// its newest session, says the window is used up.
+var codexWindowSpent = func(now time.Time) bool {
+	w, ok := usage.ReadCodexWindow(usage.CodexHome())
+	return ok && w.Spent(now)
+}
 
 // agents is the order to try; an empty spec means claude alone.
 func (s WatchSpec) agents() []string {
@@ -40,7 +48,8 @@ func (s WatchSpec) harness() harness.Harness { return s.harnessNamed(s.agents()[
 // agentUnwell says why this agent cannot take a run now: "missing" when it
 // is not installed, "limit" when its window is spent, else the failure of
 // its newest finished run of the day when that was a login, a permission
-// or a limit. Only the first agent has a window corgi can read.
+// or a limit. Claude's window is read for the first agent; codex's wherever
+// it stands, from what its own sessions logged.
 func agentUnwell(spec WatchSpec, name string, log *watch.FixLog, now time.Time) string {
 	h := spec.harnessNamed(name)
 	if !harnessInstalled(h) {
@@ -50,6 +59,9 @@ func agentUnwell(spec WatchSpec, name string, log *watch.FixLog, now time.Time) 
 		if b := freeBudget(spec.ConfigDir); b >= 0 && b <= 2 {
 			return "limit"
 		}
+	}
+	if h.Name == harness.Codex && codexWindowSpent(now) {
+		return "limit"
 	}
 	if log == nil {
 		return ""
