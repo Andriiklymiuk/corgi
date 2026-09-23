@@ -339,20 +339,22 @@ see one token row per workspace. `corgi agent doctor` and `corgi agent watch
 prune --dry-run` are the check for leftovers; `git worktree list` in each
 repo shows what prune does not track (a worktree a skill made in /tmp).
 
-**Webhooks** (instant instead of every three minutes): `corgi agent watch
-hooks` prints one URL per service and a shared secret. A named tunnel
-(step 3) keeps those URLs alive across restarts; with a quick tunnel they
-change on every restart and must be re-entered. `--interval 0` on a
-workspace turns polling off once its webhooks work. The clicks, per
-service, go on the manual checklist:
+**Webhooks** (instant instead of every three minutes): run `corgi agent
+watch hooks --install` inside each watched workspace — it creates or updates
+the hook on every GitHub and GitLab repo in `--repos` (GitLab needs
+Maintainer, GitHub repo admin) and prints what is left by hand. Polling
+stays on beside the webhooks as the safety net; a comment from both runs
+once. Sources mix freely: GitLab on webhooks while Jira polls is fine. A
+named tunnel (step 3) keeps the URLs alive across restarts; with a quick
+tunnel they change on every restart, so `--install` again after one. Verify
+with a comment on a test MR/PR, then `corgi agent watch status` shows a
+`webhook <time>` on that source. What is left by hand goes on the manual
+checklist:
 
 - Linear: Settings → API → Webhooks → New: URL `<base>/hooks/linear`, the
   secret, events Issues and Comments.
-- GitHub: repo Settings → Webhooks → Add: URL `<base>/hooks/github`, content
-  type `application/json`, the secret, events Pull request reviews, Pull
-  request review comments, Issue comments.
-- GitLab: project Settings → Webhooks → Add: URL `<base>/hooks/gitlab`, the
-  secret in Secret token, trigger Comments.
+- GitHub / GitLab: only a repo `--install` reported `✗` for (no admin /
+  Maintainer there) — the same settings by hand, as `watch hooks` prints them.
 - Jira: Settings → System → WebHooks → Create: URL
   `<base>/hooks/jira?token=<secret>`, events Issue created, Comment created.
 

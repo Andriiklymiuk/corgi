@@ -350,10 +350,42 @@ func (d *Daemon) handleWatchEvent(ctx context.Context, e watch.Event) {
 		}
 	}
 	for _, spec := range d.Watches {
+		if !spec.mayTake(e) {
+			continue
+		}
 		if d.watchers[spec.Workspace].Handle(ctx, e) {
 			return
 		}
 	}
+}
+
+func (s WatchSpec) watchesSource(name string) bool {
+	for _, src := range s.Sources {
+		if src.Name() == name {
+			return true
+		}
+	}
+	return false
+}
+
+// mayTake says an event no workspace owns may still land here: the
+// workspace watches that source and has no filter that already said no —
+// a repo list for a pull request, a project for a ticket. A webhook for a
+// repo nobody listed goes to a workspace that watches every repo, or nowhere.
+func (s WatchSpec) mayTake(e watch.Event) bool {
+	switch e.Source {
+	case "github", "gitlab", "linear", "jira":
+		if !s.watchesSource(e.Source) {
+			return false
+		}
+	}
+	switch e.Kind {
+	case watch.KindIssueNew, watch.KindIssueComment:
+		return s.Project == ""
+	case watch.KindPRComment, watch.KindPRReview, watch.KindReviewRequested, watch.KindCIFailed:
+		return len(s.Repos) == 0
+	}
+	return true
 }
 
 func (d *Daemon) WatchIdentity(source string) string {

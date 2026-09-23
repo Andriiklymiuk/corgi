@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os/exec"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -152,8 +153,12 @@ func (g *GitHub) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 		if r.kind == KindPRComment && (!hasComment || (author != "" && strings.EqualFold(author, g.Me))) {
 			continue
 		}
+		key := "github:" + ref + ":" + t.ID + ":" + t.UpdatedAt
+		if id := githubCommentKey(t.Subject.LatestCommentURL); id != "" {
+			key = "github:" + ref + ":" + id
+		}
 		events = append(events, Event{
-			Key:    "github:" + ref + ":" + t.ID + ":" + t.UpdatedAt,
+			Key:    key,
 			Source: g.Name(),
 			Kind:   r.kind,
 			Ref:    ref,
@@ -451,4 +456,20 @@ func (g *GitHub) MyReviewSince(ctx context.Context, ref string, since time.Time)
 		}
 	}
 	return out, true
+}
+
+var githubCommentID = regexp.MustCompile(`/(?:issues/comments|pulls/comments|reviews)/(\d+)$`)
+
+// githubCommentKey names a comment the way its webhook does (c<id> for a
+// comment, r<id> for a review), so the same comment seen by the poll and by
+// the webhook is one event, not two runs.
+func githubCommentKey(apiURL string) string {
+	m := githubCommentID.FindStringSubmatch(apiURL)
+	if m == nil {
+		return ""
+	}
+	if strings.Contains(apiURL, "/reviews/") {
+		return "r" + m[1]
+	}
+	return "c" + m[1]
 }

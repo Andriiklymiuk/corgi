@@ -1146,13 +1146,37 @@ would be a burst of runs. Every event is deduplicated by key across polls
 and webhooks, so a comment seen twice runs once. A failing token backs the
 interval off, up to ten times, instead of hammering the API.
 
-**Webhooks** remove the polling delay. `corgi agent watch hooks` prints one
-URL per service on your tunnel and a shared secret; paste them into the
-service's webhook settings. Linear and GitHub payloads are checked against
-an HMAC of the body, GitLab against its secret token header, Jira against a
-token in the URL. A named tunnel (`corgi agent tunnel setup`) keeps the
-URLs stable. `--interval 0` turns polling off for a workspace that has
-webhooks.
+**Webhooks** remove the polling delay; they never replace polling. Each
+source of a workspace is either *webhook + poll* or *poll* alone, and a
+workspace can mix them — GitLab on webhooks while Jira polls, GitHub on
+webhooks while Linear polls. Polling stays on beside every webhook: it
+catches what came while the laptop was off or the tunnel was down (a forge
+disables a hook that keeps failing), and it is the only way in for the kinds
+the webhooks here do not send — review requests, red builds, a ticket
+assigned to you. The two never run a comment twice: a webhook and a poll
+give the same comment the same key (`github:<repo>#<n>:c<id>` / `:r<id>`,
+`gitlab:note:<id>`, `linear:<KEY>:c<id>`, `jira:<KEY>:c<id>`), and a key is
+handled once.
+
+`corgi agent watch hooks` prints the workspace's plan: which repo is on
+which forge, the URL on your tunnel, the shared secret. `--install` creates
+or updates the webhook on every GitHub and GitLab repo in `--repos` (GitLab:
+Maintainer, comments only; GitHub: repo admin, issue comments + reviews +
+review comments); running it again updates in place, and `--rotate
+--install` pushes a new secret everywhere. Linear and Jira webhooks are one
+per organisation and are added by hand (the command prints the exact URL).
+Linear and GitHub payloads are checked against an HMAC of the body, GitLab
+against its secret token header, Jira against a token in the URL. A named
+tunnel (`corgi agent tunnel setup`) keeps the URLs stable.
+
+A webhook is routed to the workspace that lists its repo (`--repos`) or its
+project (`--project`); one nobody lists goes to a workspace that watches that
+source with no filter, or is dropped. A GitLab project hook sends every note
+on every merge request; only a note on a merge request you opened is yours
+to fix (matched by your GitLab user id, which the poll learns). `corgi agent
+watch status` shows, per source, when the last poll ran and when the last
+webhook came in — a source with no webhook time after a comment is a hook
+that is not arriving.
 
 
 ### Slack
@@ -1267,7 +1291,7 @@ workspaces:
       prs: true                 # reviews and comments on my pull requests
       repos: [acme/api]         # limit GitHub to these; empty is any
       project: ABC              # Linear team key or Jira project; routes webhooks
-      interval: 3m              # 0 = webhooks only
+      interval: 3m              # the poll; it stays on beside webhooks
       action: fix               # or notify
       maxFixesPerHour: 3        # fixes past this are deferred, not dropped
       maxFixesPerDay: 10
