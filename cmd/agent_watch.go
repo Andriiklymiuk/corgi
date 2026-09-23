@@ -1586,6 +1586,10 @@ func watchStatusFixes(dir string, state *watch.State) []watchStatusFix {
 	return fixes
 }
 
+// inboxWindow is how many recent events every inbox surface reads, the
+// phone's and watch status alike.
+const inboxWindow = 40
+
 type watchInbox struct {
 	dir      string
 	now      time.Time
@@ -1602,7 +1606,7 @@ func watchStatusEvents(dir string, state *watch.State, now time.Time) []watchSta
 		picks: watch.LoadPicks(dir), pulls: watch.LoadPullLog(dir), hands: watch.LoadHands(dir), moved: watch.LoadStateLog(dir)}
 	keeper := watch.NewInboxKeeper(now)
 	events := []watchStatusEvent{}
-	for _, e := range watch.RecentEvents(dir, 25) {
+	for _, e := range watch.RecentEvents(dir, inboxWindow) {
 		if !keeper.Keep(e) || state.IsIgnored(e.Key) {
 			continue
 		}
@@ -1618,7 +1622,7 @@ func (in watchInbox) row(e watch.Event) (watchStatusEvent, bool) {
 	if st, ok := in.moved.Get(e.Key); ok {
 		current = st.Status
 	}
-	if watch.Settled(e, current) != "" {
+	if watch.InboxDone(e, current, in.pulls, in.state.Fixes) != "" {
 		return watchStatusEvent{}, false
 	}
 	er := watchStatusEvent{Key: e.Key, Ref: e.Ref, Kind: string(e.Kind),

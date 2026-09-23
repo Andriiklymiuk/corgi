@@ -1,8 +1,11 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
+	"time"
 
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/agent/watch"
@@ -20,10 +23,22 @@ and shared by the phone, the menu bar and the editor.
   corgi agent watch ignore acme/api#42 --workspace api
   corgi agent watch unignore ABC-123
 
+--all clears everything the inbox shows right now (one workspace with
+--workspace); what arrives afterwards comes in as usual.
+
 A REF is what the inbox shows; a key (linear:ABC-123:comment:…) is what --json
 prints, for a surface that already has one.`,
-	Args: cobra.ExactArgs(1),
+	Args: func(cmd *cobra.Command, args []string) error {
+		if all, _ := cmd.Flags().GetBool("all"); all {
+			return cobra.NoArgs(cmd, args)
+		}
+		return cobra.ExactArgs(1)(cmd, args)
+	},
 	Run: func(cmd *cobra.Command, args []string) {
+		if all, _ := cmd.Flags().GetBool("all"); all {
+			runIgnoreAll(cmd)
+			return
+		}
 		runIgnore(cmd, args[0], true)
 	},
 }
@@ -89,7 +104,77 @@ func inboxKeysFor(dir, arg, workspace string) []string {
 	return keys
 }
 
+func runIgnoreAll(cmd *cobra.Command) {
+	dir := mustAgentDir()
+	workspace, _ := cmd.Flags().GetString("workspace")
+	var keys []string
+	for _, e := range watchStatusEvents(dir, watch.LoadState(dir), time.Now()) {
+		if workspace == "" || e.Workspace == workspace {
+			keys = append(keys, e.Key)
+		}
+	}
+	n, err := ignoreKeys(dir, keys)
+	if err != nil {
+		exitWithError("agent_watch_ignore", err, 1)
+	}
+	if utils.JSONOutput {
+		utils.PrintJSON(map[string]any{"ignored": n, "keys": keys})
+		return
+	}
+	fmt.Printf("the inbox is clear (%s ignored)\n", plural(n, "row", "rows"))
+}
+
+// ignoreKeys takes the given inbox rows out for good. Only keys that exist
+// as watch events are touched, so a stale list cannot grow the ignore file.
+func ignoreKeys(dir string, keys []string) (int, error) {
+	state := watch.LoadState(dir)
+	n := 0
+	for _, k := range keys {
+		k = strings.TrimSpace(k)
+		if k == "" || state.IsIgnored(k) {
+			continue
+		}
+		if _, ok := watch.FindEvent(dir, k); !ok {
+			continue
+		}
+		if err := state.Ignore(k); err != nil {
+			return n, err
+		}
+		n++
+	}
+	return n, nil
+}
+
+// launchInboxIgnoreHandler is "clear the inbox" on a surface: it names the
+// rows it shows, so a row that arrived since is not cleared unseen.
+func launchInboxIgnoreHandler(w http.ResponseWriter, r *http.Request) {
+	setLaunchHeaders(w)
+	if r.Method != http.MethodPost {
+		writeLaunchError(w, http.StatusMethodNotAllowed, "POST {keys: [...]} to take those rows out of the inbox")
+		return
+	}
+	var req struct {
+		Keys []string `json:"keys"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 256<<10)).Decode(&req); err != nil || len(req.Keys) == 0 {
+		writeLaunchError(w, http.StatusBadRequest, "send the keys of the rows to clear")
+		return
+	}
+	dir, err := agentDir()
+	if err != nil {
+		writeLaunchError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	n, err := ignoreKeys(dir, req.Keys)
+	if err != nil {
+		writeLaunchError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeLaunchJSON(w, map[string]any{"ignored": n})
+}
+
 func init() {
+	agentWatchIgnoreCmd.Flags().Bool("all", false, "clear every row the inbox shows now")
 	for _, c := range []*cobra.Command{agentWatchIgnoreCmd, agentWatchUnignoreCmd} {
 		c.Flags().String("workspace", "", "only this workspace's rows, when a ref exists in two")
 	}
