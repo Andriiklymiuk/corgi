@@ -569,3 +569,30 @@ func TestEmitHookFindsCodexAsOwner(t *testing.T) {
 		t.Fatalf("event = %+v", ev)
 	}
 }
+
+func TestACodexPermissionItsReviewerAnswersIsNoWait(t *testing.T) {
+	fakeChain(t)
+	home := t.TempDir()
+	t.Setenv("CODEX_HOME", home)
+	req := `{"session_id":"th-3","hook_event_name":"PermissionRequest","cwd":"` + t.TempDir() + `","tool_name":"Bash","tool_input":{"command":"curl https://example.com"},"permission_mode":"default"}`
+
+	ev, _ := runEmitHookAs("codex", strings.NewReader(req), fakeEnv(nil), 50)
+	if ev.Name != "PermissionRequest" {
+		t.Fatalf("a person answers by default: %+v", ev)
+	}
+	_ = os.WriteFile(filepath.Join(home, "config.toml"), []byte("model = \"x\"\napprovals_reviewer = \"auto_review\"\n[profiles.p]\n"), 0o600)
+	if ev, _ := runEmitHookAs("codex", strings.NewReader(req), fakeEnv(nil), 50); ev.Name != "PreToolUse" {
+		t.Fatalf("auto_review answers it: %+v", ev)
+	}
+	_ = os.WriteFile(filepath.Join(home, "config.toml"), []byte("[profiles.p]\napprovals_reviewer = \"auto_review\"\n"), 0o600)
+	if ev, _ := runEmitHookAs("codex", strings.NewReader(req), fakeEnv(nil), 50); ev.Name != "PermissionRequest" {
+		t.Fatalf("a profile's reviewer is not the default: %+v", ev)
+	}
+	bypass := strings.Replace(req, `"default"`, `"bypassPermissions"`, 1)
+	if ev, _ := runEmitHookAs("codex", strings.NewReader(bypass), fakeEnv(nil), 50); ev.Name != "PreToolUse" {
+		t.Fatalf("bypass never asks: %+v", ev)
+	}
+	if ev, _ := runEmitHookAs("", strings.NewReader(bypass), fakeEnv(nil), 50); ev.Name != "PermissionRequest" {
+		t.Fatalf("claude's own request is left alone: %+v", ev)
+	}
+}

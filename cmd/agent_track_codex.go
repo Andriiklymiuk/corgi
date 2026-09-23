@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"andriiklymiuk/corgi/utils"
+	"andriiklymiuk/corgi/utils/agent/sessions"
 	"andriiklymiuk/corgi/utils/atomicfile"
 )
 
@@ -197,4 +198,37 @@ func writeCodexConfig(path, text string) error {
 		return err
 	}
 	return atomicfile.Write(path, []byte(text), 0o600)
+}
+
+var codexAutoReviewRe = regexp.MustCompile(`(?m)^\s*approvals_reviewer\s*=\s*"auto_review"`)
+
+// codexDecidesItself says a codex permission request is answered without a
+// person: the session bypasses approvals, or its config hands them to
+// codex's auto reviewer (the project's .codex/config.toml, then the user's).
+func codexDecidesItself(permissionMode, cwd string) bool {
+	if permissionMode == "bypassPermissions" {
+		return true
+	}
+	paths := []string{codexConfigPath()}
+	if cwd != "" {
+		if root := sessions.RepoRoot(cwd); root != "" {
+			paths = append([]string{filepath.Join(root, ".codex", "config.toml")}, paths...)
+		}
+		paths = append([]string{filepath.Join(cwd, ".codex", "config.toml")}, paths...)
+	}
+	for _, p := range paths {
+		if raw, err := os.ReadFile(p); err == nil && codexAutoReviewRe.Match(codexTopLevel(raw)) {
+			return true
+		}
+	}
+	return false
+}
+
+// codexTopLevel is the part of a codex config.toml before its first table;
+// a key under [profiles.x] is not the default.
+func codexTopLevel(raw []byte) []byte {
+	if i := regexp.MustCompile(`(?m)^\s*\[`).FindIndex(raw); i != nil {
+		return raw[:i[0]]
+	}
+	return raw
 }

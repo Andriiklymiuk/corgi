@@ -1146,7 +1146,11 @@ PermissionRequest, PostToolUse, Stop (emit + budget) and SessionEnd, all
 so a codex row has its status, tool, risk word, TTY / tmux pane / window,
 context % (from the rollout's `token_count`) and a Stop summary (from
 `last_assistant_message`); corgi's old notify line is removed so a turn is not
-reported twice. Codex runs a hook only once the person trusts it in `/hooks`
+reported twice. Codex fires PermissionRequest before its own reviewer
+answers, so with `approvals_reviewer = "auto_review"` (top level of the
+project's or the user's `.codex/config.toml`) or `permission_mode:
+bypassPermissions` the emit hook records it as PreToolUse — work, not a
+wait, no "needs you" ring. Codex runs a hook only once the person trusts it in `/hooks`
 (the trust is a hash in `config.toml` under `hooks.state`) — corgi never
 writes that trust. An older codex keeps the `notify` line (someone else's
 notify is left alone, since Codex runs one). `configDir` moves `CODEX_HOME`;
