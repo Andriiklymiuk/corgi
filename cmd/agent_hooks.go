@@ -336,7 +336,8 @@ func runAgentHook(cmd *cobra.Command, args []string) {
 	}
 	switch event {
 	case "emit":
-		if ev, ok := runEmitHook(os.Stdin, os.Getenv, os.Getppid()); ok {
+		agent, _ := cmd.Flags().GetString("agent")
+		if ev, ok := runEmitHookAs(agent, os.Stdin, os.Getenv, os.Getppid()); ok {
 			deliverEvent(ev)
 		}
 		return
@@ -479,6 +480,7 @@ func marshalCompact(v any) string {
 
 func init() {
 	agentHookCmd.Flags().String("workspace", "", "Workspace id the hook belongs to")
+	agentHookCmd.Flags().String("agent", "", "The agent the hook runs under — codex; claude when empty")
 	agentHookCmd.Flags().Bool("idle", false, "Report Claude's idle nudge too, not just a prompt that is actually blocking")
 	agentHooksEnableCmd.Flags().Bool("all", false, "Apply to every registered workspace, not just this directory")
 	agentHooksEnableCmd.Flags().Bool("turns", false, "Also notify when a session finishes a turn (noisy across several workspaces)")

@@ -110,3 +110,13 @@ func firstSentence(text string) string {
 	}
 	return ""
 }
+
+// SummaryOfText is the summary of one reply, for an agent that hands over
+// its last message rather than a transcript corgi reads (codex's Stop hook).
+func SummaryOfText(text string) Summary {
+	out := Summary{Line: firstSentence(text)}
+	if links := pullRequestLink.FindAllString(text, -1); len(links) > 0 {
+		out.PR = links[len(links)-1]
+	}
+	return out
+}

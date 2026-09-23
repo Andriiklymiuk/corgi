@@ -1134,8 +1134,13 @@ corgi agent restart
 **What it costs.** The daemon polls every three minutes (`--interval`) with
 a saved cursor: Linear and Jira are asked only for issues updated since the
 last round, GitHub notifications answer 304 when nothing changed, GitLab
-todos are read by id. A poll that finds nothing costs one HTTP request per
-source and no agent tokens. The first round after enabling only sets the
+todos are read by id. GitLab makes no todo for a plain comment on your own
+merge request, so it is also asked for your open merge requests updated since
+the last round, and only those have their notes read: a reviewer's comment
+comes through without a mention, one event per merge request with its newest
+note (a bot's, a system note or your own never do). A red pipeline on your
+merge request comes as a red build. A poll that finds nothing costs one HTTP
+request per source (two for GitLab) and no agent tokens. The first round after enabling only sets the
 bookmark: what is already in the tracker is not news, and with `fix` it
 would be a burst of runs. Every event is deduplicated by key across polls
 and webhooks, so a comment seen twice runs once. A failing token backs the

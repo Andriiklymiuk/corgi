@@ -831,11 +831,14 @@ func checkUnattended(dir string) []agentCheck {
 }
 
 // codexNotifyCheck: a workspace lists codex, so its sessions should reach
-// the board — that takes corgi's notify line in codex's config.
+// the board — through corgi's hooks, or its notify line on an older codex.
 func codexNotifyCheck() agentCheck {
 	const name = "codex sessions on the board"
 	if !codexInstalled() {
 		return agentCheck{Name: name, Detail: "a workspace lists codex, but codex is not on PATH", Fix: "install codex, or drop it from the workspace's agents"}
+	}
+	if hooks := codexHooksPath(); hasTrackingHooks(hooks) {
+		return agentCheck{Name: name, OK: true, Detail: "hooks in " + hooks + " — codex runs them once trusted in /hooks"}
 	}
 	path := codexConfigPath()
 	raw, _ := os.ReadFile(path)
@@ -843,6 +846,9 @@ func codexNotifyCheck() agentCheck {
 		return agentCheck{Name: name, Detail: "codex has no notify hook in " + path + " — its sessions stay off the board", Fix: "`corgi agent track enable`"}
 	} else if !strings.Contains(m, `"agent", "event"`) {
 		return agentCheck{Name: name, Detail: "codex's notify hook in " + path + " is someone else's; codex runs one, so its sessions stay off the board"}
+	}
+	if codexSupportsHooks() {
+		return agentCheck{Name: name, Detail: "only the notify hook in " + path + " — this codex runs hooks, which put its prompts, tools and permissions on the board too", Fix: "`corgi agent track enable`"}
 	}
 	return agentCheck{Name: name, OK: true, Detail: "notify hook in " + path}
 }

@@ -74,3 +74,18 @@ func TestWindowForKnowsTheLongContextModels(t *testing.T) {
 		t.Errorf("override: got %d", got)
 	}
 }
+
+func TestContextOfACodexRollout(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "rollout.jsonl")
+	rows := `{"timestamp":"2026-09-22T13:28:30Z","type":"session_meta","payload":{"id":"x"}}
+{"timestamp":"2026-09-22T13:28:35Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"total_tokens":999999},"last_token_usage":{"total_tokens":129200},"model_context_window":258400}}}
+{"timestamp":"2026-09-22T13:28:36Z","type":"event_msg","payload":{"type":"token_count","info":null}}
+`
+	if err := os.WriteFile(path, []byte(rows), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c, ok := ContextOf(path)
+	if !ok || c.Tokens != 129200 || c.Window != 258400 || c.Percent != 50 {
+		t.Fatalf("context = %+v %v", c, ok)
+	}
+}

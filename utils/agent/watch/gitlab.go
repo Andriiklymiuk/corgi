@@ -32,6 +32,7 @@ var gitlabActions = map[string]Kind{
 	"assigned":           KindPRComment,
 	"review_requested":   KindReviewRequested,
 	"approval_required":  KindReviewRequested,
+	"build_failed":       KindCIFailed,
 }
 
 type gitlabTodo struct {
@@ -120,13 +121,17 @@ func (g *GitLab) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 			continue
 		}
 		at, _ := time.Parse(time.RFC3339, t.CreatedAt)
+		body := t.Body
+		if kind == KindCIFailed {
+			body = ""
+		}
 		events = append(events, Event{
 			Key:    "gitlab:todo:" + strconv.FormatInt(t.ID, 10),
 			Source: g.Name(),
 			Kind:   kind,
 			Ref:    t.Project.PathWithNamespace + "!" + strconv.FormatInt(t.Target.IID, 10),
 			Title:  t.Target.Title,
-			Body:   gitlabTruncate(t.Body, 200),
+			Body:   gitlabTruncate(body, 200),
 			URL:    t.TargetURL,
 			Author: t.Author.Username,
 			Mine:   kind != KindReviewRequested,
@@ -145,8 +150,111 @@ func (g *GitLab) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 	}
 	if g.Me != "" {
 		next["me"] = g.Me
+		notes, since := g.notesOnMyMRs(ctx, strings.TrimRight(base, "/"), cursor["notesSince"])
+		events = append(events, notes...)
+		if since != "" {
+			next["notesSince"] = since
+		}
 	}
 	return events, next, nil
+}
+
+type gitlabMyMR struct {
+	IID       int64  `json:"iid"`
+	ProjectID int64  `json:"project_id"`
+	Title     string `json:"title"`
+	WebURL    string `json:"web_url"`
+	State     string `json:"state"`
+	UpdatedAt string `json:"updated_at"`
+	Refs      struct {
+		Full string `json:"full"`
+	} `json:"references"`
+}
+
+type gitlabNote struct {
+	ID        int64  `json:"id"`
+	Body      string `json:"body"`
+	System    bool   `json:"system"`
+	CreatedAt string `json:"created_at"`
+	Author    struct {
+		Username string `json:"username"`
+		Bot      bool   `json:"bot"`
+	} `json:"author"`
+}
+
+// A reviewer's comment on my own merge request makes no todo unless it
+// mentions me, so the todos alone miss most review feedback. This reads the
+// notes of my open merge requests that moved since the last round, one event
+// per merge request carrying its newest note. The first round only marks
+// where to start.
+func (g *GitLab) notesOnMyMRs(ctx context.Context, base, since string) ([]Event, string) {
+	endpoint := base + "/api/v4/merge_requests?scope=created_by_me&state=opened&order_by=updated_at&sort=desc&per_page=50"
+	if since != "" {
+		endpoint += "&updated_after=" + url.QueryEscape(since)
+	}
+	var mrs []gitlabMyMR
+	if err := g.getInto(ctx, endpoint, &mrs); err != nil {
+		return nil, since
+	}
+	sinceAt, _ := time.Parse(time.RFC3339, since)
+	latest := sinceAt
+	for _, mr := range mrs {
+		if at, err := time.Parse(time.RFC3339, mr.UpdatedAt); err == nil && at.After(latest) {
+			latest = at
+		}
+	}
+	if latest.IsZero() {
+		latest = time.Now()
+	}
+	next := latest.UTC().Format(time.RFC3339Nano)
+	if since == "" {
+		return nil, next
+	}
+	var events []Event
+	for _, mr := range mrs {
+		var notes []gitlabNote
+		notesURL := fmt.Sprintf("%s/api/v4/projects/%d/merge_requests/%d/notes?sort=desc&order_by=created_at&per_page=20", base, mr.ProjectID, mr.IID)
+		if err := g.getInto(ctx, notesURL, &notes); err != nil {
+			continue
+		}
+		for _, n := range notes {
+			at, _ := time.Parse(time.RFC3339, n.CreatedAt)
+			if !at.After(sinceAt) {
+				break
+			}
+			if n.System || isMe(g.Me, n.Author.Username) || gitlabBot(n.Author.Username, n.Author.Bot) || strings.TrimSpace(n.Body) == "" {
+				continue
+			}
+			ref := mr.Refs.Full
+			if ref == "" {
+				ref = gitlabRefFromURL(mr.WebURL, mr.IID)
+			}
+			events = append(events, Event{
+				Key:    "gitlab:note:" + strconv.FormatInt(n.ID, 10),
+				Source: g.Name(),
+				Kind:   KindPRComment,
+				Ref:    ref,
+				Title:  mr.Title,
+				Body:   gitlabTruncate(n.Body, 200),
+				URL:    mr.WebURL,
+				Author: n.Author.Username,
+				Mine:   true,
+				State:  mr.State,
+				At:     at,
+			})
+			break
+		}
+	}
+	return events, next
+}
+
+func gitlabRefFromURL(webURL string, iid int64) string {
+	u, err := url.Parse(webURL)
+	if err != nil {
+		return ""
+	}
+	project, _, _ := strings.Cut(strings.Trim(u.Path, "/"), "/-/")
+	return project + "!" + strconv.FormatInt(iid, 10)
 }
 
 func gitlabTruncate(s string, n int) string {

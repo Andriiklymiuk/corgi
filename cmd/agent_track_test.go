@@ -493,3 +493,79 @@ func TestTrackingHooksStaleSpotsAnOlderHookSet(t *testing.T) {
 		t.Fatal("a file with no hooks at all is not stale, just absent")
 	}
 }
+
+func TestCodexHooksGoInItsHooksFileNextToTheirs(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "codex", "hooks.json")
+	_ = os.MkdirAll(filepath.Dir(path), 0o700)
+	_ = os.WriteFile(path, []byte(`{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"say done"}]}]}}`), 0o600)
+	for range 2 {
+		if err := enableCodexHooks(path, "/opt/corgi"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	settings, err := readUserSettings(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hooks := settings["hooks"].(map[string]any)
+	stop := marshalCompact(hooks["Stop"])
+	if !strings.Contains(stop, "say done") || strings.Count(stop, "agent hook emit --agent codex") != 1 || !strings.Contains(stop, "agent hook budget") {
+		t.Fatalf("Stop = %s", stop)
+	}
+	start := marshalCompact(hooks["SessionStart"])
+	if !strings.Contains(start, `"matcher":"startup|resume|clear"`) || !strings.Contains(start, "agent hook context") {
+		t.Fatalf("SessionStart = %s", start)
+	}
+	for _, ev := range []string{"UserPromptSubmit", "PreToolUse", "PermissionRequest", "PostToolUse", "SessionEnd"} {
+		if !strings.Contains(marshalCompact(hooks[ev]), "agent hook emit --agent codex") {
+			t.Fatalf("%s has no emit", ev)
+		}
+	}
+	if strings.Contains(marshalCompact(hooks), "agent hook tab") {
+		t.Fatal("the tab title is a Claude Code output; codex does not get it")
+	}
+	if removed, err := disableTrackingIn(path); err != nil || !removed {
+		t.Fatalf("disable: %v %v", removed, err)
+	}
+	settings, _ = readUserSettings(path)
+	if got := marshalCompact(settings["hooks"]); got != `{"Stop":[{"hooks":[{"command":"say done","type":"command"}]}]}` {
+		t.Fatalf("theirs stays, ours goes: %s", got)
+	}
+}
+
+func TestCodexHooksFeatureRow(t *testing.T) {
+	out := "goals                                    stable             true\nhooks                                    stable             true\n"
+	if !codexHooksFeatureRe.MatchString(out) {
+		t.Fatal("hooks on")
+	}
+	if codexHooksFeatureRe.MatchString("hooks                                    under development  false\n") {
+		t.Fatal("hooks off")
+	}
+}
+
+func TestEmitHookForCodex(t *testing.T) {
+	fakeChain(t)
+	stdin := strings.NewReader(`{"session_id":"th-1","hook_event_name":"Stop","cwd":"/home/me/dev/acme","last_assistant_message":"Pushed the fix.\nhttps://github.com/acme/api/pull/9"}`)
+	ev, ok := runEmitHookAs("codex", stdin, fakeEnv(nil), 50)
+	if !ok || ev.Agent != "codex" || ev.Summary != "Pushed the fix." || ev.PR != "https://github.com/acme/api/pull/9" {
+		t.Fatalf("event = %+v", ev)
+	}
+	if ev.ClaudePID != 40 {
+		t.Fatalf("the terminal it runs in is found the same way: %+v", ev)
+	}
+}
+
+func TestEmitHookFindsCodexAsOwner(t *testing.T) {
+	orig := proc.Lookup
+	table := map[int]proc.Process{
+		50: {PID: 50, PPID: 40, Name: "sh"},
+		40: {PID: 40, PPID: 30, Name: "/opt/homebrew/bin/codex"},
+		30: {PID: 30, PPID: 1, Name: "zsh"},
+	}
+	proc.Lookup = func(pid int) (proc.Process, bool) { p, ok := table[pid]; return p, ok }
+	t.Cleanup(func() { proc.Lookup = orig })
+	ev, ok := runEmitHook(strings.NewReader(`{"session_id":"th-2","hook_event_name":"UserPromptSubmit"}`), fakeEnv(nil), 50)
+	if !ok || ev.Agent != "codex" || ev.ClaudePID != 40 {
+		t.Fatalf("event = %+v", ev)
+	}
+}

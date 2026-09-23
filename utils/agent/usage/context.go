@@ -77,6 +77,12 @@ func contextFromTail(data []byte, truncated bool) (Context, bool) {
 	}
 	for i := len(lines) - 1; i >= first; i-- {
 		line := bytes.TrimSpace(lines[i])
+		if bytes.Contains(line, []byte(`"token_count"`)) {
+			if c, ok := codexContext(line); ok {
+				return c, true
+			}
+			continue
+		}
 		if len(line) == 0 || !bytes.Contains(line, []byte(`"usage"`)) {
 			continue
 		}
@@ -104,4 +110,34 @@ func contextFromTail(data []byte, truncated bool) (Context, bool) {
 		return c, true
 	}
 	return Context{}, false
+}
+
+// codexContext reads a codex rollout's token_count row: the last turn's
+// tokens against the window codex itself reports.
+func codexContext(line []byte) (Context, bool) {
+	var row struct {
+		Timestamp time.Time `json:"timestamp"`
+		Payload   struct {
+			Type string `json:"type"`
+			Info *struct {
+				Last struct {
+					Total int64 `json:"total_tokens"`
+				} `json:"last_token_usage"`
+				Window int64 `json:"model_context_window"`
+			} `json:"info"`
+		} `json:"payload"`
+	}
+	if json.Unmarshal(line, &row) != nil || row.Payload.Type != "token_count" || row.Payload.Info == nil {
+		return Context{}, false
+	}
+	info := row.Payload.Info
+	if info.Last.Total <= 0 || info.Window <= 0 {
+		return Context{}, false
+	}
+	c := Context{Tokens: info.Last.Total, Window: info.Window, At: row.Timestamp}
+	c.Percent = int(c.Tokens * 100 / c.Window)
+	if c.Percent > 100 {
+		c.Percent = 100
+	}
+	return c, true
 }
