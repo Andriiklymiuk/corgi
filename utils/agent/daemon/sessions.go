@@ -81,9 +81,6 @@ func (d *Daemon) handleSessionCommand(ctx context.Context, c command.Command) bo
 		d.sendToSession(ctx, c.SessionID, c.Text, c.Enter)
 	case command.ActionWatch:
 		if c.WatchEvent != nil {
-			if c.Source == "webhook" && d.watchState != nil {
-				d.watchState.MarkHooked(c.WatchEvent.Source, time.Now())
-			}
 			if c.Retry && d.watchState != nil {
 				d.watchState.Unsee(c.WatchEvent.Key)
 				d.watchState.Fixes.DropDeferred(c.WatchEvent.Key)

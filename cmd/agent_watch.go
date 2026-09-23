@@ -9,7 +9,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -630,18 +632,35 @@ A webhook for a repo or project no watched workspace lists is dropped.
 		ws := watch.LoadSecretsFor(dir, id)
 		plan := hookPlanFor(wc, ws)
 		fmt.Printf("%s — webhooks at %s/hooks/<source>, polling every %s beside them\n\n", id, base, firstNonEmptyString(wc.Interval, "3m"))
+		// The watch token only has to read; setting a hook up needs a write.
+		// A read-only token hands over to the forge CLI's own login for this.
+		glAuth := map[string]string{"PRIVATE-TOKEN": ws.GitLab}
 		for _, repo := range plan.gitlab {
 			line := "  gitlab  " + repo
 			if install {
-				line += "  " + hookInstallWord(watch.InstallGitLabHook(cmd.Context(), ws.GitLabURL, ws.GitLab, repo, base+"/hooks/gitlab", secrets.HookSecret))
+				r := watch.InstallGitLabHookWith(cmd.Context(), ws.GitLabURL, glAuth, repo, base+"/hooks/gitlab", secrets.HookSecret)
+				if r.ReadOnly {
+					if cli := glabAuthHeaders(ws.GitLabURL); cli != nil {
+						glAuth = cli
+						r = watch.InstallGitLabHookWith(cmd.Context(), ws.GitLabURL, glAuth, repo, base+"/hooks/gitlab", secrets.HookSecret)
+					}
+				}
+				line += "  " + hookInstallWord(r)
 			}
 			fmt.Println(line)
 		}
-		gh := watch.NewGitHub(ws, nil)
+		ghToken := watch.NewGitHub(ws, nil).Token
 		for _, repo := range plan.github {
 			line := "  github  " + repo
 			if install {
-				line += "  " + hookInstallWord(watch.InstallGitHubHook(cmd.Context(), gh.Token, repo, base+"/hooks/github", secrets.HookSecret))
+				r := watch.InstallGitHubHook(cmd.Context(), ghToken, repo, base+"/hooks/github", secrets.HookSecret)
+				if r.ReadOnly {
+					if cli := ghCLIToken(); cli != "" && cli != ghToken {
+						ghToken = cli
+						r = watch.InstallGitHubHook(cmd.Context(), ghToken, repo, base+"/hooks/github", secrets.HookSecret)
+					}
+				}
+				line += "  " + hookInstallWord(r)
 			}
 			fmt.Println(line)
 		}
@@ -697,6 +716,36 @@ func hookPlanFor(wc *config.WatchConfig, s watch.Secrets) hookPlan {
 	p.githubAny = len(wc.Repos) == 0 && hasGitHub && wc.PRs
 	p.tracker = watchTracker(wc.Tracker, s)
 	return p
+}
+
+// glabAuthHeaders is glab's login as auth headers: an OAuth session is a
+// bearer token (glab api refreshes it first), a personal token is sent as one.
+func glabAuthHeaders(baseURL string) map[string]string {
+	host := "gitlab.com"
+	if u, err := url.Parse(baseURL); err == nil && u.Host != "" {
+		host = u.Host
+	}
+	if _, err := exec.LookPath("glab"); err != nil {
+		return nil
+	}
+	_ = exec.Command("glab", "api", "user", "--hostname", host).Run()
+	token, err := exec.Command("glab", "config", "get", "token", "--host", host).Output()
+	if err != nil || strings.TrimSpace(string(token)) == "" {
+		return nil
+	}
+	oauth, _ := exec.Command("glab", "config", "get", "is_oauth2", "--host", host).Output()
+	if strings.TrimSpace(string(oauth)) == "true" {
+		return map[string]string{"Authorization": "Bearer " + strings.TrimSpace(string(token))}
+	}
+	return map[string]string{"PRIVATE-TOKEN": strings.TrimSpace(string(token))}
+}
+
+func ghCLIToken() string {
+	out, err := exec.Command("gh", "auth", "token").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
 }
 
 func hookInstallWord(r watch.HookInstall) string {
@@ -1175,6 +1224,7 @@ func watchHookHandler(source string) http.HandlerFunc {
 			http.Error(w, "signature", http.StatusUnauthorized)
 			return
 		}
+		_ = watch.MarkHooked(dir, source, time.Now())
 		who := watch.HookIdentity{Me: watchIdentity(dir, source, secrets), ID: watch.LoadState(dir).SourceIdentity(source, "meId")}
 		events, err := watch.ParseHookAs(source, r, body, who)
 		if err != nil {

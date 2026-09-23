@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestGitLabHookClaimsOnlyMyMergeRequests(t *testing.T) {
@@ -104,5 +105,51 @@ func TestInstallGitHubHookSendsTheEventsCorgiReads(t *testing.T) {
 	cfg := got["config"].(map[string]any)
 	if cfg["secret"] != "sec" || cfg["content_type"] != "json" || len(got["events"].([]any)) != 3 {
 		t.Fatalf("body %v", got)
+	}
+}
+
+func TestAWebhookThatCameInShowsBesideItsPoll(t *testing.T) {
+	dir := t.TempDir()
+	st := LoadState(dir)
+	st.setCursor("im", "gitlab", Cursor{"lastId": "1"}, time.Now(), nil)
+	st.setCursor("im", "jira", Cursor{"x": "1"}, time.Now(), nil)
+	if err := MarkHooked(dir, "gitlab", time.Date(2026, 9, 23, 7, 0, 0, 0, time.UTC)); err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range LoadState(dir).Summaries() {
+		switch s.Key {
+		case "im/gitlab":
+			if s.Hooked != "2026-09-23T07:00:00Z" {
+				t.Fatalf("gitlab: %+v", s)
+			}
+		case "im/jira":
+			if s.Hooked != "" {
+				t.Fatalf("jira polls alone: %+v", s)
+			}
+		}
+	}
+}
+
+func TestAGitHubRefusalNamesWhatIsMissing(t *testing.T) {
+	admin := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/hooks") {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"permissions": map[string]bool{"admin": admin, "maintain": true}})
+	}))
+	defer srv.Close()
+	prev := GitHubAPI
+	GitHubAPI = srv.URL
+	defer func() { GitHubAPI = prev }()
+	r := InstallGitHubHook(context.Background(), "tok", "acme/api", "https://x/hooks/github", "sec")
+	if r.Err == nil || r.ReadOnly || !strings.Contains(r.Missing, "org webhook") {
+		t.Fatalf("a maintainer is told about the org webhook: %+v", r)
+	}
+	admin = true
+	r = InstallGitHubHook(context.Background(), "tok", "acme/api", "https://x/hooks/github", "sec")
+	if !r.ReadOnly || !strings.Contains(r.Missing, "admin:repo_hook") {
+		t.Fatalf("an admin is told about the scope: %+v", r)
 	}
 }

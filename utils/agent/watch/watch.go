@@ -357,17 +357,13 @@ type Source interface {
 type Sink func(ctx context.Context, e Event)
 
 type State struct {
-	mu       sync.Mutex
-	path     string
-	agentDir string
-	Cursors  map[string]Cursor `json:"cursors"`
-	Seen     []string          `json:"seen"`
-	Errors   map[string]string `json:"errors,omitempty"`
-	Polled   map[string]string `json:"polled,omitempty"`
-	// Hooked is when a signed webhook last came in, per source. Polling goes
-	// on regardless: it is the safety net for a laptop that was off, and the
-	// only way in for the kinds a webhook does not send.
-	Hooked    map[string]string `json:"hooked,omitempty"`
+	mu        sync.Mutex
+	path      string
+	agentDir  string
+	Cursors   map[string]Cursor `json:"cursors"`
+	Seen      []string          `json:"seen"`
+	Errors    map[string]string `json:"errors,omitempty"`
+	Polled    map[string]string `json:"polled,omitempty"`
 	Held      []HeldNote        `json:"held,omitempty"`
 	Ignored   []string          `json:"ignored,omitempty"`
 	seen      map[string]struct{}
@@ -813,23 +809,14 @@ type Summary struct {
 	Hooked string
 }
 
-func (s *State) MarkHooked(source string, now time.Time) {
-	s.mu.Lock()
-	if s.Hooked == nil {
-		s.Hooked = map[string]string{}
-	}
-	s.Hooked[source] = now.UTC().Format(time.RFC3339)
-	s.mu.Unlock()
-	_ = s.save()
-}
-
 func (s *State) Summaries() []Summary {
+	hooked := LoadHooked(s.agentDir)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var out []Summary
 	for key, at := range s.Polled {
 		_, source, _ := strings.Cut(key, "/")
-		out = append(out, Summary{Key: key, Polled: at, Error: s.Errors[key], Hooked: s.Hooked[source]})
+		out = append(out, Summary{Key: key, Polled: at, Error: s.Errors[key], Hooked: hooked[source]})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Key < out[j].Key })
 	return out
