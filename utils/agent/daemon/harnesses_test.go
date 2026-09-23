@@ -136,3 +136,24 @@ func TestThePulseKnowsAFallbackCouldRun(t *testing.T) {
 		t.Fatalf("codex can take the runs, so the laptop is not unwell: %q", got)
 	}
 }
+
+func TestAWebhookNobodyListsIsDropped(t *testing.T) {
+	gh := namedSource{name: "github"}
+	listed := WatchSpec{Workspace: "work", Repos: []string{"acme/api"}, Sources: []watch.Source{gh}}
+	anyRepo := WatchSpec{Workspace: "open", Sources: []watch.Source{gh}}
+	noGitHub := WatchSpec{Workspace: "im", Sources: []watch.Source{namedSource{name: "gitlab"}}}
+	e := watch.Event{Source: "github", Kind: watch.KindPRComment, Ref: "stranger/repo#3"}
+	if listed.mayTake(e) {
+		t.Fatal("a repo list that does not name it says no")
+	}
+	if !anyRepo.mayTake(e) {
+		t.Fatal("a workspace watching every repo takes it")
+	}
+	if noGitHub.mayTake(e) {
+		t.Fatal("a workspace that does not watch github never takes a github webhook")
+	}
+	ticket := watch.Event{Source: "linear", Kind: watch.KindIssueComment, Ref: "ABC-1"}
+	if (WatchSpec{Project: "HUM", Sources: []watch.Source{namedSource{name: "linear"}}}).mayTake(ticket) {
+		t.Fatal("a ticket of another project stays out")
+	}
+}

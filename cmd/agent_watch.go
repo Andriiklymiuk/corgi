@@ -577,31 +577,136 @@ func firstNonEmptyString(a, b string) string {
 
 var agentWatchHooksCmd = &cobra.Command{
 	Use:   "hooks",
-	Short: "Webhook URLs and the shared secret, for instant events without polling",
+	Short: "Webhooks for instant events: the plan per workspace, and --install for GitHub and GitLab",
+	Long: `A webhook makes a comment arrive in seconds instead of on the next poll.
+Polling stays on beside it whatever you set up: it catches what came while the
+laptop was off or the tunnel was down, and the kinds a webhook here does not
+send (review requests, red builds, a ticket assigned to you). The same comment
+from both is one event — they share its key — so a mix never runs twice.
+
+Each source of a workspace can be webhook + poll or poll alone, independently:
+GitLab on webhooks while Jira polls, or GitHub on webhooks while Linear polls.
+A webhook for a repo or project no watched workspace lists is dropped.
+
+  corgi agent watch hooks                 # this workspace's plan
+  corgi agent watch hooks --install       # create or update the GitHub / GitLab webhooks on its repos
+  corgi agent watch hooks --rotate --install   # new secret, pushed to every repo`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		dir := mustAgentDir()
 		secrets := watch.LoadSecrets(dir)
 		rotate, _ := cmd.Flags().GetBool("rotate")
+		install, _ := cmd.Flags().GetBool("install")
 		if secrets.HookSecret == "" || rotate {
 			secrets.HookSecret = randomSecret()
 			if err := watch.SaveSecrets(dir, secrets); err != nil {
 				return err
 			}
+			if rotate && !install {
+				utils.Info("new secret — every webhook set up with the old one now fails until it is updated; --install does GitHub and GitLab")
+			}
 		}
 		base := launcherURL()
 		if base == "" {
+			if install {
+				return fmt.Errorf("no public URL for the webhooks to reach — `corgi agent up` (a named tunnel keeps the URL stable)")
+			}
 			utils.Info("no public URL yet — `corgi agent up` first; a named tunnel keeps these URLs stable")
 			base = "https://<your-tunnel>"
 		} else {
 			base = strings.TrimSuffix(base, "/app")
 		}
-		fmt.Printf("secret: %s\n\n", secrets.HookSecret)
-		fmt.Printf("Linear   Settings → API → Webhooks: %s/hooks/linear\n         secret above; events: Issues, Comments\n", base)
-		fmt.Printf("GitHub   repo Settings → Webhooks: %s/hooks/github\n         content type json, secret above; events: Pull request reviews, Pull request review comments, Issue comments\n", base)
-		fmt.Printf("GitLab   project Settings → Webhooks: %s/hooks/gitlab\n         secret token above; trigger: Comments\n", base)
-		fmt.Printf("Jira     Settings → System → WebHooks: %s/hooks/jira?token=%s\n         events: Issue created, Comment created\n", base, secrets.HookSecret)
+		id, err := watchTargetWorkspace(dir, cmd.Flags())
+		if err != nil {
+			return err
+		}
+		user, err := config.LoadUser(agentUserConfigPath(dir))
+		if err != nil {
+			return err
+		}
+		wc := user.Workspaces[id].Watch
+		if wc == nil || !wc.Enabled {
+			return fmt.Errorf("%s is not watched — `corgi agent watch enable` there first", id)
+		}
+		ws := watch.LoadSecretsFor(dir, id)
+		plan := hookPlanFor(wc, ws)
+		fmt.Printf("%s — webhooks at %s/hooks/<source>, polling every %s beside them\n\n", id, base, firstNonEmptyString(wc.Interval, "3m"))
+		for _, repo := range plan.gitlab {
+			line := "  gitlab  " + repo
+			if install {
+				line += "  " + hookInstallWord(watch.InstallGitLabHook(cmd.Context(), ws.GitLabURL, ws.GitLab, repo, base+"/hooks/gitlab", secrets.HookSecret))
+			}
+			fmt.Println(line)
+		}
+		gh := watch.NewGitHub(ws, nil)
+		for _, repo := range plan.github {
+			line := "  github  " + repo
+			if install {
+				line += "  " + hookInstallWord(watch.InstallGitHubHook(cmd.Context(), gh.Token, repo, base+"/hooks/github", secrets.HookSecret))
+			}
+			fmt.Println(line)
+		}
+		if plan.githubAny {
+			fmt.Println("  github  every repo (no --repos) — --install needs a list; set --repos, or add an org webhook by hand")
+		}
+		if !install && (len(plan.gitlab) > 0 || len(plan.github) > 0) {
+			fmt.Println("\n  --install creates or updates these (GitLab: Maintainer; GitHub: repo admin). By hand:")
+			if len(plan.gitlab) > 0 {
+				fmt.Printf("    GitLab  project → Settings → Webhooks: %s/hooks/gitlab, secret token below, trigger: Comments\n", base)
+			}
+			if len(plan.github) > 0 || plan.githubAny {
+				fmt.Printf("    GitHub  repo → Settings → Webhooks: %s/hooks/github, application/json, secret below; events: Issue comments, Pull request reviews, Pull request review comments\n", base)
+			}
+		}
+		switch plan.tracker {
+		case "linear":
+			fmt.Printf("\n  linear  by hand, workspace admin: Settings → API → Webhooks → %s/hooks/linear, secret below, events: Issues, Comments\n", base)
+		case "jira":
+			fmt.Printf("\n  jira    by hand, Jira admin: Settings → System → WebHooks → %s/hooks/jira?token=<secret>, events: Issue created, Comment created\n", base)
+		}
+		if plan.tracker != "" || !install {
+			fmt.Printf("\nsecret: %s\n", secrets.HookSecret)
+		}
+		fmt.Println("\nPolling still covers review requests, red builds and tickets assigned to you; `corgi agent watch status` shows when each webhook last came in.")
 		return nil
 	},
+}
+
+type hookPlan struct {
+	gitlab, github []string
+	githubAny      bool
+	tracker        string
+}
+
+// hookPlanFor sorts a workspace's repos by forge: a path deeper than
+// owner/repo is GitLab (groups nest there, never on GitHub); owner/repo goes
+// to GitHub when the workspace has a GitHub token, else GitLab.
+func hookPlanFor(wc *config.WatchConfig, s watch.Secrets) hookPlan {
+	var p hookPlan
+	hasGitLab := strings.TrimSpace(s.GitLab) != ""
+	hasGitHub := watch.NewGitHub(s, nil).Token != ""
+	for _, repo := range wc.Repos {
+		switch {
+		case strings.Count(repo, "/") > 1 && hasGitLab:
+			p.gitlab = append(p.gitlab, repo)
+		case strings.Count(repo, "/") == 1 && hasGitHub:
+			p.github = append(p.github, repo)
+		case hasGitLab:
+			p.gitlab = append(p.gitlab, repo)
+		}
+	}
+	p.githubAny = len(wc.Repos) == 0 && hasGitHub && wc.PRs
+	p.tracker = watchTracker(wc.Tracker, s)
+	return p
+}
+
+func hookInstallWord(r watch.HookInstall) string {
+	switch {
+	case r.Err == nil:
+		return "✓ " + r.Action
+	case r.Missing != "":
+		return "✗ needs " + r.Missing
+	}
+	return "✗ " + r.Err.Error()
 }
 
 var agentWatchAuthCmd = &cobra.Command{
@@ -848,6 +953,9 @@ func printWatchPolls(polls []watch.Summary) {
 	fmt.Println("\nLast polls")
 	for _, p := range polls {
 		line := fmt.Sprintf("  %-28s %s", p.Key, p.Polled)
+		if p.Hooked != "" {
+			line += " · webhook " + p.Hooked
+		}
 		if p.Error != "" {
 			line += " ✗ " + p.Error
 		}
@@ -1067,7 +1175,8 @@ func watchHookHandler(source string) http.HandlerFunc {
 			http.Error(w, "signature", http.StatusUnauthorized)
 			return
 		}
-		events, err := watch.ParseHook(source, r, body, watchIdentity(dir, source, secrets))
+		who := watch.HookIdentity{Me: watchIdentity(dir, source, secrets), ID: watch.LoadState(dir).SourceIdentity(source, "meId")}
+		events, err := watch.ParseHookAs(source, r, body, who)
 		if err != nil {
 			http.Error(w, "payload", http.StatusBadRequest)
 			return
@@ -1329,6 +1438,8 @@ func init() {
 	tf.String("body", "", "Comment or review text")
 	tf.StringSlice("labels", nil, "Labels on the made-up issue (default: the workspace's own, so the rules take it)")
 	agentWatchHooksCmd.Flags().Bool("rotate", false, "Make a new secret")
+	agentWatchHooksCmd.Flags().Bool("install", false, "Create or update the webhook on every GitHub and GitLab repo the workspace watches")
+	agentWatchHooksCmd.Flags().String("workspace", "", "The workspace to plan for (default: the one this folder is in)")
 	a := agentWatchAuthCmd.Flags()
 	a.String("token", "", "API token")
 	a.String("url", "", "Jira site (https://you.atlassian.net) or self-hosted GitLab URL")

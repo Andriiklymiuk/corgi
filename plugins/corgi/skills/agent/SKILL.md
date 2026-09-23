@@ -696,7 +696,7 @@ corgi agent watch auth jira --url https://acme.atlassian.net --email me@acme.com
 corgi agent watch                                             # tokens, watched workspaces, last polls, events today, fix budget
 corgi agent watch run                                         # one poll now; hands deferred fixes back to the daemon
 corgi agent watch test issue.comment --body "still needed?"   # one made-up event through rules, dedupe, claim, caps; prints the prompt, runs nothing
-corgi agent watch hooks                                       # webhook URLs on the tunnel + the shared secret; --interval 0 for webhooks only
+corgi agent watch hooks [--install]                           # the workspace's webhook plan; --install creates/updates GitHub + GitLab repo hooks (polling stays on as the safety net; same comment = same key, runs once)
 corgi agent restart
 ```
 

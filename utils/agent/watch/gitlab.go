@@ -17,6 +17,7 @@ type GitLab struct {
 	URL    string
 	Token  string
 	Me     string
+	MeID   string
 	Client *http.Client
 }
 
@@ -73,12 +74,19 @@ func (g *GitLab) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 	if g.Me == "" {
 		g.Me = cursor["me"]
 	}
-	if g.Me == "" {
+	if g.MeID == "" {
+		g.MeID = cursor["meId"]
+	}
+	if g.Me == "" || g.MeID == "" {
 		var user struct {
+			ID       int64  `json:"id"`
 			Username string `json:"username"`
 		}
 		if err := g.getInto(ctx, strings.TrimRight(base, "/")+"/api/v4/user", &user); err == nil {
-			g.Me = user.Username
+			g.Me = firstOr(g.Me, user.Username)
+			if user.ID > 0 {
+				g.MeID = strconv.FormatInt(user.ID, 10)
+			}
 		}
 	}
 	path := "/api/v4/todos?state=pending&per_page=50"
@@ -147,6 +155,9 @@ func (g *GitLab) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 	}
 	if maxID > 0 {
 		next["lastId"] = strconv.FormatInt(maxID, 10)
+	}
+	if g.MeID != "" {
+		next["meId"] = g.MeID
 	}
 	if g.Me != "" {
 		next["me"] = g.Me

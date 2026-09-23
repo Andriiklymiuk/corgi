@@ -218,13 +218,15 @@ func TestWatchStatusRunAndHooks(t *testing.T) {
 		t.Fatalf("run: %s", out)
 	}
 
+	_ = agentWatchHooksCmd.Flags().Set("workspace", "acme-stack")
+	defer agentWatchHooksCmd.Flags().Set("workspace", "")
 	out = captureStdout(t, func() {
 		if err := agentWatchHooksCmd.RunE(agentWatchHooksCmd, nil); err != nil {
 			t.Fatal(err)
 		}
 	})
 	secret := watch.LoadSecrets(dir).HookSecret
-	if secret == "" || !strings.Contains(out, secret) || !strings.Contains(out, "/hooks/linear") {
+	if secret == "" || !strings.Contains(out, secret) || !strings.Contains(out, "/hooks/<source>") || !strings.Contains(out, "Polling still covers") {
 		t.Fatalf("hooks: %s", out)
 	}
 	_ = agentWatchHooksCmd.Flags().Set("rotate", "true")
@@ -704,5 +706,13 @@ func TestWatchStatusNamesTheChatBlock(t *testing.T) {
 	}
 	if chatStatusLine(daemon.WatchSpec{Workspace: "acme"}) != "" {
 		t.Error("a workspace with no chat block prints no chat line")
+	}
+}
+
+func TestHookPlanSortsReposByForge(t *testing.T) {
+	wc := &config.WatchConfig{Repos: []string{"acme/group/core", "acme/api"}, PRs: true}
+	p := hookPlanFor(wc, watch.Secrets{GitLab: "gl", GitHub: "gh", JiraToken: "j"})
+	if len(p.gitlab) != 1 || p.gitlab[0] != "acme/group/core" || len(p.github) != 1 || p.github[0] != "acme/api" || p.tracker != "jira" {
+		t.Fatalf("plan = %+v", p)
 	}
 }

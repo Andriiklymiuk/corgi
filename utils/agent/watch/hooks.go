@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -47,14 +48,27 @@ func verifyHMAC(got string, body []byte, secret string) error {
 	return ErrBadSignature
 }
 
+// HookIdentity is who "me" is on the source a webhook came from: the name the
+// payload carries, and for GitLab the numeric user id its merge request
+// author is given by.
+type HookIdentity struct {
+	Me string
+	ID string
+}
+
 func ParseHook(source string, r *http.Request, body []byte, me string) ([]Event, error) {
+	return ParseHookAs(source, r, body, HookIdentity{Me: me})
+}
+
+func ParseHookAs(source string, r *http.Request, body []byte, who HookIdentity) ([]Event, error) {
+	me := who.Me
 	switch source {
 	case "linear":
 		return parseLinearHook(body, me)
 	case "github":
 		return parseGitHubHook(r.Header.Get("X-GitHub-Event"), body, me)
 	case "gitlab":
-		return parseGitLabHook(body, me)
+		return parseGitLabHook(body, who)
 	case "jira":
 		return parseJiraHook(body, me)
 	}
@@ -196,7 +210,8 @@ func parseGitHubHook(event string, body []byte, me string) ([]Event, error) {
 	return nil, nil
 }
 
-func parseGitLabHook(body []byte, me string) ([]Event, error) {
+func parseGitLabHook(body []byte, who HookIdentity) ([]Event, error) {
+	me := who.Me
 	var p struct {
 		ObjectKind string                    `json:"object_kind"`
 		User       struct{ Username string } `json:"user"`
@@ -214,7 +229,8 @@ func parseGitLabHook(body []byte, me string) ([]Event, error) {
 			IID      int    `json:"iid"`
 			Title    string `json:"title"`
 			URL      string `json:"url"`
-			AuthorID int    `json:"author_id"`
+			State    string `json:"state"`
+			AuthorID int64  `json:"author_id"`
 		} `json:"merge_request"`
 	}
 	if err := json.Unmarshal(body, &p); err != nil {
@@ -224,8 +240,13 @@ func parseGitLabHook(body []byte, me string) ([]Event, error) {
 		return nil, nil
 	}
 	ref := fmt.Sprintf("%s!%d", p.Project.PathWithNamespace, p.MR.IID)
-	return []Event{{Key: fmt.Sprintf("gitlab:%s:c%d", ref, p.Attrs.ID), Source: "gitlab", Kind: KindPRComment, Ref: ref,
-		Title: p.MR.Title, URL: p.Attrs.URL, Body: clip(p.Attrs.Note, 200), Author: p.User.Username, Mine: true, At: hookTime(p.Attrs.CreatedAt)}}, nil
+	// A project hook sends every note on every merge request. Only one on a
+	// merge request I opened is mine to act on; without my id it is not
+	// claimed, and the poll of my own merge requests still finds it.
+	mine := who.ID != "" && strconv.FormatInt(p.MR.AuthorID, 10) == who.ID
+	return []Event{{Key: "gitlab:note:" + strconv.FormatInt(p.Attrs.ID, 10), Source: "gitlab", Kind: KindPRComment, Ref: ref,
+		Title: p.MR.Title, URL: p.Attrs.URL, Body: clip(p.Attrs.Note, 200), Author: p.User.Username, Mine: mine, State: p.MR.State,
+		At: hookTime(p.Attrs.CreatedAt)}}, nil
 }
 
 func parseJiraHook(body []byte, me string) ([]Event, error) {

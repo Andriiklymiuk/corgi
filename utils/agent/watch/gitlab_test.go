@@ -47,7 +47,7 @@ func newGitLabFake(t *testing.T) *gitlabFake {
 			return
 		}
 		if r.URL.Path == "/api/v4/user" {
-			_, _ = w.Write([]byte(`{"username":"me"}`))
+			_, _ = w.Write([]byte(`{"id":7,"username":"me"}`))
 			return
 		}
 		if r.URL.Path == "/api/v4/merge_requests" {
@@ -166,6 +166,8 @@ func TestGitLabNotesOnMyMergeRequests(t *testing.T) {
 	var sawSince string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
+		case "/api/v4/user":
+			_, _ = w.Write([]byte(`{"id":7,"username":"me"}`))
 		case "/api/v4/todos":
 			_, _ = w.Write([]byte(`[{"id":3,"action_name":"build_failed","target_type":"MergeRequest",
 			  "target_url":"https://gitlab.com/acme/api/-/merge_requests/5","body":"pipeline","created_at":"2026-09-22T10:00:00Z",
