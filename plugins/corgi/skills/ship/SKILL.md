@@ -5,6 +5,10 @@ description: "Use when shipping an Expo/React Native app to the stores via the r
 
 # Ship a local build to the stores
 
+Read `../_shared/conventions.md` first (finish what you start, attribution, unattended runs).
+
+**Done when:** a new IPA/AAB is on disk and the submit log says "Submitted" for each store asked for.
+
 ## Overview
 Ship = the repo's local prod build+submit target (`make ship`, or `make localIosProd` +
 `localAndroidProd`) → clean prebuild → IPA/AAB → `eas submit` to TestFlight + Play. A

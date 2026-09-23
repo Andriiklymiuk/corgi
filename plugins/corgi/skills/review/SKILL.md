@@ -5,6 +5,8 @@ description: "Use when the user wants a code review of EXISTING pull/merge reque
 
 # Corgi review
 
+**Done when:** someone else's PR/MR → the review is posted (summary + inline) and its link is in your reply; your own → the valid comments are applied, tests pass, the branch is pushed, and every thread has a reply (resolved where the forge allows).
+
 Review one or more existing remote PR/MR(s) on GitHub or GitLab against each repo's own standards (CLAUDE.md/AGENTS.md, lint and format config) plus the intent from any linked Linear or Jira tracker ticket, then post a human-readable summary comment and inline line-level suggestions back onto each PR/MR. Someone else's PR is posted to without asking; your own is fixed and pushed instead. Services, dirs, and forges resolve from `corgi-compose.yml`.
 
 Read `../_shared/conventions.md` first.
@@ -795,11 +797,12 @@ P4 order) and cross-link the two replies. Then one combined report (6).
    **Resolve only what you addressed**; a pushed-back thread stays **open**.
    **Durable convention → memory (confirm first).** If a resolved thread settles a
    lasting convention/decision for the stack and `.corgi/memory/` exists, draft a
-   `decision` fact, show it, and write it on OK (`corgi memory add --type decision …`,
-   then `corgi memory index`; see the `memory` skill). Absent → skip. **No secrets.**
-5. **Gate → push.** Preview fixes + replies for the whole set in **one** gate (P4;
-   `--yes` skips) → commit (repo style, issue key, no AI trailer) → `git push` each
-   branch. **Draft stays draft; no force-push, no merge, no approve.** Fork PR / no
+   `decision` fact and list it in the report as a proposed fact — written only on the
+   user's OK (`corgi memory add --type decision …`, then `corgi memory index`; see the
+   `memory` skill). It never holds the push. Absent → skip. **No secrets.**
+5. **Preview → push.** Print the fixes + replies for the whole set once (P4 — printed
+   on the way, not a question; `--yes` skips printing it) → commit (repo style, issue
+   key, no AI trailer) → `git push` each branch → post the thread replies. **Draft stays draft; no force-push, no merge, no approve.** Fork PR / no
    push access → post replies only, say so.
 6. **Report** — grouped by PR: per thread **applied** (commit/line) / **pushed back**
    (reason) / **needs you** (question); + each PR's push result + link. Multi-repo →
@@ -859,7 +862,9 @@ explaining, the fix in the suggestion is a clearer name or a smaller function.
   write. One target ambiguous between several PRs → ask, don't pick.
 - **Writes the branch — bounded.** Edit + push the PR's **own** branch only; **draft
   stays draft, never force-push, never merge, never approve.**
-- **Gate before pushing** unless `--yes` — preview the fixes + replies first.
+- **Pushing is the point.** Addressing feedback on your own PR already asked for the
+  push: print the preview and push, no "shall I push?". Only the user's own words in
+  this conversation hold it ("don't push", "just show me the fixes").
 - **Don't blind-apply.** A wrong / out-of-scope suggestion gets a reasoned reply, not
   a commit. **Resolve only threads you addressed**; leave pushed-back ones open.
   **Minimum diff.**

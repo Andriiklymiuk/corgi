@@ -5,6 +5,10 @@ description: "Use when verifying a mobile (Expo / React Native) change on a real
 
 # Verify mobile change on device
 
+Read `../_shared/conventions.md` first (finish what you start, attribution, unattended runs).
+
+**Done when:** the change was driven on a device and you read the screenshot of the changed screen (both platforms for a layout-sensitive change).
+
 ## Overview
 A change is not done until you drove it on a device and read the screenshot. A green
 build can still render magenta. Pick surface → navigate → drive+assert (argent MCP

@@ -5,6 +5,8 @@ description: "Use when changed code must get simpler: \"reduce complexity\", \"t
 
 # Reduce complexity
 
+**Done when:** in refactor mode, the worst touched function is under the repo's bar, re-measured, and its tests pass; in report and gate mode, the table or the verdict line is printed.
+
 ## Overview
 Generated code branches like a jungle: it works, then every later edit walks the whole
 jungle again. This skill keeps changed code readable by measuring per-function
@@ -124,7 +126,7 @@ got vaguer catches the rest.
 - Public and exported signatures stay unless the user asked to change them.
 - Minimum diff outside the target function. No code comments — the repo rule applies
   (a comment explaining a section is the signal to extract the section).
-- Stop rule: a function that will not come under the bar after ~2 honest attempts is
+- Stop rule: a function that will not come under the bar after ~3 honest attempts, each a different tactic, is
   reported with its number and a suggested split, not forced.
 
 ## Workflow

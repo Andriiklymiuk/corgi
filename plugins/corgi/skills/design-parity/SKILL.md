@@ -5,6 +5,8 @@ description: "Use when a change has a design behind it and someone must prove th
 
 # Prove the build matches the design
 
+**Done when:** the design and the app, same states, sit side by side, you read them, and every deviation is fixed or declared deliberate in the table.
+
 ## Overview
 "Implemented from the design" is a claim; the evidence is **design and app, same screen,
 side by side, read by you**. Every deviation found this way was invisible in the code

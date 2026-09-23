@@ -5,6 +5,8 @@ description: "Use when managing In-App Purchases, store metadata, or RevenueCat 
 
 # Manage IAPs + store purchase metadata
 
+**Done when:** the products and their metadata are live in each store and RevenueCat asked for, read back from the store, not assumed.
+
 ## Overview
 Two surfaces, often confused: the **binary** (ship skill) and the **products** (here).
 Load-bearing fact: **fastlane `deliver` does NOT manage IAP metadata** — it pushes the app

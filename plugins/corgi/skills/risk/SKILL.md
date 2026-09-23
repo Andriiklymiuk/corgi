@@ -5,6 +5,10 @@ description: "Use when someone asks how much human review a change deserves: \"r
 
 # Risk assessment
 
+Read `../_shared/conventions.md` first (finish what you start, attribution, unattended runs).
+
+**Done when:** the card (or the gate line) is printed; in stamp mode it is also in the PR/MR description.
+
 ## Overview
 Agents open more pull requests than a team can read line by line. The question a
 reviewer needs answered before they open one is not "is it correct" but **"how much of

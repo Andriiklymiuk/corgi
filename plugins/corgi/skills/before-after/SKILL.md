@@ -5,6 +5,10 @@ description: "Use when a visual change should be proven against the state it rep
 
 # Before and after, from the branch that changed it
 
+Read `../_shared/conventions.md` first (finish what you start, attribution, unattended runs).
+
+**Done when:** before.png and after.png of the same screen are captured, read by you, and in the PR/MR body.
+
 ## Overview
 
 A UI diff says what the code does; it never says what the screen looked like before. The

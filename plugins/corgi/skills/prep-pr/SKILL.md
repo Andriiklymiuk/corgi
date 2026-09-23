@@ -5,6 +5,8 @@ description: "Use when the user says \"prep my PR\", \"get this ready for review
 
 # Prep PR
 
+**Done when:** every gate is green and the draft PR/MR URL is printed with its risk card — or the first red gate is named with its output after you tried to fix it.
+
 Read `../_shared/conventions.md` and `../_shared/forge-commands.md` first.
 
 One command to take a branch from "works on my machine" to a draft PR/MR a reviewer can
@@ -15,9 +17,11 @@ first red.
 
 - Repos: the cwd repo, or every compose service whose branch is not `<base>`
   (`corgi context --json`). `<base>` and forge per `conventions.md`.
-- Ticket key: from the branch name or the last commits; none → ask once, or go on
-  without (the title then has no key).
-- Dirty tree → ask whether to commit it first; never commit or checkout without an OK.
+- Ticket key: from the branch name or the last commits; none → go on without (the
+  title then has no key) and say so in one line.
+- Dirty tree → the user asked for a PR of this work, so commit it on the branch in the
+  repo's commit style. Ask only when a dirty file looks unrelated to the branch (another
+  feature, a local config, a secret). Never checkout, stash or discard.
 
 ## 1. Gates, in order
 

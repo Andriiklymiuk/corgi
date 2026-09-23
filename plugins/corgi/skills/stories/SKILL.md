@@ -5,6 +5,8 @@ description: "Use when the user wants to ship work across a corgi-compose worksp
 
 # Corgi stories
 
+**Done when:** every story in the batch has, per touched repo, a pushed branch and a draft PR/MR whose checks were polled to a conclusion and whose review loop ran — or a BLOCKED line with its one question; then the report.
+
 Work items — tracker issues (Linear/Jira) **or** a free-text feature — → spec each
 → isolated branch(es) → tested + reviewed → **draft** PR/MR per repo → review
 loop until clean (Phase 5.5) → grouped report. Services, dirs, dependency order: all from `corgi-compose.yml`. Never
@@ -701,7 +703,7 @@ matching existing patterns.
   real schema, isn't validated, and the next real `codegen` run silently overwrites it.
   Producer down → bring it up (`corgi run --services <producer> --with-deps --detach`),
   don't fake the output.
-- **Stop rule:** can't pass after ~2 honest tries → STOP, leave un-pushed, report
+- **Stop rule:** can't pass after ~3 honest tries, each on a different cause → STOP, leave un-pushed, report
   `needs attention` + failure, rest ships. Never push red.
 - **Re-tier mid-flight:** adjustment reveals real design → STOP, bump to feature,
   hand to superpowers. Also **widens span** (another repo or a new contract) → loop

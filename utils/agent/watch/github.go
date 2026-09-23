@@ -307,12 +307,15 @@ func (g *GitHub) PullStatus(ctx context.Context, ref string) (PullStatus, bool) 
 		RequestedReviewers []struct {
 			Login string `json:"login"`
 		} `json:"requested_reviewers"`
+		User struct {
+			Login string `json:"login"`
+		} `json:"user"`
 	}
 	resp, err := g.get(ctx, "/repos/"+repo+"/pulls/"+num, "")
 	if err != nil || githubDecode(resp, &pr) != nil {
 		return PullStatus{}, false
 	}
-	out := PullStatus{State: pr.State, At: time.Now()}
+	out := PullStatus{State: pr.State, At: time.Now(), Mine: g.Me != "" && strings.EqualFold(pr.User.Login, g.Me)}
 	if pr.Merged {
 		out.State = "merged"
 	} else if pr.Draft && pr.State == "open" {

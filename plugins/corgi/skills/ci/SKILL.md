@@ -5,6 +5,10 @@ description: "Use when the user wants the corgi stack in CI or end-to-end tests 
 
 # Corgi in CI
 
+Read `../_shared/conventions.md` first (finish what you start, attribution, unattended runs).
+
+**Done when:** the pipeline file is committed and pushed, the secrets it needs are named or set, and its first run was polled to a conclusion (green, or red with the fix pushed).
+
 Each repo's own pipeline proves that repo. A change spanning repos — a schema
 field, a new event, a template the frontend reads — leaves every pipeline green
 while the combination is broken. This skill builds the job that boots the whole

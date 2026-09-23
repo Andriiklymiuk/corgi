@@ -5,6 +5,10 @@ description: "Use when the user wants README pictures, store screenshots, or ani
 
 # Showcase: README pictures and GIFs from HTML
 
+Read `../_shared/conventions.md` first (finish what you start, attribution, unattended runs).
+
+**Done when:** the pictures are rendered from the script, you looked at each one, and the README (or listing) points at them.
+
 Pictures drawn from the product's own output, not from a design tool. A
 terminal session, a menu bar dropdown, a VS Code window, a phone page — each
 is an HTML mockup whose every line is the string the code prints, rendered by
