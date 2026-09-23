@@ -716,3 +716,38 @@ func TestHookPlanSortsReposByForge(t *testing.T) {
 		t.Fatalf("plan = %+v", p)
 	}
 }
+
+func TestTheInboxClearsOnlyTheRowsItWasShown(t *testing.T) {
+	dir, _ := watchFixture(t, &config.WatchConfig{Enabled: true, PRs: true})
+	var st *watch.State
+	for _, k := range []string{"linear:ABC-1", "linear:ABC-2"} {
+		appendTestEvent(t, dir, watch.Event{Key: k, Kind: watch.KindIssueNew, Ref: strings.TrimPrefix(k, "linear:"), Workspace: "acme-stack", At: time.Now()})
+	}
+	rec := httptest.NewRecorder()
+	launchInboxIgnoreHandler(rec, httptest.NewRequest(http.MethodPost, "/launch/inbox/ignore", strings.NewReader(`{"keys":["linear:ABC-1","made:up"]}`)))
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"ignored":1`) {
+		t.Fatalf("%d %s", rec.Code, rec.Body.String())
+	}
+	st = watch.LoadState(dir)
+	if !st.IsIgnored("linear:ABC-1") || st.IsIgnored("linear:ABC-2") || st.IsIgnored("made:up") {
+		t.Fatal("only the shown, real row is cleared")
+	}
+	rec = httptest.NewRecorder()
+	launchInboxIgnoreHandler(rec, httptest.NewRequest(http.MethodPost, "/launch/inbox/ignore", strings.NewReader(`{}`)))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("no keys: %d", rec.Code)
+	}
+}
+
+func appendTestEvent(t *testing.T, dir string, e watch.Event) {
+	t.Helper()
+	path := filepath.Join(dir, "watch", "events.jsonl")
+	_ = os.MkdirAll(filepath.Dir(path), 0o700)
+	line, _ := json.Marshal(e)
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	_, _ = f.Write(append(line, '\n'))
+}

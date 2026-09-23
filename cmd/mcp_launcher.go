@@ -3889,7 +3889,7 @@ func launchEventsHandler(w http.ResponseWriter, r *http.Request) {
 	state := watch.LoadState(dir)
 	fixLog := watch.LoadFixLog(dir)
 	keeper := watch.NewInboxKeeper(time.Now())
-	for _, e := range watch.RecentEvents(dir, 40) {
+	for _, e := range watch.RecentEvents(dir, inboxWindow) {
 		if !keeper.Keep(e) || state.IsIgnored(e.Key) {
 			continue
 		}
@@ -3897,7 +3897,7 @@ func launchEventsHandler(w http.ResponseWriter, r *http.Request) {
 		if now, ok := moved.Get(e.Key); ok {
 			current = now.Status
 		}
-		if watch.Settled(e, current) != "" {
+		if watch.InboxDone(e, current, pulls, fixLog) != "" {
 			continue
 		}
 		r := row{Key: e.Key, Kind: string(e.Kind), Ref: e.Ref, Title: firstLineOf(e.Title),

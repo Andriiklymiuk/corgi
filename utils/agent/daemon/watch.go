@@ -1539,10 +1539,13 @@ func (d *Daemon) refreshPulls(ctx context.Context, spec WatchSpec) {
 		}
 		switch e.Kind {
 		case watch.KindPRComment, watch.KindPRReview, watch.KindReviewRequested, watch.KindCIFailed:
-			if e.Ref != "" {
+			if e.Ref != "" && strings.ContainsAny(e.Ref, "#!") {
 				refs[e.Ref] = true
 			}
 			add(e.URL)
+			for _, l := range e.Links {
+				add(l)
+			}
 		}
 	}
 	for _, r := range watch.LoadFixLog(d.Dir).RecentFixes("", 50) {

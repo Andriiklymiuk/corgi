@@ -1131,6 +1131,17 @@ corgi agent watch test issue.comment --body "still needed?"  # one made-up event
 corgi agent restart
 ```
 
+**When a row leaves the inbox.** One rule for every surface — the phone,
+the menu bar, the editor, `watch status`: a row goes when its ticket reaches
+a finished state or is picked up, when every pull request it is about is
+merged or closed (a chat review request counts the pull requests its message
+links), or when a run already handled it (the review is posted, the comment
+answered — a run on the same pull request that started after the comment
+counts). Anything else waits until you act or ignore it. `corgi agent watch
+ignore --all [--workspace ID]` clears what the inbox shows now; the phone's
+**Clear** on a workspace does the same through `POST /launch/inbox/ignore
+{keys}`, naming the rows it showed so one that arrived meanwhile is kept.
+
 **What it costs.** The daemon polls every three minutes (`--interval`) with
 a saved cursor: Linear and Jira are asked only for issues updated since the
 last round, GitHub notifications answer 304 when nothing changed, GitLab
