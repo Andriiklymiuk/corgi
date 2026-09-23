@@ -424,6 +424,7 @@ type hookInput struct {
 	TranscriptPath   string          `json:"transcript_path"`
 	// LastAssistantMessage is codex's Stop field: the reply the turn ended on.
 	LastAssistantMessage string `json:"last_assistant_message"`
+	PermissionMode       string `json:"permission_mode"`
 }
 
 func (in hookInput) readsTranscript() (context, title bool) {
@@ -499,8 +500,14 @@ func runEmitHookAs(agent string, stdin io.Reader, getenv func(string) string, pa
 	if strings.EqualFold(getenv("CLAUDE_CODE_REMOTE"), "true") {
 		return sessions.Event{}, false
 	}
+	agent = strings.ToLower(strings.TrimSpace(agent))
+	if in.Event == "PermissionRequest" && agent == "codex" && codexDecidesItself(in.PermissionMode, in.Cwd) {
+		// Codex fires this hook before its own reviewer answers; with
+		// auto_review or bypass nobody is asked, so it is work, not a wait.
+		in.Event = "PreToolUse"
+	}
 	ev := sessions.Event{
-		Name: in.Event, SessionID: in.SessionID, Cwd: in.Cwd, Agent: strings.ToLower(strings.TrimSpace(agent)),
+		Name: in.Event, SessionID: in.SessionID, Cwd: in.Cwd, Agent: agent,
 		ConfigDir: getenv("CLAUDE_CONFIG_DIR"), Source: in.Source, Reason: in.Reason,
 		Tool: in.Tool, Notification: in.NotificationType, Message: truncateLine(in.errorMessage(), 160),
 		Error: in.errorType(), Window: getenv("CORGI_VSCODE_WINDOW"),
