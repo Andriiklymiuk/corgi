@@ -119,7 +119,7 @@ func (d *Daemon) pullChanged(ctx context.Context, spec WatchSpec, ref, link stri
 			utils.Infof("agent: red checks on %s handed to %s\n", ref, label)
 		}
 	}
-	if autoMerge && link != "" && now.Ready() && d.MergePull != nil {
+	if autoMerge && link != "" && now.Ready() && now.Mine && d.MergePull != nil {
 		if err := d.MergePull(ctx, spec.Workspace, link); err != nil {
 			utils.Infof("agent: auto-merge %s: %v\n", ref, err)
 			go d.notifyAttentionAt(notifyTitlePrefix+spec.Workspace, "could not merge "+link+": "+err.Error(), spec.Workspace, link)

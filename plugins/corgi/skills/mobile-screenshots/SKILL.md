@@ -5,6 +5,8 @@ description: "Use when generating store screenshots for an Expo / React Native a
 
 # Store screenshots, end to end
 
+**Done when:** every screen × device × locale asked for is captured, framed, exported at the store sizes, and — when asked — uploaded, with the upload read back.
+
 ## Overview
 Goal isn't "a screenshot" — it's **N screens × every device class × every locale**,
 **framed** (device mockup + headline + bg), at **exact store sizes**, optionally

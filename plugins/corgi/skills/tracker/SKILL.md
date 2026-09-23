@@ -5,6 +5,8 @@ description: "Tracker-side work for a corgi workspace (Linear or Jira): status (
 
 # Corgi tracker
 
+**Done when:** the question is answered from the live tracker, or the pickup is claimed and handed to stories.
+
 Read the tracker (Linear or Jira) **and** `corgi-compose.yml`, **tie each ticket to
 its real code state**, and do four jobs: **status**, **triage**, **decompose**,
 **pickup**. Reports, plans, and dispatches to `stories` — never writes code itself.

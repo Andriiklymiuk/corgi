@@ -5,6 +5,8 @@ description: Use when the user asks "what did I do today", "what have you done t
 
 # Standup
 
+**Done when:** the standup text is printed (and posted, when asked), built from what the day's git, tracker and sessions actually show.
+
 Read `../_shared/conventions.md` first.
 
 `corgi agent today` already knows what every account's Claude Code was asked, what

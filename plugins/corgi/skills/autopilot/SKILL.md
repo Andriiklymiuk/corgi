@@ -5,6 +5,8 @@ description: "Use when the user wants a SUPERVISED background loop that drains t
 
 # Corgi autopilot
 
+**Done when:** this iteration's heartbeat is emitted: the batch reached draft PRs, or its spec gate is staged and waiting, or the queue was empty.
+
 Supervised loop. One iteration = one `/corgi-queue` pickup → `stories` (spec gate → branch per service → tests → review → draft PR) → emit heartbeat → back off → repeat on host scheduler. Inherits corgi's one-spec-gate-per-batch guarantee + draft-PR-only rule; adds visible progress + clean kill switch. **Orchestration only — calls queue/stories/review skills, never re-implements them.**
 
 ## What it is NOT

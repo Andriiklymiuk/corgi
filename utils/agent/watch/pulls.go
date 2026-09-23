@@ -16,10 +16,12 @@ import (
 )
 
 type PullStatus struct {
-	State  string    `json:"state"`
-	Checks string    `json:"checks,omitempty"`
-	Review string    `json:"review,omitempty"`
-	At     time.Time `json:"at"`
+	State  string `json:"state"`
+	Checks string `json:"checks,omitempty"`
+	Review string `json:"review,omitempty"`
+	// Mine says the forge names me as the author; only then may it merge on its own.
+	Mine bool      `json:"mine,omitempty"`
+	At   time.Time `json:"at"`
 }
 
 func (p PullStatus) Facts() sessions.PullFacts {

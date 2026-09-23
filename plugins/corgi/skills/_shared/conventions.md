@@ -13,6 +13,32 @@ idempotent updates (for example `<!-- corgi-review -->`); it does not render, so
 attribution. Match the repo's own commit style; let pre-commit hooks format and re-stage if
 they rewrite.
 
+## Finish what you start
+
+A run ends when the skill's deliverable exists, not when a plan for it does: the branch is
+pushed and the draft PR/MR is up, the review is posted, the threads are answered, the
+check is green, the screenshot was read. Each skill's **Done when** line names it. Until
+then:
+
+- **Do the next step instead of describing it.** A reply that ends on "next steps: run X"
+  when you could run X is unfinished. So is "want me to continue?", "shall I push?",
+  "should I also fix Y?" when Y is in scope — the request already said yes. The only
+  questions are the gates a skill names (spec sign-off, a destructive or shared-state
+  action, a secret, someone else's branch, a request with two readings that build
+  different things).
+- **A red step is work, not a stopping point.** Read the failure, fix the cause, run it
+  again. Hand back only under the skill's Stop rule (about three honest tries, each on a
+  different cause) or a blocker only a person can clear — then name exactly what is
+  left and the one question.
+- **Every item in the batch.** Five tickets asked for means five handled, each to its own
+  done or its own BLOCKED line — not the first one plus a summary of the rest.
+- **Long work is waited for.** A build, a CI run, a deploy runs in the background and is
+  polled to its conclusion; "it's running, check later" is not an end.
+- **Evidence before "done".** The PR URL, the green check, the posted comment, the test
+  output — seen, not assumed. Short is fine; unverified is not.
+- **Report once, at the end.** What was done (with its links), what is blocked (with its
+  question), nothing about what you could do next if asked.
+
 ## Unattended runs never ask
 
 A prompt that carries the trail `corgi watch · <workspace> · <kind> <ref>` is a run the

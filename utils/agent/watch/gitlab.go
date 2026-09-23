@@ -323,12 +323,15 @@ func (g *GitLab) PullStatus(ctx context.Context, ref string) (PullStatus, bool) 
 		HeadPipeline *struct {
 			Status string `json:"status"`
 		} `json:"head_pipeline"`
+		Author struct {
+			Username string `json:"username"`
+		} `json:"author"`
 	}
 	endpoint := base + "/api/v4/projects/" + url.PathEscape(project) + "/merge_requests/" + num
 	if err := g.getInto(ctx, endpoint, &mr); err != nil {
 		return PullStatus{}, false
 	}
-	out := PullStatus{State: mr.State, At: time.Now()}
+	out := PullStatus{State: mr.State, At: time.Now(), Mine: g.Me != "" && isMe(g.Me, mr.Author.Username)}
 	if mr.State == "opened" {
 		out.State = "open"
 	}

@@ -5,6 +5,8 @@ description: "Use when the user wants to bring up a corgi-compose stack: \"run t
 
 # Corgi run
 
+**Done when:** every service asked for is healthy (or flagged stuck with its log tail) and the URLs and the stop command are printed.
+
 Bring up a corgi stack — or a slice — from chat. Boot **detached**, wait until
 **healthy (timeout)**, flag stuck, report URLs + how to stop. What runs and how =
 read from the repo (`corgi-compose.yml`, `Makefile`, `README`); never hard-coded,

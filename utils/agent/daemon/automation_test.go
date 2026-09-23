@@ -80,10 +80,16 @@ func TestAReadyPullRequestIsMergedWhenTheWorkspaceSaysSo(t *testing.T) {
 	writeWatchConfig(t, d, "acme", "      autoMerge: true\n")
 	spec := WatchSpec{Workspace: "acme", Dir: t.TempDir(), AgentDir: d.Dir}
 	link := "https://github.com/acme/api/pull/7"
-	ready := watch.PullStatus{State: "open", Checks: "passing", Review: "approved", At: time.Now()}
-	d.pullChanged(context.Background(), spec, "acme/api#7", link, watch.PullStatus{}, watch.PullStatus{State: "open", Checks: "passing", Review: "pending", At: time.Now()}, false)
+	ready := watch.PullStatus{State: "open", Checks: "passing", Review: "approved", Mine: true, At: time.Now()}
+	d.pullChanged(context.Background(), spec, "acme/api#7", link, watch.PullStatus{}, watch.PullStatus{State: "open", Checks: "passing", Review: "pending", Mine: true, At: time.Now()}, false)
 	if len(merged) != 0 {
 		t.Fatalf("merged too early: %v", merged)
+	}
+	theirs := ready
+	theirs.Mine = false
+	d.pullChanged(context.Background(), spec, "acme/api#6", "https://github.com/acme/api/pull/6", watch.PullStatus{}, theirs, false)
+	if len(merged) != 0 {
+		t.Fatalf("merged a colleague's pull request I only reviewed: %v", merged)
 	}
 	d.pullChanged(context.Background(), spec, "acme/api#7", link, watch.PullStatus{}, ready, false)
 	if len(merged) != 1 || merged[0] != "acme "+link {

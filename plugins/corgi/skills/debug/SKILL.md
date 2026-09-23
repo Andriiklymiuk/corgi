@@ -5,6 +5,10 @@ description: "Use to diagnose a corgi stack or pull runtime data for a bug: a se
 
 # Corgi debug
 
+Read `../_shared/conventions.md` first (finish what you start, attribution, unattended runs).
+
+**Done when:** the cause is named with its evidence (the log line, trace or failing command) and, for a broken stack, the stack is healthy again — or the one missing access is named.
+
 Four entry modes:
 
 - **Broken stack** — a service won't start, crashed, is unhealthy, or hangs on
@@ -54,7 +58,7 @@ whole ladder for a one-liner.
   Don't diff against `main` HEAD or theorize about data until you know which
   commit/version each env actually runs — the report's own version string (a
   screenshot build number, "broke in the latest release") is evidence; use it, don't substitute `main`.
-- **~2 honest tries per service**, then report `needs attention` + what you saw.
+- **~3 honest tries per service, each on a different cause**, then report `needs attention` + what you saw.
 
 ## Step 0a — one service named? `corgi why` first
 
