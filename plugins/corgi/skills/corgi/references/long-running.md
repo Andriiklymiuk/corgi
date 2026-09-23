@@ -7,16 +7,16 @@ description: How to invoke `corgi run` (and other long-running corgi commands li
 
 Two shapes:
 
-- **Foreground** `corgi run` / `corgi tunnel` — block indefinitely, stream logs, watch the compose file. Synchronous in a Bash call → agent hangs until the 10-min timeout. Background them, OR prefer `--detach`.
-- **Detached** `corgi run --detach` — starts services in process groups that outlive corgi, persists state, and returns once each service's `beforeStart` completes and the processes are spawned (immediate when `beforeStart` is cached/warm; **minutes on a cold first run** — clones, installs, migrations). The modern, agent-friendly path. Pairs with `corgi ps` / `corgi stop` / `corgi restart` / `corgi logs`.
+- **Foreground** `corgi run` / `corgi tunnel` - block indefinitely, stream logs, watch the compose file. Synchronous in a Bash call → agent hangs until the 10-min timeout. Background them, OR prefer `--detach`.
+- **Detached** `corgi run --detach` - starts services in process groups that outlive corgi, persists state, and returns once each service's `beforeStart` completes and the processes are spawned (immediate when `beforeStart` is cached/warm; **minutes on a cold first run** - clones, installs, migrations). The modern, agent-friendly path. Pairs with `corgi ps` / `corgi stop` / `corgi restart` / `corgi logs`.
 
-For agents: KillShell still works for a backgrounded foreground run, but `--detach` + `corgi stop` is cleaner — no orphaned shell, survives across sessions, and `corgi ps` gives real status.
+For agents: KillShell still works for a backgrounded foreground run, but `--detach` + `corgi stop` is cleaner - no orphaned shell, survives across sessions, and `corgi ps` gives real status.
 
 ## Detached lifecycle (preferred)
 
 ```
 corgi run --detach          # or -d; spawns detached pgroups, returns immediately
-corgi ps                    # what's up — reads .state.json, reconciles PIDs/containers
+corgi ps                    # what's up - reads .state.json, reconciles PIDs/containers
 corgi restart               # stop + run --detach
 corgi stop                  # tear it all down
 ```
@@ -24,8 +24,8 @@ corgi stop                  # tear it all down
 ### `corgi run --detach` / `-d`
 
 - Each service → its own detached process group that survives corgi exiting.
-- Persists run-state to `.corgi/corgi_services/.state.json`, prints a startup summary (JSON with `--json`), and returns once `beforeStart` completes and services are spawned — immediate when warm, **minutes on a cold first run**. No streaming, no watch.
-- `--tunnel` cannot combine with `--detach` (tunnels run in-process) — run `corgi tunnel` separately.
+- Persists run-state to `.corgi/corgi_services/.state.json`, prints a startup summary (JSON with `--json`), and returns once `beforeStart` completes and services are spawned - immediate when warm, **minutes on a cold first run**. No streaming, no watch.
+- `--tunnel` cannot combine with `--detach` (tunnels run in-process) - run `corgi tunnel` separately.
 
 Use this instead of `Bash(corgi run, run_in_background: true)` + KillShell.
 
@@ -77,21 +77,21 @@ Second `corgi run --detach` while a run is live → aborts:
 
 ```
 exit token: E_ALREADY_RUNNING
-"corgi is already running for this project — stop or restart first (use --force to override)"
+"corgi is already running for this project - stop or restart first (use --force to override)"
 ```
 
 `--force` clears stale state (kills any lingering groups + docker runners) and starts anyway.
 
 ### CI / JSON
 
-- `corgi run --ci` — suppress spinners/banners/color, implies `--silent`. Auto-on when `CI=true`. Pair with `--runOnce`.
-- Global `--json` — machine-readable output for `run` / `ps` / `stop` / `restart` / `logs`.
+- `corgi run --ci` - suppress spinners/banners/color, implies `--silent`. Auto-on when `CI=true`. Pair with `--runOnce`.
+- Global `--json` - machine-readable output for `run` / `ps` / `stop` / `restart` / `logs`.
 
 ## Foreground patterns (still valid)
 
 `corgi run` and `corgi tunnel` block and stream until killed. Background them or hand off to the user.
 
-### Pattern A — background, probe with `corgi ps`
+### Pattern A - background, probe with `corgi ps`
 
 ```
 Bash(command: "corgi run", run_in_background: true)   # returns shell ID; let it boot
@@ -102,7 +102,7 @@ Bash(command: "corgi ps")                             # synchronous; what's up
 - Kill the background shell with `KillShell` on that shell ID. Don't orphan it across sessions.
 - The background shell lives only while the session is alive. (Prefer `--detach` if it must outlive you.)
 
-### Pattern B — hand off to the user's terminal
+### Pattern B - hand off to the user's terminal
 
 If the user is actively developing, or a service uses `interactiveInput: true` (needs a real TTY):
 
@@ -112,24 +112,24 @@ Then use the synchronous commands (`doctor`, `ps`, `status`, `clean`, `db`, `pul
 
 ## `corgi tunnel`
 
-One tunnel subprocess per service with a resolvable `tunnel:` block. Blocks until Ctrl+C (SIGINT/SIGTERM). `corgi run --tunnel` bundles tunnels into the stack (foreground only — not with `--detach`). Same hang risk → background or hand off.
+One tunnel subprocess per service with a resolvable `tunnel:` block. Blocks until Ctrl+C (SIGINT/SIGTERM). `corgi run --tunnel` bundles tunnels into the stack (foreground only - not with `--detach`). Same hang risk → background or hand off.
 
 ## `--runOnce` / `-o`
 
-Runs the loop once and exits instead of watching. But **services still run their `start:` commands** — if those are long-running (`npm run dev`), `--runOnce` doesn't help. Only useful when every `start:` terminates on its own (e.g. a batch script). For CI, pair `--runOnce --ci`.
+Runs the loop once and exits instead of watching. But **services still run their `start:` commands** - if those are long-running (`npm run dev`), `--runOnce` doesn't help. Only useful when every `start:` terminates on its own (e.g. a batch script). For CI, pair `--runOnce --ci`.
 
 ## Clean shutdown
 
 - **Foreground:** SIGINT/SIGTERM → kills children, runs `afterStart:`, exits 0. SIGHUP → reloads on compose change. From the agent, `KillShell` the background shell (SIGINT → SIGTERM).
-- **Detached:** `corgi stop` (runs `afterStart:`, brings db down). Don't KillShell a detached run — there's no shell to kill; use `corgi stop`.
+- **Detached:** `corgi stop` (runs `afterStart:`, brings db down). Don't KillShell a detached run - there's no shell to kill; use `corgi stop`.
 - If a db container hangs, `docker ps` + `docker kill` it manually. Warn the user.
 
 ## What to avoid
 
-- **Never** run a foreground `corgi run` synchronously in a Bash call — boot output gets truncated at the timeout. Use `--detach`, or background + `corgi ps`.
-- **Never** pipe a foreground `corgi run` into `head`/etc. — pipe close kills it and your services die.
-- **Never** orphan a background `corgi run` shell across sessions without telling the user — silent Go process binding ports.
-- **Never** leave a detached run up silently — `corgi ps` to see it, `corgi stop` to clear it.
+- **Never** run a foreground `corgi run` synchronously in a Bash call - boot output gets truncated at the timeout. Use `--detach`, or background + `corgi ps`.
+- **Never** pipe a foreground `corgi run` into `head`/etc. - pipe close kills it and your services die.
+- **Never** orphan a background `corgi run` shell across sessions without telling the user - silent Go process binding ports.
+- **Never** leave a detached run up silently - `corgi ps` to see it, `corgi stop` to clear it.
 
 ## TL;DR
 

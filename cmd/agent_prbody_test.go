@@ -42,7 +42,7 @@ func TestPRBodyReadsTheBranchAndTheSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"## What", "APP-1 — Add a grace window to token refresh.", "## Commits", "- a grace window on refresh", "## Changes", "- `auth.go` +2 −0", "1 files, +2 −0 (1 generated left out)", "## Tests", "`go test ./...` ✓ · 3m ago"} {
+	for _, want := range []string{"## What", "APP-1 - Add a grace window to token refresh.", "## Commits", "- a grace window on refresh", "## Changes", "- `auth.go` +2 −0", "1 files, +2 −0 (1 generated left out)", "## Tests", "`go test ./...` ✓ · 3m ago"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("missing %q in:\n%s", want, body)
 		}

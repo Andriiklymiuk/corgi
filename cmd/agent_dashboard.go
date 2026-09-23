@@ -32,7 +32,7 @@ func runAgentDashboard(cmd *cobra.Command, _ []string) {
 	dir := mustAgentDir()
 	addr, err := os.ReadFile(filepath.Join(dir, mcpAddrName))
 	if err != nil {
-		exitWithError("agent_dashboard", fmt.Errorf("the daemon is not running — start it with `corgi agent up`"), 2)
+		exitWithError("agent_dashboard", fmt.Errorf("the daemon is not running - start it with `corgi agent up`"), 2)
 	}
 	base := "http://" + strings.TrimSpace(string(addr))
 
@@ -48,10 +48,10 @@ func runAgentDashboard(cmd *cobra.Command, _ []string) {
 			exitWithError("agent_dashboard", fmt.Errorf("--print --json would put a working key in a log; open it instead: corgi agent dashboard"), 2)
 		}
 		if !stdoutIsTerminal() {
-			exitWithError("agent_dashboard", fmt.Errorf("--print is for a terminal you are looking at, not a pipe — run `corgi agent dashboard` to open it directly"), 2)
+			exitWithError("agent_dashboard", fmt.Errorf("--print is for a terminal you are looking at, not a pipe - run `corgi agent dashboard` to open it directly"), 2)
 		}
 		fmt.Println(link)
-		fmt.Println("\nthat link contains a key for this machine — do not paste it anywhere.")
+		fmt.Println("\nthat link contains a key for this machine - do not paste it anywhere.")
 		fmt.Println("revoke it any time: corgi mcp devices revoke " + name)
 		return
 	}

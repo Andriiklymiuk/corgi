@@ -35,11 +35,11 @@ func TestPrintValidateHuman_Branches(t *testing.T) {
 		strict bool
 		want   []string
 	}{
-		{"clean", nil, nil, false, []string{"✓ no errors", "valid — no issues"}},
+		{"clean", nil, nil, false, []string{"✓ no errors", "valid - no issues"}},
 		{"errors", []utils.ValidationIssue{errItem}, nil, false,
 			[]string{"✗ [E_X] broken", "(services.api)", "1 error(s), 0 warning(s)"}},
 		{"warnings", nil, []utils.ValidationIssue{warnItem}, false,
-			[]string{"⚠ [W_X] soft", "valid — 1 warning(s)"}},
+			[]string{"⚠ [W_X] soft", "valid - 1 warning(s)"}},
 		{"strict-warnings", nil, []utils.ValidationIssue{warnItem}, true,
 			[]string{"failing under --strict"}},
 		{"errors-and-warnings", []utils.ValidationIssue{errItem}, []utils.ValidationIssue{warnItem}, false,

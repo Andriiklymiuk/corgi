@@ -29,7 +29,7 @@ func sessionUndoPlan(s sessions.Session) (sessionUndo, error) {
 		return sessionUndo{}, fmt.Errorf("%s has no checkout on record", firstNonEmpty(s.Display, s.Label))
 	}
 	if s.Status == sessions.StatusWorking {
-		return sessionUndo{}, fmt.Errorf("%s is still working — corgi agent interrupt %s first", firstNonEmpty(s.Display, s.Label), s.ID)
+		return sessionUndo{}, fmt.Errorf("%s is still working - corgi agent interrupt %s first", firstNonEmpty(s.Display, s.Label), s.ID)
 	}
 	branch := s.Branch
 	if branch == "" {
@@ -46,7 +46,7 @@ func sessionUndoPlan(s sessions.Session) (sessionUndo, error) {
 	inTrees := strings.Contains(filepath.ToSlash(s.Cwd), "/corgi_services/.worktrees/")
 	isolated := inTrees || strings.HasPrefix(branch, "corgi/")
 	if !isolated {
-		return sessionUndo{}, fmt.Errorf("%s shares your checkout (%s on %s) — undo works on a worktree of its own; git checkout -- <file> by hand for this one", firstNonEmpty(s.Display, s.Label), s.Cwd, branch)
+		return sessionUndo{}, fmt.Errorf("%s shares your checkout (%s on %s) - undo works on a worktree of its own; git checkout -- <file> by hand for this one", firstNonEmpty(s.Display, s.Label), s.Cwd, branch)
 	}
 	out, err := exec.Command("git", "-C", s.Cwd, "status", "--porcelain").Output()
 	if err != nil {
@@ -91,7 +91,7 @@ var agentUndoCmd = &cobra.Command{
 	Use:   "undo <session> [--worktree] [--yes]",
 	Short: "Drop what a session left uncommitted in its own worktree; --worktree drops the worktree and its branch too",
 	Long: `A run went the wrong way. This throws away every uncommitted edit and every
-new file in the session's worktree — git checkout -- . and git clean -fd —
+new file in the session's worktree - git checkout -- . and git clean -fd -
 and with --worktree removes the worktree and deletes its corgi/<ref> branch.
 
 Only for a session with a worktree of its own (--isolate): a session on your

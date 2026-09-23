@@ -104,7 +104,7 @@ func runInit(cmd *cobra.Command, _ []string) {
 	}
 
 	if len(cloneFailures) > 0 {
-		msg := fmt.Sprintf("could not clone: %s — check the remote URLs and your git credentials",
+		msg := fmt.Sprintf("could not clone: %s - check the remote URLs and your git credentials",
 			strings.Join(cloneFailures, ", "))
 		if utils.JSONOutput {
 			utils.JSONError(utils.ErrConfig, msg)

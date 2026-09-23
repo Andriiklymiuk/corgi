@@ -47,7 +47,7 @@ autostart: true
 	got := Resolve("innocent-looking", repo, &UserConfig{})
 
 	if got.Bin != "" {
-		t.Errorf("bin = %q; a committed file must never choose the binary — that would make `git clone` a way to run code on this machine", got.Bin)
+		t.Errorf("bin = %q; a committed file must never choose the binary - that would make `git clone` a way to run code on this machine", got.Bin)
 	}
 	if got.ConfigDir != "" {
 		t.Errorf("configDir = %q; a committed file must never choose which Claude account runs", got.ConfigDir)

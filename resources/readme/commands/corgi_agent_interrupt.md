@@ -2,7 +2,7 @@
 
 ## corgi agent interrupt
 
-Stop what a session is doing — Escape, as you would press it
+Stop what a session is doing - Escape, as you would press it
 
 ### Synopsis
 

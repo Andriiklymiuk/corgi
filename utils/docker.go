@@ -278,7 +278,7 @@ func startDockerAndWait() error {
 			return nil
 		}
 		if time.Now().After(deadline) {
-			return fmt.Errorf("docker daemon did not become reachable within 60s — start it manually and retry")
+			return fmt.Errorf("docker daemon did not become reachable within 60s - start it manually and retry")
 		}
 		if InterruptibleSleep(500 * time.Millisecond) {
 			return fmt.Errorf("docker startup aborted by shutdown signal")

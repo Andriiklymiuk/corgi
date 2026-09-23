@@ -14,12 +14,12 @@ var envCheckCmd = &cobra.Command{
 	Long: `Diff each service's env source against the example file its repo commits
 (.env-example or .env.example), subtracting every key corgi generates itself
 (db and service dependencies, ports, environment literals). What remains is a
-key the service expects and nothing provides — the kind that fails at the
+key the service expects and nothing provides - the kind that fails at the
 first request, thousands of log lines from the cause.
 
 Exits non-zero on any missing key, on a declared env source that does not
 exist while the example still needs keys, and when nothing could be checked
-at all — a vacuous pass would read as coverage.
+at all - a vacuous pass would read as coverage.
 
 Empty values are not findings: an empty key is often a deliberate off switch.
 

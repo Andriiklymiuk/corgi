@@ -50,10 +50,10 @@ In the project directory:
 - Everything corgi generates lives in **`.corgi/corgi_services/`** beside
   `.corgi/agent.yml`. A checkout with a top-level `corgi_services/` is moved
   there by any corgi command; `corgi migrate` does it out loud (`--dry-run`
-  to look first). Nothing moves while services are up — `corgi stop` first.
+  to look first). Nothing moves while services are up - `corgi stop` first.
   Git worktrees under it are repaired, so the source repo still points at
-  them. The move also touches `.gitignore` — before committing that, run
-  `git check-ignore -v .corgi/corgi_services` — a broader rule already in
+  them. The move also touches `.gitignore` - before committing that, run
+  `git check-ignore -v .corgi/corgi_services` - a broader rule already in
   the file (a repo that ignores all of `.corgi/`) covers the new path, and
   the commit would be pure noise.
 
@@ -99,7 +99,7 @@ Telegram (free on iOS, unlike ntfy):
 
 1. Ask the user to message **@BotFather**, send `/newbot`, follow it, and
    hand you the token (into the command, not the chat).
-2. `corgi agent notify telegram --token <TOKEN>` — checks the token, waits up
+2. `corgi agent notify telegram --token <TOKEN>` - checks the token, waits up
    to three minutes for the user to message the bot, reads the chat id,
    writes `notifyUrl`, sends a test. Tell the user to open the bot and send
    it any message when the command says so.
@@ -114,7 +114,7 @@ config, `corgi agent digest --send` to try it.
 
 ```bash
 code --install-extension Corgi.corgi --force          # VS Code: Agent sessions view, status bar, focus by tab
-open "macappstore://apps.apple.com/app/corgi-agents"    # Corgi Agents for Mac: the menu bar + window (not on brew — the app is on the store)
+open "macappstore://apps.apple.com/app/corgi-agents"    # Corgi Agents for Mac: the menu bar + window (not on brew - the app is on the store)
 ```
 
 Then the person: reload each VS Code window once (`Developer: Reload
@@ -140,15 +140,15 @@ The Claude Code panel uses its own `cmd+d`.
 ### 7. The tracker and code-host watch (optional)
 
 Ask whether they want the daemon to notice things while they are away, and
-**offer the list rather than asking an open question** — people answer
+**offer the list rather than asking an open question** - people answer
 "which of these do you use?" far better than "what do you want watched?".
 Say it as a menu and take whatever they name:
 
 > corgi can watch these, and you pick the ones you actually use:
 >
-> - **Linear** or **Jira** — new tickets assigned to you, new comments on them
-> - **GitHub** or **GitLab** — reviews and comments on your pull requests, requests to review someone else's, red builds
-> - **Slack** — someone naming you or writing to you directly; a channel you want every message of; a code-review channel where pull requests get posted
+> - **Linear** or **Jira** - new tickets assigned to you, new comments on them
+> - **GitHub** or **GitLab** - reviews and comments on your pull requests, requests to review someone else's, red builds
+> - **Slack** - someone naming you or writing to you directly; a channel you want every message of; a code-review channel where pull requests get posted
 >
 > Which do you use? I only need a token for the ones you name.
 
@@ -166,7 +166,7 @@ never into the chat:
 | GitLab | Preferences → Access tokens → **legacy** token, scope `read_api` only. A fine-grained token is scoped to groups and projects; corgi reads `/api/v4/todos`, which belongs to the user and sits outside that scoping. Self-hosted needs the URL | `corgi agent watch auth gitlab --token glpat-… --url https://gitlab.example.com` or `GITLAB_TOKEN`, `GITLAB_URL` |
 
 Those are the machine-wide tokens: every watched workspace falls back to
-them. **A workspace at another company gets its own** — a second Jira site,
+them. **A workspace at another company gets its own** - a second Jira site,
 a different Linear key, a self-hosted GitLab. Add `--local` inside it (or
 `--workspace <id>` from anywhere) and that token beats both the machine-wide
 one and the environment:
@@ -208,12 +208,12 @@ corgi agent watch enable --review-channel '#code-review' --action fix --auto-for
 ```
 
 **Always set `--project` and `--repos`.** They are what routes an event to a
-workspace — an issue by its key prefix, a PR by its repo. With neither, an
+workspace - an issue by its key prefix, a PR by its repo. With neither, an
 event falls through to the first watched workspace that merely matches the
 rules, so a review on one client's PR can start an agent in another's
 checkout. `--tracker linear|jira` picks the tracker when both have tokens.
 
-**Never guess either one — read them off the repos.** A key that is one
+**Never guess either one - read them off the repos.** A key that is one
 letter off routes nothing, silently, and looks exactly like a quiet week:
 
 ```bash
@@ -235,7 +235,7 @@ works but belongs to another account sees nothing as "mine", and that looks
 exactly like a quiet week:
 
 ```bash
-corgi agent watch board            # columns · `you <email>` — the tracker's idea of who holds the token
+corgi agent watch board            # columns · `you <email>` - the tracker's idea of who holds the token
 gh auth status                     # the GitHub account the feed reads as
 corgi agent watch run --dry-run    # every source polls once, nothing moves
 ```
@@ -244,7 +244,7 @@ If `you` is not the person whose tickets these are, redo `watch auth` with
 that person's key (or `--local` for this workspace) before anything else.
 
 **Filter new issues by state, or the backlog arrives every time.** Take the
-names from `corgi agent watch board` — it reads the tracker's real columns
+names from `corgi agent watch board` - it reads the tracker's real columns
 (Linear and Jira alike); a state you invented matches nothing. Name only the
 **ready** column:
 
@@ -253,14 +253,14 @@ corgi agent watch enable --states "Ready for dev"
 ```
 
 With no `--states` the watch takes every open ticket **except the ones in
-flight** — In Progress, Code review, QA and the like, which someone already
+flight** - In Progress, Code review, QA and the like, which someone already
 has (2.30.4). Naming such a column in `--states` takes it anyway, so "In
 Progress" belongs there only when the team parks ready work in it. A ticket
-a live session is on — its ticket or its branch names it, on this laptop or a
-peer — is never picked, whatever the column.
+a live session is on - its ticket or its branch names it, on this laptop or a
+peer - is never picked, whatever the column.
 
 The state filter applies to **new issues only**. Comments on your issues and
-reviews on your PRs come through whatever the state is — those are already
+reviews on your PRs come through whatever the state is - those are already
 about you.
 
 **When something fires that should not have, or does not fire at all**, ask
@@ -273,7 +273,7 @@ corgi agent watch test issue.new --ref <KEY>-123
 
 **Unattended.** `corgi agent watch enable --auto` is `--action fix --prs
 --comments`: it works on what arrives instead of only telling you. Say what
-that means before turning it on — it opens draft pull requests on their real
+that means before turning it on - it opens draft pull requests on their real
 repositories without being asked:
 
 ```bash
@@ -285,7 +285,7 @@ twice (an event key is handled once across polls and webhooks), at most
 3/hour and 10/day, and nothing above 95% of a usage window (`--limit-ceiling
 100` lifts that for a workspace that may spend the account down). `--quiet
 HH:MM-HH:MM` closes a window completely: no fix starts **and nothing
-buzzes** — what arrived is recorded, shows in the inbox, and is delivered as
+buzzes** - what arrived is recorded, shows in the inbox, and is delivered as
 one summary when the window opens. A run the daemon was killed in the middle
 of is closed on the next start and its event offered again, so a reboot
 loses nothing and repeats nothing.
@@ -296,9 +296,9 @@ and the VS Code status bar.
 
 `--action fix` (and so `--auto`) runs unattended only after `corgi agent init
 --dangerously-skip-permissions`; say that before enabling it. Suggest quiet
-hours at the same time — an unattended agent with no window acts at 3am.
+hours at the same time - an unattended agent with no window acts at 3am.
 
-**Turning fix mode on, in order** — each line answers a question the user
+**Turning fix mode on, in order** - each line answers a question the user
 will otherwise ask after the first run:
 
 ```bash
@@ -309,7 +309,7 @@ corgi agent watch enable --action fix \
 corgi agent harden                                        # deny rules for secrets, force-push, reset --hard
 corgi agent init --dangerously-skip-permissions           # only after saying what it means
 corgi agent restart
-corgi agent doctor                                        # no ✗ — `security · <ws>` names the workspace to harden
+corgi agent doctor                                        # no ✗ - `security · <ws>` names the workspace to harden
 ```
 
 - `--isolate` keeps every run in worktrees of its own; without it a fix
@@ -323,11 +323,11 @@ corgi agent doctor                                        # no ✗ — `security
   reply under it is feedback on your work. A merge waits for the forge's
   approval and green checks (`--auto-merge`), never for a "LGTM" in Slack.
 - After every `corgi upd`: `corgi agent restart`, then `corgi agent track
-  enable` once more — the hooks live in the Claude config and an upgrade
+  enable` once more - the hooks live in the Claude config and an upgrade
   can leave them behind.
 
 **Codex as an agent** (`corgi agent init --agents claude,codex`, or `--kind
-codex`): Codex has no plugin, so give it the skills — `corgi agent skills
+codex`): Codex has no plugin, so give it the skills - `corgi agent skills
 install` copies them into `~/.codex/skills` with the `_shared` files they
 read; `corgi agent doctor` reports when that copy is behind, and `install`
 again after `corgi upd` brings it up. `corgi agent track enable` wires its
@@ -340,7 +340,7 @@ prune --dry-run` are the check for leftovers; `git worktree list` in each
 repo shows what prune does not track (a worktree a skill made in /tmp).
 
 **Webhooks** (instant instead of every three minutes): run `corgi agent
-watch hooks --install` inside each watched workspace — it creates or updates
+watch hooks --install` inside each watched workspace - it creates or updates
 the hook on every GitHub and GitLab repo in `--repos` (GitLab needs
 Maintainer, GitHub repo admin) and prints what is left by hand. Polling
 stays on beside the webhooks as the safety net; a comment from both runs
@@ -354,7 +354,7 @@ checklist:
 - Linear: Settings → API → Webhooks → New: URL `<base>/hooks/linear`, the
   secret, events Issues and Comments.
 - GitHub / GitLab: only a repo `--install` reported `✗` for (no admin /
-  Maintainer there) — the same settings by hand, as `watch hooks` prints them.
+  Maintainer there) - the same settings by hand, as `watch hooks` prints them.
 - Jira: Settings → System → WebHooks → Create: URL
   `<base>/hooks/jira?token=<secret>`, events Issue created, Comment created.
 
@@ -407,7 +407,7 @@ columns once and caches them; a column name you guessed is refused, and Jira als
 decides which moves are legal from where the ticket currently sits, so a refused
 move names the ones that were.
 
-- `--pickup "In Progress"` moves a ticket when someone picks it up — from the
+- `--pickup "In Progress"` moves a ticket when someone picks it up - from the
   phone's **Work on it** and from an unattended run. Unset writes nothing, which
   is the default: no existing setup starts changing a board it was not asked to.
 - `corgi agent watch undo [REF]` closes what a run opened and puts the ticket
@@ -424,11 +424,11 @@ corgi agent watch enable --action fix --auto-for reviews,comments
 corgi agent watch enable --action fix --auto-for ci
 ```
 
-- **reviews / comments** — a known, already-scoped change. The safest to hand over.
-- **ci** — needs `--ci` to arrive at all. A red build is the best unattended
+- **reviews / comments** - a known, already-scoped change. The safest to hand over.
+- **ci** - needs `--ci` to arrive at all. A red build is the best unattended
   target there is: a precise signal and a pass condition nobody can argue with.
-- **tickets** — a blank page. Leave it reporting until the rest has earned trust.
-- **requests** — someone else's pull request. It needs `--reviews` to arrive at
+- **tickets** - a blank page. Leave it reporting until the rest has earned trust.
+- **requests** - someone else's pull request. It needs `--reviews` to arrive at
   all, and corgi posts a review rather than pushing to their branch. Almost
   never belongs in `--auto-for`.
 
@@ -455,7 +455,7 @@ answers `notify` for it, so the split is visible before an event arrives.
 ## Reaching the dashboard
 
 The phone pairs by scanning the QR `corgi agent up` prints. A browser on the
-machine running the daemon needs no code — anything that can run the command
+machine running the daemon needs no code - anything that can run the command
 can already read the daemon's files:
 
 ```bash
@@ -471,7 +471,7 @@ It is a real device with a name: `corgi mcp devices list` shows it,
 - `--from max` narrows comments and reviews to the people you are actually
   waiting on, across every repo. The rules are otherwise shaped like a board.
 - Tickets closed as duplicate, cancelled, won't do, not planned, rejected or
-  obsolete are skipped with the reason said out loud — unless `--states` names
+  obsolete are skipped with the reason said out loud - unless `--states` names
   that column, because asking for it means you meant it.
 - Several comments on one pull request collapse to one per poll.
 - `--quiet 17:00-09:00` holds notifications as well as fixes, and delivers one
@@ -479,7 +479,7 @@ It is a real device with a name: `corgi mcp devices list` shows it,
 
 ## If they are not in Claude Code
 
-Codex, Cursor, Cline, Droid, an in-house agent — do not tell them corgi has
+Codex, Cursor, Cline, Droid, an in-house agent - do not tell them corgi has
 no plugin for their tool. The skills are plain Markdown in the repository and
 the `skills` CLI installs them anywhere:
 

@@ -1,4 +1,4 @@
-# Tracker & queue — plan and pick up work
+# Tracker & queue - plan and pick up work
 
 The `tracker` skill and the `/corgi-queue` command are the **front of the corgi
 agent loop**: they read your issue tracker (Linear or Jira) **and** your
@@ -12,11 +12,11 @@ suggest  →  tracker / queue  →  stories  →  review  →  you land it
 ```
 
 The full loop: **suggest → plan → stories → review**, with `run`/`debug` operating
-throughout. `suggest` is upstream — it proposes work before it's even a ticket.
+throughout. `suggest` is upstream - it proposes work before it's even a ticket.
 
 `suggest` can also run **proactively on a schedule** (`/corgi-suggest-proactive` armed
 via `/schedule`): each run reuses the suggest ranking, dedupes the top idea against open
-tickets + recently-dismissed ones, and — behind the same tracker write gate — either
+tickets + recently-dismissed ones, and - behind the same tracker write gate - either
 proposes it (default) or, only if you opt in, files **one** rate-limited **draft** ticket.
 See the `suggest-proactive` skill.
 
@@ -24,8 +24,8 @@ See the `suggest-proactive` skill.
 
 You need the tracker's MCP server connected to Claude Code:
 
-- **Linear** — the Linear MCP (`mcp__linear-server__*`).
-- **Jira** — the Atlassian MCP (`mcp__atlassian__*`).
+- **Linear** - the Linear MCP (`mcp__linear-server__*`).
+- **Jira** - the Atlassian MCP (`mcp__atlassian__*`).
 
 corgi auto-detects which from your workspace (tracker URLs in the README/compose, or
 the issue-key shape). If neither is connected, `tracker` degrades to a **git-only
@@ -33,7 +33,7 @@ digest** (open PRs + recent commits) and tells you what to connect.
 
 ## The four jobs
 
-You don't need the commands or any jargon — say it however you'd say it. It matches
+You don't need the commands or any jargon - say it however you'd say it. It matches
 on intent.
 
 | Job | Say something like | What you get |
@@ -46,14 +46,14 @@ on intent.
 ## The superpower: ticket ↔ code correlation
 
 A tracker UI shows you cards. `tracker` shows you cards **reconciled against your
-actual repos** — because it knows your service→repo map from `corgi-compose.yml`. It
+actual repos** - because it knows your service→repo map from `corgi-compose.yml`. It
 flags the drift the tracker can't see:
 
 | Tracker says | Code says | It reports |
 |--------------|-----------|------------|
 | In Progress | no branch/PR | **not actually started** |
 | In Progress | open PR, CI red | **blocked on CI** → `/corgi-debug` |
-| Todo / Backlog | PR merged | **stale — close it** |
+| Todo / Backlog | PR merged | **stale - close it** |
 | Done | PR open | **premature done** |
 | any | open PR, no review | **needs a reviewer** → `/corgi-review` |
 
@@ -75,7 +75,7 @@ Every scope filters to **not In Progress / not Done / not blocked**, then
 **drift-skips** anything already merged or in-flight (so nothing gets built twice).
 
 The loop isn't zero-touch: each round's **batch** of picks passes through `stories`'
-**one spec sign-off** before any branch — batch-level (all the round's specs in a
+**one spec sign-off** before any branch - batch-level (all the round's specs in a
 single gate, not one per ticket). The loop *stages* a batch for your approval, then
 builds the approved ones. Convenient, not autonomous.
 
@@ -94,20 +94,20 @@ Picking one ticket quietly engages the rest of the loop:
    move also stops a looping `/corgi-queue` from grabbing the same ticket twice.
 4. It then points you to the next steps: **`/corgi-review`** to review against your
    standards + the ticket, **`/corgi-run --service-branch …`** to see the branch live,
-   **`/corgi-debug`** if CI is red — then you land it (`gh pr merge` / `glab mr merge`).
+   **`/corgi-debug`** if CI is red - then you land it (`gh pr merge` / `glab mr merge`).
 
 ## Guardrails
 
 - **Read-only until a gate.** Reading the tracker + forge is silent; any tracker write
   (create / move / label / comment) batches behind **one confirm** (`--yes` skips it).
-- **tracker never writes code** — it dispatches to `stories`, which owns the build and
+- **tracker never writes code** - it dispatches to `stories`, which owns the build and
   its own spec sign-off gate.
 - **Never touches `manualRun` services.**
-- **Degrades gracefully** — no tracker MCP → git-only digest; no compose on disk →
+- **Degrades gracefully** - no tracker MCP → git-only digest; no compose on disk →
   tracker-only (and it says the code column wasn't checked).
 
 ## See also
 
-- [`docs/agents.md`](agents.md) — driving corgi non-interactively (`--json`, exit codes).
-- [`docs/mcp.md`](mcp.md) — corgi's own MCP server.
+- [`docs/agents.md`](agents.md) - driving corgi non-interactively (`--json`, exit codes).
+- [`docs/mcp.md`](mcp.md) - corgi's own MCP server.
 - The Claude Code plugin section of the [README](../README.md#ai-agents-mcp--claude-code).

@@ -1,12 +1,12 @@
 ---
-description: Manage In-App Purchases / store metadata / RevenueCat for an Expo / React Native app — the product-id source of truth, a version-controlled local source for per-IAP App Review notes (примечание) generated from the catalog with a drift-guard test, and pushing IAP `reviewNote` via the App Store Connect API (fastlane `deliver` can't manage IAP metadata). Dry-run before apply; the review screenshot stays manual.
+description: Manage In-App Purchases / store metadata / RevenueCat for an Expo / React Native app - the product-id source of truth, a version-controlled local source for per-IAP App Review notes (примечание) generated from the catalog with a drift-guard test, and pushing IAP `reviewNote` via the App Store Connect API (fastlane `deliver` can't manage IAP metadata). Dry-run before apply; the review screenshot stays manual.
 ---
 
 Run the **purchases** flow for `$ARGUMENTS`.
 
-- `$ARGUMENTS` = what to do — `stage` (regenerate the local IAP notes), `push` (dry-run the
+- `$ARGUMENTS` = what to do - `stage` (regenerate the local IAP notes), `push` (dry-run the
   ASC update), `push --apply` (PATCH live), or a plain-words ask ("add a premium pack",
-  "sync product ids"). Pushing mutates live store config — dry-run + confirm first.
+  "sync product ids"). Pushing mutates live store config - dry-run + confirm first.
 
 Per `plugins/corgi/skills/purchases/SKILL.md`:
 
@@ -20,7 +20,7 @@ Per `plugins/corgi/skills/purchases/SKILL.md`:
    `attributes.reviewNote`. **Dry-run by default**; `--apply` writes; per-product try/catch.
 4. **Verify.** Re-run the dry-run → "0 to update, N already current". Attach the review
    screenshot by hand in the console (only the text is managed here).
-5. **RevenueCat** for offerings/entitlements (MCP / dashboard) — NOT the ASC review notes.
+5. **RevenueCat** for offerings/entitlements (MCP / dashboard) - NOT the ASC review notes.
 
 Report: products staged, what would/did change on ASC (and any not found), and the manual
 screenshot step still outstanding.

@@ -26,7 +26,7 @@ type httpArgs struct {
 
 func addStackTools(s *server.MCPServer, composeOpt, serviceOpt mcp.ToolOption) {
 	s.AddTool(newCorgiTool("corgi_http",
-		mcp.WithDescription("Send one HTTP request to a running service of the stack by its name — corgi knows the port — and return {status, headers, body, truncated, ms}. For checking a route the way a client would: GET /health, POST /limits with a JSON body. Body is capped at 64 KB. The service must be up (corgi_up); the request goes to 127.0.0.1. Disabled over a public tunnel unless CORGI_MCP_ALLOW_DANGEROUS_TUNNEL=1, like exec and the database tools."),
+		mcp.WithDescription("Send one HTTP request to a running service of the stack by its name - corgi knows the port - and return {status, headers, body, truncated, ms}. For checking a route the way a client would: GET /health, POST /limits with a JSON body. Body is capped at 64 KB. The service must be up (corgi_up); the request goes to 127.0.0.1. Disabled over a public tunnel unless CORGI_MCP_ALLOW_DANGEROUS_TUNNEL=1, like exec and the database tools."),
 		composeOpt,
 		serviceOpt,
 		mcp.WithString("path", mcp.Required(), mcp.Description("Path with query, e.g. /api/limits?user=1")),
@@ -54,7 +54,7 @@ func addStackTools(s *server.MCPServer, composeOpt, serviceOpt mcp.ToolOption) {
 	}))
 
 	s.AddTool(newCorgiTool("corgi_explain",
-		mcp.WithDescription("Ask a postgres-family db_service how it would run a query: EXPLAIN (or EXPLAIN ANALYZE when analyze is true — the query then actually runs, so not on a mutating statement) through psql. Returns {service, plan, truncated}. For finding the sequential scan behind a slow endpoint. Disabled over a public tunnel unless CORGI_MCP_ALLOW_DANGEROUS_TUNNEL=1."),
+		mcp.WithDescription("Ask a postgres-family db_service how it would run a query: EXPLAIN (or EXPLAIN ANALYZE when analyze is true - the query then actually runs, so not on a mutating statement) through psql. Returns {service, plan, truncated}. For finding the sequential scan behind a slow endpoint. Disabled over a public tunnel unless CORGI_MCP_ALLOW_DANGEROUS_TUNNEL=1."),
 		composeOpt,
 		mcp.WithString("service", mcp.Required(), mcp.Description("db_service name")),
 		mcp.WithString("query", mcp.Required(), mcp.Description("The SQL to explain")),
@@ -109,7 +109,7 @@ func mcpHTTP(a httpArgs) (any, error) {
 	started := time.Now()
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %s did not answer on :%d — is it up? (%v)", utils.ErrServiceNotFound, a.Service, port, err)
+		return nil, fmt.Errorf("%s: %s did not answer on :%d - is it up? (%v)", utils.ErrServiceNotFound, a.Service, port, err)
 	}
 	defer resp.Body.Close()
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, httpBodyMax+1))

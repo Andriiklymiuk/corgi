@@ -128,7 +128,7 @@ func TestCustomArgsCannotDisarmPermissionPrompts(t *testing.T) {
 		c.Args = []string{"serve", arg}
 
 		if err := ValidateSpawnConfig(c); err == nil {
-			t.Errorf("arg %q must be rejected — permission prompts are the defence a phone answers", arg)
+			t.Errorf("arg %q must be rejected - permission prompts are the defence a phone answers", arg)
 		}
 	}
 }
@@ -180,14 +180,14 @@ func TestCustomKindStripsItsOwnCredentials(t *testing.T) {
 	env := BuildEnv(c, parent)
 	for _, unwanted := range []string{"SOME_AGENT_API_KEY=sk-live", "SOME_AGENT_OAUTH_TOKEN=oauth"} {
 		if slices.Contains(env, unwanted) {
-			t.Errorf("env still carries %q — an inherited credential bills the wrong account", unwanted)
+			t.Errorf("env still carries %q - an inherited credential bills the wrong account", unwanted)
 		}
 	}
 
 	got := StrippedCredentials(c, parent)
 	want := []string{"SOME_AGENT_API_KEY", "SOME_AGENT_OAUTH_TOKEN"}
 	if !slices.Equal(got, want) {
-		t.Errorf("StrippedCredentials() = %v, want %v — status output explains the account from this", got, want)
+		t.Errorf("StrippedCredentials() = %v, want %v - status output explains the account from this", got, want)
 	}
 }
 
@@ -285,7 +285,7 @@ func TestCustomArgsCannotSmuggleAForbiddenPermissionMode(t *testing.T) {
 		c.Args = args
 
 		if err := ValidateSpawnConfig(c); err == nil {
-			t.Errorf("args %v must be rejected — this is the invariant the docs promise", args)
+			t.Errorf("args %v must be rejected - this is the invariant the docs promise", args)
 		}
 	}
 }

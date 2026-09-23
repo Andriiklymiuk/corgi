@@ -285,7 +285,7 @@ button:disabled{opacity:.5}code{display:block;margin:.8rem 0;padding:.7rem;backg
 .cmd{font-size:.9rem;letter-spacing:0;text-align:left;user-select:all}.hidden{display:none}#err{color:#f16a6a}
 </style></head><body><div class="card">
 <h1>Connect <span id="client">{{.ClientName}}</span> to corgi</h1>
-<p>It will be sent back to <span class="host">{{.Host}}</span>{{if .Loopback}}<span class="warn"> — a program on your computer will receive the code</span>{{end}}.</p>
+<p>It will be sent back to <span class="host">{{.Host}}</span>{{if .Loopback}}<span class="warn"> - a program on your computer will receive the code</span>{{end}}.</p>
 <p>A connected client can read your stack, start and steer sessions, and run what your workspaces allow. Destructive tools still ask in Claude.</p>
 <div id="same" class="hidden"><button id="approve">Approve</button></div>
 <div id="other" class="hidden">
@@ -324,7 +324,7 @@ button:disabled{opacity:.5}code{display:block;margin:.8rem 0;padding:.7rem;backg
 
 var consentErrorPage = template.Must(template.New("consentError").Parse(`<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="color-scheme" content="dark"><title>corgi — cannot sign in</title>
+<meta name="color-scheme" content="dark"><title>corgi - cannot sign in</title>
 <style>body{margin:0;font-family:-apple-system,system-ui,sans-serif;background:#08090a;color:#eceef1;display:flex;min-height:100vh;align-items:center;justify-content:center;padding:1.5rem}
 .card{background:#101113;border:1px solid #212327;border-radius:1rem;padding:1.6rem;max-width:26rem}h1{font-size:1.1rem;margin:0 0 .6rem}p{color:#8a8f98;line-height:1.45}</style></head>
 <body><div class="card"><h1>corgi cannot start this sign-in</h1><p>{{.}}</p><p>Nothing was sent anywhere. Close this tab and try again from the client.</p></div></body></html>`))

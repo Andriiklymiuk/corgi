@@ -135,7 +135,7 @@ func trackCodex(bin string) {
 	case theirs != "":
 		utils.Infof("codex: %s already has a notify of its own; codex runs one, so its turns stay off the board (%s)\n", codexConfigPath(), theirs)
 	case changed:
-		utils.Infof("✓ codex turns land on the board too (%s) — a codex with hooks gets the full set; `codex update` then track enable again\n", codexConfigPath())
+		utils.Infof("✓ codex turns land on the board too (%s) - a codex with hooks gets the full set; `codex update` then track enable again\n", codexConfigPath())
 	}
 }
 

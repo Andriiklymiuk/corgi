@@ -9,7 +9,7 @@ line here that the diff does not touch does not go on the card.
   a trigger, and no ceiling sits below today's load (a "first 100 rows" shortcut on a
   table with 10k). An item with no trigger is a Check line.
 - **Built-in not used**: a new dependency, helper or component for something the
-  language, platform or an installed dependency already does — more surface for the
+  language, platform or an installed dependency already does - more surface for the
   same behaviour, and the reviewer has to learn it.
 
 ## Backend / API
@@ -51,10 +51,10 @@ line here that the diff does not touch does not go on the card.
 
 ## Mobile (Expo / React Native, native)
 - **Both platforms**: a screenshot or recording per platform in the PR body when UI
-  changed — one platform's proof says nothing about the other.
+  changed - one platform's proof says nothing about the other.
 - **OTA vs binary**: does this need a store build (native module, SDK bump, config
   plugin, entitlement, permission string)? If yes, the card says so and the review tier
-  cannot be below high — an OTA cannot fix it after release.
+  cannot be below high - an OTA cannot fix it after release.
 - **Permissions**: a new `Info.plist` usage string / manifest permission has a user-
   facing reason and is requested at the moment of use, not on launch; ATT prompt
   order preserved.
@@ -71,7 +71,7 @@ line here that the diff does not touch does not go on the card.
 - **Native modules**: version pinned exact (a `~` range re-resolves upward),
   `npx expo install --check` output in the PR body, and a device launch log or
   screenshot per platform linked (a DYLD symbol crash passes every CI check).
-- **Rendering that CI cannot see**: shaders, particles, 3D, Skia, video — verified by a
+- **Rendering that CI cannot see**: shaders, particles, 3D, Skia, video - verified by a
   screenshot read by a person; a green build proves nothing here.
 - **IAP / store**: product ids match the stores, restore-purchases path exists, receipt
   validation server-side, sandbox tested on both stores.
@@ -82,7 +82,7 @@ line here that the diff does not touch does not go on the card.
 - **Performance**: lists virtualized; images sized; no synchronous storage read on the
   render path; animations on the native driver.
 - **Preview constants**: a "force flag on" or fake-data constant added for driving the
-  UI was reverted — grep for it.
+  UI was reverted - grep for it.
 
 ## Data / analytics / ML
 - **Schema evolution**: new columns nullable or defaulted; downstream jobs tolerate the

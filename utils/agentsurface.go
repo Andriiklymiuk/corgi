@@ -246,7 +246,7 @@ func SurfaceMarkdown(repos []RepoSurface) string {
 			if c.Breaking {
 				mark = " ⚠ breaking"
 			}
-			b.WriteString("- " + c.Op + " " + c.Kind + " `" + c.Name + "` — " + c.Path + mark + "\n")
+			b.WriteString("- " + c.Op + " " + c.Kind + " `" + c.Name + "` - " + c.Path + mark + "\n")
 		}
 	}
 	if !found {

@@ -217,7 +217,7 @@ func TestMigrateRepairsMovedWorktrees(t *testing.T) {
 		t.Fatal(err)
 	}
 	if strings.Contains(string(out), "prunable") {
-		t.Fatalf("the moved worktree is still prunable — the next prune would drop it:\n%s", out)
+		t.Fatalf("the moved worktree is still prunable - the next prune would drop it:\n%s", out)
 	}
 	want := filepath.Join(root, ".corgi", "corgi_services", ".worktrees", "api-feature-x")
 	if !strings.Contains(string(out), want) {

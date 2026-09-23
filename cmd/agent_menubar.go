@@ -33,7 +33,7 @@ func startMenuBarIfInstalled(say func(string)) {
 		say("⚠ could not open corgi-bar: " + err.Error())
 		return
 	}
-	say("✓ opened corgi-bar — it starts at login from now on (Settings › App to change)")
+	say("✓ opened corgi-bar - it starts at login from now on (Settings › App to change)")
 }
 
 const checkMenuBar = "menu bar"
@@ -47,7 +47,7 @@ func checkMenuBarApp() agentCheck {
 	case !installed:
 		return agentCheck{Name: checkMenuBar, OK: true, Detail: "Corgi Agents for Mac not installed (optional)", Fix: "install it from the Mac App Store (Corgi Agents)"}
 	case !running:
-		return agentCheck{Name: checkMenuBar, OK: true, Detail: "corgi-bar installed, not running", Fix: "`open -a corgi-bar` — its first run turns login start on"}
+		return agentCheck{Name: checkMenuBar, OK: true, Detail: "corgi-bar installed, not running", Fix: "`open -a corgi-bar` - its first run turns login start on"}
 	}
 	return agentCheck{Name: checkMenuBar, OK: true, Detail: "corgi-bar running"}
 }

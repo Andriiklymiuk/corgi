@@ -95,7 +95,7 @@ func TestRemoteResolverAppliesAProfileEndToEnd(t *testing.T) {
 		t.Fatalf("profile start must resolve, got %v", err)
 	}
 	if cfg.ConfigDir != "~/claude-configs/work" {
-		t.Errorf("configDir = %q, want the profile's — the account did not take effect", cfg.ConfigDir)
+		t.Errorf("configDir = %q, want the profile's - the account did not take effect", cfg.ConfigDir)
 	}
 	if cfg.Profile != "work" {
 		t.Errorf("profile = %q, want work", cfg.Profile)
@@ -130,7 +130,7 @@ func TestRemoteResolverNamesTheSessionByBranch(t *testing.T) {
 		t.Fatalf("a normal workspace must resolve, got %v", err)
 	}
 	if !strings.HasPrefix(cfg.Name, "acme · feature/referral · ") {
-		t.Errorf("name = %q, want the workspace and its branch — a bare id makes every session look alike", cfg.Name)
+		t.Errorf("name = %q, want the workspace and its branch - a bare id makes every session look alike", cfg.Name)
 	}
 }
 

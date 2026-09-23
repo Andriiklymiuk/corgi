@@ -257,8 +257,8 @@ func TestTelegramHandleWithoutADaemon(t *testing.T) {
 		{"/say s1 go on", "", "corgi agent is not running"},
 		{"/focus s1", "", "corgi agent is not running"},
 		{"/bogus", "", "unknown command. /help"},
-		{"/compact", "", "/compact is Claude Code's command, typed inside a session — not one of corgi's.\nFrom here: reply to the session's notification with /compact, or\n/send <session> /compact"},
-		{"/model@corgibot", "", "/model is Claude Code's command, typed inside a session — not one of corgi's.\nFrom here: reply to the session's notification with /model, or\n/send <session> /model"},
+		{"/compact", "", "/compact is Claude Code's command, typed inside a session - not one of corgi's.\nFrom here: reply to the session's notification with /compact, or\n/send <session> /compact"},
+		{"/model@corgibot", "", "/model is Claude Code's command, typed inside a session - not one of corgi's.\nFrom here: reply to the session's notification with /model, or\n/send <session> /model"},
 		{"/mute 25h", "", "/mute [1h|30m|off]"},
 	} {
 		before := len(fake.messages())
@@ -343,7 +343,7 @@ func TestTelegramBoardText(t *testing.T) {
 		{ID: "b", Display: "web", Status: sessions.StatusWorking},
 	}})
 	got := c.boardText()
-	for _, want := range []string{"▲ acme — NEEDS YOU · permission: Bash · ctx 42%", "● web — WORKING\n", "/send <session> <text>"} {
+	for _, want := range []string{"▲ acme - NEEDS YOU · permission: Bash · ctx 42%", "● web - WORKING\n", "/send <session> <text>"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("board text %q lacks %q", got, want)
 		}
@@ -417,7 +417,7 @@ func TestTelegramControlStartsAndStopsAWorkspace(t *testing.T) {
 	}
 	fakeRunningDaemon(t, dir, true)
 	c.control(command.ActionStop, "Acme")
-	if fake.last() != "stop acme — asked" {
+	if fake.last() != "stop acme - asked" {
 		t.Errorf("stop: %q", fake.last())
 	}
 	if entries, _ := os.ReadDir(filepath.Join(dir, "commands")); len(entries) != 1 {
@@ -495,7 +495,7 @@ func TestStartTelegramControlStopsBeforeItSaysAnything(t *testing.T) {
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
 		if _, err := os.Stat(marker); err == nil {
-			t.Fatal("a cancelled daemon greeted the chat anyway — that is a network call on the way out")
+			t.Fatal("a cancelled daemon greeted the chat anyway - that is a network call on the way out")
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
@@ -507,7 +507,7 @@ func TestTelegramCompactTipNamesTheDriftingSession(t *testing.T) {
 	t0 := time.Now()
 	writeBoardState(t, dir, sessions.State{UpdatedAt: t0, Sessions: []sessions.Session{
 		{ID: "s1", Display: "api·auth", Status: sessions.StatusWorking, Context: &usage.Context{Percent: 40}},
-		{ID: "s2", Display: "corgi", Status: sessions.StatusDone, Drift: []string{"context 85% full — /compact, or fresh from a handoff"}, Context: &usage.Context{Percent: 85}},
+		{ID: "s2", Display: "corgi", Status: sessions.StatusDone, Drift: []string{"context 85% full - /compact, or fresh from a handoff"}, Context: &usage.Context{Percent: 85}},
 	}})
 	c.handle("/compact", "")
 	got := fake.messages()

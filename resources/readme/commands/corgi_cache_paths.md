@@ -19,13 +19,13 @@ dependency directory keeps its marker inside it (node_modules/.corgi-step-0),
 so one cache entry carries both and a stale restore cannot pass as fresh.
 
 GitHub Actions can read this plan at runtime through the corgi action's outputs.
-GitLab cannot — its cache config is static YAML — so --gitlab renders a job
+GitLab cannot - its cache config is static YAML - so --gitlab renders a job
 template to commit, and --check fails when that file no longer matches the
 compose file.
 
 Run it after the service directories exist. A cacheKey file that is not on
 disk yet hashes to a fixed marker, so the key comes out the same on every run
-and the cache never invalidates — in a workflow that means the plan belongs
+and the cache never invalidates - in a workflow that means the plan belongs
 after corgi init, not before. The command warns when that happens; --strict
 turns the warning into exit 1, and --json reports it as complete: false with
 the files under missingFiles.

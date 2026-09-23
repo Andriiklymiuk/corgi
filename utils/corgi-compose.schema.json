@@ -148,7 +148,7 @@
         "autoSourceEnv": { "type": "boolean", "description": "Toggle the auto `set -a; . <env>; set +a` prefix. Default on." },
         "runner": { "$ref": "#/definitions/runner", "description": "Runner config (e.g. docker)." },
         "tunnel": { "$ref": "#/definitions/tunnel", "description": "Optional public HTTPS tunnel config." },
-        "healthCheck": { "type": "string", "description": "HTTP path used by `corgi status`. Falls back to TCP connect if unset. Must be cheap: it is polled, so an endpoint that does work (a dev server compiling on demand) starves the machine and never settles — put that in warmup instead.", "examples": ["/health"] },
+        "healthCheck": { "type": "string", "description": "HTTP path used by `corgi status`. Falls back to TCP connect if unset. Must be cheap: it is polled, so an endpoint that does work (a dev server compiling on demand) starves the machine and never settles - put that in warmup instead.", "examples": ["/health"] },
         "waitForDatabases": { "type": "boolean", "description": "Gate this service on the database phase. Default true; false starts it alongside the databases (it still gets their env)." },
         "warmup": { "$ref": "#/definitions/warmup", "description": "One expensive request made once the service is listening, before it counts as ready." },
         "profiles": { "type": "array", "items": { "type": "string" }, "description": "Run profiles this service belongs to. `corgi run --profile P` runs only members of P plus their depends_on closure. No profiles = runs only when no --profile is passed.", "examples": [["backend", "full"]] }
@@ -259,7 +259,7 @@
         "workdir": { "type": "string", "description": "Directory the suite lives in, relative to corgi-compose.yml.", "examples": ["./e2e"] },
         "install": { "type": "string", "description": "Optional command to install the suite's dependencies first.", "examples": ["npm ci"] },
         "run": { "type": "string", "description": "Command that runs the suite. Non-zero fails.", "examples": ["npm run e2e"] },
-        "artifacts": { "type": "array", "items": { "type": "string" }, "description": "Paths (relative to workdir) worth keeping when the suite fails — screenshots, traces, reports.", "examples": [["flows/artifacts"]] }
+        "artifacts": { "type": "array", "items": { "type": "string" }, "description": "Paths (relative to workdir) worth keeping when the suite fails - screenshots, traces, reports.", "examples": [["flows/artifacts"]] }
       }
     },
     "runner": {
@@ -279,7 +279,7 @@
             "containerPort": { "type": "integer", "description": "Port inside the container. Defaults to the Dockerfile's first EXPOSE, else the service port." },
             "command": { "type": "string", "description": "Override the image CMD." },
             "composeFile": { "type": "string", "description": "Delegate to a compose file the service repo ships instead of generating one. Mutually exclusive with the build fields (dockerfile/context/target/args/volumes/containerPort/command). Corgi injects its generated env into every container via an override file; ${VAR} in the compose file also interpolates.", "examples": ["./docker-compose.dev.yml"] },
-            "image": { "type": "string", "description": "Run the service straight from a registry image — no repo, no build. Requires port:. Mutually exclusive with dockerfile/composeFile.", "examples": ["nginx:alpine"] },
+            "image": { "type": "string", "description": "Run the service straight from a registry image - no repo, no build. Requires port:. Mutually exclusive with dockerfile/composeFile.", "examples": ["nginx:alpine"] },
             "watch": { "type": "boolean", "description": "Rebuild + restart the container when files in the build context change (docker compose up --watch). Foreground runs only; detached runs skip it." }
           }
         }

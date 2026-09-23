@@ -113,9 +113,9 @@ var agentBriefCmd = &cobra.Command{
 	Long: `A restarted session is a NEW session: the previous conversation, and
 everything it had worked out, is gone.
 
-corgi cannot restore that. What it does keep is the part that survives on disk —
+corgi cannot restore that. What it does keep is the part that survives on disk -
 which branch each repository is on, which hold uncommitted work, and which
-worktrees a cross-repo branch left behind — captured at the moment the old
+worktrees a cross-repo branch left behind - captured at the moment the old
 session ended.
 
 With no argument, every workspace that has one, newest first.`,
@@ -140,7 +140,7 @@ func runAgentBrief(cmd *cobra.Command, args []string) {
 			return
 		}
 		if b == nil {
-			utils.Infof("no brief for %s — it has not restarted since the daemon started\n", args[0])
+			utils.Infof("no brief for %s - it has not restarted since the daemon started\n", args[0])
 			return
 		}
 		printBriefs([]brief.Brief{*b}, false)
@@ -167,7 +167,7 @@ func printBriefs(briefs []brief.Brief, asJSON bool) {
 
 func formatBriefs(briefs []brief.Brief) string {
 	if len(briefs) == 0 {
-		return "no briefs yet — nothing has restarted\n"
+		return "no briefs yet - nothing has restarted\n"
 	}
 	var out strings.Builder
 	for _, b := range briefs {

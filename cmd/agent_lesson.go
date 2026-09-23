@@ -12,7 +12,7 @@ import (
 
 var agentLessonCmd = &cobra.Command{
 	Use:   "lesson",
-	Short: "What this workspace learned the hard way — read by every new session",
+	Short: "What this workspace learned the hard way - read by every new session",
 	Long: `A lesson is one line: the review that said line 40 was wrong, the check
 that stayed red, the rule nobody wrote down. They live in
 <agentDir>/lessons/<workspace>.md, outside the repository, and the SessionStart

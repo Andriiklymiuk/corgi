@@ -396,7 +396,7 @@ func promptSliceField(target reflect.Value, field reflect.StructField, prompt st
 			target.Set(slice)
 		}
 	default:
-		fmt.Printf("(skipping %s — edit corgi-compose.yml directly for this field)\n", field.Name)
+		fmt.Printf("(skipping %s - edit corgi-compose.yml directly for this field)\n", field.Name)
 	}
 }
 

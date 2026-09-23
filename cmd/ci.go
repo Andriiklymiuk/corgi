@@ -31,7 +31,7 @@ GitHub gets .github/workflows/stack-e2e.yml, which installs corgi through the
 official action and reads the cache plan from its outputs.
 
 GitLab gets .gitlab-ci.yml, which includes corgi's published job template, plus
-.gitlab/corgi-cache.yml generated from this compose — GitLab cannot read the
+.gitlab/corgi-cache.yml generated from this compose - GitLab cannot read the
 plan at runtime, so it is committed and guarded by
 ` + "`corgi cache paths --gitlab --check`" + `.
 
@@ -100,7 +100,7 @@ func resolveCIProvider(cmd *cobra.Command) (string, error) {
 		return "gitlab", nil
 	}
 	return "", fmt.Errorf(
-		"could not tell the forge from the git remote (%q) — pass --provider github|gitlab", remote)
+		"could not tell the forge from the git remote (%q) - pass --provider github|gitlab", remote)
 }
 
 var gitOriginURL = func() string {
@@ -130,7 +130,7 @@ func writeCIFiles(provider string, corgi *utils.CorgiCompose, force bool) ([]str
 	if !force {
 		for _, name := range names {
 			if _, err := os.Stat(filepath.Join(utils.CorgiComposePathDir, name)); err == nil {
-				return nil, fmt.Errorf("%s already exists — pass --force to overwrite it", name)
+				return nil, fmt.Errorf("%s already exists - pass --force to overwrite it", name)
 			}
 		}
 	}
@@ -160,12 +160,12 @@ func ciNextSteps(provider string, corgi *utils.CorgiCompose) string {
 			"Call this workflow from each service repo so one branch boots the stack.")
 	}
 	steps = append(steps,
-		"Provide whatever copyEnvFromFilePath points at — those files are\n"+
+		"Provide whatever copyEnvFromFilePath points at - those files are\n"+
 			"     gitignored, so no runner has them. corgi doctor names the missing ones.")
 
 	if corgi.E2E == nil {
 		steps = append(steps,
-			"Declare an e2e: block, or drop the `corgi test --e2e` step — there is\n"+
+			"Declare an e2e: block, or drop the `corgi test --e2e` step - there is\n"+
 				"     no stack-level suite in this compose yet.")
 	}
 

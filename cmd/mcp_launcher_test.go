@@ -30,7 +30,7 @@ func TestLaunchWorkspacesReturnsTheRegistry(t *testing.T) {
 		t.Fatalf("status = %d", rec.Code)
 	}
 	if rec.Header().Get("Cache-Control") != "no-store" {
-		t.Error("the workspace list may carry session URLs — it must not be cached")
+		t.Error("the workspace list may carry session URLs - it must not be cached")
 	}
 	var body struct {
 		Workspaces []launchWorkspace `json:"workspaces"`
@@ -99,10 +99,10 @@ func TestLauncherPageIsSelfContainedAndUsesTheStoredToken(t *testing.T) {
 		t.Error("the launcher must read the device token from localStorage")
 	}
 	if strings.Contains(body, "src=\"http") || strings.Contains(body, "href=\"http") {
-		t.Error("the launcher must be self-contained — no external assets")
+		t.Error("the launcher must be self-contained - no external assets")
 	}
 	if !strings.Contains(body, "safeClaudeUrl(") {
-		t.Error("the session link must be gated by safeClaudeUrl — a scanned URL must be validated before it is clickable")
+		t.Error("the session link must be gated by safeClaudeUrl - a scanned URL must be validated before it is clickable")
 	}
 	if !strings.Contains(body, "noopener") {
 		t.Error("the session link must open with rel=noopener")
@@ -177,7 +177,7 @@ func TestLaunchStateReportsADisabledWorkspace(t *testing.T) {
 		t.Errorf("state = %q, want disabled", got)
 	}
 	if got := launchState(launchWorkspace{Disabled: true, Running: true, Live: 2}); got != "disabled" {
-		t.Errorf("state = %q; disabled outranks a live session — it is the thing to explain", got)
+		t.Errorf("state = %q; disabled outranks a live session - it is the thing to explain", got)
 	}
 }
 
@@ -252,7 +252,7 @@ func TestBuildLaunchWorkspacesSurfacesADiagnostic(t *testing.T) {
 	reg.Upsert(workspace.Workspace{ID: "acme", AbsPath: "/dev/acme", Status: workspace.StatusOK})
 	st := &daemon.Status{
 		Diagnostics: []daemon.WorkspaceDiagnostic{
-			{WorkspaceID: "acme", Warning: "workspace acme is marked sensitive — remote session start is refused"},
+			{WorkspaceID: "acme", Warning: "workspace acme is marked sensitive - remote session start is refused"},
 		},
 	}
 	out := buildLaunchWorkspaces(reg, st)

@@ -32,7 +32,7 @@ func prBodyFor(ctx context.Context, s sessions.Session) (string, error) {
 	asked := firstPromptOf(s)
 	switch {
 	case asked != "" && s.Ticket != "":
-		b.WriteString(s.Ticket + " — " + asked + "\n")
+		b.WriteString(s.Ticket + " - " + asked + "\n")
 	case asked != "":
 		b.WriteString(asked + "\n")
 	case s.Ticket != "":

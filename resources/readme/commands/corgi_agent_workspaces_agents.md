@@ -12,8 +12,8 @@ Sets the agents of one workspace, first choice first.
   corgi agent workspaces agents api codex          # codex alone
   corgi agent workspaces agents --default claude,codex
 
-Every unattended run picks the first agent that can work right now — installed,
-logged in, window not spent — so the first one gets the next run back the
+Every unattended run picks the first agent that can work right now - installed,
+logged in, window not spent - so the first one gets the next run back the
 moment it can. The pick rings your phone once a day when it moves.
 
 ```

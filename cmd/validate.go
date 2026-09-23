@@ -109,10 +109,10 @@ func printValidateHuman(errs, warns []utils.ValidationIssue, strict bool) {
 	case len(errs) > 0:
 		utils.Infof("%s%d error(s), %d warning(s)%s\n", art.RedColor, len(errs), len(warns), art.WhiteColor)
 	case strict && len(warns) > 0:
-		utils.Infof("%s0 errors but %d warning(s) — failing under --strict%s\n", art.YellowColor, len(warns), art.WhiteColor)
+		utils.Infof("%s0 errors but %d warning(s) - failing under --strict%s\n", art.YellowColor, len(warns), art.WhiteColor)
 	case len(warns) > 0:
-		utils.Infof("%s🎉 valid — %d warning(s)%s\n", art.GreenColor, len(warns), art.WhiteColor)
+		utils.Infof("%s🎉 valid - %d warning(s)%s\n", art.GreenColor, len(warns), art.WhiteColor)
 	default:
-		utils.Infof("%s🎉 valid — no issues%s\n", art.GreenColor, art.WhiteColor)
+		utils.Infof("%s🎉 valid - no issues%s\n", art.GreenColor, art.WhiteColor)
 	}
 }

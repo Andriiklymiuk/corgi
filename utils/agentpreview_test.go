@@ -110,7 +110,7 @@ func TestReapRemovesPreviewsWhoseProcessIsGone(t *testing.T) {
 	}
 
 	if len(reaped) != 1 {
-		t.Fatalf("reaped %d, want 1 — a dead tunnel must not linger in the store", len(reaped))
+		t.Fatalf("reaped %d, want 1 - a dead tunnel must not linger in the store", len(reaped))
 	}
 	after, _ := LoadPreviews(dir)
 	if len(after.Previews) != 0 {
@@ -148,7 +148,7 @@ func TestReapTearsDownAnIdlePreview(t *testing.T) {
 	}
 
 	if len(reaped) != 1 {
-		t.Fatalf("reaped %d, want 1 — a forgotten preview is a public URL onto seeded data", len(reaped))
+		t.Fatalf("reaped %d, want 1 - a forgotten preview is a public URL onto seeded data", len(reaped))
 	}
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) && PidAlive(p.PID, "") {
@@ -208,7 +208,7 @@ func TestPreviewStateReflectsALostTunnel(t *testing.T) {
 	refreshPreviewFromLog(p)
 
 	if p.State != PreviewStopped {
-		t.Errorf("state = %q, want %q — a dead tunnel must not still read as ready", p.State, PreviewStopped)
+		t.Errorf("state = %q, want %q - a dead tunnel must not still read as ready", p.State, PreviewStopped)
 	}
 	if p.Error == "" {
 		t.Error("a stopped preview should say why")
@@ -369,7 +369,7 @@ func TestStartPreviewRecordsAndReusesTheSameTunnel(t *testing.T) {
 	}
 
 	if second.PID != first.PID {
-		t.Error("a second request for the same service must reuse the live tunnel — a new one would hand the user a different URL for the same thing")
+		t.Error("a second request for the same service must reuse the live tunnel - a new one would hand the user a different URL for the same thing")
 	}
 	store, _ := LoadPreviews(dir)
 	if len(store.Previews) != 1 {

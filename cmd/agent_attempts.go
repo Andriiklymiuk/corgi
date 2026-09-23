@@ -74,9 +74,9 @@ var agentAttemptsCmd = &cobra.Command{
 	Use:   "attempts [ref]",
 	Short: "Compare the sessions a fan-out opened on a ticket, and pick one",
 	Long: `corgi agent watch work ABC-123 --attempts 3 opens three sessions on the
-ticket, a worktree each. This puts them side by side — status, what each
+ticket, a worktree each. This puts them side by side - status, what each
 built, whether its tests and the workspace's done-when passed, what it cost,
-the pull request it opened — and picks one:
+the pull request it opened - and picks one:
 
   corgi agent attempts                 every fan-out on the board
   corgi agent attempts ABC-123
@@ -170,7 +170,7 @@ func pickCommands(g AttemptGroup, n string) []command.Command {
 		if a.Status == string(sessions.StatusWorking) {
 			out = append(out, command.Command{Action: command.ActionInterrupt, SessionID: a.Session, Source: "cli"})
 		}
-		out = append(out, command.Command{Action: command.ActionNote, SessionID: a.Session, Note: "not picked — attempt " + n + " was", Source: "cli"})
+		out = append(out, command.Command{Action: command.ActionNote, SessionID: a.Session, Note: "not picked - attempt " + n + " was", Source: "cli"})
 	}
 	return out
 }

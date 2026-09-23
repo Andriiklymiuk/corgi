@@ -19,7 +19,7 @@ var docsCheckCmd = &cobra.Command{
 	Short: "Docs that mention what the diff changed, and pointers that no longer land",
 	Long: `Reads the stack's changed surface (exported symbols, routes, contracts,
 migrations, config) against a base branch, then finds every Markdown file that
-names one of them — those are the docs to re-read. Also checks the file:line
+names one of them - those are the docs to re-read. Also checks the file:line
 pointers in CLAUDE.md, AGENTS.md and .claude/rules against the tree.
 
   corgi docs check
@@ -213,7 +213,7 @@ func printDocsReport(r docsReport) {
 		return
 	}
 	if len(r.Mentions) > 0 {
-		fmt.Printf("Docs that name what the diff changed (%d) — re-read these:\n", len(r.Mentions))
+		fmt.Printf("Docs that name what the diff changed (%d) - re-read these:\n", len(r.Mentions))
 		for _, m := range r.Mentions {
 			fmt.Printf("  %s:%d  `%s` (%s %s in %s)\n", m.Doc, m.Line, m.Name, m.Op, m.Kind, m.Path)
 		}
@@ -221,7 +221,7 @@ func printDocsReport(r docsReport) {
 	if len(r.StalePointers) > 0 {
 		fmt.Printf("Pointers that no longer land (%d):\n", len(r.StalePointers))
 		for _, p := range r.StalePointers {
-			fmt.Printf("  %s:%d  %s — %s\n", p.Doc, p.Line, p.Pointer, p.Why)
+			fmt.Printf("  %s:%d  %s - %s\n", p.Doc, p.Line, p.Pointer, p.Why)
 		}
 	}
 }

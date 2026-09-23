@@ -21,11 +21,11 @@ corgi agent restart [flags]
       --fresh                                   Replace a corgi MCP already holding the port: new tunnel + a new single-use pairing window (a phone mid-session on the old URL is cut)
   -h, --help                                    help for restart
       --http string                             Local MCP address. Use 0.0.0.0:8765 to also serve phones on the same Wi-Fi, which needs no tunnel at all (default "127.0.0.1:8765")
-      --pair-code corgi agent pair --mint       Open the first pairing window on this code instead of a random one — minted earlier with corgi agent pair --mint, so a phone prepared ahead of time can pair a headless daemon nobody types on
-      --pair-ttl duration                       How long the --pair-code window stays open (default 10m, at most 24h) — room for a slow boot
+      --pair-code corgi agent pair --mint       Open the first pairing window on this code instead of a random one - minted earlier with corgi agent pair --mint, so a phone prepared ahead of time can pair a headless daemon nobody types on
+      --pair-ttl duration                       How long the --pair-code window stays open (default 10m, at most 24h) - room for a slow boot
       --provider string                         Tunnel provider (cloudflared|ngrok|localtunnel)
       --tunnel-hostname string                  Public hostname of the named tunnel, e.g. corgi.yourdomain.com (the DNS name routed to it; ngrok: your free static domain). Remembered for the next up/restart; pass "" to go back to a quick tunnel
-      --tunnel-name cloudflared tunnel create   cloudflared named-tunnel name — a stable public URL you can bookmark, and a phone that stays paired (needs a one-time cloudflared tunnel create and --tunnel-hostname; see docs/agent.md)
+      --tunnel-name cloudflared tunnel create   cloudflared named-tunnel name - a stable public URL you can bookmark, and a phone that stays paired (needs a one-time cloudflared tunnel create and --tunnel-hostname; see docs/agent.md)
       --viewer                                  The pairing window this opens hands out a read-only token: a teammate's phone sees the board, the inbox and the brief, never a transcript, never a button (with --fresh to reopen a window)
 ```
 

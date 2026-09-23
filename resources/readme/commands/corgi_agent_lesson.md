@@ -2,7 +2,7 @@
 
 ## corgi agent lesson
 
-What this workspace learned the hard way — read by every new session
+What this workspace learned the hard way - read by every new session
 
 ### Synopsis
 

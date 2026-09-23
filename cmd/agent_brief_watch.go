@@ -91,7 +91,7 @@ func runAgentWhileAway(cmd *cobra.Command, _ []string) {
 func printWhileAway(rep awayReport) {
 	fmt.Printf("Since %s\n", rep.Since.Local().Format("Mon 2 Jan 15:04"))
 	if len(rep.Arrived)+len(rep.Opened)+len(rep.Failed)+len(rep.Waiting)+len(rep.Deferred) == 0 {
-		fmt.Println("  nothing arrived, and corgi did nothing on its own — a quiet one")
+		fmt.Println("  nothing arrived, and corgi did nothing on its own - a quiet one")
 		return
 	}
 	block := func(title string, lines []awayLine) {

@@ -74,7 +74,7 @@ func TestDefaultSessionNameDropsTheBranchWhenThereIsNoRoom(t *testing.T) {
 	got := defaultSessionName(id, dir, "", time.Date(2026, 9, 3, 18, 55, 0, 0, time.UTC))
 
 	if want := id + " · 18:55"; got != want {
-		t.Errorf("name = %q, want %q — a branch stub identifies nothing", got, want)
+		t.Errorf("name = %q, want %q - a branch stub identifies nothing", got, want)
 	}
 	if n := len([]rune(got)); n > maxSessionNameLen {
 		t.Errorf("name is %d runes, want at most %d", n, maxSessionNameLen)

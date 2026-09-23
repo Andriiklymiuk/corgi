@@ -120,7 +120,7 @@ func TestPairEndpointServesThePairPageOnGet(t *testing.T) {
 		t.Error("the pair page must ask for a device name and read the code from the URL fragment")
 	}
 	if strings.Contains(body, session.Code()) {
-		t.Error("the pairing code must never be server-rendered into the page — it arrives only via the QR fragment")
+		t.Error("the pairing code must never be server-rendered into the page - it arrives only via the QR fragment")
 	}
 }
 
@@ -269,7 +269,7 @@ func TestBearerAuthRejectsARevokedDevice(t *testing.T) {
 	h.ServeHTTP(rec, req)
 
 	if reached {
-		t.Fatal("a revoked device must lose access immediately — a lost phone is the whole reason revocation exists")
+		t.Fatal("a revoked device must lose access immediately - a lost phone is the whole reason revocation exists")
 	}
 	if rec.Code != http.StatusUnauthorized {
 		t.Errorf("status = %d, want 401", rec.Code)

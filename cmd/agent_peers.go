@@ -18,7 +18,7 @@ import (
 
 // Two laptops on the same trackers: they pair with each other the way a
 // phone pairs with one, pulse each other every minute, and for every
-// tracker both watch, one leads — it fixes and rings, the other stays quiet
+// tracker both watch, one leads - it fixes and rings, the other stays quiet
 // until the leader goes silent. The phone introduces them on its own the
 // moment it holds both; these commands do it by hand.
 
@@ -263,7 +263,7 @@ func launchPeersHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		writeLaunchJSON(w, map[string]any{"me": peers.Me(), "lead": store.Lead, "peers": list})
 	case http.MethodPost:
-		// {lead: true|false} — this laptop asks to lead the trackers it shares.
+		// {lead: true|false} - this laptop asks to lead the trackers it shares.
 		if device, ok := authorizedDeviceFull(pairing.StorePath(dir), r.Header.Get("Authorization")); ok && device.Peer() {
 			writeLaunchError(w, http.StatusForbidden, "a peer laptop does not set the lead here")
 			return
@@ -409,7 +409,7 @@ func launchPeersPulseHandler(w http.ResponseWriter, r *http.Request) {
 func peersText(dir string) string {
 	store, err := peers.Load(peers.Path(dir))
 	if err != nil || len(store.Peers) == 0 {
-		return "no peer laptops — pair the phone with both and it introduces them"
+		return "no peer laptops - pair the phone with both and it introduces them"
 	}
 	now := time.Now()
 	var b strings.Builder
@@ -449,7 +449,7 @@ func checkPeers(dir string) agentCheck {
 	const name = "peers"
 	store, err := peers.Load(peers.Path(dir))
 	if err != nil || len(store.Peers) == 0 {
-		return agentCheck{Name: name, OK: true, Detail: "no peer laptops — this one acts alone"}
+		return agentCheck{Name: name, OK: true, Detail: "no peer laptops - this one acts alone"}
 	}
 	now := time.Now()
 	var awake, silent, unwell []string
@@ -475,7 +475,7 @@ func checkPeers(dir string) agentCheck {
 	}
 	if me := LocalPulseUnwell(dir); me != "" {
 		c.OK = false
-		c.Detail += " — and this laptop cannot run fixes (" + me + ")"
+		c.Detail += " - and this laptop cannot run fixes (" + me + ")"
 		c.Fix = "claude → /login here, or wait for the window to reset"
 	}
 	return c

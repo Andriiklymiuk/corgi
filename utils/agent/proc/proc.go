@@ -87,7 +87,7 @@ func isClaude(name string) bool {
 	return base == "claude" || base == "codex" || base == "node" || base == "bun"
 }
 
-// HarnessOf names the coding agent a process is — "claude", "codex" — or
+// HarnessOf names the coding agent a process is - "claude", "codex" - or
 // "" when it is neither.
 func HarnessOf(p Process) string {
 	base := filepath.Base(p.Name)

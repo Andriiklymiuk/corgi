@@ -19,7 +19,7 @@ func TestTheMachineStaysAwakeForASessionCorgiDidNotStart(t *testing.T) {
 
 	for _, quiet := range []sessions.Status{sessions.StatusDone, sessions.StatusStale, sessions.StatusNeedsInput, sessions.StatusGone} {
 		if anyWorking([]sessions.Session{{ID: "s", Status: quiet}}) {
-			t.Errorf("%s is not mid-turn — waiting on a person is not work", quiet)
+			t.Errorf("%s is not mid-turn - waiting on a person is not work", quiet)
 		}
 	}
 	if !anyWorking([]sessions.Session{

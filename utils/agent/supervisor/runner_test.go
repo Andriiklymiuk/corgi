@@ -92,7 +92,7 @@ func TestRunnerRestartsAfterNetworkTimeout(t *testing.T) {
 	<-done
 
 	if *calls < 2 {
-		t.Errorf("started %d processes, want at least 2 — a network timeout must be restarted", *calls)
+		t.Errorf("started %d processes, want at least 2 - a network timeout must be restarted", *calls)
 	}
 	mu.Lock()
 	defer mu.Unlock()
@@ -115,7 +115,7 @@ func TestRunnerStopsOnAuthFailureWithoutLooping(t *testing.T) {
 	}
 
 	if *calls != 1 {
-		t.Errorf("started %d processes, want 1 — retrying cannot produce credentials", *calls)
+		t.Errorf("started %d processes, want 1 - retrying cannot produce credentials", *calls)
 	}
 	if state := r.State(); !state.Disabled {
 		t.Error("the workspace must be marked disabled so doctor can explain it")
@@ -135,7 +135,7 @@ func TestRunnerGivesUpAfterRepeatedStartupFailures(t *testing.T) {
 	}
 
 	if *calls > MaxStartupFailures {
-		t.Errorf("started %d processes, want at most %d — a crash loop must stop", *calls, MaxStartupFailures)
+		t.Errorf("started %d processes, want at most %d - a crash loop must stop", *calls, MaxStartupFailures)
 	}
 	if !r.State().Disabled {
 		t.Error("persistent startup failure must disable the workspace")
@@ -156,7 +156,7 @@ func TestRunnerStopsWhenContextCancelled(t *testing.T) {
 	select {
 	case <-done:
 	case <-time.After(5 * time.Second):
-		t.Fatal("Run() did not return after cancellation — the supervisor would block shutdown")
+		t.Fatal("Run() did not return after cancellation - the supervisor would block shutdown")
 	}
 	if r.State().Running {
 		t.Error("state must not still claim to be running after shutdown")
@@ -340,7 +340,7 @@ func TestStopKeepsItStopped(t *testing.T) {
 		t.Fatal("Run() should return after Stop()")
 	}
 	if got := *calls; got != 1 {
-		t.Errorf("started %d processes, want 1 — Stop must not be undone by a restart", got)
+		t.Errorf("started %d processes, want 1 - Stop must not be undone by a restart", got)
 	}
 }
 
@@ -371,7 +371,7 @@ func TestStopDuringBackoffDoesNotStartAgain(t *testing.T) {
 		t.Fatal("Stop() during a backoff must end the loop")
 	}
 	if got := *calls; got != 1 {
-		t.Errorf("started %d processes, want 1 — Stop must not be followed by another start", got)
+		t.Errorf("started %d processes, want 1 - Stop must not be followed by another start", got)
 	}
 }
 
@@ -534,7 +534,7 @@ func TestSupervisingReportsStopAndDisable(t *testing.T) {
 	}
 	r.Stop()
 	if r.Supervising() {
-		t.Error("a stopped runner must not report itself supervising — a restart needs a fresh runner")
+		t.Error("a stopped runner must not report itself supervising - a restart needs a fresh runner")
 	}
 }
 
@@ -554,7 +554,7 @@ func TestStopBetweenStartAndMarkRunningDoesNotOrphanTheProcess(t *testing.T) {
 	select {
 	case <-done:
 	case <-time.After(3 * time.Second):
-		t.Fatal("Run never returned — the just-started process was orphaned in Wait()")
+		t.Fatal("Run never returned - the just-started process was orphaned in Wait()")
 	}
 	select {
 	case <-proc.stopped:
@@ -646,7 +646,7 @@ func TestSetSessionURLIgnoresARepeat(t *testing.T) {
 	r.setSessionURL("https://claude.ai/code/x")
 	r.setSessionURL("https://claude.ai/code/y")
 	if changes != 2 {
-		t.Errorf("OnChange fired %d times, want 2 — a repeated URL must not notify again", changes)
+		t.Errorf("OnChange fired %d times, want 2 - a repeated URL must not notify again", changes)
 	}
 	if r.State().SessionURL != "https://claude.ai/code/y" {
 		t.Errorf("sessionURL = %q", r.State().SessionURL)

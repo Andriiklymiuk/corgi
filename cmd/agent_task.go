@@ -17,8 +17,8 @@ import (
 var agentTaskCmd = &cobra.Command{
 	Use:   "task",
 	Short: "Tasks of your own on the board: add one for later, pick it up, move it along",
-	Long: `A task is a ticket you write yourself — a title, a description, the
-workspace it is for — kept on this machine and shown on the same board as the
+	Long: `A task is a ticket you write yourself - a title, a description, the
+workspace it is for - kept on this machine and shown on the same board as the
 tracker's tickets: the inbox, the Board tab, the page, the menu bar. It goes
 through Todo, Doing, Review, Done (or Canceled), and nothing about it reaches
 a tracker.
@@ -85,7 +85,7 @@ var agentTaskListCmd = &cobra.Command{
 			return
 		}
 		if len(tasks) == 0 {
-			fmt.Println("no tasks — corgi agent task add \"…\"")
+			fmt.Println("no tasks - corgi agent task add \"…\"")
 			return
 		}
 		for _, col := range watch.TaskColumns {

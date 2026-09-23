@@ -21,9 +21,9 @@ func TestReviewsOnEveryPullRequestOfAStoryAreOneRun(t *testing.T) {
 	d.startWatches(context.Background())
 	t.Cleanup(func() { d.runs.Wait() })
 
-	d.handleWatchEvent(context.Background(), watch.Event{Key: "github:acme/api#526:r1", Kind: watch.KindPRComment, Ref: "acme/api#526", URL: "https://github.com/acme/api/pull/526", Title: "Premium frequency [ABC-1500]", Body: "## Code review — ABC-1500 · api #526\n\n**Verdict: REQUEST_CHANGES — 2 blockers.**", Author: "reviewer", Mine: true})
+	d.handleWatchEvent(context.Background(), watch.Event{Key: "github:acme/api#526:r1", Kind: watch.KindPRComment, Ref: "acme/api#526", URL: "https://github.com/acme/api/pull/526", Title: "Premium frequency [ABC-1500]", Body: "## Code review - ABC-1500 · api #526\n\n**Verdict: REQUEST_CHANGES - 2 blockers.**", Author: "reviewer", Mine: true})
 	time.Sleep(50 * time.Millisecond)
-	d.handleWatchEvent(context.Background(), watch.Event{Key: "github:acme/web#455:r1", Kind: watch.KindPRComment, Ref: "acme/web#455", URL: "https://github.com/acme/web/pull/455", Title: "Premium frequency [ABC-1500]", Body: "## Code review — ABC-1500 · web #455\n\n**Verdict: REQUEST_CHANGES — 1 blocker.**", Author: "reviewer", Mine: true})
+	d.handleWatchEvent(context.Background(), watch.Event{Key: "github:acme/web#455:r1", Kind: watch.KindPRComment, Ref: "acme/web#455", URL: "https://github.com/acme/web/pull/455", Title: "Premium frequency [ABC-1500]", Body: "## Code review - ABC-1500 · web #455\n\n**Verdict: REQUEST_CHANGES - 1 blocker.**", Author: "reviewer", Mine: true})
 
 	collectNotes(t, notes, "fixed acme/api#526 + acme/web#455")
 	runs := fakeRuns(ran)

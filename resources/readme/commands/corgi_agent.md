@@ -12,7 +12,7 @@ Remote Control already gives you a phone-driven Claude Code session on your own
 machine. Two things stop it being always-on: the local process must keep
 running, and it exits after roughly ten minutes awake without network.
 
-corgi agent supervises it — restarting after a network timeout, holding a wake
+corgi agent supervises it - restarting after a network timeout, holding a wake
 lock so the machine does not sleep mid-session, and running one per workspace
 under that workspace's own Claude config directory.
 
@@ -71,7 +71,7 @@ Getting started:
 * [corgi agent digest](corgi_agent_digest)	 - Today's one-message summary, as the daily digest would send it
 * [corgi agent dismiss](corgi_agent_dismiss)	 - Take a finished session off the board until its next event
 * [corgi agent doctor](corgi_agent_doctor)	 - Check whether agent mode can actually work here
-* [corgi agent down](corgi_agent_down)	 - Stop everything `corgi agent up` started — the daemon and the detached MCP + tunnel
+* [corgi agent down](corgi_agent_down)	 - Stop everything `corgi agent up` started - the daemon and the detached MCP + tunnel
 * [corgi agent event](corgi_agent_event)	 - Report one event from an agent that is not Claude Code, so it sits on the board
 * [corgi agent focus](corgi_agent_focus)	 - Bring a session's window to the front and reveal its terminal tab
 * [corgi agent guard](corgi_agent_guard)	 - A pre-push hook that refuses a branch whose session's gate or tests are red
@@ -80,16 +80,16 @@ Getting started:
 * [corgi agent hooks](corgi_agent_hooks)	 - Get notified when a session in this workspace needs you
 * [corgi agent init](corgi_agent_init)	 - Opt this stack into agent mode
 * [corgi agent install](corgi_agent_install)	 - Start agent mode at login (launchd on macOS, systemd on Linux)
-* [corgi agent interrupt](corgi_agent_interrupt)	 - Stop what a session is doing — Escape, as you would press it
+* [corgi agent interrupt](corgi_agent_interrupt)	 - Stop what a session is doing - Escape, as you would press it
 * [corgi agent kanban](corgi_agent_kanban)	 - One card per ticket: Inbox, Ready, Running, Blocked, Review, Done
-* [corgi agent lesson](corgi_agent_lesson)	 - What this workspace learned the hard way — read by every new session
+* [corgi agent lesson](corgi_agent_lesson)	 - What this workspace learned the hard way - read by every new session
 * [corgi agent logs](corgi_agent_logs)	 - Show a workspace's session timeline (starts, exits, why)
-* [corgi agent mute](corgi_agent_mute)	 - Nothing rings for a while — no toast, no push; the board goes on
+* [corgi agent mute](corgi_agent_mute)	 - Nothing rings for a while - no toast, no push; the board goes on
 * [corgi agent new](corgi_agent_new)	 - Open a new agent session (Claude Code, or codex with --agent) in the editor window in front
 * [corgi agent note](corgi_agent_note)	 - Put your own line under a session on the board
 * [corgi agent notify](corgi_agent_notify)	 - Where notifications go when you are away from this machine
 * [corgi agent page](corgi_agent_page)	 - Turn the board's overflow page when more sessions run than keys
-* [corgi agent pair](corgi_agent_pair)	 - Open a fresh pairing window and print its QR — or write a .corgipair file to AirDrop
+* [corgi agent pair](corgi_agent_pair)	 - Open a fresh pairing window and print its QR - or write a .corgipair file to AirDrop
 * [corgi agent peers](corgi_agent_peers)	 - The other laptops on your trackers: who leads, who is awake
 * [corgi agent pin](corgi_agent_pin)	 - Reserve a key for the session on it (--off to release)
 * [corgi agent plan](corgi_agent_plan)	 - A planner breaks a goal into tasks on the board; the daemon works through them, a worktree each
@@ -114,17 +114,17 @@ Getting started:
 * [corgi agent stream](corgi_agent_stream)	 - Which workspaces a paired phone may read as a conversation
 * [corgi agent task](corgi_agent_task)	 - Tasks of your own on the board: add one for later, pick it up, move it along
 * [corgi agent timeline](corgi_agent_timeline)	 - What happened in a session, in order: prompts, tool bursts, tests, the pull request and its reviews
-* [corgi agent today](corgi_agent_today)	 - What has been done today — yours and the watch's
+* [corgi agent today](corgi_agent_today)	 - What has been done today - yours and the watch's
 * [corgi agent top](corgi_agent_top)	 - The board in the terminal, live: every session, its standing, what it is doing
 * [corgi agent track](corgi_agent_track)	 - Track every Claude Code session on this machine for a Stream Deck or the CLI
 * [corgi agent transcript](corgi_agent_transcript)	 - A session's conversation: the newest entries, or everything after an offset
 * [corgi agent tunnel](corgi_agent_tunnel)	 - Set up the permanent launcher URL
-* [corgi agent turn](corgi_agent_turn)	 - One more turn for a session whose terminal is gone — claude -p --resume, or codex exec resume
+* [corgi agent turn](corgi_agent_turn)	 - One more turn for a session whose terminal is gone - claude -p --resume, or codex exec resume
 * [corgi agent undo](corgi_agent_undo)	 - Drop what a session left uncommitted in its own worktree; --worktree drops the worktree and its branch too
 * [corgi agent uninstall](corgi_agent_uninstall)	 - Stop starting agent mode at login
 * [corgi agent up](corgi_agent_up)	 - One command from a stack directory to phone-startable: register, daemon, tunnel, pairing
 * [corgi agent usage](corgi_agent_usage)	 - Every account's limits, where they are heading, and today's numbers
-* [corgi agent watch](corgi_agent_watch)	 - Watch the tracker and your pull requests: new issues, new comments, reviews — notify, or fix
+* [corgi agent watch](corgi_agent_watch)	 - Watch the tracker and your pull requests: new issues, new comments, reviews - notify, or fix
 * [corgi agent while-away](corgi_agent_while-away)	 - What happened while you were gone
 * [corgi agent windows](corgi_agent_windows)	 - List the editor windows the corgi VS Code extension has connected
 * [corgi agent workspaces](corgi_agent_workspaces)	 - List and manage the workspaces agent mode knows about

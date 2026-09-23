@@ -88,14 +88,14 @@ func runAgentWatchReplay(cmd *cobra.Command, _ []string) {
 		return
 	}
 	if len(rows) == 0 {
-		fmt.Printf("Nothing recorded since %s — the watch has seen no events to replay.\n",
+		fmt.Printf("Nothing recorded since %s - the watch has seen no events to replay.\n",
 			since.Local().Format("Mon 2 Jan 15:04"))
 		return
 	}
 	fmt.Printf("Since %s, with the rules as they are now\n", since.Local().Format("Mon 2 Jan 15:04"))
 	for _, id := range sortedKeys(rows) {
 		list := rows[id]
-		fmt.Printf("\n%s — %s\n", id, replayTally(list))
+		fmt.Printf("\n%s - %s\n", id, replayTally(list))
 		for _, r := range list {
 			if r.Would == "ignored" {
 				continue
@@ -103,7 +103,7 @@ func runAgentWatchReplay(cmd *cobra.Command, _ []string) {
 			fmt.Printf("  %-10s %-14s %s\n", r.Would, r.Kind, r.Ref)
 		}
 		if n := countWould(list, "ignored"); n > 0 {
-			fmt.Printf("  %-10s %d — run with --json to see each reason\n", "ignored", n)
+			fmt.Printf("  %-10s %d - run with --json to see each reason\n", "ignored", n)
 		}
 	}
 	fmt.Println("\nCaps and quiet hours are not replayed: they depend on when a run started,")

@@ -332,7 +332,7 @@ func (r *Runner) runOnce(ctx context.Context, alwaysAwake bool) (Exit, error) {
 const unknownOptionMarker = "unknown option"
 
 const unsupportedFlagNote = "this Claude Code predates " + DeviceOnlyFlag +
-	" — a session is opened in the checkout at every start; update Claude Code to stop that"
+	" - a session is opened in the checkout at every start; update Claude Code to stop that"
 
 func flagUnsupported(output, flag string) bool {
 	lower := strings.ToLower(output)

@@ -428,7 +428,7 @@ func TestNotifierCheckSaysWhenNothingWillShow(t *testing.T) {
 	}
 	c := notifierCheck(false, "")
 	if !c.OK || !strings.Contains(c.Fix, "corgi agent notify telegram") {
-		t.Fatalf("with nothing: %+v — must stay green and point at Telegram", c)
+		t.Fatalf("with nothing: %+v - must stay green and point at Telegram", c)
 	}
 }
 

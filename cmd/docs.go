@@ -116,7 +116,7 @@ var serviceItems = []CorgiComposeItems{
 		item:        "waitForDatabases",
 		example:     "false",
 		itemType:    "boolean",
-		description: "Whether this service waits for the database phase before starting. Default true.\n\t\t\tSet false for a service that only needs the databases' env — a bundler that\n\t\t\tspends a minute compiling can do it while the databases come up. Its\n\t\t\tdepends_on_db entries still supply env; only the wait is skipped, so a\n\t\t\tservice whose beforeStart talks to a database must keep the default.",
+		description: "Whether this service waits for the database phase before starting. Default true.\n\t\t\tSet false for a service that only needs the databases' env - a bundler that\n\t\t\tspends a minute compiling can do it while the databases come up. Its\n\t\t\tdepends_on_db entries still supply env; only the wait is skipped, so a\n\t\t\tservice whose beforeStart talks to a database must keep the default.",
 	},
 	{
 		item:        "depends_on_db",
@@ -293,7 +293,7 @@ var dbServiceItems = []CorgiComposeItems{
 		item:        "inbucketPort",
 		example:     "54324",
 		itemType:    "int",
-		description: "supabase driver only. Override the local email capture port — [local_smtp].port, or [inbucket].port on CLI older than 2.109. Patched on every up. Default 54324.",
+		description: "supabase driver only. Override the local email capture port - [local_smtp].port, or [inbucket].port on CLI older than 2.109. Patched on every up. Default 54324.",
 	},
 	{
 		item:        "healthCheck",

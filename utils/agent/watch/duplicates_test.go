@@ -101,7 +101,7 @@ func TestIgnoringIsNotTheSameAsHavingBeenSeen(t *testing.T) {
 
 	s.MarkSeen("jira:ABC-1")
 	if s.IsIgnored("jira:ABC-1") {
-		t.Fatal("delivering an event is not dismissing it — this is what emptied the inbox")
+		t.Fatal("delivering an event is not dismissing it - this is what emptied the inbox")
 	}
 
 	if err := s.Ignore("jira:ABC-1"); err != nil {

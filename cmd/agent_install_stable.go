@@ -145,7 +145,7 @@ func checkDaemonBinaryPath() agentCheck {
 	if program != stable {
 		return agentCheck{
 			Name:   checkDaemonBinary,
-			Detail: fmt.Sprintf("the login service runs %s — a path that changes with every update, so macOS asks for Documents access again after each one", program),
+			Detail: fmt.Sprintf("the login service runs %s - a path that changes with every update, so macOS asks for Documents access again after each one", program),
 			Fix:    "`corgi agent install` moves the daemon to a stable copy; one prompt, then never again",
 		}
 	}
@@ -162,7 +162,7 @@ func checkDaemonBinaryPath() agentCheck {
 	if same, err := sameFileContent(self, stable); err == nil && !same {
 		return agentCheck{
 			Name:   checkDaemonBinary,
-			Detail: "the daemon's copy is not the corgi you are running — it was installed before the last update",
+			Detail: "the daemon's copy is not the corgi you are running - it was installed before the last update",
 			Fix:    "`corgi agent install` refreshes the copy and restarts the daemon",
 		}
 	}

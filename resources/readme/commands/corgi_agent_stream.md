@@ -6,8 +6,8 @@ Which workspaces a paired phone may read as a conversation
 
 ### Synopsis
 
-A paired phone can show a session as a chat — your prompts, Claude's
-words, every tool call and result — for sessions in the workspaces listed
+A paired phone can show a session as a chat - your prompts, Claude's
+words, every tool call and result - for sessions in the workspaces listed
 here. Nothing streams until you enable a workspace, and nothing is pushed:
 the phone pulls while its chat sheet is open, over the sealed link, and
 the session's row shows an eye while it does. What looks like a secret in

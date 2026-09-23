@@ -14,7 +14,7 @@ e.g. a git worktree. The dir must exist.`,
 		nil,
 		`Run a service on a git branch via a reused worktree under
 corgi_services/.worktrees: --service-branch name=branch (repeatable).
-Non-destructive — the main checkout is untouched. Clean up with: corgi worktree prune.`,
+Non-destructive - the main checkout is untouched. Clean up with: corgi worktree prune.`,
 	)
 	fs.StringArray(
 		"service-checkout",

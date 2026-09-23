@@ -9,9 +9,9 @@ What the last supervised session was working on before it restarted
 A restarted session is a NEW session: the previous conversation, and
 everything it had worked out, is gone.
 
-corgi cannot restore that. What it does keep is the part that survives on disk —
+corgi cannot restore that. What it does keep is the part that survives on disk -
 which branch each repository is on, which hold uncommitted work, and which
-worktrees a cross-repo branch left behind — captured at the moment the old
+worktrees a cross-repo branch left behind - captured at the moment the old
 session ended.
 
 With no argument, every workspace that has one, newest first.

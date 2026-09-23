@@ -91,7 +91,7 @@ func validateRunnerConfig(s Service, dockerFlag bool) error {
 	}
 	if s.Runner.Image != "" && s.Port == 0 {
 		return fmt.Errorf(
-			"service %s: runner.image needs `port:` — there is no Dockerfile to read EXPOSE from",
+			"service %s: runner.image needs `port:` - there is no Dockerfile to read EXPOSE from",
 			s.ServiceName)
 	}
 	if s.Runner.Dockerfile != "" && !dockerfileExists(s) &&
@@ -114,7 +114,7 @@ func deriveRunnerMode(s Service, dockerFlag, announce bool) (Service, error) {
 			s = flipped
 		}
 	case len(s.Start) == 0 && src != SourceNone:
-		if flipped, ok := tryDockerFlip(s, src, announce, "no start scripts —"); ok {
+		if flipped, ok := tryDockerFlip(s, src, announce, "no start scripts -"); ok {
 			s = flipped
 		}
 	case len(s.Start) == 0 && s.Port != 0:
@@ -147,7 +147,7 @@ func tryDockerFlip(s Service, src DockerSource, announce bool, why string) (Serv
 	if src == SourceDockerfile {
 		if err := resolveDockerPortDefaults(&flipped, announce); err != nil {
 			if announce {
-				Info(fmt.Sprintf("%s: found a Dockerfile but no port — add `port:` or an EXPOSE line to run it in docker", s.ServiceName))
+				Info(fmt.Sprintf("%s: found a Dockerfile but no port - add `port:` or an EXPOSE line to run it in docker", s.ServiceName))
 			}
 			return s, false
 		}
@@ -173,7 +173,7 @@ func resolveDockerPortDefaults(s *Service, announce bool) error {
 		}
 	}
 	return fmt.Errorf(
-		"service %s: docker mode needs a port — add `port:` in corgi-compose.yml or an EXPOSE line in %s",
+		"service %s: docker mode needs a port - add `port:` in corgi-compose.yml or an EXPOSE line in %s",
 		s.ServiceName, s.DockerfileName())
 }
 

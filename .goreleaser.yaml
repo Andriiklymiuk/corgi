@@ -71,7 +71,7 @@ homebrew_casks:
       zsh: completions/corgi.zsh
       fish: completions/corgi.fish
     # A downloaded binary carries the quarantine flag; unsigned, Gatekeeper
-    # holds it behind a dialog on first run — which for a CLI just looks like a
+    # holds it behind a dialog on first run - which for a CLI just looks like a
     # hang. Signed and notarized builds (docs/release-signing.md) pass without
     # this; it stays harmless for them.
     # Homebrew 5 wants postflight_steps; GoReleaser's hooks still write the
@@ -83,7 +83,7 @@ homebrew_casks:
       end
     caveats: |
       What's new: https://github.com/Andriiklymiuk/corgi/releases/tag/v#{version}
-      Tab completion installed for bash, zsh, fish — if <TAB> shows files: corgi completion zsh --help
+      Tab completion installed for bash, zsh, fish - if <TAB> shows files: corgi completion zsh --help
 
 # Linux packages, attached to the release: `sudo dpkg -i corgi_*.deb`,
 # `sudo rpm -i corgi_*.rpm`, `apk add --allow-untrusted corgi_*.apk`.

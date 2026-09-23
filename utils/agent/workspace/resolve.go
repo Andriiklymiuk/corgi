@@ -36,7 +36,7 @@ func Resolve(r *Registry, query string) Resolution {
 	if normalizedQuery == "" {
 		return Resolution{
 			Candidates: allCandidates(r),
-			Reason:     "no workspace named — say which one",
+			Reason:     "no workspace named - say which one",
 		}
 	}
 
@@ -50,7 +50,7 @@ func Resolve(r *Registry, query string) Resolution {
 	} else if len(exact) > 1 {
 		return Resolution{
 			Candidates: exact,
-			Reason:     "more than one workspace uses that name — pick one",
+			Reason:     "more than one workspace uses that name - pick one",
 		}
 	}
 
@@ -71,7 +71,7 @@ func Resolve(r *Registry, query string) Resolution {
 	default:
 		return Resolution{
 			Candidates: fuzzy,
-			Reason:     strings.TrimSpace(query) + " matched several workspaces — pick one",
+			Reason:     strings.TrimSpace(query) + " matched several workspaces - pick one",
 		}
 	}
 }

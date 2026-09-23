@@ -7,7 +7,7 @@ Report one event from an agent that is not Claude Code, so it sits on the board
 ### Synopsis
 
 The board tracks Claude Code through its hooks. Another agent CLI joins the
-same board by calling this on its own events — from whatever hook, notify or
+same board by calling this on its own events - from whatever hook, notify or
 plugin mechanism it has:
 
   corgi agent event start --agent codex --session $ID
@@ -21,7 +21,7 @@ Codex: in ~/.codex/config.toml set
   notify = ["corgi", "agent", "event", "stop", "--agent", "codex", "--notify"]
 and every finished turn lands on the board (Codex appends its JSON as the last
 argument; --notify reads the thread id, cwd and last message from it).
-Without --session the id is the calling process — fine for an agent that runs
+Without --session the id is the calling process - fine for an agent that runs
 one conversation per process. With - the event is read from stdin as JSON
 (`{session_id, cwd, tool_name, tool_input}`), the shape Claude Code's hooks use.
 The session shows on every surface with the agent's name; a permission with a
@@ -35,7 +35,7 @@ corgi agent event <start|prompt|tool|done|fail|permission|stop|end> [flags]
 ### Options
 
 ```
-      --agent string     The agent's name — codex, gemini, opencode — shown on the board
+      --agent string     The agent's name - codex, gemini, opencode - shown on the board
       --cwd string       The directory the session works in; default: the current one
   -h, --help             help for event
       --input string     The tool's input as JSON ({"command":…}, {"file_path":…}), or a bare command line

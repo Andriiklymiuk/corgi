@@ -10,7 +10,7 @@ Answers "where am I" in a single call: every service and db_service with its
 port and current status, each repo's branch, uncommitted work and ahead/behind
 counts, the active env tier, the declared profiles, and any validation findings.
 
-Built for agents — the same picture that otherwise takes corgi ps, corgi status,
+Built for agents - the same picture that otherwise takes corgi ps, corgi status,
 corgi validate and a git call per repo.
 
 ```

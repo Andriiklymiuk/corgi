@@ -96,7 +96,7 @@ corgi run [flags]
   -s, --seed                           Seed all db_services that have seedSource or have dump.sql / dump.bak or other dump file in their folder
       --service-branch stringArray     Run a service on a git branch via a reused worktree under
                                        corgi_services/.worktrees: --service-branch name=branch (repeatable).
-                                       Non-destructive — the main checkout is untouched. Clean up with: corgi worktree prune.
+                                       Non-destructive - the main checkout is untouched. Clean up with: corgi worktree prune.
       --service-checkout stringArray   Run a service on a git branch by checking it out in place:
                                        --service-checkout name=branch (repeatable). Refuses on a dirty tree; leaves the
                                        repo on that branch afterwards.
@@ -115,7 +115,7 @@ corgi run [flags]
       --tunnel                         Open public HTTPS tunnels alongside the stack for every service that
                                        declares a tunnel: block in corgi-compose.yml. Services whose tunnel
                                        hostname env vars (e.g. ${API_TUNNEL_HOST}) are unset are skipped with
-                                       a warning — corgi run keeps going. Equivalent to running corgi tunnel
+                                       a warning - corgi run keeps going. Equivalent to running corgi tunnel
                                        in a second terminal, but bundled into one process. Auth still
                                        required per provider (e.g. ngrok config add-authtoken).
       --wait                           With --detach: block until every service and database is reachable

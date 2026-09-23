@@ -21,12 +21,12 @@ var agentAwakeCmd = &cobra.Command{
 sessions the laptop sleeps, and a phone tap reaches nothing.
 
   corgi agent awake on     hold the wake lock for the daemon's whole life
-  corgi agent awake --display on   keep the display lit too — no lock screen while it holds
+  corgi agent awake --display on   keep the display lit too - no lock screen while it holds
   corgi agent awake off    back to holding it per session (the default)
   corgi agent awake        what is set now
 
 Off by default: a machine that never sleeps is a flat battery, so it is the
-machine owner's call. On macOS the lock cannot beat a closed lid on battery —
+machine owner's call. On macOS the lock cannot beat a closed lid on battery -
 keep the lid open, or plug in, for a long unattended run.`,
 	Args: cobra.MaximumNArgs(1),
 	Run:  runAgentAwake,
@@ -55,9 +55,9 @@ func runAgentAwake(cmd *cobra.Command, args []string) {
 			exitWithError("agent_awake", err, 1)
 		}
 		if on {
-			utils.Infof("✓ keepDisplay: true in %s — the screen stays lit while the wake lock is held (no lock screen); corgi agent restart\n", path)
+			utils.Infof("✓ keepDisplay: true in %s - the screen stays lit while the wake lock is held (no lock screen); corgi agent restart\n", path)
 		} else {
-			utils.Infof("✓ keepDisplay: false in %s — the display may sleep and lock; corgi agent restart\n", path)
+			utils.Infof("✓ keepDisplay: false in %s - the display may sleep and lock; corgi agent restart\n", path)
 		}
 		return
 	}
@@ -78,7 +78,7 @@ func runAgentAwake(cmd *cobra.Command, args []string) {
 		}
 	} else {
 		utils.Infof("✓ stayAwake: false in %s\n", path)
-		utils.Info("back to a wake lock per session — the machine may sleep between them")
+		utils.Info("back to a wake lock per session - the machine may sleep between them")
 	}
 	utils.Info("run `corgi agent restart` so the running daemon picks it up")
 }
@@ -86,11 +86,11 @@ func runAgentAwake(cmd *cobra.Command, args []string) {
 func printAwakeState(path string) {
 	user, err := config.LoadUser(path)
 	if err != nil || user == nil || !user.StayAwake {
-		utils.Infof("stayAwake is off (%s) — the machine may sleep between sessions\n", path)
+		utils.Infof("stayAwake is off (%s) - the machine may sleep between sessions\n", path)
 		utils.Info("turn it on with `corgi agent awake on`")
 		return
 	}
-	utils.Infof("stayAwake is on (%s) — held for as long as the daemon runs\n", path)
+	utils.Infof("stayAwake is on (%s) - held for as long as the daemon runs\n", path)
 }
 
 func stayAwakeEnabled(dir string) bool {

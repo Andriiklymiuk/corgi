@@ -22,20 +22,20 @@ then:
 
 - **Do the next step instead of describing it.** A reply that ends on "next steps: run X"
   when you could run X is unfinished. So is "want me to continue?", "shall I push?",
-  "should I also fix Y?" when Y is in scope — the request already said yes. The only
+  "should I also fix Y?" when Y is in scope - the request already said yes. The only
   questions are the gates a skill names (spec sign-off, a destructive or shared-state
   action, a secret, someone else's branch, a request with two readings that build
   different things).
 - **A red step is work, not a stopping point.** Read the failure, fix the cause, run it
   again. Hand back only under the skill's Stop rule (about three honest tries, each on a
-  different cause) or a blocker only a person can clear — then name exactly what is
+  different cause) or a blocker only a person can clear - then name exactly what is
   left and the one question.
 - **Every item in the batch.** Five tickets asked for means five handled, each to its own
-  done or its own BLOCKED line — not the first one plus a summary of the rest.
+  done or its own BLOCKED line - not the first one plus a summary of the rest.
 - **Long work is waited for.** A build, a CI run, a deploy runs in the background and is
   polled to its conclusion; "it's running, check later" is not an end.
 - **Evidence before "done".** The PR URL, the green check, the posted comment, the test
-  output — seen, not assumed. Short is fine; unverified is not.
+  output - seen, not assumed. Short is fine; unverified is not.
 - **Report once, at the end.** What was done (with its links), what is blocked (with its
   question), nothing about what you could do next if asked.
 
@@ -44,7 +44,7 @@ then:
 A prompt that carries the trail `corgi watch · <workspace> · <kind> <ref>` is a run the
 daemon started while nobody is at the desk: no one reads it live, no one answers. In that
 run every gate, preview, "warn and ask", "say A or B" or "paste the link" collapses to the
-recommended choice — take it, name it in one line ("chose A: …"), and go on. `--yes` is
+recommended choice - take it, name it in one line ("chose A: …"), and go on. `--yes` is
 implied. A merged or closed PR/MR is skipped with one line, not asked about. The only
 stop is a real blocker (a missing credential, a tool that is not there, a question only
 a person can settle): then `corgi agent handoff --ref <ref> --blocked "<why>"` with the

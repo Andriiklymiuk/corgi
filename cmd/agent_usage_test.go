@@ -344,7 +344,7 @@ func TestDigestText(t *testing.T) {
 	got := digestText(agentD, now)
 	want := strings.Join([]string{
 		"work: 2 sessions, 12 messages, 7 tool calls",
-		"waited on you 2× — median 5m, longest 5m (web)",
+		"waited on you 2× - median 5m, longest 5m (web)",
 		"limits cost 10m",
 		"work: 5h 62%, week 10%",
 	}, "\n")

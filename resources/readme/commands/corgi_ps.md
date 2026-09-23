@@ -6,7 +6,7 @@ Runtime snapshot of declared services and db_services
 
 ### Synopsis
 
-Reports the topology declared in corgi-compose.yml — name, kind, port —
+Reports the topology declared in corgi-compose.yml - name, kind, port -
 and infers running/stopped from a port-listening probe where a port is known.
 
 Unlike a single 'corgi run', 'corgi ps' is a separate process and cannot see

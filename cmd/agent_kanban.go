@@ -311,7 +311,7 @@ func (b *kanbanBoard) placePicks() {
 		if age <= watch.PickFresh {
 			c.Column, c.Why = ColRunning, pickedWhy(p.By, age, "waiting for a session to open")
 		} else if c.Column == ColRunning && c.Kind == string(watch.KindTask) {
-			c.Why = pickedWhy(p.By, age, "no session came — Work on it again")
+			c.Why = pickedWhy(p.By, age, "no session came - Work on it again")
 		}
 	}
 }
@@ -523,7 +523,7 @@ func gatherKanban(dir, onlyWorkspace string, now time.Time) []KanbanCard {
 var agentKanbanCmd = &cobra.Command{
 	Use:   "kanban",
 	Short: "One card per ticket: Inbox, Ready, Running, Blocked, Review, Done",
-	Long: `The board corgi derives from what it knows — the inbox, the unattended runs,
+	Long: `The board corgi derives from what it knows - the inbox, the unattended runs,
 the sessions on each branch, the handoffs, the tracker's own columns. A card
 is Running because a run or a session is on it, Review because a pull request
 is open, Blocked because the breaker tripped or a run said so, Ready because
@@ -631,7 +631,7 @@ func sessionWhy(c *CardSess, s sessions.Session) string {
 	case sessions.StatusWorking:
 		return kanbanSessionWord + c.Label + " is working on it"
 	case sessions.StatusDone:
-		return kanbanSessionWord + c.Label + " finished a turn — check it, then move the card"
+		return kanbanSessionWord + c.Label + " finished a turn - check it, then move the card"
 	case sessions.StatusLimited:
 		return kanbanSessionWord + c.Label + " is limited; continues later"
 	}

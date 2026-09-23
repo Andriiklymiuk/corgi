@@ -127,5 +127,5 @@ func startPlatformWakeLock(pid int) (*exec.Cmd, error) {
 	return cmd, nil
 }
 
-const ClamshellWarning = "on macOS, closing the lid sleeps the machine unless `sudo pmset -a disablesleep 1` — " +
+const ClamshellWarning = "on macOS, closing the lid sleeps the machine unless `sudo pmset -a disablesleep 1` - " +
 	"plugged in; corgi agent doctor --away checks it"

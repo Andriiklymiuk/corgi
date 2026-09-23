@@ -12,8 +12,8 @@ corgi agent profile add <name> [flags]
 
 ```
       --bin claude                     Command to run instead of the default claude (a real program on PATH, not a shell alias)
-      --config-dir string              Claude config directory for this profile (e.g. ~/.claude-work) — the account it runs under
-      --dangerously-skip-permissions   Run this profile's sessions with permission prompts OFF (--permission-mode bypassPermissions). Removes the gate you answer from your phone — trusted local config only, off by default.
+      --config-dir string              Claude config directory for this profile (e.g. ~/.claude-work) - the account it runs under
+      --dangerously-skip-permissions   Run this profile's sessions with permission prompts OFF (--permission-mode bypassPermissions). Removes the gate you answer from your phone - trusted local config only, off by default.
   -h, --help                           help for add
       --permission-mode string         Permission mode passed to remote control (default|acceptEdits|plan|auto|dontask)
 ```

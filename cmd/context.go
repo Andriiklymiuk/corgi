@@ -52,7 +52,7 @@ var contextCmd = &cobra.Command{
 port and current status, each repo's branch, uncommitted work and ahead/behind
 counts, the active env tier, the declared profiles, and any validation findings.
 
-Built for agents — the same picture that otherwise takes corgi ps, corgi status,
+Built for agents - the same picture that otherwise takes corgi ps, corgi status,
 corgi validate and a git call per repo.`,
 	Example: `corgi context --json
 

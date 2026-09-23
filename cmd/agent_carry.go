@@ -29,11 +29,11 @@ git and the last thing the session said, unless the session wrote its own.
 Then, by default, the transcript is copied into the other account's config
 directory and a new terminal in the same window runs
 ` + "`corgi agent claude --profile <name> -- --resume <id>`" + `, so the conversation
-carries on where it was. With --fresh — or on its own when the context window
-is over 85% full — the new session starts clean instead, with the handoff as
+carries on where it was. With --fresh - or on its own when the context window
+is over 85% full - the new session starts clean instead, with the handoff as
 its first prompt: same worktree, none of the old context.
 
-Only a profile the workspace's accounts: list names is allowed — a workspace
+Only a profile the workspace's accounts: list names is allowed - a workspace
 that lists none cannot be carried anywhere. The old session is dismissed once
 the new one is up; its process is left alone.
 
@@ -46,7 +46,7 @@ original keeps running.
 
 --to codex (or --to claude) hands the work to another agent instead: the
 handoff is written, and a new terminal opens that agent in the same
-workspace with the handoff as its first prompt — a conversation cannot cross
+workspace with the handoff as its first prompt - a conversation cannot cross
 harnesses, so this is always a fresh start. Only an agent the workspace lists
 (corgi agent workspaces agents <id> claude,codex) can take it.
 
@@ -137,11 +137,11 @@ func carrySessionTo(dir string, s sessions.Session, profile string, fresh bool, 
 	}
 	if !fresh && sessionHarness(s) != harness.Claude {
 		fresh = true
-		utils.Infof("%s threads cannot move between accounts — starting the new session clean, from the handoff\n", sessionHarness(s))
+		utils.Infof("%s threads cannot move between accounts - starting the new session clean, from the handoff\n", sessionHarness(s))
 	}
 	if !fresh && s.Context != nil && s.Context.Percent >= carryFreshAt {
 		fresh = true
-		utils.Infof("context is %d%% full — starting the new session clean, from the handoff\n", s.Context.Percent)
+		utils.Infof("context is %d%% full - starting the new session clean, from the handoff\n", s.Context.Percent)
 	}
 	plan, err := planCarry(dir, s, profile, fresh)
 	if err != nil {
@@ -155,7 +155,7 @@ func carrySessionTo(dir string, s sessions.Session, profile string, fresh bool, 
 	packet, packetPath := leaveCarryHandoffTo(plan.Workspace, s, profile, to)
 	if fresh {
 		if packetPath == "" {
-			return "", &carryError{fmt.Errorf("a fresh start needs a handoff, and the branch %q names no ticket — say --ref on `corgi agent handoff` first", sessions.Branch(s.Cwd)), 2}
+			return "", &carryError{fmt.Errorf("a fresh start needs a handoff, and the branch %q names no ticket - say --ref on `corgi agent handoff` first", sessions.Branch(s.Cwd)), 2}
 		}
 		id, err := savePrompt(dir, carryPrompt(packet, packetPath))
 		if err != nil {
@@ -219,7 +219,7 @@ func checkHandTarget(to, from string, agents []string) error {
 			return nil
 		}
 	}
-	return fmt.Errorf("the workspace does not list %s in its agents — corgi agent workspaces agents <id> %s,%s", to, strings.Join(agents, ","), to)
+	return fmt.Errorf("the workspace does not list %s in its agents - corgi agent workspaces agents <id> %s,%s", to, strings.Join(agents, ","), to)
 }
 
 func forkSession(dir string, s sessions.Session, profile string, n int, prompts []string, source string) error {
@@ -230,7 +230,7 @@ func forkSession(dir string, s sessions.Session, profile string, n int, prompts 
 		return &carryError{fmt.Errorf("%s cannot fork a conversation; corgi agent carry %s --to claude hands the work over instead", h, s.Display), 2}
 	}
 	if len(prompts) > n {
-		return &carryError{fmt.Errorf("%d prompts for %d forks — one --prompt per fork at most", len(prompts), n), 2}
+		return &carryError{fmt.Errorf("%d prompts for %d forks - one --prompt per fork at most", len(prompts), n), 2}
 	}
 	own := firstNonEmpty(s.Profile, "default")
 	if profile == "" {
@@ -403,7 +403,7 @@ func leaveCarryHandoffTo(workspaceDir string, s sessions.Session, profile, to st
 }
 
 func carryPrompt(p handoff.Packet, path string) string {
-	msg := fmt.Sprintf("Continue the work on %s. Read the handoff first: %s — it is typed state from the previous session, not a transcript; check its done list against the diff before building on it.", p.Ref, path)
+	msg := fmt.Sprintf("Continue the work on %s. Read the handoff first: %s - it is typed state from the previous session, not a transcript; check its done list against the diff before building on it.", p.Ref, path)
 	if p.Draft {
 		msg += " It is a draft corgi assembled from git and the last thing the session said, so start by looking at the branch."
 	}
@@ -457,7 +457,7 @@ func planCarry(agentD string, s sessions.Session, profile string, fresh bool) (c
 	fromDir := claudeConfigDir(s.ConfigDir)
 	toDir := claudeConfigDir(expandTilde(target.ConfigDir))
 	if samePath(fromDir, toDir) && !fresh {
-		return carryPlan{}, fmt.Errorf("%s already runs under %s — --fresh restarts it there from a handoff", s.Display, profile)
+		return carryPlan{}, fmt.Errorf("%s already runs under %s - --fresh restarts it there from a handoff", s.Display, profile)
 	}
 	rel := filepath.Join("projects", mungeClaudeProjectDir(s.Cwd), s.ID+".jsonl")
 	plan := carryPlan{From: filepath.Join(fromDir, rel), To: filepath.Join(toDir, rel)}
@@ -526,7 +526,7 @@ func findBoardSession(st sessions.State, ref string) (sessions.Session, error) {
 	case 0:
 		return sessions.Session{}, fmt.Errorf("no session matches %q", ref)
 	}
-	return sessions.Session{}, fmt.Errorf("%q matches %d sessions — use the id", ref, len(matches))
+	return sessions.Session{}, fmt.Errorf("%q matches %d sessions - use the id", ref, len(matches))
 }
 
 func init() {

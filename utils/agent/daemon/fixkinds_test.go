@@ -11,7 +11,7 @@ func TestFixKindsSplitUnattendedWorkByKind(t *testing.T) {
 	everything := WatchSpec{Action: "fix"}
 	for _, k := range []watch.Kind{watch.KindIssueNew, watch.KindIssueComment, watch.KindPRComment, watch.KindPRReview} {
 		if !everything.FixesKind(k) {
-			t.Fatalf("fix with no kinds named is what it always was — everything: %s", k)
+			t.Fatalf("fix with no kinds named is what it always was - everything: %s", k)
 		}
 	}
 

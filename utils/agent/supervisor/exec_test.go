@@ -36,7 +36,7 @@ func TestStartProcessRejectsABinaryPath(t *testing.T) {
 	_, err := StartProcess(context.Background(), cfg)
 
 	if err == nil {
-		t.Fatal("a bin containing a path must be rejected — otherwise a config file chooses which program the daemon runs")
+		t.Fatal("a bin containing a path must be rejected - otherwise a config file chooses which program the daemon runs")
 	}
 	if !strings.Contains(err.Error(), "not a path") {
 		t.Errorf("error should explain the rule, got %q", err)
@@ -122,7 +122,7 @@ func TestProcessStopTerminatesIt(t *testing.T) {
 	select {
 	case <-done:
 	case <-time.After(15 * time.Second):
-		t.Fatal("Stop() did not terminate the process — shutdown would hang")
+		t.Fatal("Stop() did not terminate the process - shutdown would hang")
 	}
 }
 
@@ -201,7 +201,7 @@ func TestNoGoroutineLeakAcrossManyRestarts(t *testing.T) {
 	after := settle()
 
 	if after > before+5 {
-		t.Errorf("goroutines grew from %d to %d across 25 restarts — the process watcher is leaking, and this daemon runs for weeks", before, after)
+		t.Errorf("goroutines grew from %d to %d across 25 restarts - the process watcher is leaking, and this daemon runs for weeks", before, after)
 	}
 }
 
@@ -213,7 +213,7 @@ func TestRingBufferKeepsOnlyTheTail(t *testing.T) {
 
 	got := r.String()
 	if len(got) != 16 {
-		t.Errorf("buffer length = %d, want it capped at 16 — an unbounded buffer is a slow leak in a process that runs for days", len(got))
+		t.Errorf("buffer length = %d, want it capped at 16 - an unbounded buffer is a slow leak in a process that runs for days", len(got))
 	}
 	if !strings.HasSuffix(got, "TAIL") {
 		t.Errorf("buffer = %q, want the most recent bytes kept", got)
@@ -400,6 +400,6 @@ func TestStartProcessReportsTheSessionURLFromOutput(t *testing.T) {
 			t.Errorf("reported URL = %q", u)
 		}
 	case <-time.After(3 * time.Second):
-		t.Fatal("the session URL was never reported — the scanner is not wired into StartProcess's output")
+		t.Fatal("the session URL was never reported - the scanner is not wired into StartProcess's output")
 	}
 }

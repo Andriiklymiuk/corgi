@@ -11,14 +11,14 @@ A wrong reading of the request is the most expensive token spend there is: every
 built on it is thrown away. A question that grep could have answered is the second most
 expensive. Align spends the minimum to rule out the first without paying the second.
 
-## Step 0 — look before asking
+## Step 0 - look before asking
 
 Read the request, then the code it points at (`grep`, `rg`, `git log -5`, the compose
 file). Facts are your job, never the user's: file names, current behaviour, which service
 owns a route, what a flag does today. Main session only; no subagents.
 
 Then answer one question: **does any other reading of the request change what you
-would build?** Not the wording, not the style — the work.
+would build?** Not the wording, not the style - the work.
 
 - **No** → one line, then code:
 
@@ -30,13 +30,13 @@ would build?** Not the wording, not the style — the work.
 
 - **Yes** → one round, format below. Then code.
 
-## The round — forks only, picks always
+## The round - forks only, picks always
 
 List only the forks whose answer changes the work. At most 5. Number them, give the
 body in one or two lines, and give your pick. Grill style, not grill length:
 
 ```
-Reading: <≤5 bullets — what you understood, what you found in the code>
+Reading: <≤5 bullets - what you understood, what you found in the code>
 
 ❓ **Q1** - **<fork>**: <two or three options, one line each>
 ➡️ <your pick, half a sentence why>
@@ -48,7 +48,7 @@ Reading: <≤5 bullets — what you understood, what you found in the code>
 
 Whole frontier in one round; a fork that depends on an open fork waits. The user answers
 in letters or words, or says "go": unanswered forks take your pick. Apply the answers and
-code — do not echo them back, do not ask a second round unless an answer opened a fork
+code - do not echo them back, do not ask a second round unless an answer opened a fork
 you could not have seen.
 
 Never ask about: naming, style, formatting, a detail one grep settles, or a choice where
@@ -56,11 +56,11 @@ your pick is the obvious default. Fold those into the pick.
 
 ## Mid-flight forks
 
-A real fork that appears while coding gets one line, two options, your pick — then keep
+A real fork that appears while coding gets one line, two options, your pick - then keep
 going on the pick unless told otherwise. No status recap around it.
 
 ```
-Fork: <what> — a) <x> b) <y>. Taking a.
+Fork: <what> - a) <x> b) <y>. Taking a.
 ```
 
 ## Diagrams

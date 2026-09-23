@@ -76,7 +76,7 @@ func launchPreviewHandler(w http.ResponseWriter, r *http.Request) {
 		writeLaunchError(w, http.StatusBadRequest, service+" is a database, not a page")
 		return
 	case found.Status != "running":
-		writeLaunchError(w, http.StatusConflict, service+" is not running — start the stack first")
+		writeLaunchError(w, http.StatusConflict, service+" is not running - start the stack first")
 		return
 	case found.Port == 0:
 		writeLaunchError(w, http.StatusBadRequest, service+" has no port to open")

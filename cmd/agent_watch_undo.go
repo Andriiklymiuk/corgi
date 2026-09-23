@@ -41,7 +41,7 @@ func runAgentWatchUndo(cmd *cobra.Command, args []string) {
 		if ref != "" {
 			exitWithError("agent_watch_undo", fmt.Errorf("no finished run for %s", ref), 2)
 		}
-		exitWithError("agent_watch_undo", fmt.Errorf("nothing to undo — no unattended run has finished"), 2)
+		exitWithError("agent_watch_undo", fmt.Errorf("nothing to undo - no unattended run has finished"), 2)
 	}
 
 	back := ""
@@ -133,7 +133,7 @@ func reportUndo(p undoPlan, problems []string) {
 	default:
 		fmt.Println("  the ticket was never moved, so there is nothing to put back")
 	}
-	fmt.Println("  the branch is left alone — the work is on it")
+	fmt.Println("  the branch is left alone - the work is on it")
 	for _, why := range problems {
 		fmt.Printf("  problem  %s\n", why)
 	}

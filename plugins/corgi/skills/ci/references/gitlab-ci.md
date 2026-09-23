@@ -4,7 +4,7 @@ corgi ships a GitLab include, so most of this file is wiring rather than YAML to
 copy. Replace the runner tags, the secrets source, and the participating repos
 with the workspace's real ones.
 
-## Workspace repo — the implementation
+## Workspace repo - the implementation
 
 `stack-e2e.yml` in the repo that holds `corgi-compose.yml`, included by the
 service repos:
@@ -49,7 +49,7 @@ corgi-cache-drift:
 --json`, `corgi test --e2e --artifacts-dir`, and an always-executed `corgi logs
 --dump` + artifact upload. Do not re-write those steps; override an input.
 
-## Service repo — the caller
+## Service repo - the caller
 
 `.gitlab-ci.yml` in each participating repo:
 
@@ -74,7 +74,7 @@ stack-e2e:
   GitLab port fails in a way that looks like "the api can't reach postgres".
   `.corgi-setup` now detects this and fails immediately with that explanation,
   but the fix is still yours: a `shell` runner on a VM, or `docker+machine`.
-  `allow_container: true` overrides the guard — only when the runner genuinely
+  `allow_container: true` overrides the guard - only when the runner genuinely
   shares the namespace.
 - `CI_JOB_TOKEN` can clone sibling projects when each grants the calling project
   under **Settings → CI/CD → Job token permissions**. Otherwise use a group
@@ -84,7 +84,7 @@ stack-e2e:
 - `GIT_DEPTH: "1"` shallow-clones the *caller*; `corgi init --depth 1` handles
   the service repos.
 - **Sharding e2e by feature-domain folder** (`parallel: matrix:` over a folder
-  list) keeps wall clock flat as the suite grows — but a `needs:` gate on that
+  list) keeps wall clock flat as the suite grows - but a `needs:` gate on that
   job must then name every matrix permutation by hand, and a newly added shard
   silently falls out of the gate. Gate on the stage where possible, and add a
   lint job that fails when the domain folders and the matrix list drift apart.
@@ -103,7 +103,7 @@ knowing before someone "fixes" the output by hand:
 
 - **Nothing outside the project directory can be cached.** `~/.npm`,
   `~/.cache/pip` and friends are redirected into `$CI_PROJECT_DIR/.corgi-cache/`
-  together with the environment variable that puts them there — which is why the
+  together with the environment variable that puts them there - which is why the
   job that *installs* must extend `.corgi-cache`, not just a warming job.
 - **Four caches per job.** Past three ecosystems the tail is merged into one
   entry; the markers entry always survives.
@@ -114,5 +114,5 @@ knowing before someone "fixes" the output by hand:
   checks the dependency directory is really there before skipping an install.
 
 If the job clones the workspace repo into a subdirectory, generate with
-`--path-prefix <dir>` — GitLab resolves cache paths against the project root
+`--path-prefix <dir>` - GitLab resolves cache paths against the project root
 only.

@@ -16,7 +16,7 @@ same board and `corgi agent focus` brings a session's window to the front.
 Every hook is asynchronous and exits 0 whatever happens: a daemon that is
 down costs nothing and shows nothing in the transcript. The one exception
 prints a terminal title (● repo / ▲ repo NEEDS YOU) into the tab the session
-runs in, which VS Code and most terminals show — `--no-tab-title` skips it.
+runs in, which VS Code and most terminals show - `--no-tab-title` skips it.
 
   corgi agent track enable                  # this account, plus every corgi profile
   corgi agent track enable --config-dir ~/.claude-work

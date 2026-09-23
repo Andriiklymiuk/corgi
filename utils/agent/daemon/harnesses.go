@@ -161,12 +161,12 @@ func (d *Daemon) pickHarnessFor(spec WatchSpec) harness.Harness {
 	}
 	line := spec.Workspace + ": " + strings.Join(skipped, ", ")
 	if h.Name != spec.agents()[0] {
-		line += " — this run goes through " + h.Name
+		line += " - this run goes through " + h.Name
 		if d.rangOnce("fallback|"+spec.Workspace+"|"+h.Name, now) {
 			go d.notifyAttention("corgi agent", line, spec.Workspace)
 		}
 	} else {
-		line += " — no agent can take it"
+		line += " - no agent can take it"
 	}
 	utils.Infof("agent: %s\n", line)
 	return h

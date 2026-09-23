@@ -169,7 +169,7 @@ func (d *Daemon) routineReport(spec WatchSpec, e watch.Event, out string, failed
 	}
 	report := e
 	report.Key = e.Key + ":report"
-	report.Title = e.Title + " — " + clipText(headline, 160)
+	report.Title = e.Title + " - " + clipText(headline, 160)
 	report.Body = ""
 	d.watchState.MarkSeen(report.Key)
 	d.appendWatchEvent(report)

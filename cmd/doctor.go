@@ -282,7 +282,7 @@ func buildDoctorResult(corgi *utils.CorgiCompose) doctorResult {
 			if owner == "" {
 				owner = "unknown"
 			}
-			c.Detail = fmt.Sprintf("busy — needed for %s — held by: %s", p.Desc, owner)
+			c.Detail = fmt.Sprintf("busy - needed for %s - held by: %s", p.Desc, owner)
 		}
 		res.Checks = append(res.Checks, c)
 	}
@@ -302,7 +302,7 @@ func ciChecks(corgi *utils.CorgiCompose) []doctorCheck {
 		c := doctorCheck{Name: "ci:host", OK: !inContainer}
 		if inContainer {
 			c.Detail = "this job runs inside a container, so the database containers publish " +
-				"to a localhost the services cannot reach — use a shell or VM-backed runner"
+				"to a localhost the services cannot reach - use a shell or VM-backed runner"
 		}
 		checks = append(checks, c)
 	}
@@ -314,7 +314,7 @@ func ciChecks(corgi *utils.CorgiCompose) []doctorCheck {
 	for _, m := range utils.MissingEnvSources(corgi) {
 		detail := fmt.Sprintf("declares copyEnvFromFilePath %s, which is not on this runner", m.Declared)
 		if m.Fallback != "" {
-			detail += fmt.Sprintf(" — corgi would silently fall back to %s", m.Fallback)
+			detail += fmt.Sprintf(" - corgi would silently fall back to %s", m.Fallback)
 		}
 		checks = append(checks, doctorCheck{Name: "ci:env:" + m.Service, OK: false, Detail: detail})
 	}
@@ -329,7 +329,7 @@ func diskHeadroomCheck(corgi *utils.CorgiCompose) (doctorCheck, bool) {
 	c := doctorCheck{Name: "ci:disk", OK: ok}
 	if !ok {
 		c.Detail = fmt.Sprintf(
-			"%s free, and this stack needs roughly %s (%d databases, %d services) — "+
+			"%s free, and this stack needs roughly %s (%d databases, %d services) - "+
 				"free space before booting, or the failure will look like a broken build",
 			utils.FormatGigabytes(free), utils.FormatGigabytes(need),
 			len(corgi.DatabaseServices), len(corgi.Services))
@@ -399,7 +399,7 @@ func runDockerCheck(corgi *utils.CorgiCompose) bool {
 		return true
 	}
 	fmt.Println("❌", art.RedColor,
-		"Docker daemon is not reachable — start Docker Desktop / colima / dockerd",
+		"Docker daemon is not reachable - start Docker Desktop / colima / dockerd",
 		art.WhiteColor)
 	return false
 }
@@ -445,13 +445,13 @@ func runPortChecks(corgi *utils.CorgiCompose) bool {
 		if utils.IsPortListening(p.Port) {
 			owner := utils.PortOwner(p.Port)
 			if owner == "" {
-				owner = fmt.Sprintf("(unidentified — try: sudo lsof -nP -i:%d)", p.Port)
+				owner = fmt.Sprintf("(unidentified - try: sudo lsof -nP -i:%d)", p.Port)
 			}
-			fmt.Printf("  %s ❌ %d busy — needed for %s — held by: %s%s\n",
+			fmt.Printf("  %s ❌ %d busy - needed for %s - held by: %s%s\n",
 				art.RedColor, p.Port, p.Desc, owner, art.WhiteColor)
 			allFree = false
 		} else {
-			fmt.Printf("  %s ✅ %d free — for %s%s\n",
+			fmt.Printf("  %s ✅ %d free - for %s%s\n",
 				art.GreenColor, p.Port, p.Desc, art.WhiteColor)
 		}
 	}
@@ -475,7 +475,7 @@ func processRequired(required utils.Required) bool {
 	}
 	if required.Optional {
 		if utils.NonInteractive {
-			fmt.Printf("\n❌ %s is not installed (optional, skipped — no terminal to confirm install)\n", required.Name)
+			fmt.Printf("\n❌ %s is not installed (optional, skipped - no terminal to confirm install)\n", required.Name)
 			return false
 		}
 		prompt := promptui.Prompt{

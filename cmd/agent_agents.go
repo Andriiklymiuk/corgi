@@ -12,7 +12,7 @@ import (
 
 // A workspace's agents, in the order to try: `agents: [claude, codex]`.
 // The first is what corgi agent claude opens and what fixes run through;
-// the next takes an unattended run when the first cannot work — not
+// the next takes an unattended run when the first cannot work - not
 // installed, login lapsed, window spent. Every run picks again.
 
 // parseAgents reads "claude,codex" (or several flags) into the order.
@@ -65,7 +65,7 @@ func setAgents(id string, agents []string, asDefault bool) error {
 	} else {
 		entry, ok := user.Workspaces[id]
 		if !ok {
-			return fmt.Errorf("no workspace called %q — corgi agent workspaces lists them", id)
+			return fmt.Errorf("no workspace called %q - corgi agent workspaces lists them", id)
 		}
 		apply(&entry)
 		user.Workspaces[id] = entry
@@ -85,10 +85,10 @@ func agentsNotice(order []string) {
 		return
 	}
 	utils.Infof("agents %s: %s opens and runs the fixes; %s takes a run when it cannot\n", agentsWord(order), order[0], strings.Join(order[1:], ", then "))
-	utils.Info("  (not installed, login lapsed, window spent — checked at every run, nothing is remembered)")
+	utils.Info("  (not installed, login lapsed, window spent - checked at every run, nothing is remembered)")
 	for _, name := range order {
 		if !harness.For(name, "").Installed() {
-			utils.Infof("  %s is not installed here — it is skipped until it is\n", name)
+			utils.Infof("  %s is not installed here - it is skipped until it is\n", name)
 		}
 	}
 }
@@ -102,8 +102,8 @@ var agentWorkspacesAgentsCmd = &cobra.Command{
   corgi agent workspaces agents api codex          # codex alone
   corgi agent workspaces agents --default claude,codex
 
-Every unattended run picks the first agent that can work right now — installed,
-logged in, window not spent — so the first one gets the next run back the
+Every unattended run picks the first agent that can work right now - installed,
+logged in, window not spent - so the first one gets the next run back the
 moment it can. The pick rings your phone once a day when it moves.`,
 	Args: cobra.RangeArgs(1, 2),
 	RunE: func(cmd *cobra.Command, args []string) error {

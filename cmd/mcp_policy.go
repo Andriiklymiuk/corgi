@@ -24,7 +24,7 @@ func registerPolicyMCPTools(s *server.MCPServer) {
 	}))
 
 	s.AddTool(newCorgiTool("corgi_watch_set",
-		mcp.WithDescription("Flip a workspace's own switches — autoAllow, doneWhen, compactAt, rebase, lessons, handOver, autoMerge — the ones that take on the daemon's next round with no restart. Do it when the user asks for the behaviour (\"answer the read prompts yourself\", \"a session is not done until go test passes\", \"rebase my branch when main moves\"), never to tidy up: each one makes the daemon act on their code. Omitted fields keep their value."),
+		mcp.WithDescription("Flip a workspace's own switches - autoAllow, doneWhen, compactAt, rebase, lessons, handOver, autoMerge - the ones that take on the daemon's next round with no restart. Do it when the user asks for the behaviour (\"answer the read prompts yourself\", \"a session is not done until go test passes\", \"rebase my branch when main moves\"), never to tidy up: each one makes the daemon act on their code. Omitted fields keep their value."),
 		mcp.WithString("workspace", mcp.Required(), mcp.Description("Workspace id")),
 		mcp.WithString("autoAllow", mcp.Description("reads, or off")),
 		mcp.WithArray("doneWhen", mcp.Description("Commands run in the session's directory when it stops with changes; empty list turns it off"), mcp.WithStringItems()),
@@ -43,7 +43,7 @@ func registerPolicyMCPTools(s *server.MCPServer) {
 	}))
 
 	s.AddTool(newCorgiTool("corgi_chat_post",
-		mcp.WithDescription("Say something in the Slack the workspace listens to, or answer the message an event came from — the reply lands in its thread. `reply` is a watch event key (slack:<channel>:<ts>); `to` is #channel, @handle or a channel id when there is nothing to answer. `as` is bot or me: without it the workspace's replyAs decides, and speaking as the person is never the accidental default. `react` also puts one emoji on the message being answered. Returns {channel, ts, permalink, as}."),
+		mcp.WithDescription("Say something in the Slack the workspace listens to, or answer the message an event came from - the reply lands in its thread. `reply` is a watch event key (slack:<channel>:<ts>); `to` is #channel, @handle or a channel id when there is nothing to answer. `as` is bot or me: without it the workspace's replyAs decides, and speaking as the person is never the accidental default. `react` also puts one emoji on the message being answered. Returns {channel, ts, permalink, as}."),
 		mcp.WithString("text", mcp.Description("What to say")),
 		mcp.WithString("to", mcp.Description("#channel, @handle, or a channel id")),
 		mcp.WithString("reply", mcp.Description("Event key to answer (slack:<channel>:<ts>)")),
@@ -55,7 +55,7 @@ func registerPolicyMCPTools(s *server.MCPServer) {
 	}))
 
 	s.AddTool(newCorgiTool("corgi_agent_mute",
-		mcp.WithDescription("Nothing rings for a while — no desktop toast, no phone push, no permission ping — while the inbox and the board go on. `for` is a duration up to 24h (1h, 30m) or off; omitted reads the current state. Returns {muted, until}."),
+		mcp.WithDescription("Nothing rings for a while - no desktop toast, no phone push, no permission ping - while the inbox and the board go on. `for` is a duration up to 24h (1h, 30m) or off; omitted reads the current state. Returns {muted, until}."),
 		mcp.WithString("for", mcp.Description("1h, 30m, off; omitted only reads")),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
 		return mcpMute(r.GetString("for", ""))
@@ -64,13 +64,13 @@ func registerPolicyMCPTools(s *server.MCPServer) {
 	s.AddTool(newCorgiTool("corgi_agent_attempts",
 		mcp.WithDescription("The sessions a fan-out opened on a ticket (corgi agent watch work <ref> --attempts N), side by side: [{ref, attempts[{n, session, label, status, model, branch, changes, tests, gate, spend, pr, summary, picked}]}]. With `pick` (the attempt's n) that one is kept: a note on it, the others interrupted and marked not picked, their worktrees left. Read-only without pick."),
 		mcp.WithString("ref", mcp.Description("Only this ticket's tries")),
-		mcp.WithString("pick", mcp.Description("Keep this attempt (its n) — needs ref")),
+		mcp.WithString("pick", mcp.Description("Keep this attempt (its n) - needs ref")),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
 		return mcpAttempts(r.GetString("ref", ""), r.GetString("pick", ""))
 	}))
 
 	s.AddTool(newCorgiTool("corgi_agent_lessons",
-		mcp.WithDescription("What a workspace learned the hard way, one line each, oldest first: [{at, source, text}] — reviews on the user's pull requests, checks that stayed red, bots that failed, lines the user wrote. Read them before changing code in that workspace. With `add`, write one line yourself (say why in the line)."),
+		mcp.WithDescription("What a workspace learned the hard way, one line each, oldest first: [{at, source, text}] - reviews on the user's pull requests, checks that stayed red, bots that failed, lines the user wrote. Read them before changing code in that workspace. With `add`, write one line yourself (say why in the line)."),
 		mcp.WithString("workspace", mcp.Description("Workspace id; omitted means the one the cwd is in")),
 		mcp.WithString("add", mcp.Description("A lesson to write, one line")),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {

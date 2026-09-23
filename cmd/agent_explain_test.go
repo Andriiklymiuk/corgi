@@ -48,7 +48,7 @@ func TestExplainReadsTheDiffAndAnswersInThreeLines(t *testing.T) {
 	defer func() { runClaudePrint = origRun }()
 	runClaudePrint = func(_ context.Context, model, system, prompt string) (string, error) {
 		gotModel, gotSystem, gotPrompt = model, system, prompt
-		return "Refresh now calls grace().\nOne file, two lines.\nNo tests touched.\nrisk: low — a comment and one call", nil
+		return "Refresh now calls grace().\nOne file, two lines.\nNo tests touched.\nrisk: low - a comment and one call", nil
 	}
 
 	post := func(body string) *httptest.ResponseRecorder {
@@ -86,7 +86,7 @@ func TestExplainReadsTheDiffAndAnswersInThreeLines(t *testing.T) {
 
 func TestRiskWordIsReadOffTheLastLine(t *testing.T) {
 	for in, want := range map[string]string{
-		"a\nb\nrisk: high — drops a table": "high",
+		"a\nb\nrisk: high - drops a table": "high",
 		"one line\nRisk: Medium":           "medium",
 		"no word at all":                   "",
 		"risk: low":                        "low",

@@ -13,9 +13,9 @@ import (
 
 var agentTodayCmd = &cobra.Command{
 	Use:   "today",
-	Short: "What has been done today — yours and the watch's",
+	Short: "What has been done today - yours and the watch's",
 	Long: `Answers "what have I done today?" in one place: the commits that landed, what
-Claude was asked, and — the part nothing else records — what ` + "`corgi agent watch --auto`" + `
+Claude was asked, and - the part nothing else records - what ` + "`corgi agent watch --auto`" + `
 did on its own while nobody was looking, with the pull requests it opened.
 
 The window is today since midnight, not a rolling 24 hours, so the answer does

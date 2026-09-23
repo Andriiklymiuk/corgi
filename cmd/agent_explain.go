@@ -10,7 +10,7 @@ import (
 	"andriiklymiuk/corgi/utils/agent/sessions"
 )
 
-const explainSoul = `You explain a code change to its author, who is reading on a phone. You are given the ticket, the branch, the files with their line counts, and the patch. Answer in plain text only — no markdown, no asterisks, no headings, no code fences. Exactly this shape: at most three short lines saying what the change does and what it touches (name files as given), then one last line "risk: low|medium|high — <why in a clause>". Low is a comment, a rename, a test, a small local change; medium is logic or an interface others use; high is data, auth, deletion, migrations, money, or anything that runs against production. Say what the patch shows, never what it might have meant to do.`
+const explainSoul = `You explain a code change to its author, who is reading on a phone. You are given the ticket, the branch, the files with their line counts, and the patch. Answer in plain text only - no markdown, no asterisks, no headings, no code fences. Exactly this shape: at most three short lines saying what the change does and what it touches (name files as given), then one last line "risk: low|medium|high - <why in a clause>". Low is a comment, a rename, a test, a small local change; medium is logic or an interface others use; high is data, auth, deletion, migrations, money, or anything that runs against production. Say what the patch shows, never what it might have meant to do.`
 
 const explainPatchMax = 60 << 10
 

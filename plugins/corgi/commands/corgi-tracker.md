@@ -1,5 +1,5 @@
 ---
-description: Tracker-side planning for a corgi workspace (Linear or Jira) — status/standup, triage, or decompose an epic into tickets, with each ticket tied to its real PR/CI state across services. Pass what you want in plain words (e.g. "standup", "what's blocked", "triage the inbox", "break EPIC-9 into tickets"); no args = a status digest of the active cycle/board.
+description: Tracker-side planning for a corgi workspace (Linear or Jira) - status/standup, triage, or decompose an epic into tickets, with each ticket tied to its real PR/CI state across services. Pass what you want in plain words (e.g. "standup", "what's blocked", "triage the inbox", "break EPIC-9 into tickets"); no args = a status digest of the active cycle/board.
 ---
 
 Run the corgi **tracker** flow for the request in `$ARGUMENTS`.

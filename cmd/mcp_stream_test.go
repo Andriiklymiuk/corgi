@@ -136,7 +136,7 @@ func TestTheStreamCatchesUpAListenerThatWasAway(t *testing.T) {
 	var frame streamFrame
 	_ = json.Unmarshal([]byte(data), &frame)
 	if event != "hello" || frame.Seq != 2 || strings.Join(frame.What, ",") != strings.Join(allFeeds, ",") {
-		t.Fatalf("away since 1, now at 2: read everything — %s %s", event, data)
+		t.Fatalf("away since 1, now at 2: read everything - %s %s", event, data)
 	}
 	first.Body.Close()
 }

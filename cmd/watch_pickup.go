@@ -43,7 +43,7 @@ func markPickedUp(agentD string, events []watch.Event) {
 			current = known.Status
 		}
 		if over := watch.FinishedState(current); over != "" {
-			utils.Infof("corgi: %s is %s — not moving it to %s\n", ref, over, status)
+			utils.Infof("corgi: %s is %s - not moving it to %s\n", ref, over, status)
 			continue
 		}
 		if err := w.Move(ctx, ref, status); err != nil {

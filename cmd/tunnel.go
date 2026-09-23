@@ -158,7 +158,7 @@ func printTunnelSummary(targets []tunnelTarget, provider tunnel.Provider) {
 		providerList = append(providerList, n)
 	}
 	sort.Strings(providerList)
-	fmt.Printf("🌐 Tunnels (%s) — Ctrl+C to stop\n\n", strings.Join(providerList, ", "))
+	fmt.Printf("🌐 Tunnels (%s) - Ctrl+C to stop\n\n", strings.Join(providerList, ", "))
 	for _, t := range targets {
 		mode := "quick"
 		if t.named != nil {
@@ -346,7 +346,7 @@ func startTunnelsForRun(services []utils.Service) {
 		return
 	}
 
-	fmt.Printf("🌐 opening %d tunnel(s) alongside services — Ctrl+C to stop everything\n", len(targets))
+	fmt.Printf("🌐 opening %d tunnel(s) alongside services - Ctrl+C to stop everything\n", len(targets))
 	for _, t := range targets {
 		fmt.Printf("  %-30s :%-5d  %s/named %s\n", t.service, t.port, t.provider.Name(), t.named.Hostname)
 	}

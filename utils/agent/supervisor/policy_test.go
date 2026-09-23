@@ -74,7 +74,7 @@ func TestDecideNetworkTimeoutRestartsAndTellsTheUser(t *testing.T) {
 	d := Decide(Exit{Code: 0, Uptime: time.Hour}, 0, 0)
 
 	if !d.Restart {
-		t.Error("network timeout must restart — it is the whole point of the supervisor")
+		t.Error("network timeout must restart - it is the whole point of the supervisor")
 	}
 	if !d.Notify {
 		t.Error("a restart must notify: the previous session's context is gone, and silently pretending otherwise misleads the user")
@@ -132,7 +132,7 @@ func TestDecideTrustFailureDisablesWithInstructions(t *testing.T) {
 		Output: "Error: Workspace not trusted. Please run `claude` in /x first"}, 0, 0)
 
 	if d.Restart {
-		t.Error("retrying cannot accept a trust dialog — must not loop")
+		t.Error("retrying cannot accept a trust dialog - must not loop")
 	}
 	if !d.Disable || !d.Notify {
 		t.Error("a trust failure must disable and notify")

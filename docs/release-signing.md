@@ -12,7 +12,7 @@ warning.
 Both happen in CI. GoReleaser signs and notarizes the darwin binaries from
 the Linux runner (`notarize.macos` in `.goreleaser.yaml`); corgi-bar's
 workflow signs, notarizes and staples the app bundle on a macOS runner.
-Nothing is signed locally, and no key lives in a repo — only in GitHub
+Nothing is signed locally, and no key lives in a repo - only in GitHub
 Actions secrets. When the secrets are missing the release is simply
 unsigned, as before.
 

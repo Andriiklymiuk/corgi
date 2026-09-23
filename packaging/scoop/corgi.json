@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/ScoopInstaller/Scoop/master/schema.json",
   "version": "1.16.2",
-  "description": "Send someone your project yml file, init and run it in minutes — multi-service / db / tunnel orchestrator",
+  "description": "Send someone your project yml file, init and run it in minutes - multi-service / db / tunnel orchestrator",
   "homepage": "https://github.com/Andriiklymiuk/corgi",
   "license": "MIT",
   "architecture": {

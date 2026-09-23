@@ -61,7 +61,7 @@ var agentWatchUnblockCmd = &cobra.Command{
 			utils.PrintJSON(map[string]any{"workspace": id, "ref": ref, "blocked": false})
 			return
 		}
-		fmt.Printf("%s unblocked — the next matching event runs\n", ref)
+		fmt.Printf("%s unblocked - the next matching event runs\n", ref)
 	},
 }
 

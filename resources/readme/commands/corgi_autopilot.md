@@ -7,7 +7,7 @@ Supervised loop state: status / pause / resume / stop / heartbeat
 ### Synopsis
 
 Durable state for the autopilot supervised loop (the autopilot skill drives
-the loop; this command owns its kill switch + heartbeat). No daemon — state lives
+the loop; this command owns its kill switch + heartbeat). No daemon - state lives
 in corgi_services/.autopilot.json and coordinates iterations across /loop or
 /schedule runs. Draft PRs only; never merges.
 

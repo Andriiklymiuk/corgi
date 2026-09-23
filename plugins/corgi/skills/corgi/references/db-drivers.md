@@ -7,7 +7,7 @@ description: Full list of supported corgi db_services drivers with default ports
 
 Set the driver with `driver: <name>`. Corgi generates a `docker-compose.yml` and `Makefile` for each db under `.corgi/corgi_services/db_services/<name>/`.
 
-No hardcoded host-port default per driver — host port is whatever you set in `port:`. The port column below shows the conventional/container port (generateEnv.go falls back to the postgres `default` config for unknown drivers).
+No hardcoded host-port default per driver - host port is whatever you set in `port:`. The port column below shows the conventional/container port (generateEnv.go falls back to the postgres `default` config for unknown drivers).
 
 ## Driver table
 
@@ -21,7 +21,7 @@ No hardcoded host-port default per driver — host port is whatever you set in `
 | `mysql` | 3306 | `MYSQL_` | `mysql:latest` | |
 | `mariadb` | 3306 | `MARIADB_` | `mariadb:latest` | |
 | `mssql` | 1433 | `MSSQL_` | `mcr.microsoft.com/mssql/server:2022-latest` | Password must be >= 8 chars |
-| `cockroach` | 26257 | `COCKROACH_` | `cockroachdb/cockroach:latest` | `driver: cockroachdb` silently falls back to the postgres default config — use `cockroach`. |
+| `cockroach` | 26257 | `COCKROACH_` | `cockroachdb/cockroach:latest` | `driver: cockroachdb` silently falls back to the postgres default config - use `cockroach`. |
 | `clickhouse` | 9000 | `CLICKHOUSE_` | `clickhouse/clickhouse-server:latest` | |
 | `cassandra` | 9042 | `CASSANDRA_` | `cassandra:latest` | |
 | `scylla` | 9042 | `SCYLLA_` | `scylladb/scylla:latest` | Cassandra-compatible |
@@ -46,14 +46,14 @@ No hardcoded host-port default per driver — host port is whatever you set in `
 | `yugabytedb` | 5433 | `YUGABYTEDB_` | `yugabytedb/yugabyte:latest` | Dashboard on `:15433` |
 | `skytable` | 2003 | `SKYTABLE_` | `skytable/skytable:latest` | |
 | `dynamodb` | 4566 | `DYNAMODB_` | `localstack/localstack:3.8` (`SERVICES=dynamodb`) | localstack-backed local emulator |
-| `localstack` | 4566 | `AWS_` | `localstack/localstack:latest` | Unified AWS emulator — see below |
+| `localstack` | 4566 | `AWS_` | `localstack/localstack:latest` | Unified AWS emulator - see below |
 | `sqs` | 4566 | `AWS_SQS_` | `localstack/localstack:3.8` | Single SQS queue on localstack; for several queues, or queues plus buckets, use `localstack` with `queues:`/`buckets:` |
 | `supabase` | 54321 | `SUPABASE_` | wraps `supabase` CLI | Local auth + storage. Reads ports from `supabase/config.toml`. Seeds `buckets:` + `authUsers:` on `up`. See below + [docs/drivers/supabase.md](https://github.com/Andriiklymiuk/corgi/blob/main/docs/drivers/supabase.md) |
 | `image` | (you set) | `<SERVICE>_` | (you set via `image:`) | Generic stateless docker-image driver. For services that ship as a public image with no DB/state (gotenberg, mailhog, jaeger). See below |
 
 ## localstack special keys
 
-Prefer `driver: localstack` over standalone `sqs`/`s3` drivers when multiple AWS services are needed — one container covers all.
+Prefer `driver: localstack` over standalone `sqs`/`s3` drivers when multiple AWS services are needed - one container covers all.
 
 ```yaml
 db_services:
@@ -66,11 +66,11 @@ db_services:
     healthCheck: /_localstack/health
 ```
 
-`corgi status` uses `/_localstack/health` by default for the localstack driver — you don't need to set `healthCheck` unless overriding.
+`corgi status` uses `/_localstack/health` by default for the localstack driver - you don't need to set `healthCheck` unless overriding.
 
 ## supabase special keys
 
-Wraps supabase CLI — corgi runs `supabase init`/`start`/`stop`. Auto-creates Storage buckets via Storage API and auth users via Admin API on `up`. Idempotent.
+Wraps supabase CLI - corgi runs `supabase init`/`start`/`stop`. Auto-creates Storage buckets via Storage API and auth users via Admin API on `up`. Idempotent.
 
 ```yaml
 db_services:
@@ -88,13 +88,13 @@ db_services:
         metadata:
           role: admin
     # jwtSecret: my-32-char-secret  # only if you customized auth.jwt_secret in config.toml
-    # configTomlPath: ./config/supabase.config.toml  # source of truth — copied to .corgi/corgi_services/db_services/<svc>/supabase/config.toml on every init
+    # configTomlPath: ./config/supabase.config.toml  # source of truth - copied to .corgi/corgi_services/db_services/<svc>/supabase/config.toml on every init
 ```
 
 Compose ports always win: the Makefile awk-patches `[api/db/studio/inbucket].port` in config.toml before `supabase start`, so emitted env URLs and bind ports stay aligned. Unset yaml ports keep whatever `config.toml` says (stock defaults 54321/54322/54323/54324).
 
 `configTomlPath` controls where the canonical config.toml lives:
-- **set** → corgi copies the file to `.corgi/corgi_services/db_services/<svc>/supabase/config.toml` and runs the CLI from that dir. Edit the source file (e.g. `config/supabase.config.toml`) only — destination is regenerated each init.
+- **set** → corgi copies the file to `.corgi/corgi_services/db_services/<svc>/supabase/config.toml` and runs the CLI from that dir. Edit the source file (e.g. `config/supabase.config.toml`) only - destination is regenerated each init.
 - **unset** → legacy behavior. `supabase init` writes `<projectRoot>/supabase/config.toml` on first run. Dev edits live there directly.
 
 Emitted env (with `envAlias: none`): `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET`, `SUPABASE_DB_URL`, `SUPABASE_DB_HOST`, `SUPABASE_DB_PORT`, `SUPABASE_STUDIO_URL`, `SUPABASE_INBUCKET_URL`, `SUPABASE_STORAGE_S3_URL`, `SUPABASE_S3_PROTOCOL_*`, `SUPABASE_BUCKET_<UPPER_NAME>`.
@@ -144,7 +144,7 @@ services:
 
 ### Optional fields
 
-`environment:` — passed verbatim to docker-compose `environment:` list.
+`environment:` - passed verbatim to docker-compose `environment:` list.
 
 ```yaml
 db_services:
@@ -157,7 +157,7 @@ db_services:
       - MEILI_NO_ANALYTICS=true
 ```
 
-`volumes:` — passed verbatim to docker-compose `volumes:` list. Required for stateful images that need persistence across restarts.
+`volumes:` - passed verbatim to docker-compose `volumes:` list. Required for stateful images that need persistence across restarts.
 
 ```yaml
 db_services:
@@ -169,7 +169,7 @@ db_services:
       - ./meili_data:/meili_data
 ```
 
-`command:` — override container entrypoint args. Passed as docker-compose `command:` array.
+`command:` - override container entrypoint args. Passed as docker-compose `command:` array.
 
 ```yaml
 db_services:
@@ -195,12 +195,12 @@ db_services:
 
 ## Port collisions to watch for
 
-- 5432: `postgres`, `pgvector`, `postgis`, `timescaledb` — only one can bind per project.
-- 6379: `redis`, `keydb`, `dragonfly` — same. (`redict` exposes 6380, `valkey` exposes 8080 — not 6379.)
+- 5432: `postgres`, `pgvector`, `postgis`, `timescaledb` - only one can bind per project.
+- 6379: `redis`, `keydb`, `dragonfly` - same. (`redict` exposes 6380, `valkey` exposes 8080 - not 6379.)
 - 3306: `mysql`, `mariadb`.
 - 9042: `cassandra`, `scylla`.
 - 8000: `surrealdb`.
 - 4566: `localstack`, `dynamodb`, `sqs`, `s3` all share this; only one at a time.
-- 54321..54324: `supabase` driver claims api/db/studio/inbucket here. Override via compose `port:` (api), `dbPort:`, `studioPort:`, `inbucketPort:` — driver patches config.toml + emits matching env URLs.
+- 54321..54324: `supabase` driver claims api/db/studio/inbucket here. Override via compose `port:` (api), `dbPort:`, `studioPort:`, `inbucketPort:` - driver patches config.toml + emits matching env URLs.
 
 If two drivers need the same port, change `port:` on one of them. Corgi will substitute it into the generated compose file and env vars.

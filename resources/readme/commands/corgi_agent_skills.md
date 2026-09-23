@@ -10,7 +10,7 @@ Claude reads the corgi skills from the plugin (/plugin install corgi@corgi).
 Codex reads skills from `~/.codex/skills/<name>/SKILL.md` and has no plugin, so
 corgi copies them there: every skill, the _shared files they read, one
 manifest naming what corgi owns. Skills you installed yourself are never
-touched; a skill corgi dropped is removed. Run it again after an upgrade —
+touched; a skill corgi dropped is removed. Run it again after an upgrade -
 corgi agent doctor says when the copy is behind.
 
   corgi agent skills install               # into ~/.codex/skills ($CODEX_HOME/skills when set)

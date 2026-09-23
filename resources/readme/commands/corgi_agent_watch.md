@@ -2,7 +2,7 @@
 
 ## corgi agent watch
 
-Watch the tracker and your pull requests: new issues, new comments, reviews — notify, or fix
+Watch the tracker and your pull requests: new issues, new comments, reviews - notify, or fix
 
 ### Synopsis
 

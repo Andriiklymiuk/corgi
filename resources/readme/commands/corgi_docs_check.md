@@ -8,7 +8,7 @@ Docs that mention what the diff changed, and pointers that no longer land
 
 Reads the stack's changed surface (exported symbols, routes, contracts,
 migrations, config) against a base branch, then finds every Markdown file that
-names one of them — those are the docs to re-read. Also checks the file:line
+names one of them - those are the docs to re-read. Also checks the file:line
 pointers in CLAUDE.md, AGENTS.md and .claude/rules against the tree.
 
   corgi docs check

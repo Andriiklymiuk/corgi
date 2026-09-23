@@ -31,7 +31,7 @@ func TestCaptureDefaultsTheTimestamp(t *testing.T) {
 		t.Error("a brief with no end time cannot be ordered against any other")
 	}
 	if b.EndedAt.Location() != time.UTC {
-		t.Error("stored time must be UTC — a brief outlives the timezone the daemon started in")
+		t.Error("stored time must be UTC - a brief outlives the timezone the daemon started in")
 	}
 }
 
@@ -60,7 +60,7 @@ func TestSummaryNamesTheBranchAndCountsTheRest(t *testing.T) {
 
 	got := b.Summary()
 	if !strings.Contains(got, "feature/referral") {
-		t.Errorf("summary %q must name the branch — that is the whole point of it", got)
+		t.Errorf("summary %q must name the branch - that is the whole point of it", got)
 	}
 	if !strings.Contains(got, "1 repo has uncommitted changes") {
 		t.Errorf("summary %q must count uncommitted work", got)
@@ -304,7 +304,7 @@ func TestDistinctIDsDoNotShareAFile(t *testing.T) {
 		t.Fatalf("Read(acme/stack) = %v, %v", slash, err)
 	}
 	if slash.Cause != "slash" {
-		t.Errorf("acme/stack got cause %q — another workspace's brief overwrote it", slash.Cause)
+		t.Errorf("acme/stack got cause %q - another workspace's brief overwrote it", slash.Cause)
 	}
 	if Path(dir, "acme/stack") == Path(dir, "acme-stack") {
 		t.Error("two distinct ids resolved to the same file")

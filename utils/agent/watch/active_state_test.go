@@ -30,12 +30,12 @@ func TestListedStatesTakeInFlightTicketsAnyway(t *testing.T) {
 func TestAnApprovingReviewSummaryIsNotWorkToDo(t *testing.T) {
 	rules := Rules{Enabled: true, PRs: true}
 	approve := Event{Kind: KindPRComment, Ref: "acme/api#455", Mine: true, Author: "reviewer",
-		Body: "## Code review — ABC-1 · api #455\n\n**Verdict: APPROVE** — no blockers in this repo. CI green. All three acceptance criteria met.\n\nSome things I checked and want to credit properly, the flag handling…"}
+		Body: "## Code review - ABC-1 · api #455\n\n**Verdict: APPROVE** - no blockers in this repo. CI green. All three acceptance criteria met.\n\nSome things I checked and want to credit properly, the flag handling…"}
 	if why := rules.Why(approve); !strings.Contains(why, "approves") {
 		t.Fatalf("a verdict of approve asks for nothing: %q", why)
 	}
 	changes := Event{Kind: KindPRComment, Ref: "acme/api#526", Mine: true, Author: "reviewer",
-		Body: "## Code review — ABC-1 · api #526\n\n**Verdict: REQUEST_CHANGES — 2 blockers.** CI is green.\n\nThe code is correct — I want to…"}
+		Body: "## Code review - ABC-1 · api #526\n\n**Verdict: REQUEST_CHANGES - 2 blockers.** CI is green.\n\nThe code is correct - I want to…"}
 	if why := rules.Why(changes); why != "" {
 		t.Fatalf("request changes is work: %q", why)
 	}

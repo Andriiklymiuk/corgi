@@ -47,7 +47,7 @@ if (-not $installDir) {
 }
 New-Item -ItemType Directory -Force -Path $installDir | Out-Null
 
-# tar.exe ships with Windows 10+ — required for .tar.gz extraction.
+# tar.exe ships with Windows 10+ - required for .tar.gz extraction.
 if (-not (Get-Command tar -ErrorAction SilentlyContinue)) {
     Fail 'tar.exe not found. Windows 10 1803+ ships tar; please update Windows or extract the release manually.'
 }

@@ -7,8 +7,8 @@ One live pane: every service's run state + its branch/PR/CI
 ### Synopsis
 
 Aggregates, in one refreshing read-only view, each declared service's
-run state (reusing 'corgi status' probes) and its per-service agent work —
-current branch, draft/open/merged PR, and CI status — read locally via git
+run state (reusing 'corgi status' probes) and its per-service agent work -
+current branch, draft/open/merged PR, and CI status - read locally via git
 and gh/glab.
 
   --watch          Repoll and reprint the frame until Ctrl+C.

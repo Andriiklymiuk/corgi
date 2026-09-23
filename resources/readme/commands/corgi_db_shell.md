@@ -34,7 +34,7 @@ corgi db shell [service-name] [flags]
   -e, --exec string   Run a single query/command non-interactively and exit.
                       For redis-family drivers the query is split on whitespace, so quoted
                       arguments containing spaces (e.g. SET foo "hello world") are not
-                      preserved — wrap them in a script file or use the interactive shell.
+                      preserved - wrap them in a script file or use the interactive shell.
   -h, --help          help for shell
 ```
 

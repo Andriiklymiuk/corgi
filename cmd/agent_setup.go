@@ -31,7 +31,7 @@ var agentInitCmd = &cobra.Command{
 	Long: `Registers the current directory as an agent-mode workspace and writes
 .corgi/agent.yml.
 
-That file is committed and holds identity only — id and aliases. Anything that
+That file is committed and holds identity only - id and aliases. Anything that
 grants capability (which binary runs, which Claude config directory, permission
 mode) lives in the user-level config instead, because a committed file arrives
 with a clone and is not written by whoever runs the daemon.`,
@@ -67,14 +67,14 @@ func runAgentInit(cmd *cobra.Command, _ []string) {
 	}
 
 	utils.Infof("registered %s (%s) and enabled it\n", id, cwd)
-	utils.Info("wrote .corgi/agent.yml — safe to commit, it holds identity only")
+	utils.Info("wrote .corgi/agent.yml - safe to commit, it holds identity only")
 	if len(agents) > 0 {
 		agentsNotice(agents)
 	} else if harness.For(harness.Codex, "").Installed() {
 		utils.Info("runs through claude; `corgi agent init --agents claude,codex` lets codex take a run when claude cannot")
 	}
 	if skipPerms {
-		utils.Info("⚠ permissions: SKIPPED for this workspace — its remote sessions run without the prompts you answer from your phone.")
+		utils.Info("⚠ permissions: SKIPPED for this workspace - its remote sessions run without the prompts you answer from your phone.")
 		utils.Infof("  to undo: remove `dangerouslySkipPermissions: true` for %s from %s\n", id, agentUserConfigPath(mustAgentDir()))
 	}
 	if configDir == "" {
@@ -98,7 +98,7 @@ func (e *registerError) Unwrap() error { return e.err }
 func registerWorkspace(dir, id string, aliases []string, configDir string, sensitive, skipPerms bool, agents []string) (string, error) {
 	if !dirIsWorkspace(dir) {
 		return "", &registerError{"agent_no_workspace", 2,
-			fmt.Errorf("nothing to register here — run this in a corgi stack or a git repository (or `corgi agent scan <dir>` to find stacks)")}
+			fmt.Errorf("nothing to register here - run this in a corgi stack or a git repository (or `corgi agent scan <dir>` to find stacks)")}
 	}
 	if id == "" {
 		id = filepath.Base(dir)
@@ -110,7 +110,7 @@ func registerWorkspace(dir, id string, aliases []string, configDir string, sensi
 	}
 	if prior, ok := registry.Find(id); ok && prior.AbsPath != "" && prior.AbsPath != dir {
 		return "", &registerError{"agent_id_taken", 2, fmt.Errorf(
-			"workspace id %q already belongs to %s — its settings (account, permissions) must not transfer here. "+
+			"workspace id %q already belongs to %s - its settings (account, permissions) must not transfer here. "+
 				"Pass --id <something-else> to register this directory under its own name",
 			id, prior.AbsPath)}
 	}
@@ -216,7 +216,7 @@ func warnIfUntrusted(configDir, dir string) {
 	if claudeTrustsDir(configDir, dir) {
 		return
 	}
-	utils.Infof("⚠ Claude has not trusted %s yet%s — run `claude` there once and accept the trust dialog, or the remote session will fail to start.\n",
+	utils.Infof("⚠ Claude has not trusted %s yet%s - run `claude` there once and accept the trust dialog, or the remote session will fail to start.\n",
 		dir, trustAccountSuffix(configDir))
 }
 
@@ -247,7 +247,7 @@ func writeRepoAgentConfig(dir, id string, aliases []string, sensitive bool) erro
 	if err != nil {
 		return err
 	}
-	header := []byte("# corgi agent mode — committed, identity only.\n" +
+	header := []byte("# corgi agent mode - committed, identity only.\n" +
 		"# Capability settings (bin, configDir, permissionMode) live in the\n" +
 		"# user-level config, never here: this file arrives with a clone.\n")
 
@@ -355,7 +355,7 @@ func runAgentScan(cmd *cobra.Command, args []string) {
 		exitWithError("agent_registry_write", err, 1)
 	}
 	utils.Infof("registered %d workspace(s)\n", added)
-	utils.Info("none of them are supervised yet — run `corgi agent init` in the ones you want running")
+	utils.Info("none of them are supervised yet - run `corgi agent init` in the ones you want running")
 }
 
 var skipDirs = map[string]bool{
@@ -492,7 +492,7 @@ func checkSessionTracking(dir string) []agentCheck {
 	}
 	c := agentCheck{Name: "session tracking", OK: true, Detail: fmt.Sprintf("hooks in %d of %d Claude config dir(s)", hooked, len(dirs))}
 	if hooked == 0 {
-		c.Detail = "off — `corgi agent track enable` for a Stream Deck or `corgi agent sessions`"
+		c.Detail = "off - `corgi agent track enable` for a Stream Deck or `corgi agent sessions`"
 		return append(checks, c)
 	}
 	if hooked < len(dirs) {
@@ -500,7 +500,7 @@ func checkSessionTracking(dir string) []agentCheck {
 	}
 	if stale > 0 {
 		c.OK = false
-		c.Detail = fmt.Sprintf("hooks in %d of %d Claude config dir(s) — %d from an older corgi", hooked, len(dirs), stale)
+		c.Detail = fmt.Sprintf("hooks in %d of %d Claude config dir(s) - %d from an older corgi", hooked, len(dirs), stale)
 		c.Fix = "`corgi agent track enable` again: this version adds hooks the old set does not have"
 	}
 	checks = append(checks, c)
@@ -519,7 +519,7 @@ func checkSessionTracking(dir string) []agentCheck {
 	if unknown > 0 {
 		board.OK = false
 		board.Detail += fmt.Sprintf(", %d with no known window", unknown)
-		board.Fix = "focus reaches those at app level only — reopen the terminal after installing the corgi VS Code extension, or run claude inside tmux (any OS)"
+		board.Fix = "focus reaches those at app level only - reopen the terminal after installing the corgi VS Code extension, or run claude inside tmux (any OS)"
 	}
 	return append(checks, board)
 }
@@ -538,7 +538,7 @@ func checkWorkspaceTrust() []agentCheck {
 		c := agentCheck{Name: "trust · " + ws.ID, OK: true, Detail: "Claude trusts " + absPath + trustAccountSuffix(configDir)}
 		if !claudeTrustsDir(configDir, absPath) {
 			c.OK = false
-			c.Detail = "Claude has not trusted " + absPath + trustAccountSuffix(configDir) + " — remote sessions will refuse to start"
+			c.Detail = "Claude has not trusted " + absPath + trustAccountSuffix(configDir) + " - remote sessions will refuse to start"
 			c.Fix = "run `claude` in that directory once and accept the trust prompt"
 		}
 		checks = append(checks, c)
@@ -565,7 +565,7 @@ func checkAmbientAPIKey() agentCheck {
 	return agentCheck{
 		Name:   "ambient credentials",
 		OK:     true,
-		Detail: "ANTHROPIC_API_KEY is set — corgi strips it from supervised processes",
+		Detail: "ANTHROPIC_API_KEY is set - corgi strips it from supervised processes",
 		Fix:    "remote control requires subscription auth and refuses to start with an API key set; corgi removes it for you",
 	}
 }
@@ -588,10 +588,10 @@ func checkWakeLockSupport() agentCheck {
 	}
 	detail := argv[0] + " · " + wakeLockScope()
 	if risk := supervisor.CheckSleepRisk(); risk.AtRisk() {
-		return agentCheck{Name: checkWakeLock, OK: true, Detail: detail + " — " + risk.Reason, Fix: risk.Fix}
+		return agentCheck{Name: checkWakeLock, OK: true, Detail: detail + " - " + risk.Reason, Fix: risk.Fix}
 	}
 	if runtime.GOOS == "darwin" {
-		detail += " — note: " + supervisor.ClamshellWarning
+		detail += " - note: " + supervisor.ClamshellWarning
 	}
 	return agentCheck{Name: checkWakeLock, OK: true, Detail: detail}
 }
@@ -603,7 +603,7 @@ func wakeLockScope() string {
 	}
 	user, err := config.LoadUser(agentUserConfigPath(dir))
 	if err != nil || user == nil || !user.StayAwake {
-		return "per session (the machine may sleep between them — `corgi agent awake on`)"
+		return "per session (the machine may sleep between them - `corgi agent awake on`)"
 	}
 	return "held for the daemon's whole life (stayAwake)"
 }
@@ -620,13 +620,13 @@ func checkInstallSupport() agentCheck {
 		return agentCheck{
 			Name:   checkAtLogin,
 			OK:     true,
-			Detail: "not installed — nothing comes back after a reboot",
+			Detail: "not installed - nothing comes back after a reboot",
 			Fix:    "`corgi agent up --at-login` in a stack, or `corgi agent install` for the daemon alone",
 		}
 	}
-	detail := installMechanism() + " — daemon only"
+	detail := installMechanism() + " - daemon only"
 	if dir, err := agentDir(); err == nil && loadUpSettings(dir).AtLogin {
-		detail = installMechanism() + " — daemon, MCP endpoint and tunnel"
+		detail = installMechanism() + " - daemon, MCP endpoint and tunnel"
 	}
 	if on, known := lingerEnabled(); known && !on {
 		return agentCheck{Name: checkAtLogin, OK: true, Detail: detail + ", stops with your last login", Fix: "`loginctl enable-linger $USER` so it outlives the SSH session"}
@@ -651,9 +651,9 @@ func notifierCheck(haveNotifySend bool, notifyURL string) agentCheck {
 	case haveNotifySend:
 		return agentCheck{Name: name, OK: true, Detail: "notify-send"}
 	case notifyURL != "":
-		return agentCheck{Name: name, OK: true, Detail: "no desktop notifier — notifyUrl carries them"}
+		return agentCheck{Name: name, OK: true, Detail: "no desktop notifier - notifyUrl carries them"}
 	}
-	return agentCheck{Name: name, OK: true, Detail: "no notify-send and no notifyUrl — nothing here shows a notification", Fix: "`corgi agent notify telegram --token <TOKEN>`, then `corgi agent restart`"}
+	return agentCheck{Name: name, OK: true, Detail: "no notify-send and no notifyUrl - nothing here shows a notification", Fix: "`corgi agent notify telegram --token <TOKEN>`, then `corgi agent restart`"}
 }
 
 func checkUserConfigPermissions(path string) agentCheck {
@@ -735,7 +735,7 @@ func checkAgents() agentCheck {
 	}
 	detail := strings.Join(words, "; ")
 	if len(missingNext) > 0 {
-		detail += " — not installed: " + strings.Join(missingNext, ", ")
+		detail += " - not installed: " + strings.Join(missingNext, ", ")
 	}
 	return agentCheck{Name: name, OK: true, Detail: detail}
 }
@@ -763,7 +763,7 @@ func init() {
 	agentInitCmd.Flags().StringSlice("agents", nil, "The agents to try in order, e.g. claude,codex: the next takes an unattended run when the first cannot")
 	agentInitCmd.Flags().String("kind", "", "The one agent this workspace runs (claude, codex); --agents lists several")
 	agentInitCmd.Flags().Bool("dangerously-skip-permissions", false,
-		"Run this workspace's sessions with permission prompts OFF (--permission-mode bypassPermissions). Removes the gate you answer from your phone — off by default.")
+		"Run this workspace's sessions with permission prompts OFF (--permission-mode bypassPermissions). Removes the gate you answer from your phone - off by default.")
 
 	agentScanCmd.Flags().Bool("dry-run", false, "Show what would be registered without changing anything")
 
@@ -831,24 +831,24 @@ func checkUnattended(dir string) []agentCheck {
 }
 
 // codexNotifyCheck: a workspace lists codex, so its sessions should reach
-// the board — through corgi's hooks, or its notify line on an older codex.
+// the board - through corgi's hooks, or its notify line on an older codex.
 func codexNotifyCheck() agentCheck {
 	const name = "codex sessions on the board"
 	if !codexInstalled() {
 		return agentCheck{Name: name, Detail: "a workspace lists codex, but codex is not on PATH", Fix: "install codex, or drop it from the workspace's agents"}
 	}
 	if hooks := codexHooksPath(); hasTrackingHooks(hooks) {
-		return agentCheck{Name: name, OK: true, Detail: "hooks in " + hooks + " — codex runs them once trusted in /hooks"}
+		return agentCheck{Name: name, OK: true, Detail: "hooks in " + hooks + " - codex runs them once trusted in /hooks"}
 	}
 	path := codexConfigPath()
 	raw, _ := os.ReadFile(path)
 	if m := codexNotifyRe.FindString(string(raw)); m == "" {
-		return agentCheck{Name: name, Detail: "codex has no notify hook in " + path + " — its sessions stay off the board", Fix: "`corgi agent track enable`"}
+		return agentCheck{Name: name, Detail: "codex has no notify hook in " + path + " - its sessions stay off the board", Fix: "`corgi agent track enable`"}
 	} else if !strings.Contains(m, `"agent", "event"`) {
 		return agentCheck{Name: name, Detail: "codex's notify hook in " + path + " is someone else's; codex runs one, so its sessions stay off the board"}
 	}
 	if codexSupportsHooks() {
-		return agentCheck{Name: name, Detail: "only the notify hook in " + path + " — this codex runs hooks, which put its prompts, tools and permissions on the board too", Fix: "`corgi agent track enable`"}
+		return agentCheck{Name: name, Detail: "only the notify hook in " + path + " - this codex runs hooks, which put its prompts, tools and permissions on the board too", Fix: "`corgi agent track enable`"}
 	}
 	return agentCheck{Name: name, OK: true, Detail: "notify hook in " + path}
 }
@@ -858,7 +858,7 @@ func codexSkillsCheck() agentCheck {
 	dst := codexSkillsDir()
 	m, ok := readCodexSkillsManifest(dst)
 	if !ok {
-		return agentCheck{Name: name, Detail: "codex takes runs here but has no corgi skills in " + dst + " — a fix runs $stories and $review, which live there",
+		return agentCheck{Name: name, Detail: "codex takes runs here but has no corgi skills in " + dst + " - a fix runs $stories and $review, which live there",
 			Fix: "`corgi agent skills install`"}
 	}
 	src, err := corgiSkillsSource("")
@@ -898,7 +898,7 @@ func gitIdentityCheck(missing []string) agentCheck {
 	if len(missing) == 0 {
 		return agentCheck{Name: name, OK: true, Detail: "user.email set in every workspace"}
 	}
-	return agentCheck{Name: name, Detail: "no user.email in " + strings.Join(missing, ", ") + " — an unattended commit fails there",
+	return agentCheck{Name: name, Detail: "no user.email in " + strings.Join(missing, ", ") + " - an unattended commit fails there",
 		Fix: "git config --global user.name \"…\" && git config --global user.email \"…\""}
 }
 
@@ -921,7 +921,7 @@ func forgeCLICheck(haveGH, haveGlab, githubToken, gitlabToken bool) agentCheck {
 		return agentCheck{Name: name, Detail: "missing " + strings.Join(need, "; "), Fix: "a fix that cannot open its pull request ends with the work stuck on a branch"}
 	}
 	if len(have) == 0 {
-		return agentCheck{Name: name, OK: true, Detail: "none — fine until a watch opens pull requests", Fix: "install gh or glab and log it in before `watch enable --action fix`"}
+		return agentCheck{Name: name, OK: true, Detail: "none - fine until a watch opens pull requests", Fix: "install gh or glab and log it in before `watch enable --action fix`"}
 	}
 	return agentCheck{Name: name, OK: true, Detail: strings.Join(have, ", ")}
 }
@@ -946,6 +946,6 @@ func pluginCheck(missingIn []string) agentCheck {
 	if len(missingIn) == 0 {
 		return agentCheck{Name: name, OK: true, Detail: "installed for every account that fixes"}
 	}
-	return agentCheck{Name: name, Detail: "not installed under " + strings.Join(missingIn, ", ") + " — a fix runs /corgi:stories and /corgi:review, which live in it",
+	return agentCheck{Name: name, Detail: "not installed under " + strings.Join(missingIn, ", ") + " - a fix runs /corgi:stories and /corgi:review, which live in it",
 		Fix: "in `claude` under that account: /plugin marketplace add Andriiklymiuk/corgi, then /plugin install corgi@corgi"}
 }

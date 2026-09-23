@@ -14,11 +14,11 @@ git and the last thing the session said, unless the session wrote its own.
 Then, by default, the transcript is copied into the other account's config
 directory and a new terminal in the same window runs
 `corgi agent claude --profile <name> -- --resume <id>`, so the conversation
-carries on where it was. With --fresh — or on its own when the context window
-is over 85% full — the new session starts clean instead, with the handoff as
+carries on where it was. With --fresh - or on its own when the context window
+is over 85% full - the new session starts clean instead, with the handoff as
 its first prompt: same worktree, none of the old context.
 
-Only a profile the workspace's accounts: list names is allowed — a workspace
+Only a profile the workspace's accounts: list names is allowed - a workspace
 that lists none cannot be carried anywhere. The old session is dismissed once
 the new one is up; its process is left alone.
 
@@ -31,7 +31,7 @@ original keeps running.
 
 --to codex (or --to claude) hands the work to another agent instead: the
 handoff is written, and a new terminal opens that agent in the same
-workspace with the handoff as its first prompt — a conversation cannot cross
+workspace with the handoff as its first prompt - a conversation cannot cross
 harnesses, so this is always a fresh start. Only an agent the workspace lists
 (corgi agent workspaces agents `<id>` claude,codex) can take it.
 

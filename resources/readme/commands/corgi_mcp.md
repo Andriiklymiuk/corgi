@@ -32,7 +32,7 @@ corgi mcp [flags]
       --tunnel-hostname string      Custom public hostname for the tunnel (${VAR} expanded).
       --tunnel-name string          cloudflared named-tunnel name.
       --tunnel-provider string      Tunnel provider (cloudflared|ngrok|localtunnel). (default "cloudflared")
-      --viewer                      The device that pairs in this window only reads: the board, the inbox, the brief — never a transcript, never a button (with --pair).
+      --viewer                      The device that pairs in this window only reads: the board, the inbox, the brief - never a transcript, never a button (with --pair).
 ```
 
 ### Options inherited from parent commands

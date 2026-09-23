@@ -31,7 +31,7 @@ func registerAgentMCPTools(s *server.MCPServer) {
 			"Health of the corgi agent daemon: whether it is running, each workspace's supervised session, "+
 				"restart count, wake lock, and which Claude account each workspace uses. Read-only. "+
 				"A workspace that is running with deviceOnly true and sessionsThisRun 0 is online as a device "+
-				"with no session yet — the resting state, not a failure; corgi_session_start opens one. "+
+				"with no session yet - the resting state, not a failure; corgi_session_start opens one. "+
 				"Use this to answer \"is it up\" and \"why did my session die\"."),
 	), jsonHandler(func(mcp.CallToolRequest) (any, error) {
 		return mcpAgentStatus()
@@ -41,7 +41,7 @@ func registerAgentMCPTools(s *server.MCPServer) {
 		mcp.WithDescription(
 			"Every interactive Claude Code session on this machine, as the board `corgi agent track` keeps: "+
 				"label, status (working, needs_input, done, stale, gone), what it is doing, which account, and where "+
-				"its terminal is. Read-only. needsInput counts the sessions waiting on a person — use this to answer "+
+				"its terminal is. Read-only. needsInput counts the sessions waiting on a person - use this to answer "+
 				"\"is anything waiting on me\" and \"what is running right now\". Empty until `corgi agent track enable`."),
 	), jsonHandler(func(mcp.CallToolRequest) (any, error) {
 		return mcpSessions()
@@ -70,7 +70,7 @@ func registerAgentMCPTools(s *server.MCPServer) {
 	s.AddTool(newCorgiTool("corgi_workspace_resolve",
 		mcp.WithDescription(
 			"Resolve a human name like \"the recipe app\" to one registered workspace. Read-only. "+
-				"Returns either a single workspace or a candidate list — it never guesses, because picking the "+
+				"Returns either a single workspace or a candidate list - it never guesses, because picking the "+
 				"wrong one means editing the wrong repository."),
 		mcp.WithString("query", mcp.Required(), mcp.Description("What the user called it")),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
@@ -80,13 +80,13 @@ func registerAgentMCPTools(s *server.MCPServer) {
 	s.AddTool(newCorgiTool("corgi_session_start",
 		mcp.WithDescription(
 			"Start a supervised Claude Code Remote Control session in a registered workspace, by name. "+
-				"Returns immediately with state \"starting\" — poll corgi_agent_status until the workspace reports "+
+				"Returns immediately with state \"starting\" - poll corgi_agent_status until the workspace reports "+
 				"running and (best-effort) a sessionUrl; opening that URL joins the conversation. Idempotent: an "+
 				"already-running workspace returns state \"running\" with its URL. The optional profile picks a "+
 				"named entry from the trusted agent config (a different Claude account, e.g. \"work\")."),
 		mcp.WithString("workspace", mcp.Required(), mcp.Description(workspaceArgDescription)),
 		mcp.WithString("profile", mcp.Description("Profile name from the agent config's profiles: section")),
-		mcp.WithString("name", mcp.Description("Session name shown in claude.ai/code, e.g. \"fix login redirect\". Defaults to the workspace, its branch and the start time — pass one whenever the task is known, it reads better in the list.")),
+		mcp.WithString("name", mcp.Description("Session name shown in claude.ai/code, e.g. \"fix login redirect\". Defaults to the workspace, its branch and the start time - pass one whenever the task is known, it reads better in the list.")),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
 		return mcpSessionStart(r.GetString("workspace", ""), r.GetString("profile", ""), r.GetString("name", ""))
 	}))
@@ -159,7 +159,7 @@ func registerAgentMCPTools(s *server.MCPServer) {
 	s.AddTool(newCorgiTool("corgi_worktrees_release",
 		mcp.WithDescription(
 			"Remove the worktrees a branch materialized. Branches and commits are left alone, and a worktree "+
-				"with uncommitted changes is kept and reported rather than discarded — pass force to remove it anyway."),
+				"with uncommitted changes is kept and reported rather than discarded - pass force to remove it anyway."),
 		composeOpt,
 		mcp.WithString("branch", mcp.Required(), mcp.Description("Branch whose worktrees should be removed")),
 		mcp.WithBoolean("force", mcp.Description("Remove even worktrees holding uncommitted changes")),
@@ -191,7 +191,7 @@ func registerAgentMCPTools(s *server.MCPServer) {
 	s.AddTool(newCorgiTool("corgi_preview_state",
 		mcp.WithDescription(
 			"State of one preview, or all of them. States: starting (no URL yet), ready, broken (the tunnel is up "+
-				"but nothing answers on the port — usually a build in progress), stopped. A url is present only in ready."),
+				"but nothing answers on the port - usually a build in progress), stopped. A url is present only in ready."),
 		composeOpt,
 		mcp.WithString("id", mcp.Description("Preview id or service name; omit for all")),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
@@ -230,7 +230,7 @@ func registerAgentMCPTools(s *server.MCPServer) {
 				"what changed. Large patches are truncated rather than dropped."),
 		composeOpt,
 		mcp.WithString("base", mcp.Description("Base branch to compare against (default: main)")),
-		mcp.WithString("branch", mcp.Description("Diff the existing worktrees of this branch instead of the main checkouts. Does not create anything — run corgi_worktrees_materialize first.")),
+		mcp.WithString("branch", mcp.Description("Diff the existing worktrees of this branch instead of the main checkouts. Does not create anything - run corgi_worktrees_materialize first.")),
 		mcp.WithBoolean("includePatch", mcp.Description("Include the unified diff per file (default true)")),
 		mcp.WithBoolean("surface", mcp.Description("Only the changed surface: exported symbols, routes, contracts, migrations and config that changed, per repository, with removals and signature changes marked breaking. Read this before the diff. Returns {repos, markdown}.")),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
@@ -292,7 +292,7 @@ func mcpSessions() (any, error) {
 	if len(rep.Sessions) == 0 {
 		return map[string]any{
 			"sessions": []any{}, "daemonRunning": rep.Running,
-			"hint": "nothing tracked — `corgi agent track enable` installs the hooks; sessions appear from their next event",
+			"hint": "nothing tracked - `corgi agent track enable` installs the hooks; sessions appear from their next event",
 		}, nil
 	}
 	return rep, nil
@@ -381,10 +381,10 @@ func mcpSessionStart(query, profile, name string) (any, error) {
 		return nil, err
 	}
 	if info == nil {
-		return nil, fmt.Errorf("the corgi agent daemon is not running — run `corgi agent serve` on the laptop, or `corgi agent install` to start at login")
+		return nil, fmt.Errorf("the corgi agent daemon is not running - run `corgi agent serve` on the laptop, or `corgi agent install` to start at login")
 	}
 	if !info.Commands {
-		return nil, fmt.Errorf("the running corgi agent predates remote session start — restart it (`corgi agent stop` then `corgi agent serve`) on the laptop")
+		return nil, fmt.Errorf("the running corgi agent predates remote session start - restart it (`corgi agent stop` then `corgi agent serve`) on the laptop")
 	}
 	c, err := command.Write(dir, command.Command{
 		Action: command.ActionStart, WorkspaceID: w.ID, Profile: profile, Name: sanitizeSessionName(name), Source: "mcp",
@@ -397,7 +397,7 @@ func mcpSessionStart(query, profile, name string) (any, error) {
 		"workspaceId": w.ID,
 		"state":       "starting",
 		"commandId":   c.ID,
-		"hint":        "poll corgi_agent_status until this workspace is running with a sessionUrl; that URL opens the conversation. A workspace that was already online as a device (running, deviceOnly, no sessions) is being given a session now — expect a short gap while the process is swapped",
+		"hint":        "poll corgi_agent_status until this workspace is running with a sessionUrl; that URL opens the conversation. A workspace that was already online as a device (running, deviceOnly, no sessions) is being given a session now - expect a short gap while the process is swapped",
 	}, nil
 }
 
@@ -418,10 +418,10 @@ func mcpSessionStop(query string) (any, error) {
 		return nil, err
 	}
 	if info == nil {
-		return nil, fmt.Errorf("the corgi agent daemon is not running — nothing to stop")
+		return nil, fmt.Errorf("the corgi agent daemon is not running - nothing to stop")
 	}
 	if !info.Commands {
-		return nil, fmt.Errorf("the running corgi agent predates remote session start — restart it on the laptop")
+		return nil, fmt.Errorf("the running corgi agent predates remote session start - restart it on the laptop")
 	}
 	c, err := command.Write(dir, command.Command{
 		Action: command.ActionStop, WorkspaceID: w.ID, Source: "mcp",
@@ -482,7 +482,7 @@ func mcpPROpen(composePath, branch, title, body, base string, draft bool) (any, 
 		}
 	}
 	if len(dirs) == 0 {
-		return nil, fmt.Errorf("%s: no worktrees for %s — run corgi_worktrees_materialize first", utils.ErrUsage, branch)
+		return nil, fmt.Errorf("%s: no worktrees for %s - run corgi_worktrees_materialize first", utils.ErrUsage, branch)
 	}
 	out, err := utils.OpenBranchPRs(dirs, branch, base, title, body, draft)
 	if err != nil {
@@ -529,7 +529,7 @@ func mcpDiff(composePath, base, branch string, includePatch bool) (any, error) {
 		}
 		if len(set.Worktrees) == 0 {
 			return nil, fmt.Errorf(
-				"%s: no worktrees exist for branch %q — run corgi_worktrees_materialize first, "+
+				"%s: no worktrees exist for branch %q - run corgi_worktrees_materialize first, "+
 					"or omit branch to diff the main checkouts",
 				utils.ErrUsage, branch)
 		}

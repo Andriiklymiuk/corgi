@@ -68,16 +68,16 @@ var awsVpnLinuxLaunch = func() error {
 func awsVpnInitLinux() error {
 	running, err := awsVpnLinuxRunning()
 	if err != nil {
-		fmt.Printf("ℹ️  %v — open it and connect yourself, or run with --omit useAwsVpn\n", err)
+		fmt.Printf("ℹ️  %v - open it and connect yourself, or run with --omit useAwsVpn\n", err)
 		return nil
 	}
 	if running {
-		fmt.Println("✅ AWS VPN Client is running — connect the profile in its window if it is not up yet")
+		fmt.Println("✅ AWS VPN Client is running - connect the profile in its window if it is not up yet")
 		return nil
 	}
-	fmt.Println("🔌 Starting AWS VPN Client — connect the profile in its window")
+	fmt.Println("🔌 Starting AWS VPN Client - connect the profile in its window")
 	if err := awsVpnLinuxLaunch(); err != nil {
-		return fmt.Errorf("%w — open it yourself, or run with --omit useAwsVpn", err)
+		return fmt.Errorf("%w - open it yourself, or run with --omit useAwsVpn", err)
 	}
 	for attempt := 0; attempt < awsVpnMaxLaunchAttempts; attempt++ {
 		if ShutdownRequested() {
@@ -215,7 +215,7 @@ func connectFirstAwsVpnProfile() error {
 }
 
 func awsVpnWaitConnected() {
-	fmt.Println("   Finish the sign-in in your browser; Safari may warn that the form is sent insecurely — that is the client's own callback on 127.0.0.1.")
+	fmt.Println("   Finish the sign-in in your browser; Safari may warn that the form is sent insecurely - that is the client's own callback on 127.0.0.1.")
 	deadline := time.Now().Add(awsVpnConnectTimeout)
 	for time.Now().Before(deadline) && !ShutdownRequested() {
 		InterruptibleSleep(awsVpnConnectPoll)
@@ -229,12 +229,12 @@ func awsVpnWaitConnected() {
 			fmt.Println("✅ AWS VPN connected")
 			return
 		case "disconnected", "no-profile":
-			fmt.Println("⚠️  AWS VPN connection did not complete — the profile is back to Disconnected. Connect it manually.")
+			fmt.Println("⚠️  AWS VPN connection did not complete - the profile is back to Disconnected. Connect it manually.")
 			return
 		}
 	}
 	if !ShutdownRequested() {
-		fmt.Printf("⚠️  AWS VPN still connecting after %s — going on without waiting; check the client window.\n", awsVpnConnectTimeout)
+		fmt.Printf("⚠️  AWS VPN still connecting after %s - going on without waiting; check the client window.\n", awsVpnConnectTimeout)
 	}
 }
 

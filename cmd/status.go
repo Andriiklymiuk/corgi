@@ -101,7 +101,7 @@ func resolveStatusRows(cmd *cobra.Command) []statusRow {
 
 	rows := collectStatusRows(corgi)
 	if len(rows) == 0 {
-		utils.Info("No services with ports declared in corgi-compose.yml — nothing to check.")
+		utils.Info("No services with ports declared in corgi-compose.yml - nothing to check.")
 		return nil
 	}
 
@@ -146,7 +146,7 @@ func runStatusOnce(rows []statusRow, f statusFlags) {
 		return
 	}
 	if !f.quiet {
-		fmt.Printf("%s%d down, %d up%s — check `corgi run` logs for the failing services.\n",
+		fmt.Printf("%s%d down, %d up%s - check `corgi run` logs for the failing services.\n",
 			art.RedColor, len(down), len(up), art.WhiteColor)
 	}
 	exitProcess(1)
@@ -380,7 +380,7 @@ func buildWatchFrame(rows []statusRow, results map[string]probeResult, interval 
 		}
 	}
 	down := len(rows) - upCount
-	fmt.Fprintf(&buf, "\n%s👀 watching %d targets every %s — last update %s (%d up, %d down) — Ctrl+C to stop%s\n",
+	fmt.Fprintf(&buf, "\n%s👀 watching %d targets every %s - last update %s (%d up, %d down) - Ctrl+C to stop%s\n",
 		art.CyanColor, len(rows), interval, now.Format("15:04:05"), upCount, down, art.WhiteColor)
 	return buf.String()
 }
@@ -463,9 +463,9 @@ func emitTransition(r statusRow, ok bool, detail string, jsonOut, quiet bool) {
 	}
 	ts := time.Now().Format("15:04:05")
 	if ok {
-		fmt.Printf("  %s[%s] ✅ %-40s came up — %s%s\n", art.GreenColor, ts, r.Label, detail, art.WhiteColor)
+		fmt.Printf("  %s[%s] ✅ %-40s came up - %s%s\n", art.GreenColor, ts, r.Label, detail, art.WhiteColor)
 	} else {
-		fmt.Printf("  %s[%s] ❌ %-40s went down — %s%s\n", art.RedColor, ts, r.Label, detail, art.WhiteColor)
+		fmt.Printf("  %s[%s] ❌ %-40s went down - %s%s\n", art.RedColor, ts, r.Label, detail, art.WhiteColor)
 	}
 }
 
@@ -481,7 +481,7 @@ func finalize(rows []statusRow, jsonOut, quiet, healthy bool) {
 	if healthy {
 		fmt.Printf("%s🎉 all %d targets healthy%s\n", art.GreenColor, len(rows), art.WhiteColor)
 	} else {
-		fmt.Printf("%s⌛ timeout — %d up, %d down%s\n", art.RedColor, len(up), len(down), art.WhiteColor)
+		fmt.Printf("%s⌛ timeout - %d up, %d down%s\n", art.RedColor, len(up), len(down), art.WhiteColor)
 		renderProbeResults(up, down)
 	}
 }

@@ -180,6 +180,6 @@ func TestStartDockerAndWait_BailsBeforeLaunchingDockerApp(t *testing.T) {
 		t.Errorf("expected abort-by-shutdown error, got: %v", err)
 	}
 	if elapsed > 500*time.Millisecond {
-		t.Errorf("did not short-circuit promptly: %s — may have launched Docker", elapsed)
+		t.Errorf("did not short-circuit promptly: %s - may have launched Docker", elapsed)
 	}
 }

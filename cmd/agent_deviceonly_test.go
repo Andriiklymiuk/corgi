@@ -29,7 +29,7 @@ func TestAutostartWorkspacesRunAsDevicesByDefault(t *testing.T) {
 	}
 	c := configs[0]
 	if !c.DeviceOnly {
-		t.Error("a server the daemon starts by itself must not pre-create a session — that row is the one nobody opened")
+		t.Error("a server the daemon starts by itself must not pre-create a session - that row is the one nobody opened")
 	}
 	if c.SessionNamePrefix != "acme" {
 		t.Errorf("on-demand sessions are named after the workspace, got prefix %q", c.SessionNamePrefix)

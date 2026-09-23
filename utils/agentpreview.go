@@ -109,7 +109,7 @@ type PreviewOptions struct {
 func StartPreview(opts PreviewOptions) (*Preview, error) {
 	if opts.Sensitive {
 		return nil, fmt.Errorf(
-			"workspace %s is marked sensitive, so it never opens a public tunnel — "+
+			"workspace %s is marked sensitive, so it never opens a public tunnel - "+
 				"use corgi_diff, which needs no tunnel", opts.Workspace)
 	}
 	if opts.Service == "" {
@@ -365,7 +365,7 @@ func refreshPreviewFromLog(p *Preview) {
 		p.Error = ""
 	} else {
 		p.State = PreviewBroken
-		p.Error = fmt.Sprintf("nothing is listening on port %d yet — the service may still be building", p.Port)
+		p.Error = fmt.Sprintf("nothing is listening on port %d yet - the service may still be building", p.Port)
 	}
 }
 

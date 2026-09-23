@@ -7,7 +7,7 @@ Drop what a session left uncommitted in its own worktree; --worktree drops the w
 ### Synopsis
 
 A run went the wrong way. This throws away every uncommitted edit and every
-new file in the session's worktree — git checkout -- . and git clean -fd —
+new file in the session's worktree - git checkout -- . and git clean -fd -
 and with --worktree removes the worktree and deletes its `corgi/<ref>` branch.
 
 Only for a session with a worktree of its own (--isolate): a session on your

@@ -81,7 +81,7 @@ func runScopeHook(stdin io.Reader, stdout io.Writer) {
 	if s.Allows(rel) {
 		return
 	}
-	reason := fmt.Sprintf("%s is outside the scope agreed for %s (%s). If the change really needs it, widen the scope on the record — `corgi agent scope add %s --path %q` — and say why in the PR; otherwise keep the change inside it.",
+	reason := fmt.Sprintf("%s is outside the scope agreed for %s (%s). If the change really needs it, widen the scope on the record - `corgi agent scope add %s --path %q` - and say why in the PR; otherwise keep the change inside it.",
 		rel, s.Ref, strings.Join(s.Paths, ", "), s.Ref, rel)
 	_ = json.NewEncoder(stdout).Encode(map[string]any{
 		"hookSpecificOutput": map[string]any{
@@ -156,7 +156,7 @@ func runBudgetHook(stdin io.Reader, stdout io.Writer) {
 	}
 	sweepOldMarkers(scope.Dir(root))
 	_ = os.WriteFile(marker, []byte("reported\n"), 0o600)
-	reason := fmt.Sprintf("Before you stop: %s for %s. Trim the change to what the spec asked for, or — if this size is right — say why in one line in the PR body and raise the budget on the record: `corgi agent scope set %s --lines %d --tests %d`.",
+	reason := fmt.Sprintf("Before you stop: %s for %s. Trim the change to what the spec asked for, or - if this size is right - say why in one line in the PR body and raise the budget on the record: `corgi agent scope set %s --lines %d --tests %d`.",
 		strings.Join(over, "; "), s.Ref, s.Ref, lines, tests)
 	_ = json.NewEncoder(stdout).Encode(map[string]any{"decision": "block", "reason": reason})
 }

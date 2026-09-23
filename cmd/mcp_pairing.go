@@ -90,7 +90,7 @@ func pairingHandlerFor(window *pairWindow, storePath string) http.Handler {
 			return
 		}
 		if !session.Open() {
-			writePairError(w, http.StatusForbidden, "pairing is not open — run `corgi mcp --http --pair` on the machine")
+			writePairError(w, http.StatusForbidden, "pairing is not open - run `corgi mcp --http --pair` on the machine")
 			return
 		}
 
@@ -105,7 +105,7 @@ func pairingHandlerFor(window *pairWindow, storePath string) http.Handler {
 			server, kerr := pairing.LoadOrCreateServerKey(pairing.ServerKeyPath(filepath.Dir(storePath)))
 			if kerr != nil {
 				utils.Infof("pairing: e2e key: %v\n", kerr)
-				writePairError(w, http.StatusInternalServerError, "pairing failed on the machine — check its output")
+				writePairError(w, http.StatusInternalServerError, "pairing failed on the machine - check its output")
 				return
 			}
 			serverPub = pairing.PublicKeyString(server.PublicKey())
@@ -117,7 +117,7 @@ func pairingHandlerFor(window *pairWindow, storePath string) http.Handler {
 				return
 			}
 			utils.Infof("pairing failed: %v\n", err)
-			writePairError(w, http.StatusInternalServerError, "pairing failed on the machine — check its output")
+			writePairError(w, http.StatusInternalServerError, "pairing failed on the machine - check its output")
 			return
 		}
 
@@ -208,7 +208,7 @@ const pairPageHTML = `<!doctype html>
   const btn = document.getElementById('go');
   const esc = s => String(s).replace(/[&<>"']/g, c =>
     ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  if (!code) { out.innerHTML = '<span class="err">No code in the link — rescan the QR from the terminal.</span>'; btn.disabled = true; }
+  if (!code) { out.innerHTML = '<span class="err">No code in the link - rescan the QR from the terminal.</span>'; btn.disabled = true; }
   btn.onclick = async () => {
     const device = document.getElementById('device').value.trim() || 'my-phone';
     btn.disabled = true; btn.textContent = 'Pairing…';
@@ -337,7 +337,7 @@ func runMCPDevicesList(_ *cobra.Command, _ []string) {
 		return
 	}
 	for _, d := range store.Devices {
-		how := "plain — pair again from the app for end-to-end encryption"
+		how := "plain - pair again from the app for end-to-end encryption"
 		if d.Encrypted() {
 			how = "end-to-end encrypted"
 		}
@@ -370,7 +370,7 @@ func runMCPDevicesRevoke(_ *cobra.Command, args []string) {
 		exitWithError("mcp_devices_write", err, 1)
 	}
 	revokeOAuthFamily(filepath.Dir(path), device.Family)
-	utils.Infof("revoked %s — other devices are unaffected\n", args[0])
+	utils.Infof("revoked %s - other devices are unaffected\n", args[0])
 }
 
 func init() {

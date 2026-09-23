@@ -65,8 +65,8 @@ var whyCmd = &cobra.Command{
 the port, the last exit code, missing or unresolved env, and the tail of the
 service's own log.
 
-Reports a single machine-readable verdict — healthy, crashed, not_started,
-dependency_unready, port_taken, env_missing, no_start_command or unhealthy — so a
+Reports a single machine-readable verdict - healthy, crashed, not_started,
+dependency_unready, port_taken, env_missing, no_start_command or unhealthy - so a
 script or an agent can branch without reading prose.`,
 	Example: `corgi why api
 
@@ -169,7 +169,7 @@ func whyVerdict(service utils.Service, report whyReport) (verdict, detail, next 
 
 	case report.Status == "":
 		return verdictNotStarted,
-			"corgi has no run state for this service — it was never started, or the stack was stopped",
+			"corgi has no run state for this service - it was never started, or the stack was stopped",
 			"corgi run --services " + service.ServiceName
 
 	case report.Status == "running":

@@ -1,6 +1,6 @@
 ---
 name: yml-schema
-description: Full corgi-compose.yml schema — top-level keys, services, db_services, required. Read when authoring or editing a corgi-compose.yml.
+description: Full corgi-compose.yml schema - top-level keys, services, db_services, required. Read when authoring or editing a corgi-compose.yml.
 ---
 
 # `corgi-compose.yml` schema
@@ -26,7 +26,7 @@ e2e:          E2ESuite              # Optional stack-level e2e suite. See below
 
 `scopeContainers: true` prefixes every container (services + dbs) with the
 docker-safe workspace name (`name:`, else the compose dir name). Fixes
-cross-workspace container-name collisions. Opt-in — default keeps legacy
+cross-workspace container-name collisions. Opt-in - default keeps legacy
 names; recommend it when scaffolding a new corgi-compose.yml.
 
 ## `e2e` (optional)
@@ -42,7 +42,7 @@ e2e:
   run: maestro test flows/  # or: npx playwright test · cypress run · ./e2e.sh
 ```
 
-`corgi test --e2e` runs it against the already-running stack — it never boots
+`corgi test --e2e` runs it against the already-running stack - it never boots
 anything itself, so start the stack first (`corgi run -d --wait`). Same entry
 point locally and in CI; the CI pipeline recipe is the `ci` skill's job.
 
@@ -54,8 +54,8 @@ e2e:
     - artifacts             # -> e2e/artifacts
 ```
 
-`artifacts:` are copied after the run — **pass or fail**, since a red suite is
-exactly when its screenshots are worth having — into `corgi_artifacts/e2e/` next
+`artifacts:` are copied after the run - **pass or fail**, since a red suite is
+exactly when its screenshots are worth having - into `corgi_artifacts/e2e/` next
 to the compose file, or `--artifacts-dir <dir>` to point somewhere else (a CI job
 uploads that directory). A declared path that does not resolve warns and is
 skipped rather than failing the run. Paths are relative to `workdir`, so a suite
@@ -84,10 +84,10 @@ Resolution per service under a tier: `${tier}`-substituted `copyEnvFromFilePath`
 The whole file is interpolated **before** parsing, so `${VAR}` works in any
 string field (passwords, ports, paths, image refs, environment entries).
 
-- `${VAR}` — value of `VAR`.
-- `${VAR:-default}` — value of `VAR`, or `default` when unset/empty.
-- `$${X}` — escapes to the literal `${X}` (not expanded).
-- Braced only — bare `$VAR` is left untouched (safe for shell snippets).
+- `${VAR}` - value of `VAR`.
+- `${VAR:-default}` - value of `VAR`, or `default` when unset/empty.
+- `$${X}` - escapes to the literal `${X}` (not expanded).
+- Braced only - bare `$VAR` is left untouched (safe for shell snippets).
 - Unset with no default → left unresolved (token stays literal), silently, so
   runtime/per-service env, tunnel, and cross-service refs still resolve later;
   use `${VAR:-default}` for an explicit fallback.
@@ -162,7 +162,7 @@ services:
       name: ${USER}-api-dev       # cloudflared only: pre-created tunnel name
 ```
 
-`${VAR}` resolves in order: shell env → `<service-dir>/.env` (runtime, dev-edited, same file `corgi run` loads) → `env/source/<service>.env` (source, declared by `copyEnvFromFilePath`). Missing vars = strict error at `corgi tunnel`. CLI `corgi tunnel --provider X` overrides compose `provider`. localtunnel `hostname:` accepts a bare subdomain label (no dots) — passed to `lt --subdomain`; server grant is best-effort.
+`${VAR}` resolves in order: shell env → `<service-dir>/.env` (runtime, dev-edited, same file `corgi run` loads) → `env/source/<service>.env` (source, declared by `copyEnvFromFilePath`). Missing vars = strict error at `corgi tunnel`. CLI `corgi tunnel --provider X` overrides compose `provider`. localtunnel `hostname:` accepts a bare subdomain label (no dots) - passed to `lt --subdomain`; server grant is best-effort.
 
 ## `services.<name>`
 
@@ -210,7 +210,7 @@ runner:
   containerPort: int              # Port inside the container (default: first EXPOSE, else port)
   command: string                 # Override image CMD
   composeFile: string             # Delegate to the repo's own compose file (mutually exclusive with build fields)
-  image: string                   # Run a registry image directly — no repo, no build. Requires port:. Excludes dockerfile/composeFile
+  image: string                   # Run a registry image directly - no repo, no build. Requires port:. Excludes dockerfile/composeFile
   watch: bool                     # Rebuild+restart container on file changes (foreground runs only)
 
 waitForDatabases: bool            # Default true. False = start alongside the databases (still gets their env)
@@ -256,11 +256,11 @@ parallel without starting anything.
 
 `beforeStart` still runs host-side in docker mode (certs, migrations, env);
 the container replaces only `start:`. `afterStart` runs on stop. `port:` may
-be omitted when the Dockerfile has `EXPOSE` — corgi reads it.
+be omitted when the Dockerfile has `EXPOSE` - corgi reads it.
 
 **When scaffolding a corgi-compose.yml, prefer the smallest rung**: if a
 service repo ships a working Dockerfile or compose file and the user has no
-local dev flow for it, emit just `cloneFrom` (+ `port` if no EXPOSE) — no
+local dev flow for it, emit just `cloneFrom` (+ `port` if no EXPOSE) - no
 beforeStart/start. Reserve scripts for services that need hot reload or a
 native toolchain. Both can coexist; scripts stay the default,
 `corgi run --docker` flips. Verify with `corgi run --dry-run` (prints
@@ -349,7 +349,7 @@ services:
 
 Rules:
 - Producer must be listed in consumer's `depends_on_services` to be referenced.
-- Only names in `exports` are visible — typos and unexported names error at env generation.
+- Only names in `exports` are visible - typos and unexported names error at env generation.
 - Cycles in `depends_on_services` graph error.
 - Service name in `${producer.VAR}` must match the raw yaml key exactly (case-sensitive, no `-`/`/` normalization, unlike legacy `<NAME>_URL`).
 - `exports` entries that reference a missing own-env var error at env generation.

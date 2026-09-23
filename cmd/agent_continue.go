@@ -41,11 +41,11 @@ func runAgentContinue(_ *cobra.Command, args []string) {
 	if len(args) == 0 {
 		user, err := config.LoadUser(path)
 		if err != nil || user == nil || !user.AutoContinue {
-			utils.Infof("autoContinue is off (%s) — a limited session waits for you\n", path)
+			utils.Infof("autoContinue is off (%s) - a limited session waits for you\n", path)
 			utils.Info("turn it on with `corgi agent continue on`")
 			return
 		}
-		utils.Infof("autoContinue is on (%s) — the daemon continues limited sessions when their window resets\n", path)
+		utils.Infof("autoContinue is on (%s) - the daemon continues limited sessions when their window resets\n", path)
 		return
 	}
 	on, err := parseOnOff(args[0])

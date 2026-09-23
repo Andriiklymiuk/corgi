@@ -27,7 +27,7 @@ outputs:
       Newline-separated directories worth caching, derived from every service's
       beforeStart cacheKey. Pass straight to actions/cache's path input.
       Computed here, before `corgi init` clones the services, the key is hashed
-      from lockfiles that do not exist yet and never changes — prefer the
+      from lockfiles that do not exist yet and never changes - prefer the
       Andriiklymiuk/corgi/cache action placed after `corgi init`.
     value: ${{ steps.setup.outputs.cache-paths }}
   cache-key:
@@ -96,8 +96,8 @@ outputs:
   cache-complete:
     description: >-
       "true" when every cacheKey file existed when the keys were computed.
-      "false" means the keys were hashed from missing files — the usual case
-      here, since this action runs before `corgi init` — and will not change
+      "false" means the keys were hashed from missing files - the usual case
+      here, since this action runs before `corgi init` - and will not change
       when those files do. The action warns; use Andriiklymiuk/corgi/cache
       after `corgi init` for keys that track the real lockfiles.
     value: ${{ steps.setup.outputs.cache-complete }}
@@ -153,7 +153,7 @@ runs:
           else
             grep " ${archive}\$" checksums.txt | shasum --algorithm 256 --check --status -
           fi
-        ) || { echo "::error::checksum mismatch for $archive — refusing to install"; exit 1; }
+        ) || { echo "::error::checksum mismatch for $archive - refusing to install"; exit 1; }
 
         tar -xzf "$tmp/$archive" -C "$tmp" corgi
         sudo install -m 0755 "$tmp/corgi" /usr/local/bin/corgi

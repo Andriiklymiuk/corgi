@@ -29,7 +29,7 @@ domain facts, and recurring fixes for this corgi stack. It is opt-in: with no
   corgi memory index                        regenerate index.md from the facts
   corgi memory lint [--json]                validate frontmatter, names, links, and NO SECRETS
 
-Committed memory must never contain secrets — lint fails the store on a key-shaped
+Committed memory must never contain secrets - lint fails the store on a key-shaped
 string.`,
 }
 
@@ -64,7 +64,7 @@ var memoryListCmd = &cobra.Command{
 			return
 		}
 		for _, f := range facts {
-			utils.Infof("[%s] %s — %s\n", f.Type, f.Name, f.Description)
+			utils.Infof("[%s] %s - %s\n", f.Type, f.Name, f.Description)
 		}
 	},
 }
@@ -93,7 +93,7 @@ var memoryAddCmd = &cobra.Command{
 			utils.PrintJSON(map[string]string{"created": path, "type": t, "name": name})
 			return
 		}
-		utils.Infof("Wrote %s — edit the body, then run: corgi memory index\n", path)
+		utils.Infof("Wrote %s - edit the body, then run: corgi memory index\n", path)
 	},
 }
 
@@ -149,7 +149,7 @@ var memoryLintCmd = &cobra.Command{
 			utils.Infof("⚠ [%s] %s (%s)\n", w.Code, w.Message, w.File)
 		}
 		if len(errs) == 0 {
-			utils.Infof("memory ok — %d warning(s)\n", len(warns))
+			utils.Infof("memory ok - %d warning(s)\n", len(warns))
 			return
 		}
 		exitProcess(1)

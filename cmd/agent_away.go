@@ -97,7 +97,7 @@ func checkMacUpdates() agentCheck {
 	if off {
 		return agentCheck{Name: name, OK: true, Detail: "not installed on their own"}
 	}
-	return agentCheck{Name: name, Detail: "macOS installs updates on its own — after the reboot it waits at the login screen until you are back",
+	return agentCheck{Name: name, Detail: "macOS installs updates on its own - after the reboot it waits at the login screen until you are back",
 		Fix: "sudo softwareupdate --schedule off && sudo defaults write /Library/Preferences/com.apple.SoftwareUpdate AutomaticallyInstallMacOSUpdates -bool false"}
 }
 
@@ -132,7 +132,7 @@ func checkFileVault() agentCheck {
 		return couldNotCheck(name)
 	}
 	if fileVaultOn(out) {
-		return agentCheck{Name: name, OK: true, Detail: "on — a reboot waits at the login screen, so keep updates off"}
+		return agentCheck{Name: name, OK: true, Detail: "on - a reboot waits at the login screen, so keep updates off"}
 	}
 	return agentCheck{Name: name, OK: true, Detail: "off"}
 }
@@ -147,7 +147,7 @@ func checkHeat() agentCheck {
 	if !known || limit >= awayHotLimit {
 		return agentCheck{Name: name, OK: true, Detail: "no thermal pressure"}
 	}
-	return agentCheck{Name: name, Detail: fmt.Sprintf("CPU held at %d%% for heat — no fix starts until it cools", limit), Fix: "give the laptop air"}
+	return agentCheck{Name: name, Detail: fmt.Sprintf("CPU held at %d%% for heat - no fix starts until it cools", limit), Fix: "give the laptop air"}
 }
 
 func checkDisk(dir string) agentCheck {
@@ -160,7 +160,7 @@ func checkDisk(dir string) agentCheck {
 	if freeGB >= awayDiskMinGB {
 		return agentCheck{Name: name, OK: true, Detail: fmt.Sprintf("%d GB free", freeGB)}
 	}
-	return agentCheck{Name: name, Detail: fmt.Sprintf("%d GB free — worktrees and images fill it", freeGB),
+	return agentCheck{Name: name, Detail: fmt.Sprintf("%d GB free - worktrees and images fill it", freeGB),
 		Fix: "corgi agent watch prune, docker system prune"}
 }
 
@@ -177,7 +177,7 @@ func checkNetwork() agentCheck {
 		return agentCheck{Name: name, OK: true, Detail: "open internet"}
 	}
 	return agentCheck{Name: name, Detail: "a captive portal is in the way (a Wi-Fi login page)",
-		Fix: "log in on the portal; hotels often ask again every day — a travel router or a hotspot avoids that"}
+		Fix: "log in on the portal; hotels often ask again every day - a travel router or a hotspot avoids that"}
 }
 
 func checkPulse(dir string) agentCheck {
@@ -185,14 +185,14 @@ func checkPulse(dir string) agentCheck {
 	user, err := config.LoadUser(agentUserConfigPath(dir))
 	if err != nil || user == nil || user.PulseUrl == "" {
 		return agentCheck{Name: name, Detail: "nobody is told when this machine goes quiet",
-			Fix: "corgi agent pulse <url> — a healthchecks.io or Uptime Kuma push URL"}
+			Fix: "corgi agent pulse <url> - a healthchecks.io or Uptime Kuma push URL"}
 	}
 	last := daemon.ReadPulse(dir)
 	switch {
 	case last.Error != "":
 		return agentCheck{Name: name, Detail: "last ping failed: " + last.Error, Fix: "check the URL and the network"}
 	case last.At.IsZero():
-		return agentCheck{Name: name, OK: true, Detail: "set — no ping yet (corgi agent restart)"}
+		return agentCheck{Name: name, OK: true, Detail: "set - no ping yet (corgi agent restart)"}
 	}
 	return agentCheck{Name: name, OK: true, Detail: "last ping " + time.Since(last.At).Round(time.Second).String() + " ago"}
 }
@@ -201,11 +201,11 @@ func checkTunnel(dir string) agentCheck {
 	const name = "tunnel"
 	up := loadUpSettings(dir)
 	if up.Provider == "" {
-		return agentCheck{Name: name, Detail: "no tunnel — the phone cannot reach this machine from outside", Fix: "corgi agent up"}
+		return agentCheck{Name: name, Detail: "no tunnel - the phone cannot reach this machine from outside", Fix: "corgi agent up"}
 	}
 	detail := up.Provider
 	if up.Provider == "ngrok" {
-		detail += " — the free plan caps requests per month; a cloudflared tunnel has no cap"
+		detail += " - the free plan caps requests per month; a cloudflared tunnel has no cap"
 	}
 	return agentCheck{Name: name, OK: true, Detail: detail}
 }
@@ -228,7 +228,7 @@ func digestChecks(user *config.UserConfig) []agentCheck {
 		c := agentCheck{Name: "digest · " + id, OK: true, Detail: "a daily digest reaches the phone"}
 		if !hasRoutine(wc.Routines, "digest") {
 			c.OK = false
-			c.Detail = "no digest — nothing sums the day up for you"
+			c.Detail = "no digest - nothing sums the day up for you"
 			c.Fix = "corgi agent routine add digest, in " + id
 		}
 		checks = append(checks, c)

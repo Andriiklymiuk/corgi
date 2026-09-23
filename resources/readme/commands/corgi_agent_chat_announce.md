@@ -9,7 +9,7 @@ Post the pull requests of a piece of work in the workspace's review channel
 The post a person writes by hand when work is up for review: the title, then
 one line per pull request named by its repository. It goes to the first
 --review-channel of the workspace (or postTo), in the voice replyAs names.
-No channel configured: nothing is posted, and it says so — a workspace
+No channel configured: nothing is posted, and it says so - a workspace
 without a review channel is not an error.
 
   corgi agent chat announce "[ABC-12] Phone field" https://github.com/acme/api/pull/5 https://github.com/acme/web/pull/9

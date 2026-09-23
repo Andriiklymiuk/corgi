@@ -1,5 +1,5 @@
 ---
-description: Start a corgi-compose stack (or a slice of it) from chat — detached, then wait until healthy with a timeout and flag anything stuck. Pass what to run in plain words (e.g. "whole stack with tunnel and logs", "web + mobile on the remote backend", "just the api", "for the android emulator"); no args = whole stack.
+description: Start a corgi-compose stack (or a slice of it) from chat - detached, then wait until healthy with a timeout and flag anything stuck. Pass what to run in plain words (e.g. "whole stack with tunnel and logs", "web + mobile on the remote backend", "just the api", "for the android emulator"); no args = whole stack.
 ---
 
 Run the corgi **run** flow for the request in `$ARGUMENTS`.

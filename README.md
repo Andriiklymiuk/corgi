@@ -28,11 +28,11 @@ A feature is rarely one repo. It's an API change, a web change, a mobile change,
 
 <p align="center"><img src="docs/media/stories.gif" width="760" alt="An agent takes a ticket across three repos and opens three draft PRs"></p>
 
-<p align="center"><img src="docs/media/phone.gif" width="900" alt="corgi agent up prints a QR; the phone scans it and opens on the inbox — a ticket worked on from its sheet, the board, a session's permission allowed from its row, a stack started, settings with both laptops, and the lock screen where Allow on the Live Activity answers the laptop the session is on"></p>
+<p align="center"><img src="docs/media/phone.gif" width="900" alt="corgi agent up prints a QR; the phone scans it and opens on the inbox - a ticket worked on from its sheet, the board, a session's permission allowed from its row, a stack started, settings with both laptops, and the lock screen where Allow on the Live Activity answers the laptop the session is on"></p>
 
 Video: [2-minute showcase](https://youtu.be/rlMCjs4EoFs?si=o3SQaymM55zxBCUY).
 
-**Install:** `brew install andriiklymiuk/homebrew-tools/corgi` (Homebrew 5 asks you to `brew trust andriiklymiuk/tools` once; [other ways](docs/install.md)). Then, in Claude Code with the plugin: **`/corgi:setup`** installs the rest — VS Code extension, menu bar app, the daemon at login with a tunnel and the pairing QR, notifications, session tracking — and lists the few clicks only you can do.
+**Install:** `brew install andriiklymiuk/homebrew-tools/corgi` (Homebrew 5 asks you to `brew trust andriiklymiuk/tools` once; [other ways](docs/install.md)). Then, in Claude Code with the plugin: **`/corgi:setup`** installs the rest - VS Code extension, menu bar app, the daemon at login with a tunnel and the pairing QR, notifications, session tracking - and lists the few clicks only you can do.
 
 ## Run a team of agents
 
@@ -40,7 +40,7 @@ Plan → implement → review → merge, with a coding agent on each step and yo
 corgi runs every Claude Code session on your laptop as a team you can see: a worktree per
 task, a kanban worked out from the pull request's own checks and reviews, one word on every
 row that says where it stands, and Allow, Deny, Send, Merge from the menu bar, the editor,
-a Stream Deck or your phone — end-to-end encrypted, through your own machine.
+a Stream Deck or your phone - end-to-end encrypted, through your own machine.
 
 ```text
   ticket / prompt ─► corgi agent watch --action fix     a session per ticket, in its own worktree
@@ -54,13 +54,13 @@ a Stream Deck or your phone — end-to-end encrypted, through your own machine.
               checks ✓ + approved ──► auto-merge (opt-in), a red build rerun once first
 ```
 
-- **One standing per session, card and inbox row** — *needs you*, *checks failing*, *ready to
-  merge* — worked out once by the daemon from the session, its tests and the forge, so the phone
+- **One standing per session, card and inbox row** - *needs you*, *checks failing*, *ready to
+  merge* - worked out once by the daemon from the session, its tests and the forge, so the phone
   never disagrees with the menu bar.
 - **A worktree per task** (`--isolate`), **N at once** (`--slots`), a **token budget** per session,
-  per workspace per day, and **carry to the next account** when one hits its limit — every switch
+  per workspace per day, and **carry to the next account** when one hits its limit - every switch
   off by default.
-- **Feedback closes the loop on its own** — a review comment, a red build, a merge conflict is typed
+- **Feedback closes the loop on its own** - a review comment, a red build, a merge conflict is typed
   into the session that owns the branch (`--hand-over`); a red build is rerun once before anyone is
   told (`--rerun-ci`).
 - **From the phone**: dictate a message, answer permissions one card at a time, have the chief
@@ -129,7 +129,7 @@ corgi-compose.yml  ─►  corgi run
                          whole stack running 🐶   (Ctrl-C tears it all down)
 ```
 
-> **Agents & CI:** use `corgi run --detach` then `corgi status --ready --timeout 2m` instead of the foreground commands above — they return instead of blocking. See [agents & scripting](docs/agents.md).
+> **Agents & CI:** use `corgi run --detach` then `corgi status --ready --timeout 2m` instead of the foreground commands above - they return instead of blocking. See [agents & scripting](docs/agents.md).
 
 No `corgi-compose.yml` yet? `corgi create` writes a starter one, or `/corgi-new` writes one with Claude.
 
@@ -195,23 +195,23 @@ Slash-commands and plain English both work:
 /corgi:stories ABC-123          "build a referral program across the services"
 /corgi:review <pr-url>          "fix the comments on this MR and answer them"
 /corgi-run                      "run the todo stack, then show me the logs"
-/corgi-tracker                  "how's the team doing — anything stuck?"
-/corgi-queue                    "I just joined — what should I pick up first?"
+/corgi-tracker                  "how's the team doing - anything stuck?"
+/corgi-queue                    "I just joined - what should I pick up first?"
 /corgi-debug                    "the api is 500ing, find out why"
-/corgi-complexity               "this handler branches like a jungle — simplify it"
-/corgi-risk <pr-url>            "how much review does this need — can it be auto-approved?"
+/corgi-complexity               "this handler branches like a jungle - simplify it"
+/corgi-risk <pr-url>            "how much review does this need - can it be auto-approved?"
 /corgi:setup                    "set corgi up for me: agent, phone, Telegram, menu bar, Stream Deck"
 /corgi:showcase                 "make README gifs of the new feature"
 ```
 
-Ask once, then ship: `align` looks the code up itself, asks only the questions that change the work — at most five, each with a recommended answer — and says "Aligned. Going." when there are none. Nothing ships without you. It opens **draft** PRs and waits. If you have no project to try this on, `corgi run -l` fetches an example.
+Ask once, then ship: `align` looks the code up itself, asks only the questions that change the work - at most five, each with a recommended answer - and says "Aligned. Going." when there are none. Nothing ships without you. It opens **draft** PRs and waits. If you have no project to try this on, `corgi run -l` fetches an example.
 
 <p align="center"><img src="docs/media/stories.gif" width="760" alt="/corgi:stories ABC-123: the agent edits api, web and mobile, runs the stack, waits for health, runs e2e, opens three draft PRs"></p>
 
 corgi is built to be driven by a program: it never stops to ask a question, prints JSON with `--json`, and returns exit codes you can branch on (`0` ok, `1` failed, `2` bad usage). It also ships an **MCP server**, so an agent calls real tools instead of guessing shell commands:
 
 ```bash
-corgi mcp                        # stdio, local, no network — point any MCP client at it
+corgi mcp                        # stdio, local, no network - point any MCP client at it
 corgi mcp --http :8765 --tunnel  # remote: a bearer-token-protected public URL
 ```
 
@@ -221,7 +221,7 @@ More: [agents & scripting](docs/agents.md) · [MCP server](docs/mcp.md) · [plan
 
 Run `corgi agent up` on your laptop and scan the QR once. Your phone now has a
 launcher: every repo you registered, one tap each. Tap one and a Claude Code
-session starts on the laptop — your files, your databases, your credentials — and
+session starts on the laptop - your files, your databases, your credentials - and
 you drive it and answer its permission prompts from the phone. The branch is
 waiting when you get back to the desk.
 
@@ -257,7 +257,7 @@ $ corgi agent up
                  └─ client-app  [open in: chrome]  ──► Chrome (its own account)
 ```
 
-One scan pairs the phone. It gets its own token, revocable without touching your other devices. Each workspace remembers where it should open — personal projects in the Claude app, a work repo on a different Claude account in Chrome signed into that account. Save the launcher to your home screen and it is one tap after that.
+One scan pairs the phone. It gets its own token, revocable without touching your other devices. Each workspace remembers where it should open - personal projects in the Claude app, a work repo on a different Claude account in Chrome signed into that account. Save the launcher to your home screen and it is one tap after that.
 
 <p align="center"><img src="docs/media/dashboard.gif" width="900" alt="The phone launcher: every Claude session on the machine, accounts and their windows, a card per repo with Open and Start, the sessions panel, doctor checks"></p>
 
@@ -282,18 +282,18 @@ workspace:
   aliases: [acme, recipe app]
 ```
 
-Which Claude account it runs under, and whether it starts on its own, live in your own machine's config instead — a cloned repo can never decide that. The new repo shows up in the launcher on the next refresh; no re-pairing.
+Which Claude account it runs under, and whether it starts on its own, live in your own machine's config instead - a cloned repo can never decide that. The new repo shows up in the launcher on the next refresh; no re-pairing.
 
 **What corgi is doing for you.** The session itself is Claude's own
-[Remote Control](https://code.claude.com/docs/en/remote-control) — corgi
+[Remote Control](https://code.claude.com/docs/en/remote-control) - corgi
 reimplements none of it, and never asks you to start it. What corgi adds is
 everything that has to be true before a phone is any use:
 
-- **It is running when you are not there.** `corgi agent up --at-login` brings the daemon, the endpoint and the tunnel back at login, so the laptop answers after a reboot without you having set anything up before you left. Sessions come back after a crash, and a wake lock stops the laptop sleeping through a long task. If one dies anyway, `corgi agent brief` says where it stopped and which repo it left dirty. The supervised servers wait as **devices**, not as pre-opened conversations, so a restart leaves no empty `corgi · main · 10:00` rows in your session list — a session exists once you start one, from the launcher or the Claude app.
+- **It is running when you are not there.** `corgi agent up --at-login` brings the daemon, the endpoint and the tunnel back at login, so the laptop answers after a reboot without you having set anything up before you left. Sessions come back after a crash, and a wake lock stops the laptop sleeping through a long task. If one dies anyway, `corgi agent brief` says where it stopped and which repo it left dirty. The supervised servers wait as **devices**, not as pre-opened conversations, so a restart leaves no empty `corgi · main · 10:00` rows in your session list - a session exists once you start one, from the launcher or the Claude app.
 - **Every repo, on its own Claude account.** One launcher lists them all. Personal projects open in the Claude app; a work repo opens in Chrome signed into the work account.
-- **One branch across the whole stack.** A session is not stuck in one directory: corgi puts the same branch in every repo that has it, and hands back a single diff over all of them — readable on the phone with no tunnel and nothing running.
+- **One branch across the whole stack.** A session is not stuck in one directory: corgi puts the same branch in every repo that has it, and hands back a single diff over all of them - readable on the phone with no tunnel and nothing running.
 
-**Keeping the same URL.** By default `agent up` opens a free Cloudflare quick tunnel, and that URL is different every time it restarts — so the bookmark on your phone goes stale and you re-pair. Pick one of these instead, once:
+**Keeping the same URL.** By default `agent up` opens a free Cloudflare quick tunnel, and that URL is different every time it restarts - so the bookmark on your phone goes stale and you re-pair. Pick one of these instead, once:
 
 ```bash
 # phone on the same Wi-Fi: no tunnel at all, nothing public
@@ -309,9 +309,9 @@ corgi agent tunnel setup corgi.yourdomain.com   # remembered from now on
 corgi agent tunnel setup <yours>.ngrok-free.dev --provider ngrok
 ```
 
-`agent tunnel setup` stores the choice, so plain `corgi agent up` keeps using it after that. Because the origin stops changing, the phone stays paired across restarts and reboots — save `https://<your-host>/app` to the home screen and it keeps working.
+`agent tunnel setup` stores the choice, so plain `corgi agent up` keeps using it after that. Because the origin stops changing, the phone stays paired across restarts and reboots - save `https://<your-host>/app` to the home screen and it keeps working.
 
-**Two laptops, one phone.** Each laptop gets a tunnel and a hostname of its own (`home.yourdomain.com`, `work.yourdomain.com` — one Cloudflare account, one domain; `tunnel setup` names the tunnel after the laptop). Pair the phone with both and it introduces them to each other; from then on the two daemons pulse each other every minute and, for every tracker both watch, **one leads** — it starts the fixes and rings you, the other stays quiet and takes over when the leader sleeps. `corgi agent peers` shows who is awake, who leads, and what the other laptop is on or failed at; `corgi agent sessions` lists the other laptop's sessions under your own. A laptop whose login lapsed or whose window is spent never leads while the other can, and the one with more budget wins a tie — so the laptop that sits at home for weeks keeps working, or hands over, without you. `corgi agent peers lead` pins it (the phone has the same switch in Settings). By hand: `corgi agent peers invite` on one, `corgi agent peers join <url> <code>` on the other. A peer's token opens two routes on the other laptop — its pulse and the pair-back — nothing else.
+**Two laptops, one phone.** Each laptop gets a tunnel and a hostname of its own (`home.yourdomain.com`, `work.yourdomain.com` - one Cloudflare account, one domain; `tunnel setup` names the tunnel after the laptop). Pair the phone with both and it introduces them to each other; from then on the two daemons pulse each other every minute and, for every tracker both watch, **one leads** - it starts the fixes and rings you, the other stays quiet and takes over when the leader sleeps. `corgi agent peers` shows who is awake, who leads, and what the other laptop is on or failed at; `corgi agent sessions` lists the other laptop's sessions under your own. A laptop whose login lapsed or whose window is spent never leads while the other can, and the one with more budget wins a tie - so the laptop that sits at home for weeks keeps working, or hands over, without you. `corgi agent peers lead` pins it (the phone has the same switch in Settings). By hand: `corgi agent peers invite` on one, `corgi agent peers join <url> <code>` on the other. A peer's token opens two routes on the other laptop - its pulse and the pair-back - nothing else.
 
 <p align="center"><img src="docs/media/peers.gif" width="760" alt="corgi agent peers: the home laptop leads, a fix rings once; corgi agent sessions shows the other laptop's board; the lead moves when the home laptop's window runs out; corgi agent peers lead pins it; doctor --away checks the peers"></p>
 
@@ -323,16 +323,16 @@ corgi agent workspaces agents --default claude,codex    # every workspace withou
 corgi agent init --agents claude,codex                  # from the start
 ```
 
-Claude Code is the default. With an order, every unattended run — a fix, a bot, a routine — picks the first agent that can work *right now*: installed, logged in, window not spent. When Claude's five-hour window runs out the next comment does not wait until it resets; Codex takes that run, under its own login, and your phone hears once a day that the work moved. The pick is not remembered, so Claude gets the next run back the moment its window opens. Two laptops see it too: a laptop with a fallback that can run never tells its peer it is unwell. `corgi agent workspaces` shows each order and what is not installed; `corgi agent doctor` fails when a first choice is missing. `corgi agent codex` opens Codex in this folder's workspace the way `corgi agent claude` opens Claude Code — same checkout, same flags — and `corgi agent claude` itself opens the first agent of the order that is installed. `corgi agent track enable` writes Codex's hooks (`~/.codex/hooks.json`, trusted once in Codex's `/hooks`), so its sessions land on the same board as Claude's — every prompt, tool, permission and stop, the terminal it runs in, its context and its summary — and the phone can focus, answer and type into it the same way; an older Codex without hooks gets the `notify` line and one row per turn. Codex's own rate-limit window is read from its sessions too: a spent Codex hands the run to the next agent in the order, as a spent Claude does. A workspace with `dangerouslySkipPermissions` opens Codex without approvals too, the way `codex --dangerously-bypass-approvals-and-sandbox` does by hand. A session can hand its work to the other agent — `corgi agent carry k3 --to codex`, or "Hand to codex" on the phone and the Mac — a fresh session in the same workspace with the handoff packet as its first prompt, allowed only where the workspace lists that agent. The next agent is one more entry in the harness table.
+Claude Code is the default. With an order, every unattended run - a fix, a bot, a routine - picks the first agent that can work *right now*: installed, logged in, window not spent. When Claude's five-hour window runs out the next comment does not wait until it resets; Codex takes that run, under its own login, and your phone hears once a day that the work moved. The pick is not remembered, so Claude gets the next run back the moment its window opens. Two laptops see it too: a laptop with a fallback that can run never tells its peer it is unwell. `corgi agent workspaces` shows each order and what is not installed; `corgi agent doctor` fails when a first choice is missing. `corgi agent codex` opens Codex in this folder's workspace the way `corgi agent claude` opens Claude Code - same checkout, same flags - and `corgi agent claude` itself opens the first agent of the order that is installed. `corgi agent track enable` writes Codex's hooks (`~/.codex/hooks.json`, trusted once in Codex's `/hooks`), so its sessions land on the same board as Claude's - every prompt, tool, permission and stop, the terminal it runs in, its context and its summary - and the phone can focus, answer and type into it the same way; an older Codex without hooks gets the `notify` line and one row per turn. Codex's own rate-limit window is read from its sessions too: a spent Codex hands the run to the next agent in the order, as a spent Claude does. A workspace with `dangerouslySkipPermissions` opens Codex without approvals too, the way `codex --dangerously-bypass-approvals-and-sandbox` does by hand. A session can hand its work to the other agent - `corgi agent carry k3 --to codex`, or "Hand to codex" on the phone and the Mac - a fresh session in the same workspace with the handoff packet as its first prompt, allowed only where the workspace lists that agent. The next agent is one more entry in the harness table.
 
 <p align="center"><img src="docs/media/codex.gif" width="760" alt="corgi agent workspaces agents claude,codex; track enable hooks Codex's notify; a PR comment fixed by claude, the next one by codex when claude's window is spent; corgi agent codex"></p>
 
-`corgi agent down` turns everything off, and nothing runs again until you start it. macOS and Linux — a headless server too, where the phone and Telegram are the screen ([running it on a server](docs/agent.md#running-it-on-a-server)). With the plugin, `/corgi-remote` walks you through the whole setup. Full guide: [docs/agent.md](docs/agent.md).
+`corgi agent down` turns everything off, and nothing runs again until you start it. macOS and Linux - a headless server too, where the phone and Telegram are the screen ([running it on a server](docs/agent.md#running-it-on-a-server)). With the plugin, `/corgi-remote` walks you through the whole setup. Full guide: [docs/agent.md](docs/agent.md).
 
 ### Talk to your laptop from any Claude
 
 The same daemon is an MCP connector for Claude.ai, Claude Desktop and the
-Claude phone app — the whole stack as 52 tools, behind your own sign-in:
+Claude phone app - the whole stack as 52 tools, behind your own sign-in:
 
 ```text
 $ corgi agent status
@@ -410,7 +410,7 @@ corgi agent watch enable --action fix --auto-for tickets,reviews,comments,ci \
 
 `--quiet` is the night: nothing starts and nothing rings, one summary when it
 opens. `--days-off weekends` (or any days: `sat,sun`, `mon,fri`) is the
-weekend: the watch sleeps through the day — the tracker is not even polled —
+weekend: the watch sleeps through the day - the tracker is not even polled -
 and what arrived is in the inbox and rings once on the next working day.
 
 <p align="center"><img src="docs/media/story.gif" width="760" alt="Three things in a row: a colleague asks for a review and corgi comments on their branch without pushing to it; a reviewer comments on your own pull request and corgi applies it, replies in the thread and pushes; a ticket assigned to you is claimed, moved to In Progress, worked, opened as a draft pull request and moved to In Review with the link posted on the ticket; then the morning card."></p>
@@ -418,19 +418,19 @@ and what arrived is in the inbox and rings once on the next working day.
 A ticket assigned to you moves itself twice: to **In Progress** when a run
 takes it, and to **In Review** once that run has opened a pull request, with
 the link posted on the ticket. Each finished run also reaches wherever
-`notifyUrl` points — Telegram, Slack, ntfy — with the pull request as the link,
+`notifyUrl` points - Telegram, Slack, ntfy - with the pull request as the link,
 and is kept in `corgi agent while-away` for the morning.
 
 - **review comments** and **red builds** are the safest to hand over: both are
   already scoped, and a build brings its own test for "done".
-- **a fresh ticket** is a blank page — leave it reporting until the rest has
+- **a fresh ticket** is a blank page - leave it reporting until the rest has
   earned trust. It waits in the inbox with a *Work on it* button that hands it
   to a session you can watch.
 - **someone else's pull request** needs `--reviews` to reach you at all and is
   never worked on unattended: corgi reads it and posts a review, and will not
   push to their branch.
 
-<p align="center"><img src="docs/media/autofix.gif" width="760" alt="a ticket assigned to you claimed, moved to In Progress, worked, a draft PR opened and the ticket moved to In Review; a review comment fixed and pushed; a red CI build fixed; a ticket outside the state filter stopped; someone else’s review request left alone; comments on finished work and a duplicate skipped; a ticket another machine claimed; a cap and a budget deferral; then the morning summary"></p>
+<p align="center"><img src="docs/media/autofix.gif" width="760" alt="a ticket assigned to you claimed, moved to In Progress, worked, a draft PR opened and the ticket moved to In Review; a review comment fixed and pushed; a red CI build fixed; a ticket outside the state filter stopped; someone else's review request left alone; comments on finished work and a duplicate skipped; a ticket another machine claimed; a cap and a budget deferral; then the morning summary"></p>
 
 Every unattended run reviews its own diff before it reports, stamps the pull
 request with where it came from, and is capped by what a run on that workspace
@@ -444,10 +444,10 @@ week it *would* have had before you turn it on, and
 <p align="center"><img src="docs/media/replay.gif" width="760" alt="corgi agent watch replay, while-away and undo: the week unattended mode would have had, the morning card, and a run put back"></p>
 
 **A workspace says what it wants done on its own.** Switches, each off until
-you flip it, each taking effect on the daemon's next round — from the CLI or
+you flip it, each taking effect on the daemon's next round - from the CLI or
 the phone: `--auto-allow reads` answers a Read/Grep/Glob prompt itself (never
 Bash, never a write); `--done-when "go test ./..."` runs the checks when a
-session stops with changes and types a red one back — *done* means the tests
+session stops with changes and types a red one back - *done* means the tests
 say so; `--compact-at 85` sends `/compact` to a full session when it stops;
 `--rebase` rebases a stopped session's clean branch when main moved (a branch
 that would conflict is told which files under `--hand-over`); `--lessons`
@@ -458,13 +458,13 @@ picks. A bot run that fails retries a model up; `bot show` sums its ledger.
 Another agent's CLI joins the board through `corgi agent event`; a
 teammate's phone pairs read-only with `corgi agent up --viewer`.
 
-Full setup — every flag, what it refuses to do and why — in
+Full setup - every flag, what it refuses to do and why - in
 [docs/agent.md](docs/agent.md#choosing-what-it-does-on-its-own). In a chat with
 the corgi plugin, `/corgi:setup` walks it, and asking *"what do we track?"*
 answers from the live config and suggests what is missing.
 
-**Work hands itself off.** A session that stops half-way — a usage limit, the
-end of the day, a carry to another account — leaves a **handoff**: a typed
+**Work hands itself off.** A session that stops half-way - a usage limit, the
+end of the day, a carry to another account - leaves a **handoff**: a typed
 packet, never a transcript, with what is done, what is not, what was decided,
 what to ask, where the code is, and the check that was run. The next run
 re-runs that check at the current head before it trusts a word; a new session
@@ -477,22 +477,22 @@ corgi comment that grows instead of a trail of them.
 (and the phone's Board tab) puts each ticket where the facts put it: Running
 because a run or a session is on it, Review because a pull request is open,
 Blocked because two runs failed in a row or a run said it needs a credential,
-Ready because a handoff or a deferred run is waiting — with the branch, the
+Ready because a handoff or a deferred run is waiting - with the branch, the
 pull requests and what it has cost so far. A card in Review says how its
-pull request stands — checks green, approved — and *ready to merge* once
+pull request stands - checks green, approved - and *ready to merge* once
 nothing is left between it and the button (`pull` on the card, the inbox
 row and `corgi agent watch --json`; read from GitHub or GitLab once a round).
 Two switches close the loop without you: `corgi agent watch enable
 --hand-over` types a review comment or a red build into the session already
 on that branch, and `--auto-merge` merges what the forge calls ready. A bot
-can act on its own too — `corgi agent bot add reviewer --template reviewer`
+can act on its own too - `corgi agent bot add reviewer --template reviewer`
 reviews every pull request someone asks you about, as itself.
 
-<p align="center"><img src="docs/media/kanban.gif" width="760" alt="corgi agent kanban: Inbox, Ready, Running, Blocked, Review, Done — with the session, the handoff, the pull requests and the cost on each card"></p>
+<p align="center"><img src="docs/media/kanban.gif" width="760" alt="corgi agent kanban: Inbox, Ready, Running, Blocked, Review, Done - with the session, the handoff, the pull requests and the cost on each card"></p>
 
 **Tasks of your own, on the same board.** Not everything comes from a
-tracker. `corgi agent task add "Meta SDK on iOS" --workspace app --body "…"`
-— or **+ Task for later** on the phone and the page — puts a ticket you wrote
+tracker. `corgi agent task add "Meta SDK on iOS" --workspace app --body "…"` -
+or **+ Task for later** on the phone and the page - puts a ticket you wrote
 in the inbox and the Inbox column, with a description and the workspace it is
 for. **Work on it** opens a session in that checkout with the description as
 its prompt; the task moves to Doing at once and the card says *picked from
@@ -504,8 +504,8 @@ leaves the inbox when it is Done or Canceled. Nothing about it reaches a
 tracker. The same goes for a tracker ticket you press Work on it on: the card
 says who picked it and names the session on it from the first event.
 
-A pull request of yours — one corgi's run opened, one a session on the ticket
-opened, or the one an inbox row is about — can be taken out of draft, merged
+A pull request of yours - one corgi's run opened, one a session on the ticket
+opened, or the one an inbox row is about - can be taken out of draft, merged
 or closed from the same row, on every surface: `corgi agent watch pr
 ready|merge|close ABC-123`. A comment from a bot on your pull request (a
 tracker's link, a coverage report) never reaches the inbox, whether it came
@@ -557,7 +557,7 @@ Private repos, prerequisites, secrets or staging tiers? See
 
 corgi treats your repos as part of the stack, not as something you keep in sync on the side.
 
-- **Auto-clone** — `cloneFrom:` clones a service when its folder is missing. A plain `path:` (a monorepo subfolder, or a repo you manage yourself) runs in place. You can mix both.
+- **Auto-clone** - `cloneFrom:` clones a service when its folder is missing. A plain `path:` (a monorepo subfolder, or a repo you manage yourself) runs in place. You can mix both.
 - **`corgi pull`** pulls every repo at once. **`corgi fork`** forks them to your account.
 - **`corgi checkout main`** puts every repo back on `main` and fast-forwards it. A repo that calls its trunk something else falls back to its own default branch, and a repo with uncommitted work is skipped, not clobbered.
 - **Run one service on a branch**, without editing the file:

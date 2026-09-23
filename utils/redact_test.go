@@ -72,7 +72,7 @@ func TestRedactLineLeavesOrdinaryLinesAlone(t *testing.T) {
 	for _, in := range []string{
 		"api listening on http://localhost:3000",
 		"✗ [E_DANGLING_DEP] service \"web\" depends on unknown service \"api\"",
-		"port 3000 busy (services.web) — held by node(pid=4242)",
+		"port 3000 busy (services.web) - held by node(pid=4242)",
 		"feature: api -> feature/add-metrics",
 		"GET /health 200 in 4ms",
 	} {

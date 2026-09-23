@@ -17,7 +17,7 @@ import (
 
 var agentPairCmd = &cobra.Command{
 	Use:   "pair",
-	Short: "Open a fresh pairing window and print its QR — or write a .corgipair file to AirDrop",
+	Short: "Open a fresh pairing window and print its QR - or write a .corgipair file to AirDrop",
 	Long: `The MCP server corgi agent up started keeps serving; this asks it for a new
 single-use pairing code (ten minutes) and prints the QR and the link, the way
 agent up did.
@@ -25,7 +25,7 @@ agent up did.
   corgi agent pair                    a new QR and code
   corgi agent pair --viewer           a read-only window, for a teammate's phone
   corgi agent pair --file             also write ~/Desktop/<laptop>.corgipair: AirDrop it to the phone,
-                                      which opens it with corgi and is paired — no scanning, no typing
+                                      which opens it with corgi and is paired - no scanning, no typing
   corgi agent pair --mint             a launch code for a daemon you will start without a terminal:
                                       corgi agent up --pair-code <code> on that host opens its first window on it
   corgi agent pair --json
@@ -51,10 +51,10 @@ when it pairs. AirDrop carries it end-to-end encrypted between your devices.`,
 		file, _ := cmd.Flags().GetBool("file")
 		info, err := daemon.ReadInfo(dir)
 		if err != nil || info == nil {
-			exitWithError("agent_pair", fmt.Errorf("corgi agent is not running — corgi agent up first"), 1)
+			exitWithError("agent_pair", fmt.Errorf("corgi agent is not running - corgi agent up first"), 1)
 		}
 		if _, err := os.Stat(filepath.Join(dir, "mcp.pid")); err != nil {
-			exitWithError("agent_pair", fmt.Errorf("no MCP server is running — corgi agent up first"), 1)
+			exitWithError("agent_pair", fmt.Errorf("no MCP server is running - corgi agent up first"), 1)
 		}
 		ans, err := requestPairWindow(dir, viewer, 6*time.Second)
 		if err != nil {
@@ -85,7 +85,7 @@ when it pairs. AirDrop carries it end-to-end encrypted between your devices.`,
 			printTerminalQR(link)
 			fmt.Printf("    or open: %s\n", link)
 		} else {
-			fmt.Printf("  code: %s (single use, 10 minutes) — the phone finds this laptop nearby and asks for it\n", ans.Code)
+			fmt.Printf("  code: %s (single use, 10 minutes) - the phone finds this laptop nearby and asks for it\n", ans.Code)
 		}
 		if ans.Role == pairing.RoleViewer {
 			fmt.Println("  this window pairs a phone that only reads")
@@ -122,7 +122,7 @@ func requestPairWindowFor(dir, role string, wait time.Duration) (pairAnswer, err
 		time.Sleep(200 * time.Millisecond)
 	}
 	_ = os.Remove(filepath.Join(dir, pairRequestName))
-	return pairAnswer{}, fmt.Errorf("the MCP server did not open a window — is it the one corgi agent up started, on corgi 2.22.4 or newer?")
+	return pairAnswer{}, fmt.Errorf("the MCP server did not open a window - is it the one corgi agent up started, on corgi 2.22.4 or newer?")
 }
 
 type PairFile struct {

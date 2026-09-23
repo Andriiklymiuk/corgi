@@ -350,7 +350,7 @@ func (d *Daemon) runDynamic(ctx context.Context, configs []supervisor.SpawnConfi
 		launch(r)
 	}
 	if len(configs) == 0 {
-		utils.Info("agent: no autostart workspaces — waiting for remote session starts")
+		utils.Info("agent: no autostart workspaces - waiting for remote session starts")
 	}
 
 	d.startSessionTracking()
@@ -391,7 +391,7 @@ func (d *Daemon) runDynamic(ctx context.Context, configs []supervisor.SpawnConfi
 
 func (d *Daemon) runFixed(ctx context.Context, configs []supervisor.SpawnConfig) error {
 	if len(configs) == 0 {
-		return fmt.Errorf("no workspaces configured for agent mode — run `corgi agent init` in a stack, or `corgi agent scan <dir>`")
+		return fmt.Errorf("no workspaces configured for agent mode - run `corgi agent init` in a stack, or `corgi agent scan <dir>`")
 	}
 
 	for _, cfg := range configs {
@@ -431,7 +431,7 @@ func (d *Daemon) runFixed(ctx context.Context, configs []supervisor.SpawnConfig)
 	wg.Wait()
 
 	if ctx.Err() == nil {
-		utils.Info("agent: every workspace is disabled — staying up so `corgi agent status` can explain why")
+		utils.Info("agent: every workspace is disabled - staying up so `corgi agent status` can explain why")
 		d.requestPublish()
 		<-ctx.Done()
 	}
@@ -922,7 +922,7 @@ func diagnose(cfg supervisor.SpawnConfig, env []string) WorkspaceDiagnostic {
 		d.ConfigDir = "<default>"
 	}
 	if cfg.InheritAPIKey {
-		d.Warning = "inheriting ANTHROPIC_API_KEY — remote control refuses to start with one set, and it bills the API rather than a subscription"
+		d.Warning = "inheriting ANTHROPIC_API_KEY - remote control refuses to start with one set, and it bills the API rather than a subscription"
 	}
 	return d
 }

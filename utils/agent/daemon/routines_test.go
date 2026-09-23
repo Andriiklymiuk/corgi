@@ -54,7 +54,7 @@ func TestRoutinesRunOnTheClockAndReportToTheInbox(t *testing.T) {
 	}
 	d.routineReport(spec, e, "3 PRs green, 1 red\n- details…", nil)
 	rows := watch.RecentEvents(d.Dir, 5)
-	if len(rows) != 2 || rows[0].Kind != watch.KindRoutine || !strings.Contains(rows[0].Title, "digest — 3 PRs green, 1 red") || rows[0].Body != "" {
+	if len(rows) != 2 || rows[0].Kind != watch.KindRoutine || !strings.Contains(rows[0].Title, "digest - 3 PRs green, 1 red") || rows[0].Body != "" {
 		t.Fatalf("inbox row: %+v", rows)
 	}
 	if !strings.Contains(rows[1].Title, "failed:") {
@@ -99,7 +99,7 @@ func TestARoutineRunsAsTheBotItNames(t *testing.T) {
 		t.Fatalf("filed under the bot: %+v", runs)
 	}
 	rows := watch.RecentEvents(d.Dir, 5)
-	if len(rows) != 1 || rows[0].Kind != watch.KindRoutine || !strings.Contains(rows[0].Title, "suggest — Search by tag") {
+	if len(rows) != 1 || rows[0].Kind != watch.KindRoutine || !strings.Contains(rows[0].Title, "suggest - Search by tag") {
 		t.Fatalf("its report is a routine row: %+v", rows)
 	}
 	if !d.claimFix("api", "routine/suggest") {

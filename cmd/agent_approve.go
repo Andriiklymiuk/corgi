@@ -37,13 +37,13 @@ func runAgentApprove(_ *cobra.Command, args []string) {
 		utils.PrintJSON(map[string]string{"status": "approved", "client": client})
 		return
 	}
-	fmt.Printf("approved %s — the browser page finishes the sign-in\n", client)
+	fmt.Printf("approved %s - the browser page finishes the sign-in\n", client)
 }
 
 func readLocalMCPAddr(agentDir string) (string, error) {
 	data, err := os.ReadFile(filepath.Join(agentDir, mcpAddrName))
 	if err != nil {
-		return "", errors.New("the daemon is not running — start it with `corgi agent up`")
+		return "", errors.New("the daemon is not running - start it with `corgi agent up`")
 	}
 	addr := loopbackAddr(strings.TrimSpace(string(data)))
 	if addr == "" {

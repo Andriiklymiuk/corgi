@@ -38,7 +38,7 @@ func watchWriter(agentD, workspaceID string) (watch.Writer, string, error) {
 	}
 	wc := resolved.Watch
 	if wc == nil {
-		return nil, "", fmt.Errorf("%s does not watch a tracker — `corgi agent watch enable` there first", workspaceID)
+		return nil, "", fmt.Errorf("%s does not watch a tracker - `corgi agent watch enable` there first", workspaceID)
 	}
 	secrets := watch.LoadSecretsFor(agentD, workspaceID)
 	tracker := strings.TrimSpace(wc.Tracker)
@@ -50,7 +50,7 @@ func watchWriter(agentD, workspaceID string) (watch.Writer, string, error) {
 	}
 	w := watch.WriterFor(secrets, tracker, wc.Project)
 	if w == nil {
-		return nil, wc.Project, fmt.Errorf("no %s token for %s — `corgi agent watch auth %s --local` there", tracker, workspaceID, tracker)
+		return nil, wc.Project, fmt.Errorf("no %s token for %s - `corgi agent watch auth %s --local` there", tracker, workspaceID, tracker)
 	}
 	return w, wc.Project, nil
 }
@@ -100,7 +100,7 @@ func runAgentWatchBoard(cmd *cobra.Command, _ []string) {
 		fmt.Printf("  problem    %s\n", info.Error)
 	}
 	if len(info.Statuses) == 0 {
-		fmt.Println("  no columns cached — run with --refresh")
+		fmt.Println("  no columns cached - run with --refresh")
 		return
 	}
 	fmt.Print("  columns    ")
@@ -110,7 +110,7 @@ func runAgentWatchBoard(cmd *cobra.Command, _ []string) {
 	}
 	fmt.Println(strings.Join(names, " · "))
 	if info.Stale(time.Now()) {
-		fmt.Println("  (older than a week — --refresh to be sure)")
+		fmt.Println("  (older than a week - --refresh to be sure)")
 	}
 }
 

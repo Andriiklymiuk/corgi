@@ -79,7 +79,7 @@ func TestMaterializeSharesOneWorktreeForRepoUsedTwice(t *testing.T) {
 	}
 
 	if set.Worktrees[0].Dir != set.Worktrees[1].Dir {
-		t.Error("two services in one repository must share a worktree — git allows a branch in exactly one")
+		t.Error("two services in one repository must share a worktree - git allows a branch in exactly one")
 	}
 }
 

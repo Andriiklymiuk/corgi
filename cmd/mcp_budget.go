@@ -95,7 +95,7 @@ func mcpUpDetached(args upArgs, wait time.Duration) (upLaunch, error) {
 
 	statePath := utils.RunStatePath(composeDir)
 	if isAlreadyRunning(statePath) {
-		return upLaunch{}, fmt.Errorf(errFmt, utils.ErrAlreadyRunning, "corgi is already running for this project — call corgi_down first")
+		return upLaunch{}, fmt.Errorf(errFmt, utils.ErrAlreadyRunning, "corgi is already running for this project - call corgi_down first")
 	}
 	mcpUpInFlightMu.Lock()
 	if h, ok := mcpUpInFlight[composeDir]; ok && utils.PidAlive(h.PID, "") {

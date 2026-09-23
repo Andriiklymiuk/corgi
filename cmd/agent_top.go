@@ -113,7 +113,7 @@ var agentTopCmd = &cobra.Command{
 	Short: "The board in the terminal, live: every session, its standing, what it is doing",
 	Long: `Like top, for your agents: the sessions with their standing, what each is
 doing and what it has spent, the ones that need you first, refreshed every
-second. Keys: j/k move, a allow, d deny, i interrupt, o open, q quit — each
+second. Keys: j/k move, a allow, d deny, i interrupt, o open, q quit - each
 goes through the daemon like a press on the phone would.
 
   corgi agent top`,

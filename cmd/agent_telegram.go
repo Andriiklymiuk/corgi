@@ -212,7 +212,7 @@ func (t *telegramControl) handle(text, replyTo string) {
 var claudeSlashWords = map[string]bool{"compact": true, "clear": true, "rewind": true, "model": true, "cost": true, "context": true, "resume": true, "continue": true, "remote-control": true, "init": true, "review": true}
 
 func claudeSlashTip(verb, session string) string {
-	tip := "/" + verb + " is Claude Code's command, typed inside a session — not one of corgi's.\nFrom here: reply to the session's notification with /" + verb + ", or\n/send <session> /" + verb
+	tip := "/" + verb + " is Claude Code's command, typed inside a session - not one of corgi's.\nFrom here: reply to the session's notification with /" + verb + ", or\n/send <session> /" + verb
 	if session != "" {
 		tip += "\n\nfor the one drifting now:\n/send " + session + " /" + verb
 	}
@@ -262,7 +262,7 @@ func (t *telegramControl) mute(arg string) {
 		t.send("ringing again")
 		return
 	}
-	t.send("muted until " + until.Local().Format("15:04") + " — nothing rings; the board goes on")
+	t.send("muted until " + until.Local().Format("15:04") + " - nothing rings; the board goes on")
 }
 
 func sessionFromNotification(text string) string {
@@ -330,7 +330,7 @@ func (t *telegramControl) boardText() string {
 	}
 	var b strings.Builder
 	for _, s := range board.Sessions {
-		fmt.Fprintf(&b, "%s %s — %s", statusGlyph(s.Status), s.Display, statusWord(s.Status))
+		fmt.Fprintf(&b, "%s %s - %s", statusGlyph(s.Status), s.Display, statusWord(s.Status))
 		if s.Detail != "" {
 			b.WriteString(" · " + s.Detail)
 		}
@@ -380,7 +380,7 @@ const telegramHelp = `corgi commands:
 /mute [1h|off]     nothing rings for a while
 /help              this
 
-A /compact or /model in a notification is Claude Code's — /send <session> /compact types it there.`
+A /compact or /model in a notification is Claude Code's - /send <session> /compact types it there.`
 
 func (t *telegramControl) statusText() string {
 	status, err := daemon.ReadStatus(t.agentIn)
@@ -430,7 +430,7 @@ func (t *telegramControl) control(action, name string) {
 		return
 	}
 	daemon.Nudge(info)
-	t.send(fmt.Sprintf("%s %s — asked", action, id))
+	t.send(fmt.Sprintf("%s %s - asked", action, id))
 }
 
 func (t *telegramControl) resolveWorkspace(name string) (string, bool) {
@@ -486,7 +486,7 @@ func startTelegramControl(ctx context.Context, notifyURL, agentDir string) <-cha
 		close(done)
 		return done
 	}
-	utils.Info("📨 telegram control on — /help in the chat")
+	utils.Info("📨 telegram control on - /help in the chat")
 	go func() {
 		defer close(done)
 		control.run(ctx)

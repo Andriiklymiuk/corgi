@@ -33,7 +33,7 @@ var agentChatAnnounceCmd = &cobra.Command{
 	Long: `The post a person writes by hand when work is up for review: the title, then
 one line per pull request named by its repository. It goes to the first
 --review-channel of the workspace (or postTo), in the voice replyAs names.
-No channel configured: nothing is posted, and it says so — a workspace
+No channel configured: nothing is posted, and it says so - a workspace
 without a review channel is not an error.
 
   corgi agent chat announce "[ABC-12] Phone field" https://github.com/acme/api/pull/5 https://github.com/acme/web/pull/9
@@ -50,7 +50,7 @@ without a review channel is not an error.
 		}
 		channel := announceChannel(to, slackDefaultsFor(dir, workspace))
 		if channel == "" {
-			utils.Infof("no review channel for %s — nothing posted (corgi agent watch enable --review-channel '#reviews')\n", firstNonEmpty(workspace, "this workspace"))
+			utils.Infof("no review channel for %s - nothing posted (corgi agent watch enable --review-channel '#reviews')\n", firstNonEmpty(workspace, "this workspace"))
 			if utils.JSONOutput {
 				utils.PrintJSON(map[string]any{"posted": false})
 			}

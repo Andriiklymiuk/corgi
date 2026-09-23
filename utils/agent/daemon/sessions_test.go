@@ -418,7 +418,7 @@ func TestLimitLiftedIsToldWhenItHappens(t *testing.T) {
 	d.onSessionTransition(s, sessions.StatusLimited, sessions.StatusWorking, now)
 	select {
 	case body := <-got:
-		if body != "limit lifted on skp — back to work" {
+		if body != "limit lifted on skp - back to work" {
 			t.Fatalf("body %q", body)
 		}
 	case <-time.After(time.Second):
@@ -606,7 +606,7 @@ func TestLiftRingsAtTheClockTheLimitNamed(t *testing.T) {
 	d.onSessionTransition(s, sessions.StatusWorking, sessions.StatusLimited, now)
 	select {
 	case body := <-got:
-		if body != "limit lifted on skp — back to work" {
+		if body != "limit lifted on skp - back to work" {
 			t.Fatalf("body %q", body)
 		}
 	case <-time.After(time.Second):

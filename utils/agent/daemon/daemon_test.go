@@ -160,7 +160,7 @@ func TestDiagnosticNamesTheConfigDirAndStrippedCredentials(t *testing.T) {
 		t.Errorf("configDir = %q; status must say which account will actually run", diag.ConfigDir)
 	}
 	if len(diag.Stripped) == 0 {
-		t.Error("status must report that an ambient credential was stripped — otherwise the user cannot tell which account ran")
+		t.Error("status must report that an ambient credential was stripped - otherwise the user cannot tell which account ran")
 	}
 	if diag.Bin != "claude" {
 		t.Errorf("bin = %q, want the resolved default", diag.Bin)
@@ -326,7 +326,7 @@ func TestDaemonWritesABriefWhenASessionIsReplaced(t *testing.T) {
 		t.Fatalf("brief.Read() error = %v", err)
 	}
 	if got == nil {
-		t.Fatal("no brief written after a restart — the handover note is the feature")
+		t.Fatal("no brief written after a restart - the handover note is the feature")
 	}
 	if got.Cause == "" {
 		t.Error("brief must carry the exit cause, so it explains why this is a new session")
@@ -519,7 +519,7 @@ func TestDaemonSurvivesASIGUSR1Nudge(t *testing.T) {
 
 	select {
 	case <-done:
-		t.Fatal("the daemon exited on SIGUSR1 — the handler was not installed")
+		t.Fatal("the daemon exited on SIGUSR1 - the handler was not installed")
 	default:
 	}
 	if len(d.Status().Workspaces) != 1 {

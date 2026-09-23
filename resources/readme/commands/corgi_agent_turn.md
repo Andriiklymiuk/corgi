@@ -2,13 +2,13 @@
 
 ## corgi agent turn
 
-One more turn for a session whose terminal is gone — claude -p --resume, or codex exec resume
+One more turn for a session whose terminal is gone - claude -p --resume, or codex exec resume
 
 ### Synopsis
 
 The editor closed, the lid shut on a tab: the session's process is gone
-but its conversation is not. This runs one headless turn for it — claude -p
---resume `<id>` `<message>`, or codex exec resume for a codex session — in its own checkout, under its own account, so the
+but its conversation is not. This runs one headless turn for it - claude -p
+--resume `<id>` `<message>`, or codex exec resume for a codex session - in its own checkout, under its own account, so the
 conversation goes on and the phone's chat reads the answer. A session that
 still has a terminal is typed into (corgi agent send) and never resumed
 beside itself.

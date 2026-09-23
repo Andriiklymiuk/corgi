@@ -53,7 +53,7 @@ func newOAuthClientHosts(extra []string, warn io.Writer) *oauthClientHosts {
 		}
 		if !strings.Contains(h, ".") {
 			if warn != nil {
-				fmt.Fprintf(warn, "corgi mcp: ignoring OAuth client host %q — a host needs at least one dot\n", raw)
+				fmt.Fprintf(warn, "corgi mcp: ignoring OAuth client host %q - a host needs at least one dot\n", raw)
 			}
 			return
 		}

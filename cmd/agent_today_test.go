@@ -143,7 +143,7 @@ func TestTodayIncludesWhatTheWatchDidUnattended(t *testing.T) {
 	var b strings.Builder
 	writeWatchActions(&b, *e)
 	text := b.String()
-	for _, want := range []string{"corgi worked on 2 things unattended", "ABC-1 — opened 1 PR", "merge_requests/7", "… ABC-2", "the watch saw 1 thing", "waiting for a free slot: ABC-8"} {
+	for _, want := range []string{"corgi worked on 2 things unattended", "ABC-1 - opened 1 PR", "merge_requests/7", "… ABC-2", "the watch saw 1 thing", "waiting for a free slot: ABC-8"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("the report is missing %q:\n%s", want, text)
 		}

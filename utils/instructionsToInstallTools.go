@@ -95,10 +95,10 @@ func InstallHint(tool string) string {
 	return installHintFor(runtime.GOOS, tool)
 }
 
-// NotInstalledError is the one-line "X is not installed — how to get it".
+// NotInstalledError is the one-line "X is not installed - how to get it".
 func NotInstalledError(tool string) error {
 	if hint := InstallHint(tool); hint != "" {
-		return fmt.Errorf("%s is not installed — `%s`", tool, hint)
+		return fmt.Errorf("%s is not installed - `%s`", tool, hint)
 	}
 	return fmt.Errorf("%s is not installed", tool)
 }

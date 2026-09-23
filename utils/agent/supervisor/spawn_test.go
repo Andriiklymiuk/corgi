@@ -184,7 +184,7 @@ func TestBuildEnvSetsConfigDirAndReplacesInherited(t *testing.T) {
 		t.Error("the workspace's config dir must be set")
 	}
 	if slices.Contains(env, "CLAUDE_CONFIG_DIR=/inherited/from/daemon") {
-		t.Error("the inherited config dir must be replaced, not duplicated — otherwise which one wins depends on env ordering")
+		t.Error("the inherited config dir must be replaced, not duplicated - otherwise which one wins depends on env ordering")
 	}
 }
 
@@ -205,7 +205,7 @@ func TestStrippedCredentialsReportsWhatWasRemoved(t *testing.T) {
 
 	want := []string{"ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"}
 	if !slices.Equal(got, want) {
-		t.Errorf("StrippedCredentials() = %v, want %v — status output depends on this to explain which account ran", got, want)
+		t.Errorf("StrippedCredentials() = %v, want %v - status output depends on this to explain which account ran", got, want)
 	}
 }
 

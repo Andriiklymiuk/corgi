@@ -87,7 +87,7 @@ func runAgentWatchPrune(cmd *cobra.Command, _ []string) {
 				fmt.Printf("removed %s\n", p)
 			}
 			for _, p := range r.Kept {
-				fmt.Printf("kept    %s — uncommitted work\n", p)
+				fmt.Printf("kept    %s - uncommitted work\n", p)
 			}
 		}
 	}

@@ -70,7 +70,7 @@ func (s *Slack) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, error
 		// only needed for listened channels and direct messages.
 		if len(s.cfg.Channels)+len(s.cfg.ReviewChannels) > 0 || !strings.Contains(err.Error(), "missing_scope") {
 			if strings.Contains(err.Error(), "missing_scope") {
-				err = fmt.Errorf("%w — listening to a channel needs channels:read and channels:history (groups:* for a private one)", err)
+				err = fmt.Errorf("%w - listening to a channel needs channels:read and channels:history (groups:* for a private one)", err)
 			}
 			return nil, next, err
 		}

@@ -31,13 +31,13 @@ func TestDirIsWorkspace(t *testing.T) {
 		t.Error("a corgi stack is a workspace")
 	}
 	if !dirIsWorkspace(gitRepo) {
-		t.Error("a plain git repo is a workspace — Remote Control is useful without a compose file")
+		t.Error("a plain git repo is a workspace - Remote Control is useful without a compose file")
 	}
 	if !dirIsWorkspace(worktree) {
 		t.Error("a git worktree (.git file) is a workspace")
 	}
 	if dirIsWorkspace(t.TempDir()) {
-		t.Error("an arbitrary folder is NOT a workspace — that guard must not regress")
+		t.Error("an arbitrary folder is NOT a workspace - that guard must not regress")
 	}
 	if dirIsWorkspace("") {
 		t.Error("empty dir is not a workspace")
@@ -56,7 +56,7 @@ func TestCorgiListenerPIDsIsSafeOnBadInput(t *testing.T) {
 func TestReclaimCorgiMCPWithNothingListening(t *testing.T) {
 	found, freed := reclaimCorgiMCP("127.0.0.1:1")
 	if found || freed {
-		t.Error("nothing corgi-owned on the port — reclaim must report neither found nor freed")
+		t.Error("nothing corgi-owned on the port - reclaim must report neither found nor freed")
 	}
 }
 
@@ -242,10 +242,10 @@ func TestClaudeTrustsDir(t *testing.T) {
 		t.Error("a declined dialog must report untrusted")
 	}
 	if claudeTrustsDir(cfgDir, "/never-opened") {
-		t.Error("a dir Claude never opened must report untrusted — that is the warning's whole point")
+		t.Error("a dir Claude never opened must report untrusted - that is the warning's whole point")
 	}
 	if claudeTrustsDir(t.TempDir(), "/anything") {
-		t.Error("a missing .claude.json means Claude never ran under the account — untrusted")
+		t.Error("a missing .claude.json means Claude never ran under the account - untrusted")
 	}
 	broken := t.TempDir()
 	_ = os.WriteFile(filepath.Join(broken, ".claude.json"), []byte("not json"), 0o600)

@@ -6,7 +6,7 @@ Take a finished session off the board until its next event
 
 ### Synopsis
 
-Frees the key of a session that is done, idle or closed — a chat tab you
+Frees the key of a session that is done, idle or closed - a chat tab you
 closed while Claude Code kept its process, say. The session is not touched;
 its next hook event puts it back on a key. A working or waiting session is
 refused. Same references as focus: id, id prefix, label, or key number.

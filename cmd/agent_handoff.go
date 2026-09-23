@@ -61,7 +61,7 @@ var agentHandoffShowCmd = &cobra.Command{
 		}
 		fmt.Print(p.Markdown())
 		if n, err := handoff.CommitsSince(worktreeFor(dir, p), p.Where.Head); err == nil && n > 0 {
-			fmt.Printf("\n%d commit(s) since it was written — the code moved on; read the diff too.\n", n)
+			fmt.Printf("\n%d commit(s) since it was written - the code moved on; read the diff too.\n", n)
 		}
 	},
 }
@@ -107,9 +107,9 @@ var agentHandoffVerifyCmd = &cobra.Command{
 		if utils.JSONOutput {
 			utils.PrintJSON(map[string]any{"ref": p.Ref, "verified": ok, "result": v, "recorded": p.Verification})
 		} else if ok {
-			fmt.Printf("✓ %s: `%s` passes at %s — the packet can be trusted as written\n", p.Ref, v.Cmd, shortSHA(v.At))
+			fmt.Printf("✓ %s: `%s` passes at %s - the packet can be trusted as written\n", p.Ref, v.Cmd, shortSHA(v.At))
 		} else {
-			fmt.Printf("✗ %s: `%s` exit %d at %s (packet said exit %d at %s) — start from the ticket and the diff, not the packet\n",
+			fmt.Printf("✗ %s: `%s` exit %d at %s (packet said exit %d at %s) - start from the ticket and the diff, not the packet\n",
 				p.Ref, v.Cmd, v.Exit, shortSHA(v.At), p.Verification.Exit, shortSHA(p.Verification.At))
 		}
 		if !ok {
@@ -178,7 +178,7 @@ func runAgentHandoff(cmd *cobra.Command, _ []string) {
 	}
 	fmt.Printf("✓ handoff for %s: %s\n  %s\n", p.Ref, p.Summary(), handoff.MarkdownPath(dir, p.Ref))
 	if p.Verification != nil && p.Verification.Exit != 0 {
-		fmt.Printf("  note: `%s` exited %d — the next run will see that\n", p.Verification.Cmd, p.Verification.Exit)
+		fmt.Printf("  note: `%s` exited %d - the next run will see that\n", p.Verification.Cmd, p.Verification.Exit)
 	}
 }
 

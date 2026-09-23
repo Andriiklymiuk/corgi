@@ -316,7 +316,7 @@ func codexSkillPrompt(prompt string) string {
 	for _, n := range names {
 		files = append(files, "$"+n+" is ~/.codex/skills/"+n+"/SKILL.md")
 	}
-	return out + "\n\nSkills: " + strings.Join(files, "; ") + " — read it whole, then follow it."
+	return out + "\n\nSkills: " + strings.Join(files, "; ") + " - read it whole, then follow it."
 }
 
 func codexInteractiveArgs(mode string) []string {

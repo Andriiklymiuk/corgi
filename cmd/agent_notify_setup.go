@@ -20,7 +20,7 @@ var agentNotifyCmd = &cobra.Command{
 	Use:     "notify",
 	Aliases: []string{"notifications"},
 	Short:   "Where notifications go when you are away from this machine",
-	Long: `Without this, every notification stops at this machine — the desk you were
+	Long: `Without this, every notification stops at this machine - the desk you were
 trying to leave. Point it at something your phone receives.
 
   corgi agent notify telegram --token <TOKEN>   set up a Telegram bot end to end
@@ -36,7 +36,7 @@ var agentNotifyTelegramCmd = &cobra.Command{
 message, writes notifyUrl and sends a test.
 
 Get a token first: message @BotFather in Telegram, send /newbot, follow it. The
-token is a credential — pass it here, do not paste it into a chat or a commit.`,
+token is a credential - pass it here, do not paste it into a chat or a commit.`,
 	Example: `corgi agent notify telegram --token 123456:AA...`,
 	Run:     runAgentNotifyTelegram,
 }
@@ -123,7 +123,7 @@ func finishNotifySetup(target string) {
 		exitProcess(1)
 		return
 	}
-	utils.Info("✓ test message sent — check your phone")
+	utils.Info("✓ test message sent - check your phone")
 	utils.Info("")
 	utils.Info("run `corgi agent restart` so the running daemon picks it up")
 }
@@ -132,7 +132,7 @@ func runAgentNotifyShow(_ *cobra.Command, _ []string) {
 	target, path := configuredNotifyURL()
 	if target == "" {
 		utils.Infof("no notifyUrl set in %s\n", path)
-		utils.Info("notifications reach this machine only — `corgi agent notify telegram --token <TOKEN>`")
+		utils.Info("notifications reach this machine only - `corgi agent notify telegram --token <TOKEN>`")
 		return
 	}
 	u, err := url.Parse(target)
@@ -155,7 +155,7 @@ func runAgentNotifyTest(_ *cobra.Command, _ []string) {
 		exitWithError("agent_notify", err, 1)
 		return
 	}
-	utils.Info("✓ sent — check your phone")
+	utils.Info("✓ sent - check your phone")
 }
 
 func configuredNotifyURL() (target, path string) {

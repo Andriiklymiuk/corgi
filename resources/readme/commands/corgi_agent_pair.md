@@ -2,7 +2,7 @@
 
 ## corgi agent pair
 
-Open a fresh pairing window and print its QR — or write a .corgipair file to AirDrop
+Open a fresh pairing window and print its QR - or write a .corgipair file to AirDrop
 
 ### Synopsis
 
@@ -13,7 +13,7 @@ agent up did.
   corgi agent pair                    a new QR and code
   corgi agent pair --viewer           a read-only window, for a teammate's phone
   corgi agent pair --file             also write `~/Desktop/<laptop>.corgipair:` AirDrop it to the phone,
-                                      which opens it with corgi and is paired — no scanning, no typing
+                                      which opens it with corgi and is paired - no scanning, no typing
   corgi agent pair --mint             a launch code for a daemon you will start without a terminal:
                                       corgi agent up --pair-code `<code>` on that host opens its first window on it
   corgi agent pair --json

@@ -52,7 +52,7 @@ var agentClaudeCmd = &cobra.Command{
 	Short: "Run Claude Code the way this folder's workspace is configured",
 	Long: `Starts Claude Code for the workspace the current directory belongs to, under
 that workspace's account (configDir), binary and permission mode from the
-corgi agent config — the same settings a remote session gets. Outside every
+corgi agent config - the same settings a remote session gets. Outside every
 workspace it is plain claude. So one command replaces per-account aliases:
 the corgi VS Code extension's "+" key runs it in a new terminal.
 
@@ -218,7 +218,7 @@ func loadBot(name string) (bots.Bot, error) {
 	}
 	b, ok := store.Find(name)
 	if !ok {
-		return bots.Bot{}, fmt.Errorf("no bot named %q — corgi agent bot list", name)
+		return bots.Bot{}, fmt.Errorf("no bot named %q - corgi agent bot list", name)
 	}
 	return b, nil
 }
@@ -319,7 +319,7 @@ func resolveLaunch(dir, profile string, open harness.Open, extra []string) (clau
 		for _, name := range order {
 			if harness.For(name, "").Installed() {
 				if name != order[0] {
-					utils.Info(fmt.Sprintf("corgi: %s is not installed here — %s opens", order[0], name))
+					utils.Info(fmt.Sprintf("corgi: %s is not installed here - %s opens", order[0], name))
 				}
 				resolved.Kind = name
 				break
@@ -368,7 +368,7 @@ func workspaceRoot(id string) (string, error) {
 	}
 	ws, ok := registry.Find(id)
 	if !ok {
-		return "", fmt.Errorf("%q is not a registered workspace — `corgi agent init` there first", id)
+		return "", fmt.Errorf("%q is not a registered workspace - `corgi agent init` there first", id)
 	}
 	root := expandTilde(strings.TrimSpace(ws.AbsPath))
 	if root == "" {
@@ -426,7 +426,7 @@ var agentCodexCmd = &cobra.Command{
 	Use:   "codex [-- codex args]",
 	Short: "Run Codex the way this folder's workspace is configured",
 	Long: `Starts Codex for the workspace the current directory belongs to, in its
-checkout and under its settings — corgi agent claude with another harness.
+checkout and under its settings - corgi agent claude with another harness.
 The session lands on the board once corgi agent track enable has written
 Codex's notify hook.
 
@@ -449,7 +449,7 @@ func addLaunchFlags(c *cobra.Command, agent string) {
 	c.Flags().String("ticket", "", "The tracker ref(s) this session works on (ABC-1 or ABC-1,ABC-2): the board shows it on the ticket")
 	c.Flags().String("ticket-key", "", "The inbox key of that ticket, with --ticket")
 	c.Flags().Int("attempt", 0, "This session is attempt N of several on the same ticket (corgi agent watch work --attempts): its own worktree on corgi/<ticket>-N, and the board groups them")
-	c.Flags().Bool("isolate", false, "Start in a worktree of its own on a corgi/<ticket> branch — every repository of the stack gets one — so this session never touches your checkout")
+	c.Flags().Bool("isolate", false, "Start in a worktree of its own on a corgi/<ticket> branch - every repository of the stack gets one - so this session never touches your checkout")
 	c.Flags().String("bot", "", "Open as this bot (corgi agent bot list): its workspace, account, model and persona, resuming its last conversation")
 	c.Flags().Bool("show", false, "Print the resolved command and exit")
 }

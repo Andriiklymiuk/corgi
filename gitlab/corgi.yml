@@ -1,4 +1,4 @@
-# corgi for GitLab CI — the counterpart of the Andriiklymiuk/corgi GitHub Action.
+# corgi for GitLab CI - the counterpart of the Andriiklymiuk/corgi GitHub Action.
 #
 # Include it from the repo that holds corgi-compose.yml, and let each service
 # repo call that pipeline so one branch name boots the whole stack:
@@ -37,7 +37,7 @@ spec:
     runner_tags:
       description: >-
         Tags selecting the runner. Must resolve to a shell or VM-backed runner,
-        not a plain docker executor — see allow_container.
+        not a plain docker executor - see allow_container.
       type: array
       default: []
     wait_timeout:
@@ -79,7 +79,7 @@ spec:
       # as containers that publish to localhost, and every generated connection
       # string assumes the services share that localhost. A docker-executor job
       # sits in its own network namespace, so the stack boots and then every
-      # service fails to reach its database — which reads as "postgres is down",
+      # service fails to reach its database - which reads as "postgres is down",
       # not as "wrong executor", and costs an afternoon.
       if [ "$CORGI_ALLOW_CONTAINER" != "true" ] && { [ -f /.dockerenv ] || grep -qE '(docker|containerd|kubepods)' /proc/1/cgroup 2>/dev/null; }; then
         echo "corgi: this job is running inside a container." >&2

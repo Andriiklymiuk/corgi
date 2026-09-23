@@ -14,7 +14,7 @@ import (
 var agentWatchWorkpadCmd = &cobra.Command{
 	Use:   "workpad <REF> <section> [text]",
 	Short: "Write one section of the ticket's corgi comment",
-	Long: `A ticket gets one corgi comment — the workpad — with a section per thing:
+	Long: `A ticket gets one corgi comment - the workpad - with a section per thing:
 the spec, the pull requests, the latest handoff, a blocker. Writing a section
 rewrites it in place; the comment is created the first time. Empty text
 removes the section.

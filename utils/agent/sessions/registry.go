@@ -888,7 +888,7 @@ func (r *Registry) Dismiss(ref string, now time.Time) error {
 		return err
 	}
 	if s.Status == StatusWorking || s.Status == StatusNeedsInput {
-		return fmt.Errorf("%s is %s — not dismissing a live session", s.Label, s.Status)
+		return fmt.Errorf("%s is %s - not dismissing a live session", s.Label, s.Status)
 	}
 	if i := r.board.IndexOf(s.ID); i >= 0 {
 		r.board.Pin(i, false)
@@ -1330,7 +1330,7 @@ func (r *Registry) PendingAnswer(ref, answer string) (string, error) {
 		return "\x1b", nil
 	case "allow", "always":
 		if s.Pending.Risky() {
-			return "", fmt.Errorf("%s asks to run %q — look at it before allowing", r.displayLocked(s), s.Pending.Subject)
+			return "", fmt.Errorf("%s asks to run %q - look at it before allowing", r.displayLocked(s), s.Pending.Subject)
 		}
 		if answer == "always" {
 			return "2\r", nil
@@ -1449,7 +1449,7 @@ func (r *Registry) SetNotice(err error) {
 	r.touch()
 }
 
-var ErrNoWindow = errors.New("no editor window connected — open a folder in VS Code with the corgi extension installed")
+var ErrNoWindow = errors.New("no editor window connected - open a folder in VS Code with the corgi extension installed")
 
 func (r *Registry) NewSessionTarget(windowID string) (FocusTarget, error) {
 	r.mu.Lock()
@@ -1517,11 +1517,11 @@ func (r *Registry) lookupLocked(ref string) (*Session, error) {
 	case len(byPrefix) == 1:
 		return byPrefix[0], nil
 	case len(byPrefix) > 1:
-		return nil, fmt.Errorf("%q matches %d sessions — use more of the id", ref, len(byPrefix))
+		return nil, fmt.Errorf("%q matches %d sessions - use more of the id", ref, len(byPrefix))
 	case len(byLabel) == 1:
 		return byLabel[0], nil
 	case len(byLabel) > 1:
-		return nil, fmt.Errorf("%d sessions are called %q — use the id", len(byLabel), ref)
+		return nil, fmt.Errorf("%d sessions are called %q - use the id", len(byLabel), ref)
 	}
 	return nil, ErrNoSession
 }

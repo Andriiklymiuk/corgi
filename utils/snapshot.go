@@ -134,13 +134,13 @@ func ListSnapshots(serviceName string) ([]SnapshotListItem, error) {
 
 func CheckRestoreCompatibility(m SnapshotMeta, targetImage, targetArch, targetPgMajor string) error {
 	if m.Image != targetImage {
-		return fmt.Errorf("image mismatch: snapshot is %q but target is %q — physical snapshots are image-specific (extensions + uid). Use --force to override", m.Image, targetImage)
+		return fmt.Errorf("image mismatch: snapshot is %q but target is %q - physical snapshots are image-specific (extensions + uid). Use --force to override", m.Image, targetImage)
 	}
 	if m.Arch != targetArch {
-		return fmt.Errorf("arch mismatch: snapshot is %q but target is %q — physical format is architecture-specific. Use --force to override", m.Arch, targetArch)
+		return fmt.Errorf("arch mismatch: snapshot is %q but target is %q - physical format is architecture-specific. Use --force to override", m.Arch, targetArch)
 	}
 	if m.PgVersionMajor != "" && targetPgMajor != "" && m.PgVersionMajor != targetPgMajor {
-		return fmt.Errorf("pg version mismatch: snapshot is major %q but target is major %q — a physical data dir is not portable across major versions. Use --force to override", m.PgVersionMajor, targetPgMajor)
+		return fmt.Errorf("pg version mismatch: snapshot is major %q but target is major %q - a physical data dir is not portable across major versions. Use --force to override", m.PgVersionMajor, targetPgMajor)
 	}
 	return nil
 }
@@ -231,7 +231,7 @@ func stopContainerClean(container string, timeoutSeconds int) error {
 		return fmt.Errorf("inspecting %s exit code: %w", container, err)
 	}
 	if c := strings.TrimSpace(string(code)); c != "0" {
-		return fmt.Errorf("container %s did not exit cleanly (exit %s) — aborting to avoid a recovery-needing snapshot", container, c)
+		return fmt.Errorf("container %s did not exit cleanly (exit %s) - aborting to avoid a recovery-needing snapshot", container, c)
 	}
 	return nil
 }
@@ -349,7 +349,7 @@ func RunSnapshot(req SnapshotRequest, now time.Time) (SnapshotMeta, error) {
 		if req.WasRunning {
 			_ = composeInDir(serviceDir, "start")
 		}
-		Infof("\n⚠️  snapshot %q interrupted — partial files removed, container restarted\n", req.Name)
+		Infof("\n⚠️  snapshot %q interrupted - partial files removed, container restarted\n", req.Name)
 	})
 	defer stop()
 
@@ -383,7 +383,7 @@ func prepareSnapshotArchive(req SnapshotRequest) (string, string, error) {
 	}
 	if !req.Force {
 		if _, err := os.Stat(archive); err == nil {
-			return "", "", fmt.Errorf("snapshot %q already exists — use --force to overwrite", req.Name)
+			return "", "", fmt.Errorf("snapshot %q already exists - use --force to overwrite", req.Name)
 		}
 	}
 	if err := os.MkdirAll(filepath.Dir(archive), 0o755); err != nil {
@@ -443,7 +443,7 @@ func verifyArchiveSHA(archivePath, want string) error {
 		return err
 	}
 	if got := hex.EncodeToString(h.Sum(nil)); got != want {
-		return fmt.Errorf("checksum mismatch — snapshot may be corrupt (want %s, got %s)", want, got)
+		return fmt.Errorf("checksum mismatch - snapshot may be corrupt (want %s, got %s)", want, got)
 	}
 	return nil
 }
@@ -504,7 +504,7 @@ func RunRestore(req RestoreRequest) error {
 	wiped := false
 	stop := trapInterrupt(func(os.Signal) {
 		if wiped {
-			Infof("\n⚠️  restore of %q interrupted AFTER wipe — the db is empty; re-run `corgi db restore` to recover\n", req.Service)
+			Infof("\n⚠️  restore of %q interrupted AFTER wipe - the db is empty; re-run `corgi db restore` to recover\n", req.Service)
 		} else {
 			Infof("\n⚠️  restore of %q interrupted before any change\n", req.Service)
 		}
@@ -519,7 +519,7 @@ func RunRestore(req RestoreRequest) error {
 		return err
 	}
 	if err := injectArchive(container, req.ArchivePath); err != nil {
-		return fmt.Errorf("restore failed after wipe — db needs another restore: %w", err)
+		return fmt.Errorf("restore failed after wipe - db needs another restore: %w", err)
 	}
 	if err := composeInDir(serviceDir, "start"); err != nil {
 		return fmt.Errorf("snapshot injected but container failed to start: %w", err)
@@ -537,7 +537,7 @@ func validateRestore(req RestoreRequest) (serviceDir, container string, err erro
 	}
 	meta, err := ReadSnapshotMeta(req.MetaPath)
 	if err != nil {
-		return "", "", fmt.Errorf("snapshot metadata missing/unreadable (%s) — both .tar.zst and .meta.json are required: %w", filepath.Base(req.MetaPath), err)
+		return "", "", fmt.Errorf("snapshot metadata missing/unreadable (%s) - both .tar.zst and .meta.json are required: %w", filepath.Base(req.MetaPath), err)
 	}
 
 	arch, err := dockerServerArch()

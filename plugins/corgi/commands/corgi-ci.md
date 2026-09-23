@@ -24,9 +24,9 @@ per-service-repo caller from `references/github-actions.md` or
 
 Honor every guardrail: never emit a job that runs inside a container, always dump
 logs in an always-executed step, always bound the health wait with a timeout, and
-never invent a corgi flag the installed binary does not have — fall back per
+never invent a corgi flag the installed binary does not have - fall back per
 `references/fallbacks.md` or bump corgi instead.
 
 State the per-run cost (wall clock, and that every participating PR triggers it)
 and show the generated YAML before committing. A pipeline that has not been run
-once is not finished — say so plainly rather than reporting it as done.
+once is not finished - say so plainly rather than reporting it as done.

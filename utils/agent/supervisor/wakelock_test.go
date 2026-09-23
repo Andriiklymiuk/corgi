@@ -35,7 +35,7 @@ func TestWakeLockOffNeverAcquires(t *testing.T) {
 		t.Fatalf("Acquire() on an off lock should be a no-op, got %v", err)
 	}
 	if w.Held() {
-		t.Error("mode off must not hold a lock — someone on a desktop asked for this explicitly")
+		t.Error("mode off must not hold a lock - someone on a desktop asked for this explicitly")
 	}
 	if *starts != 0 {
 		t.Errorf("mode off started %d processes, want 0", *starts)
@@ -52,7 +52,7 @@ func TestWakeLockAcquireIsIdempotent(t *testing.T) {
 	}
 
 	if *starts != 1 {
-		t.Errorf("started %d lock processes, want 1 — a restart loop must not stack them up", *starts)
+		t.Errorf("started %d lock processes, want 1 - a restart loop must not stack them up", *starts)
 	}
 	if !w.Held() {
 		t.Error("lock should be held")
@@ -103,7 +103,7 @@ func TestWakeLockPropagatesStartFailure(t *testing.T) {
 	w.startFn = func(int) (*exec.Cmd, error) { return nil, sentinel }
 
 	if err := w.Acquire(1); !errors.Is(err, sentinel) {
-		t.Errorf("Acquire() = %v, want %v — a missing binary must surface, not be swallowed", err, sentinel)
+		t.Errorf("Acquire() = %v, want %v - a missing binary must surface, not be swallowed", err, sentinel)
 	}
 	if w.Held() {
 		t.Error("a failed acquire must not report the lock as held")

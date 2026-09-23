@@ -18,7 +18,7 @@ func checkPortConflicts(ports []portOwnerInfo, isBusy func(int) bool, owner func
 		if who == "" {
 			who = fmt.Sprintf("an unidentified process (try: sudo lsof -nP -i:%d)", p.Port)
 		}
-		conflicts = append(conflicts, fmt.Sprintf("port %d busy (%s) — held by %s", p.Port, p.Desc, who))
+		conflicts = append(conflicts, fmt.Sprintf("port %d busy (%s) - held by %s", p.Port, p.Desc, who))
 	}
 	return conflicts
 }
