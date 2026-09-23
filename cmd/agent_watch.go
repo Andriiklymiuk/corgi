@@ -109,8 +109,12 @@ var agentWatchEnableCmd = &cobra.Command{
 			wc.Repos = splitList(v)
 		}
 		if v, _ := flags.GetString("interval"); v != "" {
-			if _, err := time.ParseDuration(v); err != nil && v != "0" {
+			d, err := time.ParseDuration(v)
+			if err != nil {
 				return fmt.Errorf("--interval: %w", err)
+			}
+			if d < time.Minute {
+				return fmt.Errorf("--interval is at least 1m — polling always runs, beside webhooks too (GitHub asks for 60s between notification polls)")
 			}
 			wc.Interval = v
 		}
