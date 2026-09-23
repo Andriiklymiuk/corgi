@@ -13,7 +13,7 @@ func TestUpsertMatchesOnIDSoAMovedRepoDoesNotDuplicate(t *testing.T) {
 	r.Upsert(Workspace{ID: "acme", AbsPath: "/new/location"})
 
 	if len(r.Workspaces) != 1 {
-		t.Fatalf("got %d workspaces, want 1 — a moved repo must update its row, not add one", len(r.Workspaces))
+		t.Fatalf("got %d workspaces, want 1 - a moved repo must update its row, not add one", len(r.Workspaces))
 	}
 	if r.Workspaces[0].AbsPath != "/new/location" {
 		t.Errorf("path = %q, want the new location", r.Workspaces[0].AbsPath)
@@ -46,7 +46,7 @@ func TestUpsertPreservesFieldsAPartialUpdateOmits(t *testing.T) {
 
 	got := r.Workspaces[0]
 	if len(got.Aliases) != 1 || got.Aliases[0] != "recipe app" {
-		t.Errorf("aliases = %v, want them preserved — a partial update must not erase what another path discovered", got.Aliases)
+		t.Errorf("aliases = %v, want them preserved - a partial update must not erase what another path discovered", got.Aliases)
 	}
 	if len(got.Repos) != 2 || len(got.Services) != 2 {
 		t.Errorf("repos/services were erased: %v / %v", got.Repos, got.Services)
@@ -89,7 +89,7 @@ func TestReconcileMarksUnreachableWithoutDeleting(t *testing.T) {
 	r.Reconcile(func(path string) bool { return path == "/mounted" })
 
 	if len(r.Workspaces) != 2 {
-		t.Fatal("an unreachable path must keep its row — an unmounted drive is not a deleted project")
+		t.Fatal("an unreachable path must keep its row - an unmounted drive is not a deleted project")
 	}
 	byID := map[string]Status{}
 	for _, w := range r.Workspaces {

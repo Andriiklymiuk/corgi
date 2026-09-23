@@ -3,7 +3,7 @@
 A starting point, not a drop-in. Replace the service list, the secrets source, and
 the e2e command with the workspace's real ones.
 
-## Workspace repo — the implementation
+## Workspace repo - the implementation
 
 `.github/workflows/stack-e2e.yml` in the repo that holds `corgi-compose.yml`:
 
@@ -57,7 +57,7 @@ jobs:
 
       # After init on purpose: the keys are hashed from the services'
       # lockfiles, which do not exist until they are cloned. Computed earlier
-      # the key never changes and the cache never re-saves — this step fails
+      # the key never changes and the cache never re-saves - this step fails
       # instead (corgi cache paths --json --strict).
       - name: Compute the cache plan
         uses: Andriiklymiuk/corgi/cache@v1
@@ -67,7 +67,7 @@ jobs:
       # (the beforeStart skip markers). On a polyglot stack, prefer one
       # actions/cache step per slot (cache-1-key/paths/restore-keys …
       # cache-4-*) so one lockfile change doesn't evict every other language's
-      # packages — the restore-keys slot is the group's corgi-deps-<ecosystem>-
+      # packages - the restore-keys slot is the group's corgi-deps-<ecosystem>-
       # prefix, so a changed lockfile starts from the previous packages instead
       # of empty.
       - name: Restore dependency caches
@@ -127,7 +127,7 @@ jobs:
         run: corgi stop || true
 ```
 
-## Service repo — the caller
+## Service repo - the caller
 
 `.github/workflows/stack-e2e.yml` in each participating repo:
 
@@ -155,7 +155,7 @@ jobs:
 - `secrets: inherit` needs the secrets defined at the org (or each repo). A
   reusable workflow cannot read the *called* repo's secrets otherwise.
 - The default `GITHUB_TOKEN` is scoped to the calling repo only. Cloning sibling
-  private repos needs a GitHub App token or a PAT with org read — that is
+  private repos needs a GitHub App token or a PAT with org read - that is
   `REPO_TOKEN` above.
 - Cache scope belongs to the **calling** repo, so each service repo warms its own.
   If that hit rate is too low, invert the design: fire `repository_dispatch` into
@@ -167,7 +167,7 @@ jobs:
   name: a non-empty default beats every `||` fallback, so a manual run silently
   boots the default branch while claiming to test yours.
 - Add a daily `schedule:` run on the default branch. GitHub scopes caches per
-  ref, so a fresh PR restores from its base branch — the scheduled run is what
+  ref, so a fresh PR restores from its base branch - the scheduled run is what
   keeps that base warm (and doubles as a drift alarm for the suite itself).
 - `if-no-files-found: error` on the artifact upload. With the default `warn`, a
   wrong path uploads an empty artifact on every run and nobody notices until

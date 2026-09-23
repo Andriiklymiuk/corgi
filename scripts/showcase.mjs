@@ -10,7 +10,7 @@ const c = { g: "#3fb950", r: "#ff7b72", y: "#e3b341", b: "#79c0ff", c: "#56d4dd"
 const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
 /** {g}green{/} {r}red{/} {y}yellow{/} {b}blue{/} {c}cyan{/} {d}dim{/} {m}magenta{/} {B}bold{/} */
 const mark = (s) => {
-	// {/} closes whatever opened last, so a {B} is a <b> that really ends —
+	// {/} closes whatever opened last, so a {B} is a <b> that really ends -
 	// an unclosed <b> would wrap the rest of the page, phone included.
 	const open = [];
 	return esc(s).replace(/\{([grybcdmB]|\/)\}/g, (_, k) => {
@@ -117,10 +117,10 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 		"🚀 🤖 Executing command for web:  {g}yarn dev{/}",
 		"{c}[api]{/} listening on :7012",
 		"{c}[web]{/} ➜  Local: http://localhost:5173/",
-		"😉 corgi is running — Ctrl+C to stop",
+		"😉 corgi is running - Ctrl+C to stop",
 	];
 	const cuts = [1, 2, 5, 7, 9, 12, 13, 16, 19, 22, 24, 25];
-	scene("run", grow(s, cuts).map((l, i) => page(term("corgi run — stack", l, { rows: s.length, cursor: i < cuts.length - 1 }))));
+	scene("run", grow(s, cuts).map((l, i) => page(term("corgi run - stack", l, { rows: s.length, cursor: i < cuts.length - 1 }))));
 }
 
 // ---- one feature across repos, then mission control ----------------------------
@@ -134,7 +134,7 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 		"{b} 🐶 RUNNING SERVICE api {/}",
 		"{b} 🐶 RUNNING SERVICE web {/}",
 		"{b} 🐶 RUNNING SERVICE mobile {/}",
-		"😉 corgi is running — Ctrl+C to stop",
+		"😉 corgi is running - Ctrl+C to stop",
 	];
 	const mc = (t) => [
 		"{g}${/} {B}corgi mc --watch{/}",
@@ -144,7 +144,7 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 		"  {g}✅ web                          running   {/}  {c}ABC-123{/}  PR #98 [open] CI:success",
 		"  {g}✅ mobile                       running   {/}  {c}main{/}",
 		"",
-		`{c}🛰️  4 services every 3s — 4 up, 0 down, 2 open PRs — last update 14:07:${t ? "36" : "33"}{/}`,
+		`{c}🛰️  4 services every 3s - 4 up, 0 down, 2 open PRs - last update 14:07:${t ? "36" : "33"}{/}`,
 	];
 	const frames = [...grow(s, [1, 4, 9]).map((l, i) => term("corgi run --feature", l, { rows: 9, cursor: i < 2 })), term("corgi mc", mc(0), { rows: 9 }), term("corgi mc", mc(1), { rows: 9 })];
 	scene("feature", frames.map((t) => page(t)));
@@ -159,7 +159,7 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 		"  {g} ✅ services.api                            http://localhost:7012/health [HTTP 200]{/}",
 		webUp ? "  {g} ✅ services.web                            http://localhost:5173 [HTTP 200]{/}" : "  {r} ❌ services.web                            localhost:5173 not listening{/}",
 		"",
-		`{c}👀 watching 3 targets every 2s — last update 14:02:${t} (${up} up, ${3 - up} down) — Ctrl+C to stop{/}`,
+		`{c}👀 watching 3 targets every 2s - last update 14:02:${t} (${up} up, ${3 - up} down) - Ctrl+C to stop{/}`,
 	];
 	scene("status", [f(0, "09", 2), f(0, "11", 2), f(1, "13", 3), f(1, "15", 3)].map((l) => page(term("corgi status -w", l))));
 }
@@ -174,9 +174,9 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 		"✅ go is found",
 		"✅ {g}Docker daemon is running{/}",
 		"🔌 Port availability:",
-		"  {g}✅ 5432 free — for db_services.db (postgres){/}",
-		ok ? "  {g}✅ 7012 free — for services.api{/}" : "  {r}❌ 7012 busy — needed for services.api — held by: node (pid 41221){/}",
-		"  {g}✅ 5173 free — for services.web{/}",
+		"  {g}✅ 5432 free - for db_services.db (postgres){/}",
+		ok ? "  {g}✅ 7012 free - for services.api{/}" : "  {r}❌ 7012 busy - needed for services.api - held by: node (pid 41221){/}",
+		"  {g}✅ 5173 free - for services.web{/}",
 		"",
 		ok ? "{g}🎉 Doctor: all checks passed{/}" : "{r}❌ Doctor: one or more checks failed{/}",
 	];
@@ -229,7 +229,7 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 		"✅ Service web was successfully created",
 		"✅ Service mobile was successfully created",
 		"{d}▸ Run{/} {B}corgi run --feature PR-812 --detach --wait{/}",
-		"🐶 corgi running detached — 4 service(s), state: /home/runner/work/stack/.corgi/run-state.json",
+		"🐶 corgi running detached - 4 service(s), state: /home/runner/work/stack/.corgi/run-state.json",
 		"{c}⏳ waiting up to 5m0s for 4 targets to become healthy...{/}",
 		"{g}🎉 all 4 targets healthy{/}",
 		"{d}▸ Run{/} {B}corgi test --e2e{/}",
@@ -256,7 +256,7 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 		"{g}●{/} {B}Edit{/} web/src/checkout/Referral.tsx",
 		"{g}●{/} {B}Edit{/} mobile/app/checkout.tsx",
 		"{g}●{/} {B}Bash{/}(corgi run --feature ABC-123 --detach --wait)",
-		"  ⎿  🐶 corgi running detached — 4 service(s)",
+		"  ⎿  🐶 corgi running detached - 4 service(s)",
 		"{g}●{/} {B}Bash{/}(corgi status --ready --timeout 2m)",
 		"  ⎿  🎉 all 4 targets healthy",
 		"{g}●{/} {B}Bash{/}(corgi test --e2e)",
@@ -267,10 +267,10 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 		"  ⎿  https://github.com/acme/mobile/pull/231",
 		"{g}●{/} Three draft PRs. The stack ran with all three branches and the e2e suite passed. Nothing is merged.",
 	];
-	scene("stories", grow(s, [1, 4, 6, 8, 10, 12, 14, 16, 20, 21]).map((l, i) => page(term("Claude Code — stack", l, { rows: s.length, cursor: i < 9 }))));
+	scene("stories", grow(s, [1, 4, 6, 8, 10, 12, 14, 16, 20, 21]).map((l, i) => page(term("Claude Code - stack", l, { rows: s.length, cursor: i < 9 }))));
 }
 
-// ---- the phone: agent up, scan, then the app — every tab, and what each one does -----
+// ---- the phone: agent up, scan, then the app - every tab, and what each one does -----
 {
 	const qr = readFileSync("scripts/showcase-qr.txt", "utf8").trimEnd().split("\n");
 	const up = [
@@ -278,7 +278,7 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 		"",
 		"  ✓ workspace acme-api (registered)",
 		"  ✓ agent daemon running (pid 41902)",
-		"  ✓ starts at login (launchd) — survives a reboot",
+		"  ✓ starts at login (launchd) - survives a reboot",
 		"  ✓ public endpoint: https://blue-fox-42.trycloudflare.com/mcp",
 		"",
 		"  📱 scan to pair (single use, 10 minutes):",
@@ -287,12 +287,12 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 		"",
 		"    or open: https://blue-fox-42.trycloudflare.com/pair#A7K2M9",
 		"",
-		"  the phone opens on the inbox — what the watch has seen:",
+		"  the phone opens on the inbox - what the watch has seen:",
 		"    https://blue-fox-42.trycloudflare.com/app",
 	];
 
-	// The native app (corgi-mobile-app): Linear's grammar — rows, glyphs,
-	// pills, one accent — on the system tab bar. Every string is one the
+	// The native app (corgi-mobile-app): Linear's grammar - rows, glyphs,
+	// pills, one accent - on the system tab bar. Every string is one the
 	// app prints.
 	const nativeCss = `<style>
 	  .na{position:absolute;inset:0;background:#0f1011;color:#f2f3f5;font-family:-apple-system,system-ui,sans-serif;font-size:13px;overflow:hidden}
@@ -425,7 +425,7 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 		<div class="pills"><span class="pill">○ Backlog</span><span class="pill">P2</span><span class="pill">↳ new issue</span><span class="pill">🕓 12m</span></div>
 		<div class="note"><b>mara</b><p>After SSO the app bounces between /login and /home until the token refresh lands.</p></div>
 		<div class="acts"><span class="btn p${tapWork ? " tap" : ""}">▶ Work on it</span><span class="btn">↗ Open</span><span class="btn">Move…</span><span class="btn">Assign to me</span><span class="btn d">Ignore</span></div>
-		<div class="fine">Work on it opens a Claude session in acme-api's checkout with the prompt an unattended run would get — on the laptop, watchable from here.</div>
+		<div class="fine">Work on it opens a Claude session in acme-api's checkout with the prompt an unattended run would get - on the laptop, watchable from here.</div>
 		<div class="sec"><div class="sh">corgi</div><div class="kv"><span>Column</span><b>Backlog</b></div><div class="kv"><span>Runs</span><b>none yet</b></div><div class="kv"><span>Opens in</span><b>Claude app</b></div></div></div>`;
 
 	// Board: one list, grouped by column; Done folded.
@@ -518,7 +518,7 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 		"",
 		"  ✓ workspace acme-api (registered)",
 		"  ✓ agent daemon running (pid 41902)",
-		"  ✓ starts at login (launchd) — survives a reboot",
+		"  ✓ starts at login (launchd) - survives a reboot",
 		"  ✓ public endpoint: https://blue-fox-42.trycloudflare.com/mcp",
 		"",
 		"  📱 scan to pair (single use, 10 minutes):",
@@ -527,7 +527,7 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 		"",
 		"    or open: https://blue-fox-42.trycloudflare.com/pair#A7K2M9",
 		"",
-		"  the phone opens on the inbox — what the watch has seen:",
+		"  the phone opens on the inbox - what the watch has seen:",
 		"    https://blue-fox-42.trycloudflare.com/app",
 	];
 
@@ -664,12 +664,12 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 		["me", "/allow acme-api"],
 		["bot", "allow sent to acme-api"],
 		["me", "/sessions"],
-		["bot", "● corgi — WORKING · Edit registry.go · ctx 43%\n● acme-api — WORKING · Bash go test · ctx 72%\n✓ web — DONE · ctx 23%\nreply to a notification, or /send <session> <text> · /allow /deny <session>"],
+		["bot", "● corgi - WORKING · Edit registry.go · ctx 43%\n● acme-api - WORKING · Bash go test · ctx 72%\n✓ web - DONE · ctx 23%\nreply to a notification, or /send <session> <text> · /allow /deny <session>"],
 		["me", "run the tests again and fix what fails", "corgi agent · acme-api"],
 		["bot", "typed into acme-api"],
 		["me", "/usage"],
 		["bot", "default: 5h 55% (resets 5:10pm) · week 10% · 12%/h, lasts until the reset\nwork: 5h 100% (resets 1:10pm) · week 64% · limit reached, lifts 1:10pm\nwaited on you 3× today, longest 9m"],
-		["bot", "corgi agent · acme-api\nlimit lifted — back to work"],
+		["bot", "corgi agent · acme-api\nlimit lifted - back to work"],
 	];
 	const css2 = `<style>
 	  .tg{position:absolute;inset:0;background:#0e1621;color:#fff;font-family:-apple-system,system-ui,sans-serif;display:flex;flex-direction:column}
@@ -693,7 +693,7 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 {
 	const s = [
 		"{g}${/} {B}corgi tunnel{/}",
-		"🌐 Tunnels (cloudflared) — Ctrl+C to stop",
+		"🌐 Tunnels (cloudflared) - Ctrl+C to stop",
 		"",
 		"  api                            :7012   cloudflared/quick → starting...",
 		"  web                            :5173   cloudflared/quick → starting...",
@@ -717,7 +717,7 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 		"GET /health 200 1ms",
 		"POST /referrals 201 14ms",
 		"",
-		"{y}— end of log —{/}",
+		"{y}- end of log -{/}",
 		"",
 		"{g}${/} {B}corgi logs --all{/}",
 		"{c}[api]{/} listening on :7012",
@@ -733,7 +733,7 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 {
 	const s = [
 		"{g}${/} {B}corgi agent watch enable --prs --ci --action fix --auto-for reviews,comments,ci{/}",
-		"watching acme-stack — assigned to me · issue comments · PR reviews and comments → fix, at most 3/h 10/day",
+		"watching acme-stack - assigned to me · issue comments · PR reviews and comments → fix, at most 3/h 10/day",
 		"restart the daemon to pick it up: corgi agent restart",
 		"",
 		"{g}${/} {B}corgi agent watch{/}",
@@ -748,17 +748,17 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 		"  acme-stack/github            2026-09-09T13:04:02Z",
 		"  acme-stack/linear            2026-09-09T13:04:02Z",
 		"",
-		"{d}# 13:07 — a bug lands in Linear, assigned to you{/}",
-		"{y}🔔 corgi agent · acme-stack{/}  new issue ABC-7 — Login loops after password reset",
-		"{d}# 13:19 — a headless claude ran /corgi:stories ABC-7, then reviewed its own diff{/}",
-		"{g}🔔 corgi agent · acme-stack{/}  fixed ABC-7 — https://github.com/acme/api/pull/412",
-		"{d}# 13:31 — a reviewer comments on your PR{/}",
+		"{d}# 13:07 - a bug lands in Linear, assigned to you{/}",
+		"{y}🔔 corgi agent · acme-stack{/}  new issue ABC-7 - Login loops after password reset",
+		"{d}# 13:19 - a headless claude ran /corgi:stories ABC-7, then reviewed its own diff{/}",
+		"{g}🔔 corgi agent · acme-stack{/}  fixed ABC-7 - https://github.com/acme/api/pull/412",
+		"{d}# 13:31 - a reviewer comments on your PR{/}",
 		"{y}🔔 corgi agent · acme-stack{/}  max commented on acme/api#412: please cover the empty-path case",
-		"{g}🔔 corgi agent · acme-stack{/}  fixed acme/api#412 — https://github.com/acme/api/pull/412",
-		"{d}# 13:44 — CI goes red; the one kind that brings its own test for done{/}",
-		"{y}🔔 corgi agent · acme-stack{/}  red build in acme/api — e2e / checkout failed",
-		"{d}# 13:52 — a colleague wants YOUR review: reported, never worked on{/}",
-		"{y}🔔 corgi agent · acme-stack{/}  sam wants your review on acme/web!41 — Retry the upload on a 502",
+		"{g}🔔 corgi agent · acme-stack{/}  fixed acme/api#412 - https://github.com/acme/api/pull/412",
+		"{d}# 13:44 - CI goes red; the one kind that brings its own test for done{/}",
+		"{y}🔔 corgi agent · acme-stack{/}  red build in acme/api - e2e / checkout failed",
+		"{d}# 13:52 - a colleague wants YOUR review: reported, never worked on{/}",
+		"{y}🔔 corgi agent · acme-stack{/}  sam wants your review on acme/web!41 - Retry the upload on a 502",
 	];
 	scene("watch", grow(s, [1, 3, 5, 15, 18, 20, 22, 24, 26, 28]).map((l, i) => page(term("corgi agent watch", l, { rows: s.length, cursor: i < 9 }))));
 }
@@ -768,41 +768,41 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 	const s = [
 		"{g}${/} {B}corgi agent watch enable --action fix --auto-for reviews,comments,ci \\{/}",
 		"    {B}--prs --ci --reviews --pickup \"In Progress\" --lease --quiet 23:00-07:00{/}",
-		"watching acme-stack — assigned to me · issue comments · PR reviews and comments → fix, at most 3/h 10/day, quiet 23:00-07:00",
+		"watching acme-stack - assigned to me · issue comments · PR reviews and comments → fix, at most 3/h 10/day, quiet 23:00-07:00",
 		"restart the daemon to pick it up: corgi agent restart",
 		"",
-		"{d}# 09:04 — a reviewer leaves feedback on my PR. Worked on: it is scoped.{/}",
+		"{d}# 09:04 - a reviewer leaves feedback on my PR. Worked on: it is scoped.{/}",
 		"{y}🔔{/} max commented on acme/api#412: please cover the empty-path case",
 		"{c}   → claimed acme/api#412 · reviewed its own diff · pushed{/}",
-		"{g}🔔{/} fixed acme/api#412 — https://github.com/acme/api/pull/412",
+		"{g}🔔{/} fixed acme/api#412 - https://github.com/acme/api/pull/412",
 		"",
-		"{d}# 09:31 — CI goes red. The one kind that brings its own test for done.{/}",
-		"{y}🔔{/} red build in acme/api — e2e / checkout failed",
-		"{g}🔔{/} fixed acme/api — https://github.com/acme/api/pull/418",
+		"{d}# 09:31 - CI goes red. The one kind that brings its own test for done.{/}",
+		"{y}🔔{/} red build in acme/api - e2e / checkout failed",
+		"{g}🔔{/} fixed acme/api - https://github.com/acme/api/pull/418",
 		"",
-		"{d}# 10:02 — a ticket assigned to me, in a state the rules allow{/}",
-		"{y}🔔{/} new issue ABC-7 — Login loops after password reset",
+		"{d}# 10:02 - a ticket assigned to me, in a state the rules allow{/}",
+		"{y}🔔{/} new issue ABC-7 - Login loops after password reset",
 		"{c}   → claimed · Ready ▸ In Progress · worked · draft PR · ▸ In Review{/}",
-		"{g}🔔{/} fixed ABC-7 — https://github.com/acme/api/pull/415",
+		"{g}🔔{/} fixed ABC-7 - https://github.com/acme/api/pull/415",
 		"",
-		"{d}# 10:09 — a ticket in Backlog. The state filter stops it.{/}",
-		"{d}   → no match — state \"Backlog\" is not one of Ready, In Progress{/}",
+		"{d}# 10:09 - a ticket in Backlog. The state filter stops it.{/}",
+		"{d}   → no match - state \"Backlog\" is not one of Ready, In Progress{/}",
 		"",
-		"{d}# 10:15 — a colleague wants MY review. Never worked on unattended.{/}",
-		"{y}🔔{/} sam wants your review on acme/web!41 — Retry the upload on a 502",
+		"{d}# 10:15 - a colleague wants MY review. Never worked on unattended.{/}",
+		"{y}🔔{/} sam wants your review on acme/web!41 - Retry the upload on a 502",
 		"",
-		"{d}# 10:40 — a comment on a ticket closed last week{/}",
-		"{d}   → skipped: it is done — the comment is not work{/}",
-		"{d}# 10:41 — three more comments on acme/api#412 in one poll{/}",
+		"{d}# 10:40 - a comment on a ticket closed last week{/}",
+		"{d}   → skipped: it is done - the comment is not work{/}",
+		"{d}# 10:41 - three more comments on acme/api#412 in one poll{/}",
 		"{d}   → one notification, not three{/}",
-		"{d}# 10:52 — ABC-9, already closed as a duplicate{/}",
-		"{d}   → skipped: it is a duplicate — nobody is going to act on it{/}",
+		"{d}# 10:52 - ABC-9, already closed as a duplicate{/}",
+		"{d}   → skipped: it is a duplicate - nobody is going to act on it{/}",
 		"",
-		"{d}# 11:20 — the desktop got to this one first{/}",
+		"{d}# 11:20 - the desktop got to this one first{/}",
 		"{d}   → ABC-8 is already claimed by andrii-desktop{/}",
-		"{d}# 11:48 — four fixes this hour{/}",
-		"{y}🔔{/} new issue ABC-11 — Retry the webhook (3/h cap)",
-		"{d}# 12:05 — a run here costs about 12% and 88% of the window is used{/}",
+		"{d}# 11:48 - four fixes this hour{/}",
+		"{y}🔔{/} new issue ABC-11 - Retry the webhook (3/h cap)",
+		"{d}# 12:05 - a run here costs about 12% and 88% of the window is used{/}",
 		"{d}   → deferred; corgi agent watch run picks it up{/}",
 		"",
 		"{g}${/} {B}corgi agent while-away{/}",
@@ -820,7 +820,7 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 		"  a cap or quiet hours held these; corgi agent watch run picks them up",
 	];
 	scene("autofix", grow(s, [2, 4, 9, 13, 18, 21, 24, 31, 38, 44, 51]).map((l, i) =>
-		page(term("corgi agent watch — unattended", l, { rows: s.length, cursor: i < 10 }))));
+		page(term("corgi agent watch - unattended", l, { rows: s.length, cursor: i < 10 }))));
 }
 
 // ---- the three things a teammate actually sees it do, in order ----
@@ -829,27 +829,27 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 		"{g}${/} {B}corgi agent watch enable --action fix \\{/}",
 		"    {B}--auto-for requests,reviews,comments,tickets \\{/}",
 		"    {B}--prs --reviews --pickup \"In Progress\" --review-status \"In Review\"{/}",
-		"watching acme-stack — assigned to me · issue comments · PR reviews and comments → fix, at most 3/h 10/day",
+		"watching acme-stack - assigned to me · issue comments · PR reviews and comments → fix, at most 3/h 10/day",
 		"",
 		"{m}━━ 1 ━━  someone asks for my review{/}",
-		"{y}🔔{/} sam wants your review on acme/api!318 — Reconcile the stale user rows on connect",
-		"{d}   corgi reads the diff. Their branch, so it comments — it never pushes.{/}",
-		"{g}🔔{/} reviewed acme/api!318 — 3 comments, 1 blocking",
+		"{y}🔔{/} sam wants your review on acme/api!318 - Reconcile the stale user rows on connect",
+		"{d}   corgi reads the diff. Their branch, so it comments - it never pushes.{/}",
+		"{g}🔔{/} reviewed acme/api!318 - 3 comments, 1 blocking",
 		"{d}   « the retry loop swallows a 429; it will look like success »{/}",
 		"",
 		"{m}━━ 2 ━━  someone comments on mine{/}",
 		"{y}🔔{/} max commented on acme/api!294: please cover the empty-path case",
 		"{d}   my branch, so it fixes it: applies, replies in the thread, pushes.{/}",
-		"{g}🔔{/} fixed acme/api!294 — https://gitlab.com/acme/api/-/merge_requests/294",
+		"{g}🔔{/} fixed acme/api!294 - https://gitlab.com/acme/api/-/merge_requests/294",
 		"",
 		"{m}━━ 3 ━━  a ticket lands in READY TO DEV, assigned to me{/}",
-		"{y}🔔{/} new issue ABC-142 — Send the image manifest with the bootstrap",
+		"{y}🔔{/} new issue ABC-142 - Send the image manifest with the bootstrap",
 		"{c}   claimed on the ticket   {/}{d}so the desktop leaves it alone{/}",
 		"{c}   READY TO DEV ▸ In Progress{/}",
 		"{d}   …works it in the checkout, then reviews its own diff{/}",
 		"{c}   draft MR opened      {/}{d}https://gitlab.com/acme/api/-/merge_requests/301{/}",
 		"{c}   In Progress ▸ In Review{/}{d}   and the link posted on ABC-142{/}",
-		"{g}🔔{/} fixed ABC-142 — https://gitlab.com/acme/api/-/merge_requests/301",
+		"{g}🔔{/} fixed ABC-142 - https://gitlab.com/acme/api/-/merge_requests/301",
 		"",
 		"{d}# in the morning{/}",
 		"{g}${/} {B}corgi agent while-away{/}",
@@ -863,7 +863,7 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 	];
 	// Slow, even beats: this one is shown to people who have not seen corgi.
 	scene("story", grow(s, [3, 4, 6, 8, 10, 11, 13, 15, 16, 18, 19, 20, 21, 22, 23, 24, 26, 28, 34])
-		.map((l, i) => page(term("corgi — while you were in a meeting", l, { rows: s.length, cursor: i < 18 }))));
+		.map((l, i) => page(term("corgi - while you were in a meeting", l, { rows: s.length, cursor: i < 18 }))));
 }
 
 // ---- the two commands that make leaving it on a decision you can reverse ----
@@ -873,7 +873,7 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 		"{g}${/} {B}corgi agent watch replay --since 168h{/}",
 		"Since Thu 3 Sep 09:12, with the rules as they are now",
 		"",
-		"acme-stack — 4 worked on · 3 reported · 6 ignored",
+		"acme-stack - 4 worked on · 3 reported · 6 ignored",
 		"  worked on  pr.review      acme/api#412",
 		"  worked on  issue.comment  ABC-7",
 		"  worked on  ci.failed      acme/api",
@@ -881,7 +881,7 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 		"  reported   issue.new      ABC-9",
 		"  reported   issue.new      ABC-11",
 		"  reported   review.requested acme/web!41",
-		"  ignored    6 — run with --json to see each reason",
+		"  ignored    6 - run with --json to see each reason",
 		"",
 		"{d}# in the morning, one card instead of nine notifications{/}",
 		"{g}${/} {B}corgi agent while-away{/}",
@@ -900,13 +900,13 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 		"ABC-7 (acme-stack)",
 		"  would close https://github.com/acme/api/pull/412",
 		"  would move back to Ready",
-		"  the branch is left alone — the work is on it",
+		"  the branch is left alone - the work is on it",
 		"",
 		"{g}${/} {B}corgi agent watch undo ABC-7{/}",
 		"ABC-7 (acme-stack)",
 		"  closed   https://github.com/acme/api/pull/412",
 		"  moved    back to Ready",
-		"  the branch is left alone — the work is on it",
+		"  the branch is left alone - the work is on it",
 	];
 	scene("replay", grow(s, [2, 5, 9, 13, 15, 20, 24, 29, 38]).map((l, i) => page(term("corgi agent watch replay · while-away · undo", l, { rows: s.length, cursor: i < 8 }))));
 }
@@ -915,7 +915,7 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 // ---- a handoff: one session stops, the next one picks the work up ----------------
 {
 	const s = [
-		"{d}# 4:52pm — the account hits its limit half-way through ABC-7{/}",
+		"{d}# 4:52pm - the account hits its limit half-way through ABC-7{/}",
 		"{g}${/} {B}corgi agent handoff{/} --done \"POST /limits returns 429 with Retry-After\" \\",
 		"    --done \"regression test in api/limits_test.go\" --remaining \"web: banner on 429\" \\",
 		"    --decision \"5h sliding window, not fixed\" --uncertain \"retry on the phone?\" \\",
@@ -925,17 +925,17 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 		"",
 		"{d}# the ticket's workpad comment gets the same, so the other machine sees it too{/}",
 		"",
-		"{d}# 9:10am, a new session on the branch — corgi speaks first{/}",
+		"{d}# 9:10am, a new session on the branch - corgi speaks first{/}",
 		"{c}corgi · acme-stack on feature/ABC-7/limits{/}",
 		"{c}budget: 5h 3% (resets 14:02) · week 41% (resets Tue 08:59){/}",
 		"{c}handoff for ABC-7 (input-required, 16h ago): read .corgi/corgi_services/handoffs/ABC-7.md first{/}",
-		"{c}  — 2 commit(s) since, so check its done list against the diff; `corgi agent handoff verify ABC-7` re-runs its check{/}",
-		"{c}scope for ABC-7: api/limits/**, web/src/limits/** · ≤ 400 lines · ≤ 2 new test files — a write outside is refused{/}",
+		"{c}  - 2 commit(s) since, so check its done list against the diff; `corgi agent handoff verify ABC-7` re-runs its check{/}",
+		"{c}scope for ABC-7: api/limits/**, web/src/limits/** · ≤ 400 lines · ≤ 2 new test files - a write outside is refused{/}",
 		"",
 		"{g}${/} {B}corgi agent handoff verify ABC-7{/}",
-		"{g}✓{/} ABC-7: `corgi test --changed` passes at e77d10c — the packet can be trusted as written",
+		"{g}✓{/} ABC-7: `corgi test --changed` passes at e77d10c - the packet can be trusted as written",
 	];
-	scene("handoff", grow(s, [1, 5, 7, 9, 11, 16, 18, 19]).map((l, i) => page(term("corgi agent handoff — the next session starts where this one stopped", l, { rows: s.length, cursor: i < 7 }))));
+	scene("handoff", grow(s, [1, 5, 7, 9, 11, 16, 18, 19]).map((l, i) => page(term("corgi agent handoff - the next session starts where this one stopped", l, { rows: s.length, cursor: i < 7 }))));
 }
 
 // ---- the board: one card per ticket, the column worked out -------------------------
@@ -952,7 +952,7 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 		"  ABC-12          a run started 6m ago · 310k tok · $0.41 · 1 run",
 		"  ABC-4           session acme-stack is on feature/ABC-4/search · 1.2M tok · 2 sessions",
 		"Blocked (1)",
-		"  ABC-3           no GITLAB_TOKEN for the web repo — corgi agent watch unblock ABC-3",
+		"  ABC-3           no GITLAB_TOKEN for the web repo - corgi agent watch unblock ABC-3",
 		"Review (2)",
 		"  ABC-2           opened 1 PR · https://github.com/acme/api/pull/412 · $0.84 · 2 runs",
 		"  ABC-5           opened 2 PRs · $1.10 · 1 run",
@@ -961,7 +961,7 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 		"",
 		"{d}# the phone's Board tab draws the same columns; Move… moves the ticket on the tracker{/}",
 	];
-	scene("kanban", grow(s, [1, 4, 7, 10, 12, 15, 17, 19]).map((l, i) => page(term("corgi agent kanban — nobody drags a card into Running", l, { rows: s.length, cursor: i < 7 }))));
+	scene("kanban", grow(s, [1, 4, 7, 10, 12, 15, 17, 19]).map((l, i) => page(term("corgi agent kanban - nobody drags a card into Running", l, { rows: s.length, cursor: i < 7 }))));
 }
 
 
@@ -975,9 +975,9 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 		"    watches linear/acme, github/acme/api",
 		"    working acme-stack · ABC-7",
 		"",
-		"{d}# 13:07 — a bug lands in Linear. Both laptops watch it; one of them starts.{/}",
-		"{d}agent: home-mbp leads acme-stack — this laptop stays quiet there{/}",
-		"{g}🔔 corgi agent · acme-stack{/}  fixed ABC-7 — https://github.com/acme/api/pull/412   {d}rung once, by home-mbp{/}",
+		"{d}# 13:07 - a bug lands in Linear. Both laptops watch it; one of them starts.{/}",
+		"{d}agent: home-mbp leads acme-stack - this laptop stays quiet there{/}",
+		"{g}🔔 corgi agent · acme-stack{/}  fixed ABC-7 - https://github.com/acme/api/pull/412   {d}rung once, by home-mbp{/}",
 		"",
 		"{g}${/} {B}corgi agent sessions{/}",
 		"2 session(s) on 6 keys",
@@ -985,22 +985,22 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 		" 2   ● web                WORKING    Bash npm test",
 		"",
 		"on home-mbp (awake, leads):",
-		"  working  acme-stack · ABC-7 — Bash go test ./...",
+		"  working  acme-stack · ABC-7 - Bash go test ./...",
 		"  failed ABC-9: no GITLAB_TOKEN for the web repo",
 		"",
-		"{d}# 15:40 — home-mbp's five-hour window runs out. The lead moves here, once.{/}",
-		"{y}🔔 corgi agent{/}  home-mbp cannot run fixes (its five-hour window is spent) — this laptop leads",
+		"{d}# 15:40 - home-mbp's five-hour window runs out. The lead moves here, once.{/}",
+		"{y}🔔 corgi agent{/}  home-mbp cannot run fixes (its five-hour window is spent) - this laptop leads",
 		"                the trackers you share until it can",
 		"{g}🔔 corgi agent{/}  this laptop leads acme-stack now (was home-mbp)",
 		"",
 		"{d}# leaving for a trip: pin the lead on the laptop that stays{/}",
-		"{g}${/} {B}corgi agent peers lead{/}    {d}on home-mbp — or the switch in the phone's Settings{/}",
+		"{g}${/} {B}corgi agent peers lead{/}    {d}on home-mbp - or the switch in the phone's Settings{/}",
 		"This laptop leads. Peers hear it on the next pulse and go quiet on the trackers you share.",
 		"",
 		"{g}${/} {B}corgi agent doctor --away{/}",
 		"✓ peers                    1 awake, 0 silent",
 	];
-	scene("peers", grow(s, [1, 6, 8, 10, 12, 15, 19, 21, 24, 27, 31]).map((l, i) => page(term("corgi agent peers — two laptops, one tracker, one fix", l, { rows: s.length, cursor: i < 10 }))));
+	scene("peers", grow(s, [1, 6, 8, 10, 12, 15, 19, 21, 24, 27, 31]).map((l, i) => page(term("corgi agent peers - two laptops, one tracker, one fix", l, { rows: s.length, cursor: i < 10 }))));
 }
 
 // ---- codex as the harness: the same board, the same watch, another agent ----
@@ -1009,7 +1009,7 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 		"{g}${/} {B}corgi agent workspaces agents acme-stack claude,codex{/}",
 		"acme-stack: claude → codex",
 		"agents claude → codex: claude opens and runs the fixes; codex takes a run when it cannot",
-		"  (not installed, login lapsed, window spent — checked at every run, nothing is remembered)",
+		"  (not installed, login lapsed, window spent - checked at every run, nothing is remembered)",
 		"restart the daemon to pick it up: corgi agent restart",
 		"",
 		"{g}${/} {B}corgi agent track enable{/}",
@@ -1017,22 +1017,22 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 		"✓ codex turns land on the board too (/Users/me/.codex/config.toml)",
 		"new sessions report from their next event; `corgi agent sessions` shows the board",
 		"",
-		"{d}# 13:31 — a reviewer comments on your PR; claude fixes it{/}",
+		"{d}# 13:31 - a reviewer comments on your PR; claude fixes it{/}",
 		"{y}🔔 corgi agent · acme-stack{/}  max commented on acme/api#412: please cover the empty-path case",
-		"{g}🔔 corgi agent · acme-stack{/}  fixed acme/api#412 — https://github.com/acme/api/pull/412",
+		"{g}🔔 corgi agent · acme-stack{/}  fixed acme/api#412 - https://github.com/acme/api/pull/412",
 		"",
-		"{d}# 16:02 — claude's five-hour window is spent. The next comment does not wait.{/}",
-		"{d}agent: acme-stack: claude is at its limit — this run goes through codex{/}",
-		"{y}🔔 corgi agent{/}  acme-stack: claude is at its limit — this run goes through codex",
-		"{g}🔔 corgi agent · acme-stack{/}  fixed acme/api#418 — https://github.com/acme/api/pull/418",
+		"{d}# 16:02 - claude's five-hour window is spent. The next comment does not wait.{/}",
+		"{d}agent: acme-stack: claude is at its limit - this run goes through codex{/}",
+		"{y}🔔 corgi agent{/}  acme-stack: claude is at its limit - this run goes through codex",
+		"{g}🔔 corgi agent · acme-stack{/}  fixed acme/api#418 - https://github.com/acme/api/pull/418",
 		"{d}# nothing is remembered: claude takes the next run the moment its window opens{/}",
 		"",
 		"{g}${/} {B}corgi agent codex{/}",
 		"corgi: codex for acme-stack",
 		"",
-		"{d}# the next agent is one more entry in utils/agent/harness — not a search for \"claude\" through the daemon{/}",
+		"{d}# the next agent is one more entry in utils/agent/harness - not a search for \"claude\" through the daemon{/}",
 	];
-	scene("codex", grow(s, [1, 5, 7, 10, 13, 14, 16, 19, 20, 22, s.length]).map((l, i) => page(term("corgi agent — claude first, codex when it cannot", l, { rows: s.length, cursor: i < 10 }))));
+	scene("codex", grow(s, [1, 5, 7, 10, 13, 14, 16, 19, 20, 22, s.length]).map((l, i) => page(term("corgi agent - claude first, codex when it cannot", l, { rows: s.length, cursor: i < 10 }))));
 }
 
 

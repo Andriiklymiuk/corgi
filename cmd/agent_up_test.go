@@ -75,7 +75,7 @@ func TestRegisterCwdWorkspaceDoesNotHijackABasenameCollision(t *testing.T) {
 	reg, _ := workspace.Load(agentRegistryPath(agentD))
 	orig, _ := reg.Find("api")
 	if orig.AbsPath != elsewhere {
-		t.Errorf("the existing 'api' workspace was repointed to %q — hijacked", orig.AbsPath)
+		t.Errorf("the existing 'api' workspace was repointed to %q - hijacked", orig.AbsPath)
 	}
 	mine, ok := reg.Find(id)
 	if !ok || mine.AbsPath != collide {
@@ -86,7 +86,7 @@ func TestRegisterCwdWorkspaceDoesNotHijackABasenameCollision(t *testing.T) {
 func TestParseMCPLogIgnoresATruncatedCode(t *testing.T) {
 	partial := "🌐 ✓ public MCP endpoint: https://abc.trycloudflare.com/mcp\n  pairing code: WOR"
 	if _, done := parseMCPLog(partial); done {
-		t.Error("a code with no line terminator must not be treated as complete — it could be mid-write")
+		t.Error("a code with no line terminator must not be treated as complete - it could be mid-write")
 	}
 	full := partial + "D-123\n"
 	got, done := parseMCPLog(full)

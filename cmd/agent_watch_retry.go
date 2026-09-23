@@ -35,7 +35,7 @@ prints. The daemon must be running.`,
 		}
 		info, err := daemon.ReadInfo(dir)
 		if err != nil || info == nil || !info.Commands {
-			exitWithError("agent_watch_retry", fmt.Errorf("corgi agent is not running — `corgi agent serve`, or `corgi agent install` to start it at login"), 1)
+			exitWithError("agent_watch_retry", fmt.Errorf("corgi agent is not running - `corgi agent serve`, or `corgi agent install` to start it at login"), 1)
 		}
 		if _, err := command.Write(dir, command.Command{Action: command.ActionWatch, Source: "watch retry", WatchEvent: &e, Retry: true}); err != nil {
 			exitWithError("agent_watch_retry", err, 1)

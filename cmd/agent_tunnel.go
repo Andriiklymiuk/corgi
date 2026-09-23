@@ -28,11 +28,11 @@ var agentTunnelSetupCmd = &cobra.Command{
 
 For cloudflared (the default) it logs you in if needed, creates the named
 tunnel when it does not exist, routes the DNS name to it, and saves both flags
-so a plain ` + "`corgi agent restart`" + ` keeps the same URL — and the phone
+so a plain ` + "`corgi agent restart`" + ` keeps the same URL - and the phone
 stays paired, because the origin never changes.
 
 For ngrok it checks the authtoken and saves the domain. Every free account
-already has one static ` + "`*.ngrok-free.dev`" + ` dev domain — copy it from
+already has one static ` + "`*.ngrok-free.dev`" + ` dev domain - copy it from
 dashboard.ngrok.com/domains; its name cannot be chosen on the free tier.`,
 	Args: cobra.ExactArgs(1),
 	Run:  runAgentTunnelSetup,
@@ -105,18 +105,18 @@ func runAgentTunnelSetup(cmd *cobra.Command, args []string) {
 		}
 	default:
 		exitWithError("agent_tunnel_setup",
-			fmt.Errorf("tunnel setup covers cloudflared and ngrok; %q has no one-time setup — pass its flags to `corgi agent up` directly", provider), 2)
+			fmt.Errorf("tunnel setup covers cloudflared and ngrok; %q has no one-time setup - pass its flags to `corgi agent up` directly", provider), 2)
 	}
 
 	if dryRun {
-		utils.Info("dry run — nothing was changed and no settings were saved")
+		utils.Info("dry run - nothing was changed and no settings were saved")
 		return
 	}
 	if err := saveUpSettings(dir, upSettings{Provider: provider, TunnelName: tunnelNameFor(provider, name), TunnelHostname: host}); err != nil {
 		exitWithError("agent_tunnel_setup", err, 1)
 	}
 	utils.Infof("✓ saved: `corgi agent up` and `corgi agent restart` now serve the launcher at https://%s/app\n", host)
-	utils.Info("next: `corgi agent restart`, then scan the QR once — the phone stays paired from then on")
+	utils.Info("next: `corgi agent restart`, then scan the QR once - the phone stays paired from then on")
 }
 
 func tunnelNameFor(provider, name string) string {
@@ -128,13 +128,13 @@ func tunnelNameFor(provider, name string) string {
 
 func setupCloudflaredTunnel(run tunnelRunner, have binaryLookup, name, host string, dryRun bool) error {
 	if err := have("cloudflared"); err != nil {
-		return fmt.Errorf("cloudflared is not installed — %s", tunnel.Cloudflared{}.InstallHint())
+		return fmt.Errorf("cloudflared is not installed - %s", tunnel.Cloudflared{}.InstallHint())
 	}
 
 	utils.Info("checking cloudflared login…")
 	list, listErr := run("cloudflared", "tunnel", "list")
 	if listErr != nil && !dryRun {
-		utils.Info("not logged in — opening the browser (pick the domain you want the launcher on)")
+		utils.Info("not logged in - opening the browser (pick the domain you want the launcher on)")
 		if out, err := run("cloudflared", "tunnel", "login"); err != nil {
 			return fmt.Errorf("cloudflared tunnel login failed: %w\n%s", err, strings.TrimSpace(out))
 		}
@@ -143,7 +143,7 @@ func setupCloudflaredTunnel(run tunnelRunner, have binaryLookup, name, host stri
 
 	if id := tunnelIDIn(list, name); id != "" {
 		if !dryRun && !tunnelCredentialsExist(id) {
-			return fmt.Errorf("tunnel %s exists in this Cloudflare account, but its credentials are not on this laptop — it was created on another one.\n"+
+			return fmt.Errorf("tunnel %s exists in this Cloudflare account, but its credentials are not on this laptop - it was created on another one.\n"+
 				"Every laptop needs a tunnel of its own on a hostname of its own: corgi agent tunnel setup %s --name %s", name, host, defaultTunnelName(""))
 		}
 		utils.Infof("tunnel %s already exists\n", name)
@@ -159,7 +159,7 @@ func setupCloudflaredTunnel(run tunnelRunner, have binaryLookup, name, host stri
 		if !strings.Contains(strings.ToLower(out), "already exists") {
 			return fmt.Errorf("could not route %s: %w\n%s", host, err, strings.TrimSpace(out))
 		}
-		utils.Infof("%s already has a DNS record — if it was made for this tunnel, all is well; if another laptop made it, pick a hostname of your own (one per laptop: home.%s, work.%s)\n", host, domainOf(host), domainOf(host))
+		utils.Infof("%s already has a DNS record - if it was made for this tunnel, all is well; if another laptop made it, pick a hostname of your own (one per laptop: home.%s, work.%s)\n", host, domainOf(host), domainOf(host))
 	}
 	return nil
 }
@@ -237,7 +237,7 @@ https://dashboard.ngrok.com/get-started/your-authtoken then run:
     ngrok config add-authtoken <token>`)
 	}
 	utils.Infof("using ngrok domain %s\n", host)
-	utils.Info("free tier: this is the `dev domain` row on dashboard.ngrok.com/domains — its name is assigned, not chosen")
+	utils.Info("free tier: this is the `dev domain` row on dashboard.ngrok.com/domains - its name is assigned, not chosen")
 	return nil
 }
 

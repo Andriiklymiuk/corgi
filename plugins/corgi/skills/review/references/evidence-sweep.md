@@ -1,9 +1,9 @@
-# Evidence sweep — shapes, greps, failure scenarios
+# Evidence sweep - shapes, greps, failure scenarios
 
 The eight items in SKILL.md P3, each with the grep that finds it and the scenario that
 makes it a finding. Run them from the evidence worktree (P1); nothing here reads the
 user's checkout. Every example below is a shape seen in a real review that the diff
-alone did not show — a human reviewer with the whole tree open found it, the
+alone did not show - a human reviewer with the whole tree open found it, the
 diff-only review did not.
 
 ## 1. Twins and callers
@@ -14,8 +14,8 @@ Grep for the symbol, the key, the field:
 git grep -n "<symbol>" -- ':!*.spec.*' ':!*.test.*'
 ```
 
-Read every hit that *builds the same thing* the diff changed — a context object, a
-`where` filter, a validation, an allowlist — and check it received the same change.
+Read every hit that *builds the same thing* the diff changed - a context object, a
+`where` filter, a validation, an allowlist - and check it received the same change.
 
 - **Read/enforce divergence.** A flag-evaluation *read* path gains two attributes
   (app version, platform); the eight *enforce* sites that evaluate the same keys
@@ -29,7 +29,7 @@ Read every hit that *builds the same thing* the diff changed — a context objec
   registers; the authorize endpoint only exact-matches the stored list and never
   re-applies the policy. The tell is internal to the diff: a second path into the same
   consent screen *does* re-validate. A host removed from the allowlist keeps
-  authorizing forever — no revocation path. `blocking`.
+  authorizing forever - no revocation path. `blocking`.
 
 ## 2. Config delivery
 
@@ -45,7 +45,7 @@ is not there. Then name, per deployed environment, the file that sets the key.
   the task definition, so every discovery document the service serves in staging and
   production advertises `localhost`. The routes are correct; the URL inside them is
   not. `blocking`, and the fix is three lines in this PR, not an infra ticket.
-- Seven new knobs declared, none mapped in the deploy workflow — the defaults are what
+- Seven new knobs declared, none mapped in the deploy workflow - the defaults are what
   ships. Say what each default does in production before deciding the severity.
 - A secret whose absence is silent (`Logger.warn`, then a random per-process value)
   is worse than one that fails the boot: tokens die on restart and never validate
@@ -71,11 +71,11 @@ boots only the piece in question.
   `SafeAreaView` component applies insets natively in its own shadow node and ignores
   the context. Twenty screens double-pad while the banner is up.
 - A server wrapper force-sets `extensions.code` *after* spreading the original
-  extensions, so the custom code a validation rule attached cannot survive — every
+  extensions, so the custom code a validation rule attached cannot survive - every
   depth-limit rejection is reported to error tracking as schema drift.
 - Reconciliation by position: a component that returns bare `children` on one branch
   and a three-level wrapper on the other changes the element type at that slot, so
-  the whole subtree — including the blocking gate below it — unmounts and remounts on
+  the whole subtree - including the blocking gate below it - unmounts and remounts on
   the normal launch path.
 
 ## 4. What the tests assert
@@ -85,9 +85,9 @@ Per test file in the diff, read the `expect` lines, not the `describe` names:
 - `Reflect.getMetadata("path", handler)` asserts the decorator literal, not that the
   route resolves, returns 200, or returns the same body as the sibling path the
   criterion names. A route-order or prefix change keeps it green and breaks the
-  client again. The repo already had an integration spec that boots the app — that
+  client again. The repo already had an integration spec that boots the app - that
   was the pattern to use.
-- The resolver spec grew by 158 lines and mocks the service — so it cannot see the
+- The resolver spec grew by 158 lines and mocks the service - so it cannot see the
   new branch *inside* the service, and the service spec is not in the diff at all.
 - `useQuery` mocked wholesale, so `skip: !isNative` is never exercised and nothing
   pins the operation document.
@@ -113,7 +113,7 @@ git show origin/<base>:<schema file> | grep -n "<field>"          # what main ha
 - A consumer selection adds `company { logoUrl }`; the deployed producer's type has
   no such field and the consumer has no unknown-field tolerance, so the whole query
   fails with `graphql_validation_failed` until the producer deploys. Blocker on
-  release ordering, no code change needed — say exactly that.
+  release ordering, no code change needed - say exactly that.
 - "Merge order: api first" in the body does not bind: the api deploys by manual
   dispatch, the mobile repo auto-publishes an OTA to every installed device on merge.
   Name the mechanism per side and the window where the new consumer runs against
@@ -128,15 +128,15 @@ git grep -n "<count or phrase the diff changed>" -- '*.md' .env.example
 
 - The docs state a tool count and a resolver count; the diff changes both and touches neither sentence.
 - `.env.example` says the app refuses to boot without the secret; the code only
-  warns. That is a safety property described wrong — `blocking`.
+  warns. That is a safety property described wrong - `blocking`.
 - A CLAUDE.md sentence promises read/enforce parity that item 1 just showed is false.
 
 ## 7. Edges the happy path hides
 
-- `Date.now() - dismissedAt < TTL` — a `dismissedAt` in the future (clock skew, a
+- `Date.now() - dismissedAt < TTL` - a `dismissedAt` in the future (clock skew, a
   moved device clock) is negative, always under the TTL, and suppresses the banner
   permanently instead of for three days. Also require `dismissedAt <= Date.now()`.
-- `businessInfo?.companyName ?? personName` — `??` does not catch `""`; and the
+- `businessInfo?.companyName ?? personName` - `??` does not catch `""`; and the
   relation is optional, so a business client with no info row gets a corporate
   report titled with their personal name.
 - `onError` on the image nulls the derived URL: one cold-CDN blip hides the "Remove"
@@ -152,7 +152,7 @@ git grep -n "<count or phrase the diff changed>" -- '*.md' .env.example
 ## 8. Failure domain and structure
 
 - A non-critical banner mounted as the *parent* of the blocking update gate: any
-  throw in the banner — its query, its storage read, its render — unmounts the gate
+  throw in the banner - its query, its storage read, its render - unmounts the gate
   with it. Structurally the same coupling the previous round removed at the query
   level, reintroduced at the tree level.
 - Two independent bars both `position: absolute; top: 0`, opaque, one `zIndex`
@@ -162,8 +162,8 @@ git grep -n "<count or phrase the diff changed>" -- '*.md' .env.example
 
 ## What goes in the summary
 
-The acceptance-criteria rows (P3): one line per criterion the ticket enumerates —
-`met`, `unmet → I<n>`, or `not verifiable` — after the prose. It is what tells the
+The acceptance-criteria rows (P3): one line per criterion the ticket enumerates -
+`met`, `unmet → I<n>`, or `not verifiable` - after the prose. It is what tells the
 author which findings stand between the PR and done, and which are on the record
 for later. Findings that are real but not posted inline (lower tier, off the ticket's
 path) get one line each under the rows, so nothing found is lost.

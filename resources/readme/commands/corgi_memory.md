@@ -15,7 +15,7 @@ domain facts, and recurring fixes for this corgi stack. It is opt-in: with no
   corgi memory index                        regenerate index.md from the facts
   corgi memory lint [--json]                validate frontmatter, names, links, and NO SECRETS
 
-Committed memory must never contain secrets — lint fails the store on a key-shaped
+Committed memory must never contain secrets - lint fails the store on a key-shaped
 string.
 
 ### Options

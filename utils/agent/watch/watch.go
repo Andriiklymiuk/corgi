@@ -109,11 +109,11 @@ func (r Rules) Why(e Event) string {
 	switch e.Kind {
 	case KindReviewRequested:
 		if e.Self {
-			return "I posted it — my own pull requests are not mine to review"
+			return "I posted it - my own pull requests are not mine to review"
 		}
 		if len(r.States) == 0 {
 			if over := finishedState(e.State); over != "" {
-				return "it is " + over + " — there is nothing to review"
+				return "it is " + over + " - there is nothing to review"
 			}
 		}
 	case KindChatMention, KindChatMessage:
@@ -140,14 +140,14 @@ func (r Rules) Why(e Event) string {
 		}
 		if len(r.States) == 0 {
 			if over := finishedState(e.State); over != "" {
-				return "it is " + over + " — the comment is not work"
+				return "it is " + over + " - the comment is not work"
 			}
 		}
 		if e.Kind != KindPRReview && IsAcknowledgement(e.Body) {
 			return "it is a thank-you or a sign-off, not a request"
 		}
 		if approvingVerdict.MatchString(e.Body) {
-			return "it approves — nothing to change"
+			return "it approves - nothing to change"
 		}
 		if e.Bot && !r.Bots {
 			return "it is from a bot; --bots makes those count"
@@ -159,11 +159,11 @@ func (r Rules) Why(e Event) string {
 	case KindIssueNew:
 		if dead := finishedState(e.State); dead != "" {
 			if len(r.States) == 0 {
-				return "it is " + dead + " — nobody is going to act on it"
+				return "it is " + dead + " - nobody is going to act on it"
 			}
 		}
 		if len(r.States) == 0 && InFlight(e.State) {
-			return "it is in " + strings.TrimSpace(e.State) + " — someone is on it (--states names columns to take anyway)"
+			return "it is in " + strings.TrimSpace(e.State) + " - someone is on it (--states names columns to take anyway)"
 		}
 		if r.Assignee != "any" && !e.Mine {
 			return "not assigned to me (--assignee any takes every issue)"
@@ -1076,7 +1076,7 @@ func (l *FixLog) RunThatOpened(workspace, link string) (FixRecord, bool) {
 	return FixRecord{}, false
 }
 
-const InterruptedReason = "interrupted — the daemon stopped mid-run"
+const InterruptedReason = "interrupted - the daemon stopped mid-run"
 
 func (l *FixLog) StartedSince(workspace string, since time.Time) int {
 	l.mu.Lock()

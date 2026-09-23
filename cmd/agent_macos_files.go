@@ -68,7 +68,7 @@ func protectedWorkspaceNote(path string) string {
 	}
 	note := "macOS guards ~/" + folder + ", so it will ask to let corgi read it"
 	if corgiIsAdhocSigned() {
-		note += " — and asks again after every corgi upgrade, because corgi is not Developer-ID signed"
+		note += " - and asks again after every corgi upgrade, because corgi is not Developer-ID signed"
 	}
 	return note + ".\n  Keep workspaces outside Desktop/Documents/Downloads/iCloud Drive and macOS never asks."
 }
@@ -107,9 +107,9 @@ func checkMacOSFileAccess() (agentCheck, bool) {
 		Fix:    "move those workspaces outside Desktop/Documents/Downloads/iCloud Drive and it stops asking",
 	}
 	if corgiIsAdhocSigned() {
-		c.Detail += " — and asks again after every corgi upgrade (corgi is not Developer-ID signed, so each build is a new identity to macOS)"
+		c.Detail += " - and asks again after every corgi upgrade (corgi is not Developer-ID signed, so each build is a new identity to macOS)"
 	} else {
-		c.Detail += " — once: this corgi is Developer-ID signed, so the answer survives upgrades"
+		c.Detail += " - once: this corgi is Developer-ID signed, so the answer survives upgrades"
 	}
 	return c, true
 }

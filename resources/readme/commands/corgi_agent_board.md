@@ -7,8 +7,8 @@ Show or set how many keys the session board has
 ### Synopsis
 
 Without flags, prints the board's size and how many sessions are on it.
-With --slots, sets the number of keys — the size of the Stream Deck the
-board is drawn on — and applies it to a running daemon at once; seats past
+With --slots, sets the number of keys - the size of the Stream Deck the
+board is drawn on - and applies it to a running daemon at once; seats past
 the new edge move to the overflow, nothing is lost. The size is remembered
 for the next daemon start.
 
@@ -20,7 +20,7 @@ corgi agent board [flags]
 
 ```
   -h, --help        help for board
-      --slots int   Number of keys on the board (1–64)
+      --slots int   Number of keys on the board (1-64)
 ```
 
 ### Options inherited from parent commands

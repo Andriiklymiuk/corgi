@@ -1,5 +1,5 @@
 ---
-description: The Proactive bot — picks ONE thing worth building next in a corgi workspace and puts it on the board as a task with its evidence, deduped against the board, the suggest history and workspace memory, at most one per week. Meant to run as a daemon routine (corgi agent routine add suggest --bot proactive); also runnable by hand. Never writes into the repo, never files on the tracker unless opted in, never builds. Pass an absolute workspace path; no args = the current workspace.
+description: The Proactive bot - picks ONE thing worth building next in a corgi workspace and puts it on the board as a task with its evidence, deduped against the board, the suggest history and workspace memory, at most one per week. Meant to run as a daemon routine (corgi agent routine add suggest --bot proactive); also runnable by hand. Never writes into the repo, never files on the tracker unless opted in, never builds. Pass an absolute workspace path; no args = the current workspace.
 ---
 
 Run the corgi **proactive suggest** flow for `$ARGUMENTS`.

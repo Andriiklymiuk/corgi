@@ -10,7 +10,7 @@ Checks the token, waits for you to message the bot, reads the chat id from that
 message, writes notifyUrl and sends a test.
 
 Get a token first: message @BotFather in Telegram, send /newbot, follow it. The
-token is a credential — pass it here, do not paste it into a chat or a commit.
+token is a credential - pass it here, do not paste it into a chat or a commit.
 
 ```
 corgi agent notify telegram [flags]

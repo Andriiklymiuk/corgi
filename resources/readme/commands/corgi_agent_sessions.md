@@ -10,7 +10,7 @@ Prints the session board the daemon keeps: one line per key, with the
 session's label, status, what it is doing, its account and where its terminal
 lives. --json prints the same board as sessions.json, plus the file's path, so
 a plugin can find and watch it. --watch redraws on every change. --grouped
-folds the sessions by the ticket (or branch) they work on — the sessions, the
+folds the sessions by the ticket (or branch) they work on - the sessions, the
 workspaces, the worktrees and the PRs of one piece of work in one block; the
 same grouping sessions.json carries under "groups".
 

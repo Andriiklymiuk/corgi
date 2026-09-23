@@ -32,7 +32,7 @@ jobs:
       # A job-level if cannot read secrets; a step can.
       - id: login
         run: |
-          if [ -n "$CLAUDE_CODE_OAUTH_TOKEN" ] || [ -n "$ANTHROPIC_API_KEY" ]; then echo "has=true" >> "$GITHUB_OUTPUT"; else echo "no Claude login in secrets — skipping"; echo "has=false" >> "$GITHUB_OUTPUT"; fi
+          if [ -n "$CLAUDE_CODE_OAUTH_TOKEN" ] || [ -n "$ANTHROPIC_API_KEY" ]; then echo "has=true" >> "$GITHUB_OUTPUT"; else echo "no Claude login in secrets - skipping"; echo "has=false" >> "$GITHUB_OUTPUT"; fi
       - if: steps.login.outputs.has == 'true'
         run: npm install -g @anthropic-ai/claude-code
       - if: steps.login.outputs.has == 'true'
@@ -48,7 +48,7 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - id: login
         run: |
-          if [ -n "$CLAUDE_CODE_OAUTH_TOKEN" ] || [ -n "$ANTHROPIC_API_KEY" ]; then echo "has=true" >> "$GITHUB_OUTPUT"; else echo "no Claude login in secrets — skipping"; echo "has=false" >> "$GITHUB_OUTPUT"; fi
+          if [ -n "$CLAUDE_CODE_OAUTH_TOKEN" ] || [ -n "$ANTHROPIC_API_KEY" ]; then echo "has=true" >> "$GITHUB_OUTPUT"; else echo "no Claude login in secrets - skipping"; echo "has=false" >> "$GITHUB_OUTPUT"; fi
       - if: steps.login.outputs.has == 'true'
         run: npm install -g @anthropic-ai/claude-code
       # Early access: when the command is not available on this account the

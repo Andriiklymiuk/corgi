@@ -70,7 +70,7 @@ func pullsFinished(e Event, pulls *PullLog) string {
 }
 
 // handledByRun: a run for this row finished without failing. A run for the
-// same pull request that started after the row came in counts too — it read
+// same pull request that started after the row came in counts too - it read
 // the thread, this comment with it.
 func handledByRun(e Event, fixes *FixLog) bool {
 	switch e.Kind {

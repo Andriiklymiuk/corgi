@@ -58,7 +58,7 @@ func TestOAuthAuthorizeNeverRedirectsAnUntrustedTarget(t *testing.T) {
 	} {
 		rec := get(mux, q)
 		if rec.Code != http.StatusBadRequest || rec.Header().Get("Location") != "" {
-			t.Errorf("%s: %d Location=%q — must be a 400 page, never a redirect", name, rec.Code, rec.Header().Get("Location"))
+			t.Errorf("%s: %d Location=%q - must be a 400 page, never a redirect", name, rec.Code, rec.Header().Get("Location"))
 		}
 		if !strings.Contains(rec.Body.String(), "cannot start this sign-in") {
 			t.Errorf("%s: body is not the error page", name)
@@ -127,7 +127,7 @@ func TestOAuthConsentPageAndSameBrowserApprove(t *testing.T) {
 	}
 	redirect, _ := url.Parse(out["redirect"].(string))
 	if redirect.Host != "localhost:51234" || redirect.Path != "/callback" {
-		t.Errorf("redirect goes to %s — the requested loopback port must be kept", redirect)
+		t.Errorf("redirect goes to %s - the requested loopback port must be kept", redirect)
 	}
 	code := redirect.Query().Get("code")
 	if len(code) != 43 || redirect.Query().Get("state") != "xyz" || redirect.Query().Get("iss") != "http://127.0.0.1:18765" {

@@ -10,7 +10,7 @@ description: Use when the user asks "what did I do today", "what have you done t
 Read `../_shared/conventions.md` first.
 
 `corgi agent today` already knows what every account's Claude Code was asked, what
-landed in git under each registered workspace, and — the part nothing else records —
+landed in git under each registered workspace, and - the part nothing else records -
 what the unattended watch did on its own. This skill runs it, reads it, and turns it
 into words a person would say.
 
@@ -38,13 +38,13 @@ hash); prompts are headlines (what was asked, not the wording). Turn both into:
 ```
 <workspace>
   done     <what landed, one line per PR or commit cluster>
-  corgi    <what the unattended watch did, and the PR it opened — only when it did>
+  corgi    <what the unattended watch did, and the PR it opened - only when it did>
   doing    <what the last prompts were about, not yet committed>
   next     <what the open branches imply>
   blocked  <only when sessions or brief show a wait or a limit>
 ```
 
-Say plainly which work was yours and which the watch did on its own — a pull request
+Say plainly which work was yours and which the watch did on its own - a pull request
 you never opened is the one line a standup must not blur. A `waiting for a free slot`
 list is `blocked`: a cap or quiet hours held those back, and a manual
 `corgi agent watch run` picks them up.
@@ -71,7 +71,7 @@ attribution, never make the facts sound bigger than the diff.
 
 ## See also
 
-- **[`summary`](../summary/SKILL.md)** — when the question is "where does my batch stand
+- **[`summary`](../summary/SKILL.md)** - when the question is "where does my batch stand
   **now**" rather than "what did I do". That one re-reads every PR/MR and ticket live and
   groups by ticket; this one narrates a period of work for people who were not here.
 

@@ -3,17 +3,17 @@ name: suggest-proactive
 description: "Use when corgi should push ideas on its own instead of being asked: \"suggest things automatically\", \"run suggest every week\", \"put the proactive bot on\", \"be a proactive engineer / push me work\", \"why did the proactive bot propose X\", or when a daemon routine or a scheduled job invokes /corgi-suggest-proactive. NOT for on-demand ideas (suggest) or implementing anything (stories)."
 ---
 
-# Corgi proactive suggest — the Proactive bot
+# Corgi proactive suggest - the Proactive bot
 
 Once a week the Proactive bot reads the stack the way `suggest` does, picks
 **one** thing worth building, and puts it on the board as a task with its
-evidence — where **Work on it** on the phone, the bar or the editor hands it to
+evidence - where **Work on it** on the phone, the bar or the editor hands it to
 `stories`. It never writes into the repository, never files on the tracker
 unless the workspace opted in, never builds.
 
 Two ways it runs:
 
-- **On the clock** (the default) — a daemon routine under the bot's soul:
+- **On the clock** (the default) - a daemon routine under the bot's soul:
   ```
   corgi agent bot add proactive --template proactive --workspace <id>
   corgi agent routine add suggest --bot proactive --workspace <id>   # weekly Mon 09:30; --schedule to change
@@ -22,15 +22,15 @@ Two ways it runs:
   The watch's caps, quiet hours and budget apply. The run is filed under the
   bot (`corgi agent bot show proactive`), its headline is one inbox row, the
   task is on the board. `corgi agent routine run suggest` runs it now.
-- **By hand or from another scheduler** — `/corgi-suggest-proactive
+- **By hand or from another scheduler** - `/corgi-suggest-proactive
   [/abs/workspace]`: the same flow, with a person maybe present.
   `references/schedule-config.md` covers `/schedule` and `CronCreate`.
 
 ## Guardrails (non-negotiable)
 
-- **One idea per run**, at most `maxPerWeek` (default 1, hard ceiling 3) —
+- **One idea per run**, at most `maxPerWeek` (default 1, hard ceiling 3) -
   `corgi suggest-history check` says when the week is spent.
-- **Ranking is `suggest`'s** (its Phases 0–3): consume the shortlist, never
+- **Ranking is `suggest`'s** (its Phases 0-3): consume the shortlist, never
   re-invent the lenses or the evidence rule.
 - **Dedupe before anything:** the board (`corgi agent kanban --json`: open
   tasks and tickets by title), the history (`filed` always; `proposed` and
@@ -46,7 +46,7 @@ Two ways it runs:
 - **Say the mode first:** `proactive · <workspace> · mode=propose · cap=1/week`.
 - Read `../_shared/conventions.md` first.
 
-## Phase 0 — Workspace, mode, state
+## Phase 0 - Workspace, mode, state
 
 1. **Workspace.** `$ARGUMENTS` (absolute path) or cwd; a routine already runs
    in the workspace directory. Preflight per conventions; none → stop with
@@ -57,14 +57,14 @@ Two ways it runs:
    --json`. If `check --slug _` answers `rate-limit`, the week is spent:
    `record --status skipped`, headline "nothing this week: cap reached", stop.
 
-## Phase 1 — Rank, magic first
+## Phase 1 - Rank, magic first
 
-Run `suggest` Phases 0–3 in this session: one pass, three lenses, about ten
+Run `suggest` Phases 0-3 in this session: one pass, three lenses, about ten
 cited signals, cards, ranked. At equal effort prefer **magic** (a user would
-feel it) over friction over risk — unless the risk is a path that loses data,
+feel it) over friction over risk - unless the risk is a path that loses data,
 which always wins.
 
-## Phase 2 — Dedupe, top down
+## Phase 2 - Dedupe, top down
 
 `slug` = the title in kebab-case (lowercase, non-alphanumerics → `-`, repeats
 collapsed, trimmed; the same rule `corgi suggest-history` uses). For each card
@@ -79,7 +79,7 @@ from the top:
 The first survivor wins. None → `record --slug <top> --status skipped`,
 headline "nothing new: N ideas already on the board or proposed", stop.
 
-## Phase 3 — Put it on the board
+## Phase 3 - Put it on the board
 
 ```
 corgi agent task add "<title>" --body - <<'EOF'
@@ -100,9 +100,9 @@ corgi suggest-history record --slug <slug> --status proposed --title "<title>" -
   the task stands, record `proposed`.
 - "Not this" → `record --status dismissed`; the cooldown keeps it away.
 
-## Phase 4 — Report
+## Phase 4 - Report
 
-The first line is the headline the inbox row shows: `<title> — <why, in ten
+The first line is the headline the inbox row shows: `<title> - <why, in ten
 words>`. Then the task ref, the evidence, and what was skipped and why. No
 shortlist, no essay.
 

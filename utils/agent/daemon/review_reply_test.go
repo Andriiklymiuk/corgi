@@ -56,7 +56,7 @@ func TestAReviewPostReplyIsWhatWasPostedAndTheEmojiMatches(t *testing.T) {
 	said, ran := runReviewPost(t, watch.ReviewOutcome{Comments: 2})
 	said.mu.Lock()
 	defer said.mu.Unlock()
-	if len(said.posts) != 1 || said.posts[0] != "acme/web#456 — comments added (2)" {
+	if len(said.posts) != 1 || said.posts[0] != "acme/web#456 - comments added (2)" {
 		t.Fatalf("the thread hears what landed on the pull request, not the forge's review state: %v", said.posts)
 	}
 	if len(said.emoji) != 2 || said.emoji[0] != "eyes" || said.emoji[1] != "speech_balloon" {
@@ -71,7 +71,7 @@ func TestAnApprovedReviewPostGetsTheCheck(t *testing.T) {
 	said, _ := runReviewPost(t, watch.ReviewOutcome{Approved: true})
 	said.mu.Lock()
 	defer said.mu.Unlock()
-	if len(said.posts) != 1 || said.posts[0] != "acme/web#456 — approved ✅" {
+	if len(said.posts) != 1 || said.posts[0] != "acme/web#456 - approved ✅" {
 		t.Fatalf("posts = %v", said.posts)
 	}
 	if len(said.emoji) != 2 || said.emoji[1] != "white_check_mark" {

@@ -43,11 +43,11 @@ func runNotifications(cmd *cobra.Command, args []string) {
 	case "off":
 		writeNotificationsPref(false)
 	case "test":
-		utils.NotifyRaw("corgi 🐶", "Test notification — if you see this, OS-level notifications work.")
+		utils.NotifyRaw("corgi 🐶", "Test notification - if you see this, OS-level notifications work.")
 		fmt.Println("Desktop notification dispatched. Nothing shown? Check OS notification permissions for your terminal app.")
 		reportNotifyDestination()
 	default:
-		fmt.Fprintf(os.Stderr, "unknown action %q — use one of: on, off, test\n", args[0])
+		fmt.Fprintf(os.Stderr, "unknown action %q - use one of: on, off, test\n", args[0])
 		exitProcess(2)
 	}
 }
@@ -99,5 +99,5 @@ func reportNotifyDestination() {
 	fmt.Println()
 	fmt.Printf("Agent notifications also POST to %s.\n", maskNotifyURL(target))
 	fmt.Println("Send one there with: corgi agent notify test")
-	fmt.Printf("A running daemon reads %s at startup — restart it after changing that file.\n", path)
+	fmt.Printf("A running daemon reads %s at startup - restart it after changing that file.\n", path)
 }

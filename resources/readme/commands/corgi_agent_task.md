@@ -6,8 +6,8 @@ Tasks of your own on the board: add one for later, pick it up, move it along
 
 ### Synopsis
 
-A task is a ticket you write yourself — a title, a description, the
-workspace it is for — kept on this machine and shown on the same board as the
+A task is a ticket you write yourself - a title, a description, the
+workspace it is for - kept on this machine and shown on the same board as the
 tracker's tickets: the inbox, the Board tab, the page, the menu bar. It goes
 through Todo, Doing, Review, Done (or Canceled), and nothing about it reaches
 a tracker.

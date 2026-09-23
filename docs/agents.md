@@ -4,10 +4,10 @@ Guide for AI agents and scripts running corgi non-interactively.
 
 ## Related
 
-- [Agent mode](agent.md) — keep a Claude Code Remote Control session running for
+- [Agent mode](agent.md) - keep a Claude Code Remote Control session running for
   your stacks, and drive a multi-repo change from a phone.
-- [MCP server](mcp.md) — the tool surface, including device pairing.
-- [corgi-remote](remote-app.md) — design for a mobile control surface.
+- [MCP server](mcp.md) - the tool surface, including device pairing.
+- [corgi-remote](remote-app.md) - design for a mobile control surface.
 
 ## Non-interactive mode
 
@@ -22,10 +22,10 @@ Force prompts back on with the global `--interactive` flag.
 
 A compose that sets `useAwsVpn: true` launches the AWS VPN Client GUI in
 preflight, which an agent session cannot click through. On macOS corgi also
-presses Connect on the first profile when Accessibility allows it, then waits —
-up to 90 s — while you finish the sign-in in the browser; on Linux it
+presses Connect on the first profile when Accessibility allows it, then waits -
+up to 90 s - while you finish the sign-in in the browser; on Linux it
 starts the client (`gtk-launch awsvpnclient`, else `/opt/awsvpnclient`) if none
-of yours is running, then leaves the connect to you — a bounded wait, never a
+of yours is running, then leaves the connect to you - a bounded wait, never a
 hang, and a client already up returns at once. Skip it for one run
 with `corgi run --omit useAwsVpn` (also `useDocker` for the Docker auto-start),
 or for the whole session with `CORGI_OMIT=useAwsVpn` in the environment. The
@@ -48,7 +48,7 @@ stderr. Commands that emit pure-JSON stdout:
 - `create --kind ... --json` (non-interactive) → `{"created","kind","name","path"}`
 - `restart --service <name> --json` → updated run-state object
 - `mission-control --json` (one MissionSnapshot object; `--watch`: one object per refresh)
-- `autopilot status/pause/resume/stop/heartbeat --json` → the autopilot loop state object (`{mode, iteration, lastHeartbeat, lastSummary}`); `mode` ∈ `uninitialized` (no state file yet — a first run, distinct from a stop) · `running` · `paused` · `stopped`
+- `autopilot status/pause/resume/stop/heartbeat --json` → the autopilot loop state object (`{mode, iteration, lastHeartbeat, lastSummary}`); `mode` ∈ `uninitialized` (no state file yet - a first run, distinct from a stop) · `running` · `paused` · `stopped`
 - `agent brief --json` (array of briefs, newest first; `agent brief <id> --json` → one brief, or `null` when that workspace has not restarted)
 - `memory list --json` (array of facts), `memory lint --json` (`{"ok":bool,"errors":[...],"warnings":[...]}`), `memory add --json` / `memory index --json` (created/index summary)
 - `suggest-history list --json` (`{"version","entries":[...]}`), `suggest-history check --slug <s> --json` (`{"skip":bool,"reason":"filed|dismissed|proposed|rate-limit|...","slug":...}`), `suggest-history record --json` (echoes the written entry), `suggest-history config --json` (`{"autoFileDrafts":bool,"maxPerWeek":n}`)
@@ -58,7 +58,7 @@ Not yet pure-JSON: `fork` and the `db` bulk lifecycle flags (`--upAll` etc.)
 still stream human output; use `corgi_up`/`corgi_down` (MCP) for lifecycle.
 
 `run --json` is best-effort: it prints one JSON startup summary
-(`{"started":[...],"failed":[...]}`) and then streams service logs to stderr —
+(`{"started":[...],"failed":[...]}`) and then streams service logs to stderr -
 stdout is not a single JSON document for the whole run.
 
 Errors under `--json` have the shape:
@@ -99,7 +99,7 @@ immediately. It forces logs on. Under `--json` it prints the run-state object:
 A second `run --detach` while a run-state exists errors (exit 1):
 
 ```json
-{"error": {"code": "E_ALREADY_RUNNING", "message": "corgi is already running for this project — stop or restart first (use --force to override)"}}
+{"error": {"code": "E_ALREADY_RUNNING", "message": "corgi is already running for this project - stop or restart first (use --force to override)"}}
 ```
 
 `--force` replaces the existing run-state **and kills the previously tracked
@@ -108,7 +108,7 @@ processes first** (no orphans), then starts fresh.
 ### Status while detached
 
 There is no daemon. With a state file present, `ps`/`status` report **real**
-status (`running`/`crashed`/`stopped`) reconciled live — a dead pid flips to
+status (`running`/`crashed`/`stopped`) reconciled live - a dead pid flips to
 `crashed` on the next read. Without a state file they fall back to declared
 topology + a port probe. `statusChangedAt` lives in `.state.json` / the
 `run --detach --json` run-state object, not in the `ps` rows (which carry just
@@ -138,7 +138,7 @@ stops one and keeps the rest. It is idempotent (exit 0 when nothing is running).
 `corgi restart [--json]` is a full-stack stop + detached start.
 `corgi restart --service x` restarts a **single** detached service, leaving the
 rest running. It only acts on a service already present in the detached
-run-state — restarting one that was never started returns `E_NOT_RUNNING`:
+run-state - restarting one that was never started returns `E_NOT_RUNNING`:
 
 ```json
 {"error": {"code": "E_NOT_RUNNING", "message": "service \"web\" is not in the current detached run; start it with corgi run --detach first"}}
@@ -157,23 +157,23 @@ no control channel into a live foreground `corgi run`.
 ## Run a branch or external dir (no compose edit)
 
 For reviewing a PR branch, running an agent's worktree, or pointing a service at a
-checkout elsewhere — without touching `path:` in `corgi-compose.yml`. Repeatable,
+checkout elsewhere - without touching `path:` in `corgi-compose.yml`. Repeatable,
 per-service; any service you don't flag runs from its compose `path:`. Available
 on `run`, `exec`, and `test`. All three repoint the service's working dir, so its
 env generation, `beforeStart`/`afterStart`, and process all run there.
 
-- `--service-dir <name>=<path>` — run from an existing dir (e.g. a worktree you
+- `--service-dir <name>=<path>` - run from an existing dir (e.g. a worktree you
   already made). The dir must exist.
-- `--service-branch <name>=<branch>` — run on a git branch via a **reused**
+- `--service-branch <name>=<branch>` - run on a git branch via a **reused**
   worktree under `.corgi/corgi_services/.worktrees/<svc>-<branch>`. **Non-destructive**:
   the main checkout is untouched. Re-runs reuse the worktree (deps + uncommitted
   work persist); the branch must exist (local or remote).
-- `--service-checkout <name>=<branch>` — `git checkout <branch>` in place in the
+- `--service-checkout <name>=<branch>` - `git checkout <branch>` in place in the
   service's `path:`. **Refuses on a dirty tree** (commit/stash, or use
   `--service-branch`). Leaves the repo on that branch.
 
 A service may appear in only one of the three (else an `E_CONFIG` error). Detached
-works too — the override is applied before the attached/detached split.
+works too - the override is applied before the attached/detached split.
 
 ```bash
 # run a feature branch of api, rest of the stack from compose path:
@@ -230,12 +230,12 @@ corgi checkout main --json
 
 Three calls replace most of the plumbing an agent otherwise does by hand.
 
-`corgi context --json` — where am I. Topology, ports, status, each repo's branch /
+`corgi context --json` - where am I. Topology, ports, status, each repo's branch /
 dirty / ahead-behind, the active tier, the declared profiles, validation findings.
 One call instead of `ps` + `status` + `validate` + a `git` call per repo. `--no-git`
 skips the repo reads.
 
-`corgi why <service> --json` — why is it not up. Returns one `verdict` to branch on,
+`corgi why <service> --json` - why is it not up. Returns one `verdict` to branch on,
 with the evidence behind it:
 
 ```json
@@ -249,10 +249,10 @@ with the evidence behind it:
 
 Verdicts: `healthy`, `crashed`, `not_started`, `dependency_unready`, `port_taken`,
 `env_missing`, `no_start_command`, `unhealthy`. Exit is 1 for anything but `healthy`.
-Env is part of the check — an absent env file, keys the example declares that
+Env is part of the check - an absent env file, keys the example declares that
 nothing provides, and unfilled `envPlaceholdersToCheck`.
 
-`corgi logs --service <x> --wait-for <regexp> --timeout <d>` — block until a line
+`corgi logs --service <x> --wait-for <regexp> --timeout <d>` - block until a line
 matches, then exit 0; exit 1 on timeout. Never sleep-and-read in a loop. `--since`
 and `--grep` narrow what comes back; `--json` emits one object per line.
 
@@ -304,7 +304,7 @@ re-read rate, `--timeout` bounds the run.
 
 `corgi test --changed --base main` runs the test script only for services whose repo
 differs from the base (uncommitted work counts). A repo corgi cannot compare is kept
-rather than skipped — a silently skipped test looks exactly like a passing one.
+rather than skipped - a silently skipped test looks exactly like a passing one.
 
 ## Exit codes
 
@@ -346,17 +346,17 @@ message text (messages may change wording). The catalog:
 | `E_CONFIG_READ` | cannot read the user-config file | check `~/.corgi/config.yml` |
 | `E_DUPLICATE_NAME` | a name is used by more than one service/db_service (or duplicated within a section) | rename so every service/db_service name is unique |
 | `E_PORT_RANGE` | a configured port is outside 1-65535 | use a port in the valid range |
-| `E_MEMORY_SECRET` | a secret-shaped string is in committed memory | remove it — memory is committed; secrets stay in gitignored `.env` |
+| `E_MEMORY_SECRET` | a secret-shaped string is in committed memory | remove it - memory is committed; secrets stay in gitignored `.env` |
 | `E_MEMORY_TYPE_MISMATCH` | a fact's `type` doesn't match its folder | move the file or fix `type:` |
 | `E_MEMORY_BAD_NAME` | `name` isn't kebab-case or doesn't match the filename | rename so `name` == filename stem |
 | `E_MEMORY_NO_FRONTMATTER` | a memory fact is missing its `name`/`description` frontmatter | add the frontmatter block |
 
 Validation also emits advisory warnings (not errors): `W_NO_HEALTHCHECK`,
-`W_NO_BRANCH`, and `W_UNKNOWN_FIELD` (an unknown/typo'd key was ignored — warn
+`W_NO_BRANCH`, and `W_UNKNOWN_FIELD` (an unknown/typo'd key was ignored - warn
 now, may become an error later). Warnings never abort `run`/`exec`. `corgi memory lint`
 also emits `E_MEMORY_DANGLING_LINK` as a warning (a `[[link]]` points at no existing fact).
 
-Note: a few codes were renamed for consistency — `INPUT_REQUIRED` →
+Note: a few codes were renamed for consistency - `INPUT_REQUIRED` →
 `E_INTERACTIVE_REQUIRED`, `config` → `E_CONFIG`, `ALREADY_RUNNING` →
 `E_ALREADY_RUNNING`, and `UNSUPPORTED` → `E_UNSUPPORTED`. Every emitted code now
 lives in the catalog above.
@@ -391,15 +391,15 @@ stderr) and the [error-code catalog](#error-codes).
 
 ### `corgi validate` (alias `lint`)
 
-Static semantic checks over `corgi-compose.yml` — no containers, clones, or
+Static semantic checks over `corgi-compose.yml` - no containers, clones, or
 network. Pairs with `docs --json-schema`: the schema checks *structure*,
 `validate` checks *semantics* (dangling deps, cycles, unknown driver, a port
 without a start command, port conflicts).
 
 Flags:
 
-- `--json` — emit the report object (below).
-- `--strict` — treat warnings as failures.
+- `--json` - emit the report object (below).
+- `--strict` - treat warnings as failures.
 
 ```json
 {"ok": true, "errors": [], "warnings": [{"code": "...", "message": "...", "field": "..."}]}
@@ -410,7 +410,7 @@ errors (or warnings under `--strict`), 2 when the compose file fails to load.
 
 ### `corgi run --dry-run`
 
-Compute the start plan with **no side effects** — no clone, no `make up`, no
+Compute the start plan with **no side effects** - no clone, no `make up`, no
 process spawn, no `.env` writes. Runs validation first, then reports the
 resolved order and per-item details. Composes with `--profile` /
 `--services` / `--omit` to preview a narrowed run. Exit 0 if valid, 1 if
@@ -439,11 +439,11 @@ child's exit code becomes corgi's exit code.
 
 Flags:
 
-- `--json` — emit `{"service": "...", "exitCode": 0, "durationMs": 12}`; child
+- `--json` - emit `{"service": "...", "exitCode": 0, "durationMs": 12}`; child
   stdout/stderr are routed to stderr so stdout stays pure JSON.
-- `--ensure-deps` — wait for the service's `depends_on_db` /
+- `--ensure-deps` - wait for the service's `depends_on_db` /
   `depends_on_services` to be reachable first.
-- `--ready-timeout <dur>` — cap that wait (default `15s`).
+- `--ready-timeout <dur>` - cap that wait (default `15s`).
 
 ```bash
 corgi exec api -- npm run migrate
@@ -457,19 +457,19 @@ under `--ensure-deps` exits 1 with `E_READINESS_TIMEOUT`.
 
 Run each selected service's `test` script (a script named `test` under
 `services.<name>.scripts`) in that service's env and working dir. It does
-**not** start anything — that's `run`'s job. Services without a `test` script
+**not** start anything - that's `run`'s job. Services without a `test` script
 are **skipped, not failed**. Multi-command scripts run sequentially and stop on
 the first non-zero exit.
 
 Flags:
 
-- `--service <name>` — only this service (unknown name exits 2).
-- `--profile <name>` — narrow to a profile first (see [Profiles](#profiles)).
-- `--ensure-deps` / `--ready-timeout <dur>` — gate on dependency readiness, as
+- `--service <name>` - only this service (unknown name exits 2).
+- `--profile <name>` - narrow to a profile first (see [Profiles](#profiles)).
+- `--ensure-deps` / `--ready-timeout <dur>` - gate on dependency readiness, as
   in `exec`.
-- `--e2e` — run the compose file's stack-level `e2e:` block instead of the
+- `--e2e` - run the compose file's stack-level `e2e:` block instead of the
   per-service test scripts (see below).
-- `--json` — emit the results object.
+- `--json` - emit the results object.
 
 ```json
 {
@@ -486,7 +486,7 @@ unknown `--service`.
 
 ### `corgi test --e2e`
 
-Runs the top-level `e2e:` block — a suite that drives several services at once
+Runs the top-level `e2e:` block - a suite that drives several services at once
 and so belongs to the stack rather than to any one of them:
 
 ```yaml
@@ -541,14 +541,14 @@ corgi test --profile backend --json                 # test only that profile's s
 `depends_on_db` and `depends_on_services` entries accept an optional
 `condition`:
 
-- `condition: ready` — wait until the dependency's readiness probe passes.
-- `condition: started` — wait only until corgi has launched the dependency.
+- `condition: ready` - wait until the dependency's readiness probe passes.
+- `condition: started` - wait only until corgi has launched the dependency.
 
-By default (no `condition`, no flag) services start in **parallel** — no
+By default (no `condition`, no flag) services start in **parallel** - no
 waiting (unchanged). corgi waits before starting a dependent only when an edge
 sets `condition`, or when `run --gate-deps` is passed (which gates *every*
 edge). `--ready-timeout <dur>` (default `15s`) bounds each wait; a timeout is
-non-fatal — corgi proceeds anyway and emits `E_READINESS_TIMEOUT`.
+non-fatal - corgi proceeds anyway and emits `E_READINESS_TIMEOUT`.
 
 ```yaml
 services:
@@ -578,18 +578,18 @@ In an editor, point the YAML language server at it with a top-of-file directive:
 **before** YAML parsing, so they work in any string field (passwords, ports,
 paths, image refs, environment entries).
 
-- `${VAR}` — replaced with the value of `VAR`.
-- `${VAR:-default}` — value of `VAR`, or `default` if `VAR` is unset/empty.
-- `$${LITERAL}` — escapes to the literal `${LITERAL}` (not expanded).
+- `${VAR}` - replaced with the value of `VAR`.
+- `${VAR:-default}` - value of `VAR`, or `default` if `VAR` is unset/empty.
+- `$${LITERAL}` - escapes to the literal `${LITERAL}` (not expanded).
 - Only **braced** forms are expanded. Bare `$VAR` is left untouched (so shell
   snippets in `start` commands are safe).
 - An unset var with **no default** is left **unresolved** (the `${VAR}` token
-  stays literal), silently — so runtime/per-service env, tunnel hostnames, and
+  stays literal), silently - so runtime/per-service env, tunnel hostnames, and
   cross-service `${producer.VAR}` refs that resolve later still work. Use
   `${VAR:-default}` for an explicit fallback. corgi never silently substitutes
   empty.
 - Dotted forms like `${producer.VAR}` are **not** touched by this global pass
-  (only simple `${NAME}` is) — they are resolved later from per-service env.
+  (only simple `${NAME}` is) - they are resolved later from per-service env.
 - This pass runs everywhere, **including inside `start`/`beforeStart`/`afterStart`
   and `scripts` command strings**. A braced `${VAR}` / `${VAR:-default}` there is
   resolved at **load time** (against process env + sibling `.env`), not by the
@@ -612,7 +612,7 @@ db_services:
 
 ## Safe agent recipe
 
-Use `corgi run --detach` — it returns immediately and the services outlive
+Use `corgi run --detach` - it returns immediately and the services outlive
 corgi. Probe with `status`/`ps`, never by re-running `run` (a second
 `run --detach` errors `E_ALREADY_RUNNING`). Tear down with `corgi stop`.
 
@@ -689,10 +689,10 @@ corgi docs --json-schema | jq '.properties | keys'
 ## Workspace memory (`corgi memory`)
 
 `.corgi/memory/` is an **opt-in, committed** store of stack decisions, incidents,
-domain facts, and recurring fixes — the team/agent's shared memory of *why*, keyed to
+domain facts, and recurring fixes - the team/agent's shared memory of *why*, keyed to
 this `corgi-compose.yml`. Absent → every subcommand is a no-op (exit 0). One fact per
 Markdown file (`<type>/<name>.md`) with `name`/`description`/`type` frontmatter and
-`[[links]]`; `index.md` is generated. **Never commit secrets** — `corgi memory lint`
+`[[links]]`; `index.md` is generated. **Never commit secrets** - `corgi memory lint`
 fails the store on a key-shaped string. The agent skills read it before acting and
 append to it (confirmed) after a notable fix; a fix `pattern:` seen ≥3× is *proposed*
 as a learned skill/template (human-approved, never auto-installed).

@@ -8,7 +8,7 @@ Run Claude Code the way this folder's workspace is configured
 
 Starts Claude Code for the workspace the current directory belongs to, under
 that workspace's account (configDir), binary and permission mode from the
-corgi agent config — the same settings a remote session gets. Outside every
+corgi agent config - the same settings a remote session gets. Outside every
 workspace it is plain claude. So one command replaces per-account aliases:
 the corgi VS Code extension's "+" key runs it in a new terminal.
 
@@ -30,7 +30,7 @@ corgi agent claude [-- claude args] [flags]
       --attempt int         This session is attempt N of several on the same ticket (corgi agent watch work --attempts): its own worktree on corgi/<ticket>-N, and the board groups them
       --bot string          Open as this bot (corgi agent bot list): its workspace, account, model and persona, resuming its last conversation
   -h, --help                help for claude
-      --isolate             Start in a worktree of its own on a corgi/<ticket> branch — every repository of the stack gets one — so this session never touches your checkout
+      --isolate             Start in a worktree of its own on a corgi/<ticket> branch - every repository of the stack gets one - so this session never touches your checkout
       --kind string         Open this harness instead of the workspace's (claude, codex)
       --model string        Pass --model to claude (opus, sonnet, haiku, or a model id)
       --profile string      Run under this corgi profile's account and settings

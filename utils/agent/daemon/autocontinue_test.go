@@ -34,7 +34,7 @@ func TestTheDaemonContinuesALimitedSessionWhenTheWindowResets(t *testing.T) {
 	readLimits = func(string) (usage.Limits, bool) { return limits, true }
 
 	d.Sessions.Apply(sessions.Event{Name: "UserPromptSubmit", SessionID: "s1", Cwd: "/tmp/a", ClaudePID: 100, TermProgram: "iTerm.app", TTY: 5, At: now})
-	d.Sessions.Apply(sessions.Event{Name: "StopFailure", SessionID: "s1", Error: "rate_limit", Message: "usage limit — resets 3pm", At: now})
+	d.Sessions.Apply(sessions.Event{Name: "StopFailure", SessionID: "s1", Error: "rate_limit", Message: "usage limit - resets 3pm", At: now})
 
 	ctx := context.Background()
 	d.autoContinue(ctx, now)

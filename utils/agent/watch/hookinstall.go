@@ -169,9 +169,9 @@ func githubHookRefused(ctx context.Context, token, repo string, out HookInstall)
 	owner, _, _ := strings.Cut(repo, "/")
 	switch {
 	case !r.Permissions.Admin:
-		out.Missing, out.ReadOnly = "repo admin (you are not) — an owner of "+owner+" can add one org webhook instead, covering every repo", false
+		out.Missing, out.ReadOnly = "repo admin (you are not) - an owner of "+owner+" can add one org webhook instead, covering every repo", false
 	default:
-		out.Missing, out.ReadOnly = "the admin:repo_hook scope — `gh auth refresh -s admin:repo_hook`", true
+		out.Missing, out.ReadOnly = "the admin:repo_hook scope - `gh auth refresh -s admin:repo_hook`", true
 	}
 	return out
 }

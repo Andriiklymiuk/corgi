@@ -41,7 +41,7 @@ var agentSkillsCmd = &cobra.Command{
 Codex reads skills from ~/.codex/skills/<name>/SKILL.md and has no plugin, so
 corgi copies them there: every skill, the _shared files they read, one
 manifest naming what corgi owns. Skills you installed yourself are never
-touched; a skill corgi dropped is removed. Run it again after an upgrade —
+touched; a skill corgi dropped is removed. Run it again after an upgrade -
 corgi agent doctor says when the copy is behind.
 
   corgi agent skills install               # into ~/.codex/skills ($CODEX_HOME/skills when set)
@@ -107,7 +107,7 @@ var agentSkillsStatusCmd = &cobra.Command{
 			return
 		}
 		if !ok {
-			fmt.Printf("no corgi skills in %s — corgi agent skills install\n", dst)
+			fmt.Printf("no corgi skills in %s - corgi agent skills install\n", dst)
 			return
 		}
 		fmt.Printf("%d corgi skills in %s, installed by corgi %s\n", len(m.Skills), dst, m.Version)
@@ -115,7 +115,7 @@ var agentSkillsStatusCmd = &cobra.Command{
 		case srcErr != nil:
 			fmt.Printf("cannot compare: %v\n", srcErr)
 		case len(stale) > 0:
-			fmt.Printf("behind the plugin: %s — corgi agent skills install\n", strings.Join(stale, ", "))
+			fmt.Printf("behind the plugin: %s - corgi agent skills install\n", strings.Join(stale, ", "))
 		default:
 			fmt.Println("current")
 		}

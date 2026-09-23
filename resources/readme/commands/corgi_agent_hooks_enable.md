@@ -10,13 +10,13 @@ Writes Claude Code hooks into .claude/settings.local.json (local to this
 machine, never committed): one for permission prompts and questions, one that
 names a session after the first thing you ask it, and with --turns one for a
 finished turn. They call `corgi agent hook`, which tells the corgi
-daemon, which sends the same notification as a restart — including the phone
+daemon, which sends the same notification as a restart - including the phone
 push when notifyUrl is set.
 
 The naming one answers nothing to the daemon: it replies to Claude Code with a
 title, so "corgi · main · 18:55" becomes "corgi · fix the login redirect" as
 soon as you say what you want. It only ever replaces a name corgi composed or
-Claude Code derived — one you typed, or one it already set, is left alone —
+Claude Code derived - one you typed, or one it already set, is left alone -
 and --no-title skips it entirely.
 
 By default only the first: a permission prompt blocks the session until you
@@ -24,7 +24,7 @@ answer it, while a finished turn is just noise once several workspaces are busy.
 Add --turns if you do want one on every turn.
 
 Claude also nudges after about a minute of no input, with nothing blocked.
-corgi drops that one — it is the notification that arrives when the session
+corgi drops that one - it is the notification that arrives when the session
 wants nothing, and it is why people stop reading them. --idle keeps it.
 
 Covers every Claude session in the directory, not just supervised ones.

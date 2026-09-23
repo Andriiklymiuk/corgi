@@ -93,7 +93,7 @@ func (d *Daemon) runBot(ctx context.Context, spec WatchSpec, b bots.Bot, e watch
 	cost, tokens := receipt.costUSD, receipt.tokens
 	if runErr != nil && ctx.Err() == nil {
 		if next := nextModel(b.Model); next != "" {
-			fmt.Fprintf(logFile, "\n=== failed: %v — trying again on %s\n", runErr, next)
+			fmt.Fprintf(logFile, "\n=== failed: %v - trying again on %s\n", runErr, next)
 			d.watchState.Fixes.SetRetry(key, next)
 			var again runReceipt
 			out, again, runErr = d.botAttempt(ctx, attempt, next)
@@ -112,7 +112,7 @@ func (d *Daemon) runBot(ctx context.Context, spec WatchSpec, b bots.Bot, e watch
 			d.routineReport(spec, e, string(out), runErr)
 			return
 		}
-		go d.notifyAttentionAt(notifyTitlePrefix+b.Display(), fmt.Sprintf("%s on %s failed: %v — log: %s", b.Display(), e.Ref, runErr, logPath), spec.Workspace, e.URL)
+		go d.notifyAttentionAt(notifyTitlePrefix+b.Display(), fmt.Sprintf("%s on %s failed: %v - log: %s", b.Display(), e.Ref, runErr, logPath), spec.Workspace, e.URL)
 		return
 	}
 	links := uniqueStrings(prLink.FindAllString(string(out), -1))
@@ -124,7 +124,7 @@ func (d *Daemon) runBot(ctx context.Context, spec WatchSpec, b bots.Bot, e watch
 	}
 	body := b.Display() + " on " + e.Ref
 	if note != "" {
-		body += " — " + note
+		body += " - " + note
 	}
 	target := e.URL
 	if len(links) > 0 {

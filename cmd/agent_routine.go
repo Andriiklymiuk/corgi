@@ -118,7 +118,7 @@ var agentRoutineAddCmd = &cobra.Command{
 		if r.Bot != "" {
 			as = " as " + r.Bot
 		}
-		utils.Infof("✓ %s in %s: %s%s — %s\n", r.Name, id, sched.String(), as, clipTitle(what, 70))
+		utils.Infof("✓ %s in %s: %s%s - %s\n", r.Name, id, sched.String(), as, clipTitle(what, 70))
 		utils.Info("restart the daemon to pick it up: corgi agent restart")
 		return nil
 	},
@@ -254,7 +254,7 @@ The daemon has to be running.`,
 					return err
 				}
 				daemon.Nudge(info)
-				utils.Infof("✓ %s handed to the daemon — its report lands in the inbox; log: corgi agent watch --json\n", e.Title)
+				utils.Infof("✓ %s handed to the daemon - its report lands in the inbox; log: corgi agent watch --json\n", e.Title)
 				return nil
 			}
 		}
@@ -269,7 +269,7 @@ func routineBotExists(dir, name, workspace string) error {
 	}
 	b, ok := store.Find(name)
 	if !ok {
-		return fmt.Errorf("no bot %q — corgi agent bot add %s --template %s --workspace %s", name, name, name, workspace)
+		return fmt.Errorf("no bot %q - corgi agent bot add %s --template %s --workspace %s", name, name, name, workspace)
 	}
 	if b.Workspace != workspace {
 		return fmt.Errorf("bot %q is in %s, not %s", name, b.Workspace, workspace)

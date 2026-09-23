@@ -6,8 +6,8 @@ Mark every repo's state so a change can be undone in one command
 
 ### Synopsis
 
-Records where every repo in the workspace stands — its branch, its HEAD, and
-its uncommitted work — under one name. corgi restore `<name>` puts all of it back.
+Records where every repo in the workspace stands - its branch, its HEAD, and
+its uncommitted work - under one name. corgi restore `<name>` puts all of it back.
 
 Uncommitted work is captured with git stash create, so the working tree is not
 touched and nothing lands in your stash list. A checkpoint costs nothing to keep.

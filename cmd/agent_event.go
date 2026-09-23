@@ -30,7 +30,7 @@ var agentEventCmd = &cobra.Command{
 	Use:   "event <start|prompt|tool|done|fail|permission|stop|end>",
 	Short: "Report one event from an agent that is not Claude Code, so it sits on the board",
 	Long: `The board tracks Claude Code through its hooks. Another agent CLI joins the
-same board by calling this on its own events — from whatever hook, notify or
+same board by calling this on its own events - from whatever hook, notify or
 plugin mechanism it has:
 
   corgi agent event start --agent codex --session $ID
@@ -44,7 +44,7 @@ Codex: in ~/.codex/config.toml set
   notify = ["corgi", "agent", "event", "stop", "--agent", "codex", "--notify"]
 and every finished turn lands on the board (Codex appends its JSON as the last
 argument; --notify reads the thread id, cwd and last message from it).
-Without --session the id is the calling process — fine for an agent that runs
+Without --session the id is the calling process - fine for an agent that runs
 one conversation per process. With - the event is read from stdin as JSON
 ({session_id, cwd, tool_name, tool_input}), the shape Claude Code's hooks use.
 The session shows on every surface with the agent's name; a permission with a
@@ -157,7 +157,7 @@ func agentEvent(name, agent, session, cwd, tool, input, message string, getenv f
 
 func init() {
 	f := agentEventCmd.Flags()
-	f.String("agent", "", "The agent's name — codex, gemini, opencode — shown on the board")
+	f.String("agent", "", "The agent's name - codex, gemini, opencode - shown on the board")
 	f.Bool("notify", false, "The last argument is Codex's notify JSON (thread-id, cwd, last-assistant-message)")
 	f.String("session", "", "The agent's own session id; default: one per calling process")
 	f.String("cwd", "", "The directory the session works in; default: the current one")

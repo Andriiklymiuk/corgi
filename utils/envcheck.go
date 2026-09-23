@@ -92,7 +92,7 @@ func envCheckService(svc Service, resolved []EnvVar, fileOverride string) (EnvCh
 		resolvedSrc := resolveEnvSourceFile(CorgiComposePathDir, svc, "", ActiveTierName, ActiveTierDir)
 		if resolvedSrc == "" || sameFile(resolvedSrc, example) {
 			if svc.CopyEnvFromFilePath == "" {
-				row.Skipped = "no copyEnvFromFilePath — env comes from the example file itself"
+				row.Skipped = "no copyEnvFromFilePath - env comes from the example file itself"
 				return row, nil
 			}
 			return absentSource(svc.CopyEnvFromFilePath), nil
@@ -157,7 +157,7 @@ func EnvCheckStats(rows []EnvCheckRow) (checked int, findings bool) {
 	return checked, findings
 }
 
-const EnvCheckNothingChecked = "nothing was checked — no service pairs an env source with a committed .env-example / .env.example"
+const EnvCheckNothingChecked = "nothing was checked - no service pairs an env source with a committed .env-example / .env.example"
 
 func EnvCheckSummary(rows []EnvCheckRow) (string, bool) {
 	var b strings.Builder
@@ -178,7 +178,7 @@ func EnvCheckSummary(rows []EnvCheckRow) (string, bool) {
 				fmt.Fprintf(&b, "     %s\n", key)
 			}
 		case row.Source == "":
-			fmt.Fprintf(&b, "✅ %s: %s declares only keys corgi generates — no env file needed\n",
+			fmt.Fprintf(&b, "✅ %s: %s declares only keys corgi generates - no env file needed\n",
 				row.Service, row.Example)
 		default:
 			fmt.Fprintf(&b, "✅ %s: %s covers %s\n", row.Service, row.Source, row.Example)

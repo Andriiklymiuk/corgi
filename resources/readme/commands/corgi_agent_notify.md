@@ -6,7 +6,7 @@ Where notifications go when you are away from this machine
 
 ### Synopsis
 
-Without this, every notification stops at this machine — the desk you were
+Without this, every notification stops at this machine - the desk you were
 trying to leave. Point it at something your phone receives.
 
   corgi agent notify telegram --token `<TOKEN>`   set up a Telegram bot end to end

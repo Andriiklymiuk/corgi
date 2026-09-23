@@ -45,8 +45,8 @@ var checkpointNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 var checkpointCmd = &cobra.Command{
 	Use:   "checkpoint [name]",
 	Short: "Mark every repo's state so a change can be undone in one command",
-	Long: `Records where every repo in the workspace stands — its branch, its HEAD, and
-its uncommitted work — under one name. corgi restore <name> puts all of it back.
+	Long: `Records where every repo in the workspace stands - its branch, its HEAD, and
+its uncommitted work - under one name. corgi restore <name> puts all of it back.
 
 Uncommitted work is captured with git stash create, so the working tree is not
 touched and nothing lands in your stash list. A checkpoint costs nothing to keep.
@@ -187,7 +187,7 @@ func captureRepo(target checkoutTarget, checkpoint string) (checkpointRepo, bool
 
 func snapshotCheckpointDatabases(corgi *utils.CorgiCompose, checkpoint string) []checkpointDatabase {
 	if utils.IsStackSupervised(utils.CorgiComposePathDir) {
-		utils.Info("a detached corgi run is managing this stack — stop it first to snapshot databases")
+		utils.Info("a detached corgi run is managing this stack - stop it first to snapshot databases")
 		return nil
 	}
 	var out []checkpointDatabase

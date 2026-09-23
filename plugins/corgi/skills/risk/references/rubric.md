@@ -1,6 +1,6 @@
-# Risk rubric — points per dimension
+# Risk rubric - points per dimension
 
-Each dimension scores 0–4 from the evidence. **Score = the highest dimension, plus 1
+Each dimension scores 0-4 from the evidence. **Score = the highest dimension, plus 1
 for every other dimension at 2 or more, capped at 10, then raised to any floor** in
 SKILL.md, **plus 1 when a floor applied and verification is 3 or more** (the
 escalation rule). A story target scores verification 3 and takes its floors from what
@@ -24,7 +24,7 @@ Count callers with a grep, not by feel: `rg -n '<symbol>' --type <lang> | wc -l`
 | 0 | revert of the commit restores the old behaviour completely |
 | 1 | revert restores it but needs a redeploy of one service |
 | 2 | behind a flag or config that can be turned off without a deploy, **or** additive migration with a working down path |
-| 3 | irreversible side effect once run — sends email/push/SMS, charges, writes to a third party, backfills data — with no dry-run or idempotency guard |
+| 3 | irreversible side effect once run - sends email/push/SMS, charges, writes to a third party, backfills data - with no dry-run or idempotency guard |
 | 4 | destructive migration (drop, rename, type narrowing) or a binary release that reaches users and cannot be pulled (a store build, a firmware push) |
 
 A flag that exists but is hard-wired on counts as no flag.
@@ -95,7 +95,7 @@ Only when a mobile app is in the set. See `checklists.md` for the specific check
 
 ## Worked examples
 
-**Copy fix in one screen, CI green (screenshot or none — it doesn't move the score).**
+**Copy fix in one screen, CI green (screenshot or none - it doesn't move the score).**
 blast 0 · reversibility 0 · data 0 · verification 0 · contract 0 · ops 0 · mobile 1 ·
 novelty 0 → score **1** → trivial, auto-approve **yes** (all seven conditions visible).
 
@@ -103,7 +103,7 @@ novelty 0 → score **1** → trivial, auto-approve **yes** (all seven condition
 blast 3 (two services) · reversibility 2 (additive migration with down) · data 2 (new
 user field) · verification 2 (web reader untested) · contract 2 (additive) · ops 0 ·
 novelty 0 → highest 3 + four others at ≥2 = **7**; floor "contract changed" is 5, no
-change → **7 high**. Two reviewers, merge order api → web, auto-approve **no — cross-service contract**.
+change → **7 high**. Two reviewers, merge order api → web, auto-approve **no - cross-service contract**.
 
 **Rotate the JWT signing key handling.**
 data 4 · verification 0 (tests cover it, CI green) · everything else under 2 → sum 4,

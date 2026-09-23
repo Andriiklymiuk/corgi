@@ -64,7 +64,7 @@ func (d *Daemon) resumeSession(ctx context.Context, s sessions.Session) {
 	if target, err := d.Sessions.Focus(s.ID); err != nil || target.Kind == sessions.HostVSCodePanel {
 		d.Sessions.PlanResume(s.ID, time.Time{})
 		if err == nil {
-			utils.Infof("agent: %s: limit should be over, but it runs in the Claude Code panel — continue it by hand\n", s.Display)
+			utils.Infof("agent: %s: limit should be over, but it runs in the Claude Code panel - continue it by hand\n", s.Display)
 		}
 		return
 	}
@@ -73,7 +73,7 @@ func (d *Daemon) resumeSession(ctx context.Context, s sessions.Session) {
 	}
 	utils.Infof("agent: %s: continuing after %s limit (try %d)\n", s.Display, s.Limit, s.Resumes+1)
 	d.sendToSession(ctx, s.ID, "continue", true)
-	go d.notifySession(notifyTitlePrefix+label(s), "limit should be over — continued for you", s)
+	go d.notifySession(notifyTitlePrefix+label(s), "limit should be over - continued for you", s)
 }
 
 func maxResumes(kind sessions.LimitKind) int {

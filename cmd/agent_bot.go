@@ -62,7 +62,7 @@ var agentBotAddCmd = &cobra.Command{
 		if template != "" {
 			t, ok := bots.Template(template)
 			if !ok {
-				exitWithError("agent_bot", fmt.Errorf("no template %q — one of %s", template, strings.Join(bots.TemplateNames(), ", ")), 2)
+				exitWithError("agent_bot", fmt.Errorf("no template %q - one of %s", template, strings.Join(bots.TemplateNames(), ", ")), 2)
 			}
 			if soul == "" && soulFile == "" {
 				soul = t.Soul
@@ -112,7 +112,7 @@ var agentBotAddCmd = &cobra.Command{
 			exitWithError("agent_bot", fmt.Errorf("model %q: letters, digits, dots and dashes only", model), 2)
 		}
 		if profile != "" && !containsString(launchProfileNames(), profile) {
-			exitWithError("agent_bot", fmt.Errorf("no profile %q — corgi agent profile list", profile), 2)
+			exitWithError("agent_bot", fmt.Errorf("no profile %q - corgi agent profile list", profile), 2)
 		}
 		if color != "" && !containsString(bots.Colors, color) {
 			exitWithError("agent_bot", fmt.Errorf("color is one of %s", strings.Join(bots.Colors, ", ")), 2)
@@ -135,10 +135,10 @@ var agentBotAddCmd = &cobra.Command{
 			return
 		}
 		if len(on) > 0 {
-			utils.Infof("✓ bot %s in %s — runs on its own when %s; corgi agent bot open %s\n", name, workspace, bots.TriggerWords(on), name)
+			utils.Infof("✓ bot %s in %s - runs on its own when %s; corgi agent bot open %s\n", name, workspace, bots.TriggerWords(on), name)
 			return
 		}
-		utils.Infof("✓ bot %s in %s — corgi agent bot open %s\n", name, workspace, name)
+		utils.Infof("✓ bot %s in %s - corgi agent bot open %s\n", name, workspace, name)
 		if clock := bots.TemplateClock(template); clock != "" {
 			utils.Infof("  on a clock: corgi agent routine add %s --bot %s --workspace %s\n", clock, name, workspace)
 		}

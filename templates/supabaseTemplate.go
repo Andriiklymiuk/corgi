@@ -128,7 +128,7 @@ up:
 		fi; \
 	}
 	@cd "$(WORKDIR)" && [ -f supabase/config.toml ] || { \
-		echo "→ supabase/config.toml missing — running 'supabase init'..."; \
+		echo "→ supabase/config.toml missing - running 'supabase init'..."; \
 		supabase init; \
 	}
 	$(call _patch_supabase_port,api,$(DESIRED_API_PORT))
@@ -181,7 +181,7 @@ cd "$WORKDIR"
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null || (cd ../../.. && pwd))"
 
 if ! command -v supabase >/dev/null 2>&1; then
-    echo "supabase CLI not found — skipping bootstrap"
+    echo "supabase CLI not found - skipping bootstrap"
     exit 0
 fi
 
@@ -191,17 +191,17 @@ HAVE_JQ=0
 if command -v jq >/dev/null 2>&1; then
     HAVE_JQ=1
 else
-    echo "⚠ jq not found — auth user reconcile will be skipped (install: brew install jq)"
+    echo "⚠ jq not found - auth user reconcile will be skipped (install: brew install jq)"
 fi
 
 # Pull live keys from supabase. Handles custom JWT secrets transparently.
 eval "$(supabase status -o env 2>/dev/null)" || {
-    echo "⚠ supabase status failed — bootstrap skipped"
+    echo "⚠ supabase status failed - bootstrap skipped"
     exit 0
 }
 
 if [ -z "${SERVICE_ROLE_KEY:-}" ] || [ -z "${API_URL:-}" ]; then
-    echo "⚠ SERVICE_ROLE_KEY / API_URL missing — bootstrap skipped"
+    echo "⚠ SERVICE_ROLE_KEY / API_URL missing - bootstrap skipped"
     exit 0
 fi
 
@@ -241,7 +241,7 @@ USERS_TS=$(date +%s)
 # Reconcile loop: POST creates new users (422 swallowed if already there);
 # follow-up PUT keeps password + user_metadata in sync with corgi-compose.yml
 # on every re-run. PUT path is gated on $HAVE_JQ from the prerequisite check
-# above — without jq, new users still get created but edits don't propagate.
+# above - without jq, new users still get created but edits don't propagate.
 {{range .AuthUsers}}
 echo "  upsert auth user: {{.Email}}"
 metadata='{{.MetadataJSON}}'
@@ -253,7 +253,7 @@ curl -sS -o /dev/null -X POST "$API_URL/auth/v1/admin/users" \
             "{{.Email}}" "{{.Password}}" "$metadata")" || true
 
 if [ "$HAVE_JQ" = "1" ]; then
-    # gotrue admin API has no server-side email filter, so list (cap at 1000 —
+    # gotrue admin API has no server-side email filter, so list (cap at 1000 -
     # plenty for local dev seeds) and pick the matching id client-side.
     user_id=$(curl -sS "$API_URL/auth/v1/admin/users?per_page=1000" \
         -H "apikey: $SERVICE_ROLE_KEY" \

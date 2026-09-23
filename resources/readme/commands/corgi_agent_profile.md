@@ -12,7 +12,7 @@ Profiles are named account bundles you pick at start time:
   corgi agent session start my-stack --profile work
 
 They live in the global corgi config (never a committed repo file), because a
-profile chooses which config directory and binary run — that is capability, and
+profile chooses which config directory and binary run - that is capability, and
 capability must not travel with a clone.
 
 ```

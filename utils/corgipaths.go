@@ -70,11 +70,11 @@ func MigrateCorgiServices(composeDir string) (bool, error) {
 	}
 	target := filepath.Join(composeDir, CorgiDirName, CorgiServicesName)
 	if _, err := os.Stat(target); err == nil {
-		return false, fmt.Errorf("both %s and %s exist — merge them by hand, then delete %s",
+		return false, fmt.Errorf("both %s and %s exist - merge them by hand, then delete %s",
 			legacy, target, legacy)
 	}
 	if names := runningIn(legacy); len(names) > 0 {
-		return false, fmt.Errorf("%s still runs %s — `corgi stop` first", legacy, strings.Join(names, ", "))
+		return false, fmt.Errorf("%s still runs %s - `corgi stop` first", legacy, strings.Join(names, ", "))
 	}
 	if err := os.MkdirAll(filepath.Join(composeDir, CorgiDirName), 0o755); err != nil {
 		return false, err

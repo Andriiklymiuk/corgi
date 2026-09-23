@@ -123,7 +123,7 @@ func TestProbeWorktreeReposIgnoresNonRepositories(t *testing.T) {
 	}
 
 	if got := probeWorktreeRepos(dir, nil); len(got) != 0 {
-		t.Errorf("probed %+v, want nothing — only git checkouts belong in a brief", got)
+		t.Errorf("probed %+v, want nothing - only git checkouts belong in a brief", got)
 	}
 }
 
@@ -280,7 +280,7 @@ func TestProbeWorkspaceReposNamesServicesFromTheComposeFile(t *testing.T) {
 	var worktrees int
 	for _, r := range got {
 		if r.Service != "api" {
-			t.Errorf("service = %q, want api — the compose file names it", r.Service)
+			t.Errorf("service = %q, want api - the compose file names it", r.Service)
 		}
 		if r.Worktree {
 			worktrees++

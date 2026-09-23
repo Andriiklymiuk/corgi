@@ -148,13 +148,13 @@ func checkArg(a string) error {
 	for _, prefix := range forbiddenArgPrefixes {
 		if strings.HasPrefix(flag, prefix) {
 			return fmt.Errorf(
-				"arg %q is not allowed for a supervised session — "+
+				"arg %q is not allowed for a supervised session - "+
 					"permission prompts are what you answer from your phone", a)
 		}
 	}
 	if forbiddenPermissionModes[whole] || (hasValue && forbiddenPermissionModes[value]) {
 		return fmt.Errorf(
-			"arg %q is not allowed for a supervised session — "+
+			"arg %q is not allowed for a supervised session - "+
 				"permission prompts are what you answer from your phone", a)
 	}
 	return nil

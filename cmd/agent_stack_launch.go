@@ -152,7 +152,7 @@ func launchStackHandler(w http.ResponseWriter, r *http.Request) {
 			args = []string{"restart"}
 		case "test", "e2e":
 			go runStackTests(dir, req.Workspace, root, picked, req.Do == "e2e")
-			writeLaunchJSON(w, map[string]any{"done": "running the " + map[bool]string{true: "e2e", false: "tests"}[req.Do == "e2e"] + " — a push says how they went", "workspace": req.Workspace})
+			writeLaunchJSON(w, map[string]any{"done": "running the " + map[bool]string{true: "e2e", false: "tests"}[req.Do == "e2e"] + " - a push says how they went", "workspace": req.Workspace})
 			return
 		default:
 			writeLaunchError(w, http.StatusBadRequest, "do is run, stop, restart, test or e2e")

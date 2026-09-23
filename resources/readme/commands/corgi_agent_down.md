@@ -2,7 +2,7 @@
 
 ## corgi agent down
 
-Stop everything `corgi agent up` started — the daemon and the detached MCP + tunnel
+Stop everything `corgi agent up` started - the daemon and the detached MCP + tunnel
 
 ### Synopsis
 

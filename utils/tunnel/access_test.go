@@ -15,7 +15,7 @@ func TestClassifyRecognisesTheAccessLoginRedirect(t *testing.T) {
 	got := classifyAccessResponse(http.StatusFound, h)
 
 	if !got.Protected {
-		t.Fatal("a redirect to the Access login is the endpoint being intercepted — that is the evidence")
+		t.Fatal("a redirect to the Access login is the endpoint being intercepted - that is the evidence")
 	}
 	if got.Provider != "cloudflare-access" {
 		t.Errorf("provider = %q, want cloudflare-access", got.Provider)
@@ -134,7 +134,7 @@ func TestProbeAccessDoesNotFollowTheRedirect(t *testing.T) {
 		t.Fatalf("result = %+v, want the redirect recognised", got)
 	}
 	if hits != 1 {
-		t.Errorf("made %d requests, want 1 — the redirect must not be followed", hits)
+		t.Errorf("made %d requests, want 1 - the redirect must not be followed", hits)
 	}
 }
 

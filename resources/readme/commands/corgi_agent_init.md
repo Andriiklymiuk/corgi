@@ -9,7 +9,7 @@ Opt this stack into agent mode
 Registers the current directory as an agent-mode workspace and writes
 .corgi/agent.yml.
 
-That file is committed and holds identity only — id and aliases. Anything that
+That file is committed and holds identity only - id and aliases. Anything that
 grants capability (which binary runs, which Claude config directory, permission
 mode) lives in the user-level config instead, because a committed file arrives
 with a clone and is not written by whoever runs the daemon.
@@ -24,7 +24,7 @@ corgi agent init [flags]
       --agents strings                 The agents to try in order, e.g. claude,codex: the next takes an unattended run when the first cannot
       --alias strings                  Extra names this workspace answers to, e.g. --alias 'recipe app'
       --config-dir string              CLAUDE_CONFIG_DIR for this workspace, so it runs under a specific Claude account
-      --dangerously-skip-permissions   Run this workspace's sessions with permission prompts OFF (--permission-mode bypassPermissions). Removes the gate you answer from your phone — off by default.
+      --dangerously-skip-permissions   Run this workspace's sessions with permission prompts OFF (--permission-mode bypassPermissions). Removes the gate you answer from your phone - off by default.
   -h, --help                           help for init
       --id string                      Workspace id (defaults to the directory name)
       --kind string                    The one agent this workspace runs (claude, codex); --agents lists several

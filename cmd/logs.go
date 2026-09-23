@@ -34,7 +34,7 @@ var logsCmd = &cobra.Command{
 	Aliases: []string{"log"},
 	Long: `Browse logs captured by corgi run (capture is on unless --logs=false).
 
-Without flags: interactive picker — choose a service then a run, and
+Without flags: interactive picker - choose a service then a run, and
 the log is streamed to stdout (follows new writes like tail -f).
 
 Examples:
@@ -442,7 +442,7 @@ func followShouldStop(err error, path string, idleSince *time.Time) bool {
 	}
 	if shouldExitFollow(path, idleSince) {
 		if !utils.JSONOutput {
-			fmt.Printf("\n%s— end of log —%s\n", art.YellowColor, art.WhiteColor)
+			fmt.Printf("\n%s- end of log -%s\n", art.YellowColor, art.WhiteColor)
 		}
 		return true
 	}

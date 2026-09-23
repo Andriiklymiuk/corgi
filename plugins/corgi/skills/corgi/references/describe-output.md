@@ -1,23 +1,23 @@
 ---
 name: describe-output
-description: Output template for /corgi-describe — compact Markdown structure plus Mermaid diagram conventions. Read when producing or reviewing a corgi-services.md doc.
+description: Output template for /corgi-describe - compact Markdown structure plus Mermaid diagram conventions. Read when producing or reviewing a corgi-services.md doc.
 ---
 
 # `/corgi-describe` output format
 
-The slash command `/corgi-describe` writes a single Markdown file (default: `docs/corgi-services.md`). Goal: **compact**. Reader scans once, sees relationships, drills only into services they care about. Skip every empty/default field. Don't restate the schema — describe **this** project.
+The slash command `/corgi-describe` writes a single Markdown file (default: `docs/corgi-services.md`). Goal: **compact**. Reader scans once, sees relationships, drills only into services they care about. Skip every empty/default field. Don't restate the schema - describe **this** project.
 
 ## Compactness rules (enforced)
 
 1. **Skip empty.** No `_not set_`, no `none`, no placeholders. Field missing → omit line.
 2. **No metadata table** unless `useDocker` or `useAwsVpn` is explicitly set. One-line description at top is enough.
 3. **No per-DB subsection** unless DB has `additional.*`, `seed*`, `version`, or `healthCheck`. Plain DBs collapse into one shared table.
-4. **No per-service subsection wrappers** — use `### svc-name` then compact bullets/tables directly. No `#### Lifecycle commands` / `#### DB dependencies` / `#### Service dependencies` / `#### Exports` headers. Use bold inline labels (`**Deps:**`, `**Env:**`, `**Lifecycle:**`).
+4. **No per-service subsection wrappers** - use `### svc-name` then compact bullets/tables directly. No `#### Lifecycle commands` / `#### DB dependencies` / `#### Service dependencies` / `#### Exports` headers. Use bold inline labels (`**Deps:**`, `**Env:**`, `**Lifecycle:**`).
 5. **Combine db+svc deps** into one "Deps" table per service.
-6. **README → 1–3 lines max:** tagline + sonar key (linked) + repo URL if present. Never dump the badge list. Never dump useful-links section. If only badges exist, emit sonar line only.
-7. **Drop "Inbound env references" / "Consumed by"** — diagram already shows reverse direction.
+6. **README → 1-3 lines max:** tagline + sonar key (linked) + repo URL if present. Never dump the badge list. Never dump useful-links section. If only badges exist, emit sonar line only.
+7. **Drop "Inbound env references" / "Consumed by"** - diagram already shows reverse direction.
 8. **Skip "Lifecycle hooks (project-level)"** entirely if all commands are pure `echo` (debug noise). Same for per-service lifecycle: skip echo-only blocks. Keep if any real command.
-9. **Skip "Environment" prose section** — env vars belong in the deps table or are visible in `environment:`. Only list env entries that reference `${producer.VAR}` (export consumers), since those drive the dotted graph edges.
+9. **Skip "Environment" prose section** - env vars belong in the deps table or are visible in `environment:`. Only list env entries that reference `${producer.VAR}` (export consumers), since those drive the dotted graph edges.
 10. **Cycles & warnings** section appears only when non-empty.
 
 ## File skeleton
@@ -27,7 +27,7 @@ The slash command `/corgi-describe` writes a single Markdown file (default: `doc
 ````markdown
 # <name>
 
-> <description, one line — omit blockquote if no description>
+> <description, one line - omit blockquote if no description>
 
 | Tool | checkCmd | Optional |
 |---|---|---|
@@ -45,11 +45,11 @@ graph LR
 | name | driver | host:port | db / user |
 |---|---|---|---|
 | `app-db` | postgres | `localhost:5432` | `app` / `app` |
-| `cache` | redis | `localhost:6379` | — |
+| `cache` | redis | `localhost:6379` | - |
 
-(Single table. Password always `***` — omit column unless mixed. Add `:port2` to host:port if set.)
+(Single table. Password always `***` - omit column unless mixed. Add `:port2` to host:port if set.)
 
-### `<db-name>` — extras
+### `<db-name>` - extras
 
 Only emit subsection per DB if it has `version`, `healthCheck`, seed source, or `additional.*`. Include only the non-empty fields:
 
@@ -80,7 +80,7 @@ Only emit subsection per DB if it has `version`, `healthCheck`, seed source, or 
 
 **Exports** `NOTIFICATION_API_TOKEN`, `URL=http://localhost:7000`, `HEALTH=…` *(comma list, only if non-empty)*
 
-**Cross-service env refs** `${notifier.URL}`, `${notifier.TOKEN}` *(only if any — these drive the dotted edges)*
+**Cross-service env refs** `${notifier.URL}`, `${notifier.TOKEN}` *(only if any - these drive the dotted edges)*
 
 **Lifecycle**
 
@@ -108,7 +108,7 @@ Same single-block format as per-service. Omit section entirely if all three are 
 - `<service-y>` references `${producer.VAR}` where `VAR` is not in producer's `exports`.
 - `<service-z>` has neither `path:` nor `cloneFrom:`.
 
-(Omit section entirely when clean — no "None." line.)
+(Omit section entirely when clean - no "None." line.)
 ````
 
 ## Diagram conventions (Mermaid)
@@ -131,7 +131,7 @@ Edges:
 | Producer → Consumer (exports) | `svc_notifier -.->|TOKEN, URL| svc_app` | dotted, vars consumer references |
 | Tunnel → Service | `tun_api --> svc_api` | |
 
-Subgraphs only when each group has ≥ 2 nodes — for a single service or single db, skip the subgraph wrapper (saves 2 lines).
+Subgraphs only when each group has ≥ 2 nodes - for a single service or single db, skip the subgraph wrapper (saves 2 lines).
 
 ```
 subgraph services["Services"]
@@ -204,7 +204,7 @@ graph LR
 
 | name | driver | host:port | db / user |
 |---|---|---|---|
-| `app-db` | postgres | `localhost:5432` | — |
+| `app-db` | postgres | `localhost:5432` | - |
 
 ## Services
 
@@ -227,7 +227,7 @@ graph LR
 ## Style rules
 
 - Tables > lists > paragraphs.
-- Omit empty. No "none", no `_not set_`, no `—` placeholder rows for missing fields.
+- Omit empty. No "none", no `_not set_`, no `-` placeholder rows for missing fields.
 - Passwords → `***`. Never real secrets.
 - Re-runs overwrite. Tell user.
 - README scrape best-effort: tagline + sonar + repo link only. Never full badge dump. Drop block if scrape empty.

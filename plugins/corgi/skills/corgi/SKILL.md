@@ -7,15 +7,15 @@ description: Author and explain corgi-compose.yml files and the corgi CLI. Use w
 
 Corgi (https://github.com/Andriiklymiuk/corgi) runs multi-service projects from a single `corgi-compose.yml`. It handles: cloning service repos, starting databases in Docker, seeding from dumps, generating `.env` files with cross-service URLs, and running all services concurrently.
 
-Don't fall back to generic docker-compose / npm advice if a `corgi-compose.yml` is present — corgi is the authoritative entry point for that project.
+Don't fall back to generic docker-compose / npm advice if a `corgi-compose.yml` is present - corgi is the authoritative entry point for that project.
 
 ## Critical: `corgi run` is long-running
 
-`corgi run` blocks indefinitely and streams logs. **Never run it synchronously** — it will hang your shell. For agents, prefer `corgi run --detach` (returns immediately; see the lifecycle line below). See `references/long-running.md` before invoking it foreground.
+`corgi run` blocks indefinitely and streams logs. **Never run it synchronously** - it will hang your shell. For agents, prefer `corgi run --detach` (returns immediately; see the lifecycle line below). See `references/long-running.md` before invoking it foreground.
 
 Safe synchronous probes:
-- `corgi doctor` (alias `check`) — preflight: tools installed, Docker up, ports free
-- `corgi status` (aliases `health`, `healthcheck`) — post-run: TCP/HTTP probe each port
+- `corgi doctor` (alias `check`) - preflight: tools installed, Docker up, ports free
+- `corgi status` (aliases `health`, `healthcheck`) - post-run: TCP/HTTP probe each port
 
 Both exit 0 on success, 1 on failure. Add global `--json` for machine-readable output. Driving corgi from an agent: see `https://github.com/Andriiklymiuk/corgi/blob/main/docs/agents.md`.
 
@@ -23,7 +23,7 @@ Both exit 0 on success, 1 on failure. Add global `--json` for machine-readable o
 
 Corgi auto-detects non-interactive mode (CI/agent env vars like `CLAUDECODE`, or no TTY) and errors with exit code 2 instead of prompting; `--interactive` forces prompts back. Global `--json` emits pure JSON on stdout (`doctor`, `status`, `list`, `config`, `ps`, `docs --json-schema`; `run --json` prints a startup summary then streams logs to stderr). Exit codes: 0 success, 1 failure, 2 usage/missing input. Full guide + recipes: `https://github.com/Andriiklymiuk/corgi/blob/main/docs/agents.md`.
 
-Detached lifecycle (preferred for agents): `corgi run --detach` (starts services that outlive corgi, returns immediately, errors `E_ALREADY_RUNNING` if already running — use `--force`), then `corgi ps`/`status` for real running/crashed status, `corgi stop [--service x]` to tear down, `corgi restart` for full-stack restart. See the "Lifecycle (detached)" section in `https://github.com/Andriiklymiuk/corgi/blob/main/docs/agents.md`.
+Detached lifecycle (preferred for agents): `corgi run --detach` (starts services that outlive corgi, returns immediately, errors `E_ALREADY_RUNNING` if already running - use `--force`), then `corgi ps`/`status` for real running/crashed status, `corgi stop [--service x]` to tear down, `corgi restart` for full-stack restart. See the "Lifecycle (detached)" section in `https://github.com/Andriiklymiuk/corgi/blob/main/docs/agents.md`.
 
 `corgi tunnel` is also long-running (one tunnel subprocess per service, blocks until Ctrl+C). Background it the same way you background `corgi run`. See `references/long-running.md` if invoking from an agent.
 
@@ -54,9 +54,9 @@ Load only what the task needs. Do not read every reference every time.
 
 **Fresh project from scratch:** use the `/corgi-new` slash command, or: write `corgi-compose.yml` → `corgi doctor` → start `corgi run` in background → `corgi status`.
 
-**Document an existing project:** `/corgi-describe` parses `corgi-compose.yml` and writes a detailed Markdown doc (services, dbs, env wiring, tunnels, scripts) plus a Mermaid relationship diagram to `docs/corgi-services.md`. Read-only — does not touch services. Built-in `corgi --describe` only prints per-service JSON during parse (and does **not** short-circuit — the underlying command, e.g. `run`, still executes); the slash command is the richer, side-effect-free alternative.
+**Document an existing project:** `/corgi-describe` parses `corgi-compose.yml` and writes a detailed Markdown doc (services, dbs, env wiring, tunnels, scripts) plus a Mermaid relationship diagram to `docs/corgi-services.md`. Read-only - does not touch services. Built-in `corgi --describe` only prints per-service JSON during parse (and does **not** short-circuit - the underlying command, e.g. `run`, still executes); the slash command is the richer, side-effect-free alternative.
 
-**Existing repo with `corgi-compose.yml`:** this file is the single source of truth for how services start. Do not invent `npm run dev`, `docker compose up`, or per-service shell commands — use `corgi run`. Look at `db_services:` to know what databases exist and at `services:` to know what service repos are expected.
+**Existing repo with `corgi-compose.yml`:** this file is the single source of truth for how services start. Do not invent `npm run dev`, `docker compose up`, or per-service shell commands - use `corgi run`. Look at `db_services:` to know what databases exist and at `services:` to know what service repos are expected.
 
 **User says "start the project" / "run the backend":** check for `corgi-compose.yml` first (preflight in `../_shared/conventions.md`). If present, corgi is the answer.
 
@@ -89,8 +89,8 @@ corgi config               # show current user settings (~/.corgi/config.yml)
 corgi notifications on|off|test            # toggle/test desktop crash notifications
 corgi status               # health check (one-shot)
 corgi status --ready       # block until all healthy / timeout (CI-friendly)
-corgi status --watch       # BLOCKS until Ctrl+C — interactive only; agents use --ready --timeout
-corgi tunnel               # public HTTPS tunnels (long-running) — default cloudflared
+corgi status --watch       # BLOCKS until Ctrl+C - interactive only; agents use --ready --timeout
+corgi tunnel               # public HTTPS tunnels (long-running) - default cloudflared
 corgi db shell [name]                       # interactive DB shell inside running container (psql/redis-cli/mongosh/…)
 corgi db shell [name] -e "SELECT 1"         # one-shot query, exit; CI-friendly
 corgi db snapshot [name] [svc]              # fast physical Postgres snapshot (built indexes+matviews); postgres family only

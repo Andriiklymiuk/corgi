@@ -100,7 +100,7 @@ func ParseDaysOff(list []string) ([]time.Weekday, error) {
 		}
 	}
 	if len(out) == 7 {
-		return nil, fmt.Errorf("every day off is no watch at all — corgi agent watch disable")
+		return nil, fmt.Errorf("every day off is no watch at all - corgi agent watch disable")
 	}
 	sort.Slice(out, func(i, j int) bool { return (out[i]+6)%7 < (out[j]+6)%7 })
 	return out, nil
@@ -272,10 +272,10 @@ func (d *Daemon) startWatches(ctx context.Context) {
 	}
 	d.loadWatchFiles()
 	onHot = func() {
-		go d.notifyAttentionAt("corgi agent", "the laptop is hot — no fix starts until it cools", "", "")
+		go d.notifyAttentionAt("corgi agent", "the laptop is hot - no fix starts until it cools", "", "")
 	}
 	onLowDisk = func() {
-		go d.notifyAttentionAt("corgi agent", "under 10 GB of disk left — no fix starts until there is room (corgi agent watch prune, docker system prune)", "", "")
+		go d.notifyAttentionAt("corgi agent", "under 10 GB of disk left - no fix starts until there is room (corgi agent watch prune, docker system prune)", "", "")
 	}
 	d.watchers = map[string]*watch.Watch{}
 	d.fixBusy = map[string]chan struct{}{}
@@ -284,7 +284,7 @@ func (d *Daemon) startWatches(ctx context.Context) {
 		spec.AgentDir = d.Dir
 		live, dead := spec.liveSources()
 		if len(dead) > 0 {
-			utils.Infof("agent: watch %s: not polling %s — the rules take nothing they emit\n", spec.Workspace, strings.Join(dead, ", "))
+			utils.Infof("agent: watch %s: not polling %s - the rules take nothing they emit\n", spec.Workspace, strings.Join(dead, ", "))
 		}
 		w := &watch.Watch{Workspace: spec.Workspace, Rules: spec.Rules, Sources: live, Interval: spec.Interval,
 			State: d.watchState, Sink: d.watchSink(spec), Log: func(line string) { utils.Info("agent:", line) },
@@ -302,7 +302,7 @@ func (d *Daemon) startWatches(ctx context.Context) {
 			go w.Run(ctx)
 		}
 	}
-	utils.Infof("agent: watching %d workspace(s) — tracker and review events\n", len(d.Watches))
+	utils.Infof("agent: watching %d workspace(s) - tracker and review events\n", len(d.Watches))
 	for _, spec := range d.Watches {
 		if order := spec.agents(); len(order) > 1 {
 			utils.Infof("agent: %s runs through %s; %s when it cannot\n", spec.Workspace, order[0], strings.Join(order[1:], ", then "))
@@ -369,7 +369,7 @@ func (s WatchSpec) watchesSource(name string) bool {
 }
 
 // mayTake says an event no workspace owns may still land here: the
-// workspace watches that source and has no filter that already said no —
+// workspace watches that source and has no filter that already said no -
 // a repo list for a pull request, a project for a ticket. A webhook for a
 // repo nobody listed goes to a workspace that watches every repo, or nowhere.
 func (s WatchSpec) mayTake(e watch.Event) bool {
@@ -482,7 +482,7 @@ func (d *Daemon) rerunRedBuild(ctx context.Context, spec WatchSpec, e watch.Even
 		return "", false
 	}
 	utils.Infof("agent: %s: rerunning the failed jobs of run %d once\n", e.Ref, r.RunID)
-	return "rerunning its failed jobs once — a second red is handed on", true
+	return "rerunning its failed jobs once - a second red is handed on", true
 }
 
 func quietNow(spec WatchSpec, now time.Time) bool {
@@ -950,19 +950,19 @@ func (d *Daemon) fixActiveFor(workspace, ref string) bool {
 func watchBody(e watch.Event) string {
 	switch e.Kind {
 	case watch.KindIssueNew:
-		return fmt.Sprintf("new issue %s — %s", e.Ref, e.Title)
+		return fmt.Sprintf("new issue %s - %s", e.Ref, e.Title)
 	case watch.KindIssueComment:
 		return commentLine(e)
 	case watch.KindPRReview:
 		return fmt.Sprintf("%s reviewed %s: %s", firstNonEmpty(e.Author, "someone"), e.Ref, firstNonEmpty(e.Body, e.State))
 	case watch.KindCIFailed:
-		return fmt.Sprintf("red build in %s — %s", e.Ref, e.Title)
+		return fmt.Sprintf("red build in %s - %s", e.Ref, e.Title)
 	case watch.KindReviewRequested:
 		if e.Source == "slack" {
-			return fmt.Sprintf("%s posted %d pull request(s) for review in %s — %s",
+			return fmt.Sprintf("%s posted %d pull request(s) for review in %s - %s",
 				firstNonEmpty(e.Author, "someone"), len(e.Links), firstNonEmpty(e.State, "chat"), clipText(e.Body, 120))
 		}
-		return fmt.Sprintf("%s wants your review on %s — %s", firstNonEmpty(e.Author, "someone"), e.Ref, e.Title)
+		return fmt.Sprintf("%s wants your review on %s - %s", firstNonEmpty(e.Author, "someone"), e.Ref, e.Title)
 	case watch.KindChatMention, watch.KindChatMessage:
 		return fmt.Sprintf("%s in %s: %s", firstNonEmpty(e.Author, "someone"),
 			firstNonEmpty(e.State, "chat"), clipText(e.Body, 160))
@@ -974,7 +974,7 @@ func watchBody(e watch.Event) string {
 func commentLine(e watch.Event) string {
 	who := firstNonEmpty(e.Author, "someone")
 	if strings.TrimSpace(e.Body) == "" {
-		return fmt.Sprintf("%s commented on %s — %s", who, e.Ref, e.Title)
+		return fmt.Sprintf("%s commented on %s - %s", who, e.Ref, e.Title)
 	}
 	return fmt.Sprintf("%s commented on %s: %s", who, e.Ref, e.Body)
 }
@@ -993,9 +993,9 @@ var fixPrompts = map[watch.Kind]func(e watch.Event) string{
 	watch.KindTask: func(e watch.Event) string {
 		body := strings.TrimSpace(e.Body)
 		if body == "" {
-			body = "(no description — use your judgement)"
+			body = "(no description - use your judgement)"
 		}
-		return fmt.Sprintf("You are picking up %s from the corgi board — a task written by the person you work with, not a tracker ticket.\n\n"+
+		return fmt.Sprintf("You are picking up %s from the corgi board - a task written by the person you work with, not a tracker ticket.\n\n"+
 			"Title: %s\n\n%s\n\n"+
 			"Do the work in this checkout on a branch named after %s. I approve all changes; when code changed, push and open a draft pull request. "+
 			"Keep the board honest as you go, from the shell:\n"+
@@ -1007,11 +1007,11 @@ var fixPrompts = map[watch.Kind]func(e watch.Event) string{
 	},
 	watch.KindIssueNew: func(e watch.Event) string {
 		p := "I approve all changes; ship it and open draft PRs, then watch CI to green. " +
-			"Build it whole — the design, the tests, the error paths — the way you would for a colleague's review, not the shortest diff that passes. " +
+			"Build it whole - the design, the tests, the error paths - the way you would for a colleague's review, not the shortest diff that passes. " +
 			"/corgi:stories " + strings.Join(e.Refs(), " ") + storyMode(e)
 		if e.Parent != "" {
-			p += fmt.Sprintf("\n%s is a subtask of %s (%q). Read the parent for context — the bug report, the acceptance criteria, "+
-				"the earlier pull requests — but the change is scoped to %s alone.", e.Ref, e.Parent, e.ParentTitle, e.Ref)
+			p += fmt.Sprintf("\n%s is a subtask of %s (%q). Read the parent for context - the bug report, the acceptance criteria, "+
+				"the earlier pull requests - but the change is scoped to %s alone.", e.Ref, e.Parent, e.ParentTitle, e.Ref)
 		}
 		return p
 	},
@@ -1019,7 +1019,7 @@ var fixPrompts = map[watch.Kind]func(e watch.Event) string{
 		return fmt.Sprintf("A new comment on %s from %s says: %q. Read it and decide. "+
 			"If it asks a question or for information, answer it as a comment on %s through the tracker "+
 			"(the Linear or Jira MCP tools, or the REST API with the saved token) and do NOT open a PR. "+
-			"If it asks for a change, apply it on the existing branch for %s — find it by the ticket key in the branch names — "+
+			"If it asks for a change, apply it on the existing branch for %s - find it by the ticket key in the branch names - "+
 			"and when there is no such branch run /corgi:stories %s. I approve all changes; draft PRs only.",
 			e.Ref, firstNonEmpty(e.Author, "someone"), e.Body, e.Ref, e.Ref, e.Ref)
 	},
@@ -1039,7 +1039,7 @@ var fixPrompts = map[watch.Kind]func(e watch.Event) string{
 			noun = "these pull requests"
 		}
 		return "Review " + noun + ", which " + firstNonEmpty(e.Author, "a colleague") + asked + strings.Join(links, " ") +
-			". Not my branches — read each diff and post a review on it (a summary and inline comments). " +
+			". Not my branches - read each diff and post a review on it (a summary and inline comments). " +
 			"Do not push commits, do not resolve their threads" + approveClause + ". If it is good, say so and say why. /corgi:review " + strings.Join(links, " ")
 	},
 	watch.KindCIFailed: func(e watch.Event) string {
@@ -1048,7 +1048,7 @@ var fixPrompts = map[watch.Kind]func(e watch.Event) string{
 			find = "Find the failing pipeline of " + e.URL + " (glab ci view / glab ci trace on its branch, or the GitLab API with the saved token), "
 		}
 		return "A build went red in " + e.Ref + ": " + e.Title + ". " + find +
-			"read what actually failed, and fix the cause on the branch it failed on — not by weakening the test or skipping it. " +
+			"read what actually failed, and fix the cause on the branch it failed on - not by weakening the test or skipping it. " +
 			"Push, then watch the run to green. If it is a flake or an outage rather than our bug, say so and change nothing. " +
 			"I approve all changes."
 	},
@@ -1060,11 +1060,11 @@ func reviewFeedbackPrompt(e watch.Event) string {
 		for _, r := range e.Riders {
 			urls = append(urls, r.URL)
 		}
-		return "Address the review feedback on my own pull requests for " + story + " (" + strings.Join(urls, ", ") + ") — one pass over the set, do not start a fresh review: " +
+		return "Address the review feedback on my own pull requests for " + story + " (" + strings.Join(urls, ", ") + ") - one pass over the set, do not start a fresh review: " +
 			"where a pull request conflicts with its base, merge the base into the branch and resolve that first; then " +
 			"apply the valid comments, push back on the wrong ones, reply and resolve the threads, push each branch. /corgi:review " + story
 	}
-	return "Address the review feedback on my own PR " + e.URL + " — do not start a fresh review of it: " +
+	return "Address the review feedback on my own PR " + e.URL + " - do not start a fresh review of it: " +
 		"if the pull request conflicts with its base, merge the base into the branch and resolve that first; then " +
 		"apply the valid comments, push back on the wrong ones, reply and resolve the threads, push the fixes. /corgi:review " + e.URL
 }
@@ -1093,7 +1093,7 @@ const approveClause = "__APPROVE__"
 
 func withApprove(prompt string, approve bool) string {
 	if approve {
-		return strings.Replace(prompt, approveClause, ", and approve it on my behalf only when the review has no blocking finding and the risk card says auto-approve: yes — otherwise post the findings and leave it unapproved", 1)
+		return strings.Replace(prompt, approveClause, ", and approve it on my behalf only when the review has no blocking finding and the risk card says auto-approve: yes - otherwise post the findings and leave it unapproved", 1)
 	}
 	return strings.Replace(prompt, approveClause, ", and do not approve it on my behalf", 1)
 }
@@ -1116,7 +1116,7 @@ func unattendedSuffix(spec WatchSpec, e watch.Event) string {
 		"pick the recommended option yourself, say which you picked and why, and go on. " +
 		"If you truly cannot proceed, leave a handoff with `--blocked <reason>` (the question goes in `--uncertain`) and stop.\n" +
 		"Before you finish: review your own diff the way you would review someone else's, " +
-		"and fix what you find — nobody has looked at this but you. "
+		"and fix what you find - nobody has looked at this but you. "
 	ownPR := true
 	if ownPR {
 		trail := "corgi watch · " + spec.Workspace + " · " + string(e.Kind) + " " + e.Ref
@@ -1127,8 +1127,8 @@ func unattendedSuffix(spec WatchSpec, e watch.Event) string {
 	}
 	s += "Say plainly at the end what you changed and what your own review found.\n"
 	if ownPR {
-		s += "The pull request body carries a `## Evidence` section — changed files with a reason each; the commands you ran with their results; " +
-			"each test mapped to the acceptance criterion it protects; known limitations and residual risk — facts, one line each.\n"
+		s += "The pull request body carries a `## Evidence` section - changed files with a reason each; the commands you ran with their results; " +
+			"each test mapped to the acceptance criterion it protects; known limitations and residual risk - facts, one line each.\n"
 	}
 	return s + "If you stop with work remaining, blocked, or unsure, leave a handoff for the next run before you end: " +
 		"`corgi agent handoff --ref " + e.Ref + " --done … --remaining … --decision … --uncertain … --next … --verify \"<the check you ran>\"` " +
@@ -1183,7 +1183,7 @@ func fixArgsWith(spec WatchSpec, e watch.Event, handover string) []string {
 		prompt += "\n\nAn earlier run left a handoff for this ticket. Read it first; it is typed state, not a transcript. " +
 			"Its verification was re-run at the current head: " + packetTrust(spec.Dir, p, spec.DoneWhen) + "\n" + p.Markdown()
 	} else if handover = strings.TrimSpace(handover); handover != "" {
-		prompt += "\n\nAn earlier run on this stopped part-way. This is the last thing it said — " +
+		prompt += "\n\nAn earlier run on this stopped part-way. This is the last thing it said - " +
 			"treat it as notes, not as truth, and check anything it claims before building on it:\n" + handover
 	}
 	return harness.For("", "").PrintArgs(harness.Print{Prompt: prompt, SkipPermissions: spec.SkipPermissions})
@@ -1234,14 +1234,14 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 
 	if b, ok := d.watchState.Fixes.Blocked(spec.Workspace, e.Ref); ok && e.Ref != "" {
 		d.watchState.Fixes.Finish(e.Key, nil, "", "not started: blocked ("+b.By+"): "+b.Reason, time.Now())
-		utils.Infof("agent: watch: %s is blocked (%s): %s — corgi agent watch unblock %s\n", e.Ref, b.By, b.Reason, e.Ref)
+		utils.Infof("agent: watch: %s is blocked (%s): %s - corgi agent watch unblock %s\n", e.Ref, b.By, b.Reason, e.Ref)
 		return
 	}
 	if kind, runs := d.watchState.Fixes.RecentBlocker(spec.Workspace, blockerWindow, time.Now()); runs >= 2 {
 		d.watchState.Fixes.Defer(e)
 		d.watchState.Fixes.Finish(e.Key, nil, "", "not started: the last "+strconv.Itoa(runs)+" runs here failed on "+kind, time.Now())
 		go d.notifyAttentionAt(notifyTitlePrefix+spec.Workspace,
-			"not working on "+e.Ref+": the last runs failed on "+kind+" — fix that and run corgi agent watch run",
+			"not working on "+e.Ref+": the last runs failed on "+kind+" - fix that and run corgi agent watch run",
 			spec.Workspace, e.URL)
 		return
 	}
@@ -1315,9 +1315,9 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 		if e.Source == "slack" {
 			d.say(ctx, spec, e, chatOutcome(nil, "", runErr.Error()), "x")
 		}
-		body := fmt.Sprintf("fix for %s failed: %v — log: %s", e.Ref, runErr, logPath)
+		body := fmt.Sprintf("fix for %s failed: %v - log: %s", e.Ref, runErr, logPath)
 		if d.retryOnceLater(spec, e) {
-			body += fmt.Sprintf(" — one retry in %s", retryCrashAfter)
+			body += fmt.Sprintf(" - one retry in %s", retryCrashAfter)
 		}
 		go d.notifyAttentionAt(notifyTitlePrefix+spec.Workspace, body, spec.Workspace, e.URL)
 		return
@@ -1329,13 +1329,13 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 		d.watchState.Fixes.Finish(r.Key, nil, "in one run with "+e.Ref, "", time.Now())
 	}
 	if t := strings.TrimSpace(e.Title); t != "" {
-		body += " — " + t
+		body += " - " + t
 	}
 	if len(links) > 0 {
 		body = watch.PullLines(body, links)
 	} else if last := lastLine(string(out)); last != "" {
 		note = clipText(last, 160)
-		body += " — " + note
+		body += " - " + note
 	}
 	d.watchState.Fixes.Finish(e.Key, links, note, "", time.Now())
 	d.watchState.Fixes.SetHandover(e.Key, runHandover(spec.Dir, e.Ref, started, string(out)), time.Now())
@@ -1603,21 +1603,21 @@ func packetTrust(dir string, p handoff.Packet, trusted []string) string {
 		return "it recorded no check, so trust nothing in it you have not confirmed."
 	}
 	if !handoff.TrustedCommand(p.Verification.Cmd, trusted) {
-		return fmt.Sprintf("its check `%s` is not one of this workspace's doneWhen commands, so it was not re-run — trust nothing in it you have not confirmed.", p.Verification.Cmd)
+		return fmt.Sprintf("its check `%s` is not one of this workspace's doneWhen commands, so it was not re-run - trust nothing in it you have not confirmed.", p.Verification.Cmd)
 	}
 	v, ok := handoff.Verify(worktreeOf(dir, p), p, runShellQuiet)
 	if ok {
 		return fmt.Sprintf("`%s` passes at %s, so its done list can be trusted.", v.Cmd, shortSHA(v.At))
 	}
 	if n, err := handoff.CommitsSince(worktreeOf(dir, p), p.Where.Head); err == nil && n > 0 {
-		return fmt.Sprintf("`%s` exits %d and the branch moved %d commit(s) since — start from the ticket and the diff, not the packet.", v.Cmd, v.Exit, n)
+		return fmt.Sprintf("`%s` exits %d and the branch moved %d commit(s) since - start from the ticket and the diff, not the packet.", v.Cmd, v.Exit, n)
 	}
-	return fmt.Sprintf("`%s` exits %d now — start from the ticket and the diff, not the packet.", v.Cmd, v.Exit)
+	return fmt.Sprintf("`%s` exits %d now - start from the ticket and the diff, not the packet.", v.Cmd, v.Exit)
 }
 
 func runHandover(dir, ref string, started time.Time, out string) string {
 	if p, err := handoff.Read(dir, ref); err == nil && !p.WrittenAt.Before(started) {
-		return "handoff: " + p.Summary() + " — " + handoff.MarkdownPath(dir, ref)
+		return "handoff: " + p.Summary() + " - " + handoff.MarkdownPath(dir, ref)
 	}
 	return watch.TailLines(out, 6)
 }

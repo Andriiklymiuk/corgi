@@ -31,10 +31,10 @@ graph LR
 | name | driver | host:port | db / user |
 |---|---|---|---|
 | `test-db` | postgres | `localhost:5777` | `test` / `user` |
-| `test_redis-db` | redis-server | `localhost:6389` | — / `user` |
-| `test_rabbitmq-db` | rabbitmq | `localhost:5674` | — / `guest` |
+| `test_redis-db` | redis-server | `localhost:6389` | - / `user` |
+| `test_rabbitmq-db` | rabbitmq | `localhost:5674` | - / `guest` |
 
-### `test_rabbitmq-db` — extras
+### `test_rabbitmq-db` - extras
 
 - **Additional** `definitionPath: ./rabbitmq_definition.json`
 

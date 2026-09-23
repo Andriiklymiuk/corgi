@@ -9,7 +9,7 @@ Move a legacy corgi_services/ folder under .corgi/
 Everything corgi generates now lives in one place: .corgi/corgi_services/.
 Older checkouts keep a top-level corgi_services/; this moves it, and rewrites
 the matching .gitignore lines. Any corgi command does it for you on the way
-past — this is the version that says what it did.
+past - this is the version that says what it did.
 
 Nothing moves while services are up. Stop them first: corgi stop
 

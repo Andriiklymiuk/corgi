@@ -157,7 +157,7 @@ func TestCacheGroupsAreIndependentPerEcosystem(t *testing.T) {
 		t.Error("changing a node lockfile must change the node key")
 	}
 	if groupKey(after, "python") != groupKey(before, "python") {
-		t.Error("changing a node lockfile must NOT change the python key — that is the whole point of grouping")
+		t.Error("changing a node lockfile must NOT change the python key - that is the whole point of grouping")
 	}
 	if after.Key == before.Key {
 		t.Error("the aggregate key must still track every lockfile")

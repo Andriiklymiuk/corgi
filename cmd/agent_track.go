@@ -53,7 +53,7 @@ same board and ` + "`corgi agent focus`" + ` brings a session's window to the fr
 Every hook is asynchronous and exits 0 whatever happens: a daemon that is
 down costs nothing and shows nothing in the transcript. The one exception
 prints a terminal title (● repo / ▲ repo NEEDS YOU) into the tab the session
-runs in, which VS Code and most terminals show — ` + "`--no-tab-title`" + ` skips it.
+runs in, which VS Code and most terminals show - ` + "`--no-tab-title`" + ` skips it.
 
   corgi agent track enable                  # this account, plus every corgi profile
   corgi agent track enable --config-dir ~/.claude-work
@@ -128,7 +128,7 @@ func runAgentTrackEnable(cmd *cobra.Command, _ []string) {
 		utils.Info("VS Code shows the tab titles once terminal.integrated.tabs.title is \"${sequence}\" (the corgi extension offers this)")
 	}
 	if info, err := daemon.ReadInfo(dir); err != nil || info == nil {
-		utils.Info("the daemon is not running — `corgi agent install` starts it at login, `corgi agent serve` now")
+		utils.Info("the daemon is not running - `corgi agent install` starts it at login, `corgi agent serve` now")
 	}
 	utils.Info("undo with `corgi agent track disable`")
 }
@@ -403,7 +403,7 @@ func readUserSettings(path string) (map[string]any, error) {
 		return out, nil
 	}
 	if err := json.Unmarshal(data, &out); err != nil {
-		return nil, fmt.Errorf("%s is not valid JSON (%v) — fix it before corgi adds hooks to it", path, err)
+		return nil, fmt.Errorf("%s is not valid JSON (%v) - fix it before corgi adds hooks to it", path, err)
 	}
 	return out, nil
 }

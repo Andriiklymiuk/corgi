@@ -9,7 +9,7 @@ Read/append the proactive-suggest dedupe + rate-limit state (corgi_services/sugg
 Thin state helper for the proactive-suggest skill. The state file is
 per-developer audit data (gitignored) the skill reads to avoid re-filing an
 idea that is already open or recently dismissed, and to enforce the weekly
-filing cap. The skill never hand-rolls this JSON — it calls these subcommands.
+filing cap. The skill never hand-rolls this JSON - it calls these subcommands.
 
   corgi suggest-history list   [--workspace `<p>]` [--json]
   corgi suggest-history check  --slug `<s>` [--cooldown 720h] [--max `<n>]` [--workspace `<p>]` [--json]

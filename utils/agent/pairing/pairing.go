@@ -76,7 +76,7 @@ func Load(path string) (*Store, error) {
 	}
 	if runtime.GOOS != "windows" {
 		if mode := info.Mode().Perm(); mode&0o077 != 0 {
-			return nil, fmt.Errorf("%s is readable by other users (mode %04o) — run: chmod 600 %s",
+			return nil, fmt.Errorf("%s is readable by other users (mode %04o) - run: chmod 600 %s",
 				path, mode, path)
 		}
 	}
@@ -308,9 +308,9 @@ func (s *Session) Redeem(offered string) error {
 	case s.used:
 		return fmt.Errorf("%w: that pairing code has already been used", ErrBadRequest)
 	case s.attempts >= MaxAttempts:
-		return fmt.Errorf("%w: too many attempts — restart corgi mcp to pair", ErrBadRequest)
+		return fmt.Errorf("%w: too many attempts - restart corgi mcp to pair", ErrBadRequest)
 	case !s.now().Before(s.expires):
-		return fmt.Errorf("%w: that pairing code has expired — restart corgi mcp to pair", ErrBadRequest)
+		return fmt.Errorf("%w: that pairing code has expired - restart corgi mcp to pair", ErrBadRequest)
 	}
 
 	s.attempts++

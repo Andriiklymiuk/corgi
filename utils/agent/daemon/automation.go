@@ -127,9 +127,9 @@ func (d *Daemon) pullChanged(ctx context.Context, spec WatchSpec, ref, link stri
 		}
 		_ = watch.LoadPullLog(d.Dir).Set(ref, watch.PullStatus{State: "merged", Checks: now.Checks, Review: now.Review, At: time.Now()})
 		if d.Events != nil {
-			d.Events.Append(spec.Workspace, events.Event{At: time.Now().UTC(), Kind: "merged", Reason: "merged " + ref + " — checks ✓, approved", URL: link})
+			d.Events.Append(spec.Workspace, events.Event{At: time.Now().UTC(), Kind: "merged", Reason: "merged " + ref + " - checks ✓, approved", URL: link})
 		}
-		go d.notifyAttentionAt(notifyTitlePrefix+spec.Workspace, "merged "+link+" — checks ✓ · approved", spec.Workspace, link)
+		go d.notifyAttentionAt(notifyTitlePrefix+spec.Workspace, "merged "+link+" - checks ✓ · approved", spec.Workspace, link)
 		now = watch.PullStatus{State: "merged", Checks: now.Checks, Review: now.Review, At: now.At}
 	}
 	if now.State == "merged" && (!known || was.State != "merged") {
@@ -167,9 +167,9 @@ func (d *Daemon) ticketAfterMerge(ctx context.Context, spec WatchSpec, link stri
 		return
 	}
 	if d.Events != nil {
-		d.Events.Append(spec.Workspace, events.Event{At: time.Now().UTC(), Kind: "moved", Reason: rec.Ref + " → " + status + " — every pull request merged", URL: rec.URL})
+		d.Events.Append(spec.Workspace, events.Event{At: time.Now().UTC(), Kind: "moved", Reason: rec.Ref + " → " + status + " - every pull request merged", URL: rec.URL})
 	}
-	go d.notifyAttentionAt(notifyTitlePrefix+spec.Workspace, rec.Ref+" → "+status+" — every pull request merged", spec.Workspace, rec.URL)
+	go d.notifyAttentionAt(notifyTitlePrefix+spec.Workspace, rec.Ref+" → "+status+" - every pull request merged", spec.Workspace, rec.URL)
 }
 
 func (d *Daemon) allowsByPolicy(s sessions.Session) bool {
@@ -204,7 +204,7 @@ func (d *Daemon) autoAllow(s sessions.Session) {
 	if label == "" {
 		label = s.Label
 	}
-	utils.Infof("agent: allowed %s %s for %s — the workspace's reads policy\n", s.Pending.Tool, s.Pending.Subject, label)
+	utils.Infof("agent: allowed %s %s for %s - the workspace's reads policy\n", s.Pending.Tool, s.Pending.Subject, label)
 	d.Sessions.AutoAllowed(s.ID)
 	d.flushSessions()
 }
@@ -282,7 +282,7 @@ func gateLesson(s sessions.Session, cmd string, fails int, out string) string {
 	if where == "" {
 		where = label(s)
 	}
-	return "`" + cmd + "` stayed red after " + strconv.Itoa(fails) + " tries on " + where + " — " + lastLine(out)
+	return "`" + cmd + "` stayed red after " + strconv.Itoa(fails) + " tries on " + where + " - " + lastLine(out)
 }
 
 func hasWork(s sessions.Session) bool {
@@ -331,7 +331,7 @@ func (d *Daemon) compactIfFull(s sessions.Session) {
 	if label == "" {
 		label = s.Label
 	}
-	utils.Infof("agent: %s is %d%% full — /compact\n", label, s.Context.Percent)
+	utils.Infof("agent: %s is %d%% full - /compact\n", label, s.Context.Percent)
 	d.Sessions.Compacted(s.ID, time.Now())
 	d.sendToSession(context.Background(), s.ID, "/compact", true)
 }

@@ -17,7 +17,7 @@ var testCmd = &cobra.Command{
 	Short: "Run each service's `test` script in its resolved environment",
 	Long: `Run the test script configured for each selected service, in that service's
 working directory with the same env corgi uses for its start commands. corgi
-test does NOT start databases or services — that is corgi run's job; with
+test does NOT start databases or services - that is corgi run's job; with
 --ensure-deps it only WAITS for already-starting dependencies to be ready.
 
 A service runs if it has a script named "test" in its scripts. Services without
@@ -110,7 +110,7 @@ func runTestCmd(cmd *cobra.Command, args []string) {
 		base, _ := cmd.Flags().GetString("base")
 		sel = narrowToChangedServices(sel, base)
 		if len(sel.services) == 0 {
-			utils.Infof("no service repo differs from %s — nothing to test\n", base)
+			utils.Infof("no service repo differs from %s - nothing to test\n", base)
 			return
 		}
 	}

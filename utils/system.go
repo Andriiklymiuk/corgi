@@ -71,7 +71,7 @@ func KillPortOwner(port int) error {
 		lsof := lsofPath()
 		if lsof == "" {
 			return fmt.Errorf(
-				"lsof not found on PATH or in /usr/sbin, /usr/bin, /sbin — cannot identify the process on port %d",
+				"lsof not found on PATH or in /usr/sbin, /usr/bin, /sbin - cannot identify the process on port %d",
 				port)
 		}
 		out, _ := exec.Command(lsof, args...).Output()
@@ -79,7 +79,7 @@ func KillPortOwner(port int) error {
 	}
 	if len(pids) == 0 {
 		return fmt.Errorf(
-			"no process found listening on port %d (it may be owned by another user — try: sudo lsof -nP -i:%d)",
+			"no process found listening on port %d (it may be owned by another user - try: sudo lsof -nP -i:%d)",
 			port, port)
 	}
 	if err := exec.Command("kill", pids...).Run(); err != nil {

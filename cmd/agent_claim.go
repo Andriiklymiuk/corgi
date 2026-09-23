@@ -38,7 +38,7 @@ func claimFor(st sessions.State, ref, cwd string) (sessions.Session, error) {
 		}
 	}
 	if best.ID == "" {
-		return sessions.Session{}, fmt.Errorf("no session on the board for %s — say --session <id>", cwd)
+		return sessions.Session{}, fmt.Errorf("no session on the board for %s - say --session <id>", cwd)
 	}
 	return best, nil
 }
@@ -169,6 +169,6 @@ func workspaceRootOfDir(dir string) string {
 
 func init() {
 	agentClaimCmd.Flags().String("session", "", "The session the claim is for (default: the one this runs inside, or whose checkout this is)")
-	agentClaimCmd.Flags().Bool("release", false, "Give the files back — the ones named, or all of this session's")
+	agentClaimCmd.Flags().Bool("release", false, "Give the files back - the ones named, or all of this session's")
 	agentCmd.AddCommand(agentClaimCmd, agentClaimsCmd)
 }

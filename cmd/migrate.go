@@ -18,7 +18,7 @@ var migrateCmd = &cobra.Command{
 	Long: `Everything corgi generates now lives in one place: .corgi/corgi_services/.
 Older checkouts keep a top-level corgi_services/; this moves it, and rewrites
 the matching .gitignore lines. Any corgi command does it for you on the way
-past — this is the version that says what it did.
+past - this is the version that says what it did.
 
 Nothing moves while services are up. Stop them first: corgi stop`,
 	Run: func(cmd *cobra.Command, _ []string) {
@@ -29,7 +29,7 @@ Nothing moves while services are up. Stop them first: corgi stop`,
 		target := filepath.Join(dir, utils.CorgiDirName, utils.CorgiServicesName)
 
 		if _, err := os.Stat(legacy); err != nil {
-			fmt.Printf("nothing to move — already at %s\n", target)
+			fmt.Printf("nothing to move - already at %s\n", target)
 			return
 		}
 		if migrateDryRun {
@@ -42,7 +42,7 @@ Nothing moves while services are up. Stop them first: corgi stop`,
 			return
 		}
 		if !moved {
-			fmt.Printf("nothing to move — already at %s\n", target)
+			fmt.Printf("nothing to move - already at %s\n", target)
 			return
 		}
 		fmt.Printf("moved %s\n   to %s\n", legacy, target)

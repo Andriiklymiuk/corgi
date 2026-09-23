@@ -214,7 +214,7 @@ to detect the first non-loopback IPv4. db_services stay on localhost.
 		`Open public HTTPS tunnels alongside the stack for every service that
 declares a tunnel: block in corgi-compose.yml. Services whose tunnel
 hostname env vars (e.g. ${API_TUNNEL_HOST}) are unset are skipped with
-a warning — corgi run keeps going. Equivalent to running corgi tunnel
+a warning - corgi run keeps going. Equivalent to running corgi tunnel
 in a second terminal, but bundled into one process. Auth still
 required per provider (e.g. ngrok config add-authtoken).`,
 	)
@@ -454,7 +454,7 @@ func startAllServices(corgi *utils.CorgiCompose, cmd *cobra.Command) {
 		return
 	}
 
-	utils.Info("😉 corgi is running — Ctrl+C to stop")
+	utils.Info("😉 corgi is running - Ctrl+C to stop")
 	select {
 	case <-servicesDone:
 	case <-utils.ShutdownCh():
@@ -646,7 +646,7 @@ func cloneMissingRepos(services []utils.Service) {
 	if CheckClonedReposExistence(services) {
 		if failures := CloneServices(services); len(failures) > 0 {
 			utils.Info("⚠️  could not clone:", strings.Join(failures, ", "),
-				"— those services will fail to start")
+				"- those services will fail to start")
 		}
 	}
 }
@@ -731,7 +731,7 @@ func runDetached(cmd *cobra.Command, corgi *utils.CorgiCompose) {
 	if utils.JSONOutput {
 		utils.PrintJSON(state)
 	} else {
-		utils.Infof("🐶 corgi running detached — %d service(s), state: %s\n", len(procs), statePath)
+		utils.Infof("🐶 corgi running detached - %d service(s), state: %s\n", len(procs), statePath)
 	}
 }
 
@@ -740,7 +740,7 @@ func waitDetachedReadyOrExit(cmd *cobra.Command, corgi *utils.CorgiCompose) func
 	remaining := timeout - time.Since(bootStartedAt)
 	if remaining <= 0 {
 		msg := fmt.Sprintf(
-			"%s: beforeStart alone took %s, over the %s budget — raise --wait-timeout or make the setup cheaper",
+			"%s: beforeStart alone took %s, over the %s budget - raise --wait-timeout or make the setup cheaper",
 			utils.ErrReadinessTimeout, time.Since(bootStartedAt).Round(time.Second), timeout)
 		if utils.JSONOutput {
 			utils.JSONError(utils.ErrReadinessTimeout, msg)
@@ -829,7 +829,7 @@ func forceStopPreviousRun(prev utils.RunState, statePath string) {
 func exitIfDetachedStillRunning(prev utils.RunState) {
 	for _, s := range prev.Services {
 		if s.Status == "running" {
-			msg := "corgi is already running for this project — stop or restart first (use --force to override)"
+			msg := "corgi is already running for this project - stop or restart first (use --force to override)"
 			if utils.JSONOutput {
 				utils.JSONError(utils.ErrAlreadyRunning, msg)
 			} else {
@@ -872,9 +872,9 @@ func startDetachedService(svc utils.Service) (detachedProc, bool) {
 func startDetachedDockerRunner(svc utils.Service) (detachedProc, bool) {
 	if svc.Runner.Watch {
 		if svc.ResolvedDockerSource == utils.SourceDockerfile {
-			utils.Infof("👀 %s: watch needs a foreground run — detached start skips it\n", svc.ServiceName)
+			utils.Infof("👀 %s: watch needs a foreground run - detached start skips it\n", svc.ServiceName)
 		} else {
-			utils.Infof("👀 %s: watch only applies to Dockerfile-built services — ignored\n", svc.ServiceName)
+			utils.Infof("👀 %s: watch only applies to Dockerfile-built services - ignored\n", svc.ServiceName)
 		}
 	}
 	if err := dockerRunnerUp(svc.ServiceName); err != nil {
@@ -971,7 +971,7 @@ func hintDockerCapable(services []utils.Service, dockerFlag bool) {
 			continue
 		}
 		if utils.DetectDockerSource(s) != utils.SourceNone {
-			utils.Infof("tip: %s also has a Dockerfile — `corgi run --docker` runs it in a container\n", s.ServiceName)
+			utils.Infof("tip: %s also has a Dockerfile - `corgi run --docker` runs it in a container\n", s.ServiceName)
 			return
 		}
 	}
@@ -1075,7 +1075,7 @@ func applyRunFlags(cmd *cobra.Command) {
 		utils.SetCIMode(true)
 	}
 	if unknown := unknownOmitKeys(); len(unknown) > 0 {
-		utils.Info("⚠ --omit / CORGI_OMIT ignores unknown keys:", unknown, "— valid:", omitKeys)
+		utils.Info("⚠ --omit / CORGI_OMIT ignores unknown keys:", unknown, "- valid:", omitKeys)
 	}
 	gateDepsFlag, _ = cmd.Flags().GetBool("gate-deps")
 	noBeforeStartCache, _ = cmd.Flags().GetBool("no-cache")
@@ -1193,7 +1193,7 @@ func maybeHintNotifications() {
 	if err != nil || cfg.Notifications {
 		return
 	}
-	utils.Infof("\n%s💡 Tip: get a desktop alert when a service crashes — run: corgi notifications on%s\n",
+	utils.Infof("\n%s💡 Tip: get a desktop alert when a service crashes - run: corgi notifications on%s\n",
 		art.CyanColor, art.WhiteColor)
 }
 
@@ -1340,9 +1340,9 @@ func startServiceProcess(service utils.Service) {
 		if service.Runner.Watch {
 			if service.ResolvedDockerSource == utils.SourceDockerfile {
 				target = "upw"
-				utils.Info("👀 watch on — rebuilds on file changes")
+				utils.Info("👀 watch on - rebuilds on file changes")
 			} else {
-				utils.Infof("👀 %s: watch only applies to Dockerfile-built services — ignored\n", service.ServiceName)
+				utils.Infof("👀 %s: watch only applies to Dockerfile-built services - ignored\n", service.ServiceName)
 			}
 		}
 		if err := utils.ExecuteServiceCommandRun(service.ServiceName, "make", target); err != nil {
@@ -1500,7 +1500,7 @@ func emitDepTimeout(service, dep string) {
 		})
 		return
 	}
-	utils.Infof("⚠️  %s: %s waiting on %s — proceeding anyway\n", utils.ErrReadinessTimeout, service, dep)
+	utils.Infof("⚠️  %s: %s waiting on %s - proceeding anyway\n", utils.ErrReadinessTimeout, service, dep)
 }
 
 func getServiceEnv(service utils.Service) string {

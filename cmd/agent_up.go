@@ -154,7 +154,7 @@ func runAgentUp(cmd *cobra.Command, _ []string) {
 			_ = os.Remove(filepath.Join(dir, mcpPidName))
 		case found:
 			exitWithError("agent_up_mcp", fmt.Errorf(
-				"a corgi MCP on %s did not release the port within 5s — stop it manually (`corgi agent down`, or kill the pid lsof names) and rerun", addr), 1)
+				"a corgi MCP on %s did not release the port within 5s - stop it manually (`corgi agent down`, or kill the pid lsof names) and rerun", addr), 1)
 		default:
 			res.Hint = fmt.Sprintf(
 				"%s is already in use by something that is not corgi's MCP server. "+
@@ -177,7 +177,7 @@ func runAgentUp(cmd *cobra.Command, _ []string) {
 
 	parsed, err := awaitMCPLog(res.LogPath, 90*time.Second)
 	if err != nil {
-		exitWithError("agent_up_mcp", fmt.Errorf("%w — see %s", err, res.LogPath), 1)
+		exitWithError("agent_up_mcp", fmt.Errorf("%w - see %s", err, res.LogPath), 1)
 	}
 	res.PublicURL = parsed.publicURL
 	res.PairCode = parsed.pairCode
@@ -211,7 +211,7 @@ func registerCwdWorkspace() (string, bool) {
 			if existing2.AbsPath == cwd {
 				return id, false
 			}
-			utils.Infof("workspace names %q and %q are both taken by other directories — register with `corgi agent init --id <name>`\n",
+			utils.Infof("workspace names %q and %q are both taken by other directories - register with `corgi agent init --id <name>`\n",
 				filepath.Base(cwd), id)
 			return "", false
 		}
@@ -237,7 +237,7 @@ func ensureDaemon(dir string) (*daemon.Info, error) {
 		return info, nil
 	}
 	if strays := otherServers(os.Getpid()); len(strays) > 0 {
-		return nil, fmt.Errorf("a corgi agent daemon (pid %d) is running without its record — `corgi agent restart` replaces it", strays[0])
+		return nil, fmt.Errorf("a corgi agent daemon (pid %d) is running without its record - `corgi agent restart` replaces it", strays[0])
 	}
 	if _, err := spawnDetached(dir, "serve.log", "agent", "serve"); err != nil {
 		return nil, err
@@ -249,7 +249,7 @@ func ensureDaemon(dir string) (*daemon.Info, error) {
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
-	return nil, fmt.Errorf("daemon did not come up — see %s", filepath.Join(dir, "serve.log"))
+	return nil, fmt.Errorf("daemon did not come up - see %s", filepath.Join(dir, "serve.log"))
 }
 
 type upSettings struct {
@@ -405,7 +405,7 @@ func acquireUpLock(dir string) (func(), error) {
 			_ = os.Remove(path)
 			continue
 		}
-		return nil, fmt.Errorf("another `corgi agent up` is already running — wait for it, or remove %s if it crashed", path)
+		return nil, fmt.Errorf("another `corgi agent up` is already running - wait for it, or remove %s if it crashed", path)
 	}
 	return nil, fmt.Errorf("could not take the agent-up lock at %s", path)
 }
@@ -554,13 +554,13 @@ func printAgentUp(res agentUpResult) {
 	}
 	fmt.Printf("  ✓ agent daemon running (pid %d)\n", res.DaemonPID)
 	if res.AtLogin {
-		fmt.Printf("  ✓ starts at login (%s) — survives a reboot\n", installMechanism())
+		fmt.Printf("  ✓ starts at login (%s) - survives a reboot\n", installMechanism())
 	}
 	switch {
 	case res.PublicURL != "":
 		fmt.Printf("  ✓ public endpoint: %s/mcp\n", res.PublicURL)
 	default:
-		fmt.Printf("  ✓ local endpoint: http://%s/mcp (no tunnel yet — see %s)\n", res.MCPAddr, res.LogPath)
+		fmt.Printf("  ✓ local endpoint: http://%s/mcp (no tunnel yet - see %s)\n", res.MCPAddr, res.LogPath)
 	}
 	printAgentUpPairing(res)
 	if res.Hint != "" {
@@ -575,7 +575,7 @@ func printAgentUp(res agentUpResult) {
 		fmt.Print(lan)
 	}
 	if res.PublicURL != "" {
-		fmt.Printf("  after scanning, the phone opens the launcher — tap a repo to start:\n    %s/app\n", res.PublicURL)
+		fmt.Printf("  after scanning, the phone opens the launcher - tap a repo to start:\n    %s/app\n", res.PublicURL)
 		if hint := quickTunnelWarning(res); hint != "" {
 			fmt.Println()
 			fmt.Print(hint)
@@ -601,7 +601,7 @@ func printAgentUpPairing(res agentUpResult) {
 		return
 	}
 	fmt.Println("  pair a device (single use, 10 minutes):")
-	fmt.Printf("    code: %s — POST http://%s/pair {\"code\":\"%s\",\"device\":\"my-phone\"}\n",
+	fmt.Printf("    code: %s - POST http://%s/pair {\"code\":\"%s\",\"device\":\"my-phone\"}\n",
 		res.PairCode, res.MCPAddr, res.PairCode)
 }
 
@@ -683,7 +683,7 @@ func sharedTunnelHint(publicURL string) string {
 	}
 	return "  \u26a0 if the page never loads on the phone:\n" +
 		"    \u2022 open the link in the real browser, not an app's built-in one\n" +
-		"      (in Safari's in-app view, tap the compass icon) \u2014 scanning the QR\n" +
+		"      (in Safari's in-app view, tap the compass icon) - scanning the QR\n" +
 		"      with the camera already does this\n" +
 		"    \u2022 this is a free shared tunnel domain; some carriers and filtering\n" +
 		"      DNS refuse to resolve these, so it can work on Wi-Fi and not on\n" +
@@ -711,7 +711,7 @@ func orDefault(s, def string) string {
 
 var agentDownCmd = &cobra.Command{
 	Use:   "down",
-	Short: "Stop everything `corgi agent up` started — the daemon and the detached MCP + tunnel",
+	Short: "Stop everything `corgi agent up` started - the daemon and the detached MCP + tunnel",
 	Long: `The mirror of ` + "`corgi agent up`" + `. Stops the agent daemon and the detached
 MCP server that serves the launcher and pairing over the tunnel, so the public
 URL goes down too. (` + "`corgi agent stop`" + ` stops only the daemon.)`,
@@ -806,12 +806,12 @@ func readAgentPidFile(path string) (int, bool) {
 func addAgentUpFlags(c *cobra.Command) {
 	c.Flags().String("http", defaultMCPAddr, "Local MCP address. Use 0.0.0.0:8765 to also serve phones on the same Wi-Fi, which needs no tunnel at all")
 	c.Flags().String("provider", "", "Tunnel provider (cloudflared|ngrok|localtunnel)")
-	c.Flags().String(flagTunnelName, "", "cloudflared named-tunnel name — a stable public URL you can bookmark, and a phone that stays paired (needs a one-time `cloudflared tunnel create` and --tunnel-hostname; see docs/agent.md)")
+	c.Flags().String(flagTunnelName, "", "cloudflared named-tunnel name - a stable public URL you can bookmark, and a phone that stays paired (needs a one-time `cloudflared tunnel create` and --tunnel-hostname; see docs/agent.md)")
 	c.Flags().String(flagTunnelHostname, "", "Public hostname of the named tunnel, e.g. corgi.yourdomain.com (the DNS name routed to it; ngrok: your free static domain). Remembered for the next up/restart; pass \"\" to go back to a quick tunnel")
 	c.Flags().Bool(atLoginFlag, false, "Also start corgi agent at login, so the daemon, this endpoint and this tunnel come back after a reboot (--at-login=false turns it off again)")
 	c.Flags().Bool("fresh", false, "Replace a corgi MCP already holding the port: new tunnel + a new single-use pairing window (a phone mid-session on the old URL is cut)")
-	c.Flags().String("pair-code", "", "Open the first pairing window on this code instead of a random one — minted earlier with `corgi agent pair --mint`, so a phone prepared ahead of time can pair a headless daemon nobody types on")
-	c.Flags().Duration("pair-ttl", 0, "How long the --pair-code window stays open (default 10m, at most 24h) — room for a slow boot")
+	c.Flags().String("pair-code", "", "Open the first pairing window on this code instead of a random one - minted earlier with `corgi agent pair --mint`, so a phone prepared ahead of time can pair a headless daemon nobody types on")
+	c.Flags().Duration("pair-ttl", 0, "How long the --pair-code window stays open (default 10m, at most 24h) - room for a slow boot")
 	c.Flags().Bool("viewer", false, "The pairing window this opens hands out a read-only token: a teammate's phone sees the board, the inbox and the brief, never a transcript, never a button (with --fresh to reopen a window)")
 }
 
@@ -826,7 +826,7 @@ func announceNewAddress(dir, url string) {
 	store := push.Load(dir)
 	msg := push.Message{
 		Title:    "corgi agent · " + host,
-		Body:     "back on a new address — the app relinks itself",
+		Body:     "back on a new address - the app relinks itself",
 		Category: "relink",
 		Data:     map[string]string{"relink": "1", "url": url, "daemon": host},
 		Thread:   "relink",

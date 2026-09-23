@@ -74,7 +74,7 @@ func ValidateSpawnConfig(c SpawnConfig) error {
 	}
 	if c.DeviceOnly && !kind.BuildsArgvFromSettings {
 		return fmt.Errorf(
-			"workspace %s: kind %q builds no argv of its own, so deviceOnly would be ignored — put this CLI's own flag in args: instead",
+			"workspace %s: kind %q builds no argv of its own, so deviceOnly would be ignored - put this CLI's own flag in args: instead",
 			c.WorkspaceID, kind.Name)
 	}
 	if c.Capacity < 0 {
@@ -91,7 +91,7 @@ func ValidateSpawnConfig(c SpawnConfig) error {
 	}
 	if c.ConfigDir != "" && kind.ConfigDirEnv == "" {
 		return fmt.Errorf(
-			"workspace %s: kind %q has no config-directory variable, so configDir would be ignored — "+
+			"workspace %s: kind %q has no config-directory variable, so configDir would be ignored - "+
 				"set configDirEnv to the variable this CLI reads",
 			c.WorkspaceID, kind.Name)
 	}
@@ -129,7 +129,7 @@ func validatePermissionMode(c SpawnConfig, kind Kind) error {
 	if c.SkipPermissions {
 		if !kind.SupportsPermissionMode {
 			return fmt.Errorf(
-				"workspace %s: kind %q takes no permission mode, so dangerouslySkipPermissions has nothing to disarm — put the flag in args: instead",
+				"workspace %s: kind %q takes no permission mode, so dangerouslySkipPermissions has nothing to disarm - put the flag in args: instead",
 				c.WorkspaceID, kind.Name)
 		}
 		if m := normalize(c.PermissionMode); m != "" && m != "bypasspermissions" {
@@ -145,13 +145,13 @@ func validatePermissionMode(c SpawnConfig, kind Kind) error {
 	}
 	if forbiddenPermissionModes[mode] {
 		return fmt.Errorf(
-			"workspace %s: permissionMode %q is not allowed for a supervised session — "+
+			"workspace %s: permissionMode %q is not allowed for a supervised session - "+
 				"permission prompts are what you answer from your phone",
 			c.WorkspaceID, c.PermissionMode)
 	}
 	if !kind.SupportsPermissionMode {
 		return fmt.Errorf(
-			"workspace %s: kind %q does not take permissionMode — put the flag in args: instead, "+
+			"workspace %s: kind %q does not take permissionMode - put the flag in args: instead, "+
 				"so the setting is the one this CLI actually understands",
 			c.WorkspaceID, kind.Name)
 	}
@@ -169,7 +169,7 @@ func validateSpawnMode(c SpawnConfig, kind Kind) error {
 	}
 	if !kind.SupportsSpawn {
 		return fmt.Errorf(
-			"workspace %s: kind %q does not take spawn — put the flag in args: instead",
+			"workspace %s: kind %q does not take spawn - put the flag in args: instead",
 			c.WorkspaceID, kind.Name)
 	}
 	if !validSpawnModes[s] {
@@ -183,20 +183,20 @@ func validateKindOwnedSettings(c SpawnConfig, kind Kind) error {
 	if !kind.BuildsArgvFromSettings {
 		if c.Capacity > 0 {
 			return fmt.Errorf(
-				"workspace %s: kind %q does not take capacity — put the flag in args: instead",
+				"workspace %s: kind %q does not take capacity - put the flag in args: instead",
 				c.WorkspaceID, kind.Name)
 		}
 		return nil
 	}
 	if c.ConfigDirEnv != "" || len(c.CredentialEnv) > 0 {
 		return fmt.Errorf(
-			"workspace %s: configDirEnv and credentialEnv are only for kind %q — "+
+			"workspace %s: configDirEnv and credentialEnv are only for kind %q - "+
 				"kind %q already knows its own",
 			c.WorkspaceID, KindCustom, kind.Name)
 	}
 	if len(c.Args) > 0 {
 		return fmt.Errorf(
-			"workspace %s: args is only for kind %q — kind %q builds its own argv from "+
+			"workspace %s: args is only for kind %q - kind %q builds its own argv from "+
 				"spawn, capacity and permissionMode",
 			c.WorkspaceID, KindCustom, kind.Name)
 	}
@@ -216,7 +216,7 @@ func ResolveBin(c SpawnConfig) (string, error) {
 		return "", err
 	}
 	if kind.DefaultBin == "" {
-		return "", fmt.Errorf("kind %q has no default command — set bin: to the command to run", kind.Name)
+		return "", fmt.Errorf("kind %q has no default command - set bin: to the command to run", kind.Name)
 	}
 	return kind.DefaultBin, nil
 }
@@ -228,7 +228,7 @@ func SanitizeBin(bin string) (string, error) {
 	}
 	if strings.ContainsAny(bin, `/\`) {
 		return "", fmt.Errorf(
-			"bin %q must be a command name found on PATH, not a path — "+
+			"bin %q must be a command name found on PATH, not a path - "+
 				"a path here would let a config file choose which program the daemon runs", bin)
 	}
 	if strings.HasPrefix(bin, "-") {

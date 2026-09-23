@@ -294,7 +294,7 @@ func formatStandup(entries []standupEntry, since time.Time) string {
 
 func writeStandupBody(b *strings.Builder, entries []standupEntry) {
 	if len(entries) == 0 {
-		b.WriteString("  nothing on record — no prompts, no commits, nothing the watch did\n")
+		b.WriteString("  nothing on record - no prompts, no commits, nothing the watch did\n")
 		return
 	}
 	for _, e := range entries {
@@ -330,7 +330,7 @@ func writeWatchActions(b *strings.Builder, e standupEntry) {
 			case f.Outcome != "" && len(f.PRs) == 0 && f.Outcome != "nothing opened":
 				mark = "✗"
 			}
-			fmt.Fprintf(b, "    %s %s — %s\n", mark, fixLabel(f), f.Outcome)
+			fmt.Fprintf(b, "    %s %s - %s\n", mark, fixLabel(f), f.Outcome)
 			for _, pr := range f.PRs {
 				fmt.Fprintf(b, "        %s\n", pr)
 			}

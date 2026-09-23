@@ -61,7 +61,7 @@ func TestAddProfileRejectsAnEmptyProfile(t *testing.T) {
 
 func TestAddProfileRejectsABinaryPath(t *testing.T) {
 	if err := addProfile(t.TempDir(), "bad", config.WorkspaceConfig{Bin: "/usr/local/bin/claude"}); err == nil {
-		t.Error("a bin that is a path must be rejected — a profile must not choose an arbitrary program")
+		t.Error("a bin that is a path must be rejected - a profile must not choose an arbitrary program")
 	}
 }
 

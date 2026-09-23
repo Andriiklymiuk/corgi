@@ -90,11 +90,11 @@ func sessionContext(dir string, in contextHookInput, configDir string, now time.
 		lines = append(lines, fmt.Sprintf("last session here ended %s ago: %s", roughAge(now.Sub(b.EndedAt)), b.Summary()))
 	}
 	if path, facts := memoryIndex(in.Cwd, root); facts > 0 {
-		lines = append(lines, fmt.Sprintf("workspace memory: %d facts in %s — read it before changing code", facts, path))
+		lines = append(lines, fmt.Sprintf("workspace memory: %d facts in %s - read it before changing code", facts, path))
 	}
 	if learned := lessons.List(dir, wsID); len(learned) > 0 {
 		last := learned[len(learned)-1]
-		lines = append(lines, fmt.Sprintf("%d lesson(s) this workspace learned the hard way in %s — read them first; the last: %s", len(learned), lessons.Path(dir, wsID), last.Text))
+		lines = append(lines, fmt.Sprintf("%d lesson(s) this workspace learned the hard way in %s - read them first; the last: %s", len(learned), lessons.Path(dir, wsID), last.Text))
 	}
 	if line := handoffLine(root, sessions.Branch(in.Cwd), now); line != "" {
 		lines = append(lines, line)
@@ -125,7 +125,7 @@ func handoffLine(root, branch string, now time.Time) string {
 		dir = filepath.Join(root, p.Where.Worktree)
 	}
 	if n, err := handoff.CommitsSince(dir, p.Where.Head); err == nil && n > 0 {
-		line += fmt.Sprintf(" — %d commit(s) since, so check its done list against the diff", n)
+		line += fmt.Sprintf(" - %d commit(s) since, so check its done list against the diff", n)
 	}
 	if p.Verification != nil {
 		line += fmt.Sprintf("; `corgi agent handoff verify %s` re-runs its check", p.Ref)
@@ -228,11 +228,11 @@ func budgetLine(st sessions.State, configDir string, now time.Time) string {
 			line += " (resets " + weekday(l.SevenDay.ResetsAt) + ")"
 		}
 		if l.FiveHour.Percent >= 100 || l.SevenDay.Percent >= 100 {
-			line += " — limit reached, keep this turn short or `corgi agent carry`"
+			line += " - limit reached, keep this turn short or `corgi agent carry`"
 		} else if a.Forecast != nil && a.Forecast.FiveHour != nil && !a.Forecast.FiveHour.Safe && !a.Forecast.FiveHour.ExhaustAt.IsZero() {
-			line += " — at this pace the 5h window runs out at " + clock(a.Forecast.FiveHour.ExhaustAt)
+			line += " - at this pace the 5h window runs out at " + clock(a.Forecast.FiveHour.ExhaustAt)
 		} else if l.FiveHour.Percent >= 85 {
-			line += " — nearly out, prefer small turns"
+			line += " - nearly out, prefer small turns"
 		}
 		return line
 	}
@@ -293,7 +293,7 @@ func scopeLineFor(root, branch string) string {
 	if !ok {
 		return ""
 	}
-	return fmt.Sprintf("scope for %s: %s — a write outside is refused; widen with `corgi agent scope add %s --path …` and say why", s.Ref, scopeLine(s), s.Ref)
+	return fmt.Sprintf("scope for %s: %s - a write outside is refused; widen with `corgi agent scope add %s --path …` and say why", s.Ref, scopeLine(s), s.Ref)
 }
 
 func stackLine(root string) string {
@@ -343,7 +343,7 @@ func stackLine(root string) string {
 	if len(parts) > 8 {
 		parts = append(parts[:8], fmt.Sprintf("+%d more", len(parts)-8))
 	}
-	return "stack: " + strings.Join(parts, " · ") + " — corgi_http, corgi_logs, corgi_db_query and corgi_explain reach them once corgi run is up"
+	return "stack: " + strings.Join(parts, " · ") + " - corgi_http, corgi_logs, corgi_db_query and corgi_explain reach them once corgi run is up"
 }
 
 func composeNames[V any](m map[string]V) []string {

@@ -6,8 +6,8 @@ Put your own line under a session on the board
 
 ### Synopsis
 
-Sets the note a session shows under its label — "waiting on PR review",
-"do not touch" — on every surface that draws the board. No text, or
+Sets the note a session shows under its label - "waiting on PR review",
+"do not touch" - on every surface that draws the board. No text, or
 --clearNote, removes it. Notes go when the session is dismissed.
 
 ```

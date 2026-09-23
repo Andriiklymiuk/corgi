@@ -51,10 +51,10 @@ func TestSessionContextTellsTheSessionWhatTheDaemonKnows(t *testing.T) {
 	for _, want := range []string{
 		"corgi · acme-api on feat/x",
 		`another session in this workspace: ● "Referrals" working on fix/login (Bash go test) 3m, touching api/login.go, api/login_test.go`,
-		"budget: 5h 57% (resets 12:00) · week 41% — at this pace the 5h window runs out at 11:00",
+		"budget: 5h 57% (resets 12:00) · week 41% - at this pace the 5h window runs out at 11:00",
 		"last session here ended 2h ago: was on feat/x · 1 repo has uncommitted changes",
 		"workspace memory: 2 facts in .corgi/memory/index.md",
-		"2 lesson(s) this workspace learned the hard way in " + lessons.Path(dir, "acme-api") + " — read them first; the last: never mock the database",
+		"2 lesson(s) this workspace learned the hard way in " + lessons.Path(dir, "acme-api") + " - read them first; the last: never mock the database",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q in:\n%s", want, got)

@@ -163,7 +163,7 @@ func (d *Daemon) peerLeads(spec WatchSpec) string {
 }
 
 // noteLeader logs a leader once an hour, and rings once when the lead
-// moves — to a peer, or back to this laptop — so a traveller knows which
+// moves - to a peer, or back to this laptop - so a traveller knows which
 // machine is working the tracker now.
 func (d *Daemon) noteLeader(workspace, leader string) {
 	n := d.notes()
@@ -194,7 +194,7 @@ func (d *Daemon) noteLeader(workspace, leader string) {
 	key := workspace + "|" + leader
 	if last, ok := n.logged[key]; !ok || time.Since(last) > time.Hour {
 		n.logged[key] = time.Now()
-		utils.Infof("agent: %s leads %s — this laptop stays quiet there\n", leader, workspace)
+		utils.Infof("agent: %s leads %s - this laptop stays quiet there\n", leader, workspace)
 	}
 }
 
@@ -252,7 +252,7 @@ func (d *Daemon) pulsePeersOnce(ctx context.Context) {
 // ---- what a pulse carries, and what this laptop does with what it hears --
 
 // LocalPulse is this laptop as its peers should see it, read from the
-// files the daemon keeps — so the MCP server answers a pulse the same way
+// files the daemon keeps - so the MCP server answers a pulse the same way
 // the daemon sends one.
 func LocalPulse(dir, version string) peers.Pulse {
 	store, _ := peers.Load(peers.Path(dir))
@@ -411,7 +411,7 @@ func (d *Daemon) absorbPeers() {
 			if p.Unwell == "limit" {
 				why = "its five-hour window is spent"
 			}
-			go d.notifyAttention("corgi agent", p.Name+" cannot run fixes ("+why+") — this laptop leads the trackers you share until it can", "")
+			go d.notifyAttention("corgi agent", p.Name+" cannot run fixes ("+why+") - this laptop leads the trackers you share until it can", "")
 		}
 		for _, r := range p.Runs {
 			if r.State != "failed" && r.State != "blocked" {

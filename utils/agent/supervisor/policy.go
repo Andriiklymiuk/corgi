@@ -100,7 +100,7 @@ func Decide(e Exit, attempt, consecutiveStartupFailures int) Decision {
 			Cause:   cause,
 			Disable: true,
 			Notify:  true,
-			Reason:  "remote control could not authenticate — run `corgi agent doctor`",
+			Reason:  "remote control could not authenticate - run `corgi agent doctor`",
 		}
 
 	case CauseStartupFailure:
@@ -109,7 +109,7 @@ func Decide(e Exit, attempt, consecutiveStartupFailures int) Decision {
 				Cause:   cause,
 				Disable: true,
 				Notify:  true,
-				Reason:  "Claude has not trusted this folder yet — run `claude` in the workspace once, accept the trust dialog, then retry",
+				Reason:  "Claude has not trusted this folder yet - run `claude` in the workspace once, accept the trust dialog, then retry",
 			}
 		}
 		if consecutiveStartupFailures+1 >= MaxStartupFailures {
@@ -118,7 +118,7 @@ func Decide(e Exit, attempt, consecutiveStartupFailures int) Decision {
 				Disable: true,
 				Notify:  true,
 				Reason: withLastOutputLine(
-					"remote control exited immediately "+strconv.Itoa(consecutiveStartupFailures+1)+" times — run `corgi agent doctor`",
+					"remote control exited immediately "+strconv.Itoa(consecutiveStartupFailures+1)+" times - run `corgi agent doctor`",
 					e.Output),
 			}
 		}
@@ -135,7 +135,7 @@ func Decide(e Exit, attempt, consecutiveStartupFailures int) Decision {
 			Restart: true,
 			Delay:   backoffFor(attempt),
 			Notify:  true,
-			Reason:  "remote control restarted — the previous session ended (network timeout), worktrees kept",
+			Reason:  "remote control restarted - the previous session ended (network timeout), worktrees kept",
 		}
 
 	default:
@@ -154,7 +154,7 @@ func withLastOutputLine(reason, output string) string {
 	if line == "" {
 		return reason
 	}
-	return reason + " — last output: " + line
+	return reason + " - last output: " + line
 }
 
 const maxReasonLineLen = 160

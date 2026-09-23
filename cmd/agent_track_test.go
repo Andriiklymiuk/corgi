@@ -167,7 +167,7 @@ func TestDeliverEventSpoolsOnlyForARunningDaemon(t *testing.T) {
 	dir, _ := agentDir()
 	deliverEvent(sessions.Event{Name: "Stop", SessionID: "s1"})
 	if entries, _ := os.ReadDir(filepath.Join(dir, "commands")); len(entries) != 0 {
-		t.Fatalf("no daemon, no spool file — the spool would grow forever: %d entries", len(entries))
+		t.Fatalf("no daemon, no spool file - the spool would grow forever: %d entries", len(entries))
 	}
 	exe, _ := os.Executable()
 	data, _ := json.Marshal(daemon.Info{PID: os.Getpid(), Executable: exe, Commands: true})

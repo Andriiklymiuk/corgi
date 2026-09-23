@@ -121,7 +121,7 @@ var agentCostCmd = &cobra.Command{
 	Long: `Two books: the daemon's day ledger (every live session's tokens, booked to
 its workspace as the sweep counts them) and the fix log (what each unattended
 run said it cost). Tokens are in both; dollars only where claude gave a
-receipt — a session's are on the invoice.
+receipt - a session's are on the invoice.
 
   corgi agent cost --by repo
   corgi agent cost --by day --days 7

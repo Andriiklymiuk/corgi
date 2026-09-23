@@ -10,12 +10,12 @@ Without this, corgi holds the machine awake only while a session runs. Between
 sessions the laptop sleeps, and a phone tap reaches nothing.
 
   corgi agent awake on     hold the wake lock for the daemon's whole life
-  corgi agent awake --display on   keep the display lit too — no lock screen while it holds
+  corgi agent awake --display on   keep the display lit too - no lock screen while it holds
   corgi agent awake off    back to holding it per session (the default)
   corgi agent awake        what is set now
 
 Off by default: a machine that never sleeps is a flat battery, so it is the
-machine owner's call. On macOS the lock cannot beat a closed lid on battery —
+machine owner's call. On macOS the lock cannot beat a closed lid on battery -
 keep the lid open, or plug in, for a long unattended run.
 
 ```

@@ -79,7 +79,7 @@ func TestAFailedBotRunRetriesOneModelUp(t *testing.T) {
 	d.startWatches(context.Background())
 	e := watch.Event{Key: "github:acme/api#7:r1", Source: "github", Kind: watch.KindPRReview, Ref: "acme/api#7", Title: "Add retries", URL: "https://github.com/acme/api/pull/7", Mine: true, At: time.Now()}
 	d.handleWatchEvent(context.Background(), e)
-	collectNotes(t, notes, "Code Reviewer on acme/api#7 — two findings, no merge", "Big on acme/api#7 failed")
+	collectNotes(t, notes, "Code Reviewer on acme/api#7 - two findings, no merge", "Big on acme/api#7 failed")
 	d.runs.Wait()
 	mu.Lock()
 	defer mu.Unlock()

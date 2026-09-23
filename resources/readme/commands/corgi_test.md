@@ -8,7 +8,7 @@ Run each service's `test` script in its resolved environment
 
 Run the test script configured for each selected service, in that service's
 working directory with the same env corgi uses for its start commands. corgi
-test does NOT start databases or services — that is corgi run's job; with
+test does NOT start databases or services - that is corgi run's job; with
 --ensure-deps it only WAITS for already-starting dependencies to be ready.
 
 A service runs if it has a script named "test" in its scripts. Services without
@@ -47,7 +47,7 @@ corgi test [flags]
       --service string                 Only run the test script for this service.
       --service-branch stringArray     Run a service on a git branch via a reused worktree under
                                        corgi_services/.worktrees: --service-branch name=branch (repeatable).
-                                       Non-destructive — the main checkout is untouched. Clean up with: corgi worktree prune.
+                                       Non-destructive - the main checkout is untouched. Clean up with: corgi worktree prune.
       --service-checkout stringArray   Run a service on a git branch by checking it out in place:
                                        --service-checkout name=branch (repeatable). Refuses on a dirty tree; leaves the
                                        repo on that branch afterwards.

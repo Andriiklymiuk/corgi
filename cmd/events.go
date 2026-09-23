@@ -55,7 +55,7 @@ func runEvents(cmd *cobra.Command, _ []string) {
 
 	statuses, ports, exits := readStackState()
 	if len(statuses) == 0 && !eventsFollow {
-		utils.Info("no run state yet — start the stack with corgi run --detach")
+		utils.Info("no run state yet - start the stack with corgi run --detach")
 		return
 	}
 	baseline := baselineEvents(statuses, ports, exits)

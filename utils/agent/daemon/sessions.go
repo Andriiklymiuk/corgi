@@ -578,7 +578,7 @@ func raiseWindow(ctx context.Context, t sessions.FocusTarget) error {
 
 func raiseEditor(ctx context.Context, t sessions.FocusTarget) error {
 	if t.App == "" {
-		return errors.New("which editor is unknown — install the corgi VS Code extension, or reopen the terminal")
+		return errors.New("which editor is unknown - install the corgi VS Code extension, or reopen the terminal")
 	}
 	switch runtime.GOOS {
 	case "darwin":
@@ -589,7 +589,7 @@ func raiseEditor(ctx context.Context, t sessions.FocusTarget) error {
 		return run(ctx, "open", args...)
 	case "linux":
 		if t.Folder == "" {
-			return errors.New("no connected window to raise — install the corgi VS Code extension")
+			return errors.New("no connected window to raise - install the corgi VS Code extension")
 		}
 		return run(ctx, editorCLI(t.App), "--reuse-window", t.Folder)
 	}
@@ -756,7 +756,7 @@ func (d *Daemon) scheduleLiftClock(s sessions.Session, label string, now time.Ti
 }
 
 func (d *Daemon) liftWord(s sessions.Session) string {
-	line := "limit lifted" + d.accountWord(s) + " — back to work"
+	line := "limit lifted" + d.accountWord(s) + " - back to work"
 	if s.Model != "" {
 		line += " on " + sessions.ModelLabel(s.Model)
 	}

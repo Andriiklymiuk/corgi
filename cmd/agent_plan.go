@@ -143,7 +143,7 @@ func writePlanFile(dir string, p watch.Plan, tasks []watch.Task) string {
 	path := filepath.Join(dir, "plans", fmt.Sprintf("%s.md", p.Ref()))
 	_ = os.MkdirAll(filepath.Dir(path), 0o700)
 	var b strings.Builder
-	fmt.Fprintf(&b, "# %s — %s\n\n", p.Ref(), p.Goal)
+	fmt.Fprintf(&b, "# %s - %s\n\n", p.Ref(), p.Goal)
 	fmt.Fprintf(&b, "Workspace: %s · planned %s · %d slot(s)\n\n", p.Workspace, p.CreatedAt.Local().Format("2006-01-02 15:04"), p.Slots)
 	if p.Summary != "" {
 		fmt.Fprintf(&b, "%s\n\n", p.Summary)
@@ -155,7 +155,7 @@ func writePlanFile(dir string, p watch.Plan, tasks []watch.Task) string {
 	}
 	for _, pt := range p.Tasks {
 		t := byID[pt.ID]
-		fmt.Fprintf(&b, "### %s — %s\n\n", t.Ref(), t.Title)
+		fmt.Fprintf(&b, "### %s - %s\n\n", t.Ref(), t.Title)
 		if len(pt.After) > 0 {
 			var refs []string
 			for _, id := range pt.After {
@@ -165,7 +165,7 @@ func writePlanFile(dir string, p watch.Plan, tasks []watch.Task) string {
 		}
 		fmt.Fprintf(&b, "%s\n\n", strings.TrimSpace(t.Body))
 	}
-	b.WriteString("## Decisions\n\n(what changed along the way — add lines here)\n")
+	b.WriteString("## Decisions\n\n(what changed along the way - add lines here)\n")
 	_ = os.WriteFile(path, []byte(b.String()), 0o600)
 	return path
 }
@@ -196,14 +196,14 @@ func planWatchReady(dir, ws string, slots int) string {
 		}
 		return ""
 	}
-	return fmt.Sprintf("%s is not watched — the daemon runs plan tasks the way it runs fixes: corgi agent watch enable --workspace %s --isolate, then corgi agent restart", ws, ws)
+	return fmt.Sprintf("%s is not watched - the daemon runs plan tasks the way it runs fixes: corgi agent watch enable --workspace %s --isolate, then corgi agent restart", ws, ws)
 }
 
 var agentPlanCmd = &cobra.Command{
 	Use:   "plan \"<goal>\"",
 	Short: "A planner breaks a goal into tasks on the board; the daemon works through them, a worktree each",
 	Long: `One goal, handed to a planner (a short claude run on this machine, sonnet by
-default) that writes 2–6 tasks on the board — what to change, where, how a
+default) that writes 2-6 tasks on the board - what to change, where, how a
 session knows it is done, which tasks wait for which. Nothing runs until you
 say so; the tasks sit in Todo for you to read, edit (corgi agent task edit) or
 remove.
@@ -213,8 +213,8 @@ remove.
   corgi agent plan "…" --run --slots 2            start at once, two tasks side by side
 
 Running (corgi agent plan run P-1): the daemon starts each task when its turn
-comes — the same unattended run a ticket gets, in a worktree of its own, the
-workspace's caps, quiet hours and breaker respected — and the next when one
+comes - the same unattended run a ticket gets, in a worktree of its own, the
+workspace's caps, quiet hours and breaker respected - and the next when one
 ends. A task that is Review (a pull request is up) or Done lets the ones after
 it start. A run that failed leaves its task for you; the plan does not retry it.
 The kanban shows the tasks; corgi agent plan status shows the plan.
@@ -321,7 +321,7 @@ daemon to run anything.`,
 		printPlanTasks(p, made)
 		fmt.Printf("  plan: %s\n", path)
 		if run {
-			fmt.Printf("running — %d at a time; corgi agent plan status %s\n", slots, p.Ref())
+			fmt.Printf("running - %d at a time; corgi agent plan status %s\n", slots, p.Ref())
 		} else {
 			fmt.Printf("read them, then: corgi agent plan run %s [--slots N]\n", p.Ref())
 		}
@@ -360,7 +360,7 @@ var agentPlanRunCmd = &cobra.Command{
 		plans := watch.LoadPlans(dir)
 		p, ok := plans.Find(args[0])
 		if !ok {
-			exitWithError("agent_plan", fmt.Errorf("no plan %s — corgi agent plan status lists them", args[0]), 2)
+			exitWithError("agent_plan", fmt.Errorf("no plan %s - corgi agent plan status lists them", args[0]), 2)
 		}
 		slots, _ := cmd.Flags().GetInt("slots")
 		if slots > 0 {
@@ -371,9 +371,9 @@ var agentPlanRunCmd = &cobra.Command{
 		}
 		p, _ = plans.SetState(p.ID, watch.PlanRunning, time.Now())
 		if !nudgePlans(dir) {
-			exitWithError("agent_plan", fmt.Errorf("the daemon is not running — corgi agent up, then corgi agent plan run %s again", p.Ref()), 1)
+			exitWithError("agent_plan", fmt.Errorf("the daemon is not running - corgi agent up, then corgi agent plan run %s again", p.Ref()), 1)
 		}
-		fmt.Printf("%s running — %d task(s) at a time; the kanban shows them, corgi agent plan status %s follows\n", p.Ref(), p.Slots, p.Ref())
+		fmt.Printf("%s running - %d task(s) at a time; the kanban shows them, corgi agent plan status %s follows\n", p.Ref(), p.Slots, p.Ref())
 	},
 }
 
@@ -429,12 +429,12 @@ var agentPlanStatusCmd = &cobra.Command{
 			return
 		}
 		if len(list) == 0 {
-			fmt.Println("no plans yet — corgi agent plan \"<goal>\"")
+			fmt.Println("no plans yet - corgi agent plan \"<goal>\"")
 			return
 		}
 		for _, p := range list {
 			pr := p.Progress(tasks)
-			fmt.Printf("%s  %-8s %s — %s\n", p.Ref(), p.State, p.Workspace, p.Goal)
+			fmt.Printf("%s  %-8s %s - %s\n", p.Ref(), p.State, p.Workspace, p.Goal)
 			fmt.Printf("  %d todo · %d doing · %d review · %d done · %d canceled · %d slot(s)\n", pr.Todo, pr.Doing, pr.Review, pr.Done, pr.Canceled, p.Slots)
 			var its []watch.Task
 			for _, id := range p.TaskIDs() {
@@ -450,7 +450,7 @@ var agentPlanStatusCmd = &cobra.Command{
 func init() {
 	agentPlanCmd.Flags().String("workspace", "", "the workspace the plan is for (default: the one you are in)")
 	agentPlanCmd.Flags().String("model", "", "the planner's model: sonnet (default), opus, haiku")
-	agentPlanCmd.Flags().Int("max", 6, "at most this many tasks (2–12)")
+	agentPlanCmd.Flags().Int("max", 6, "at most this many tasks (2-12)")
 	agentPlanCmd.Flags().Int("slots", 1, "how many tasks run at once; more than one needs the workspace watched with --isolate")
 	agentPlanCmd.Flags().Bool("run", false, "start working through the tasks at once")
 	agentPlanRunCmd.Flags().Int("slots", 0, "how many tasks run at once (keeps the plan's when 0)")

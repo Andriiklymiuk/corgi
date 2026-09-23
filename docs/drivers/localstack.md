@@ -16,7 +16,7 @@ db_services:
 
 `corgi run` will:
 1. Start localstack container on `:4566`
-2. Run bootstrap.sh — creates queues, buckets, topics, secrets, parameters, streams via `awslocal` CLI inside the container
+2. Run bootstrap.sh - creates queues, buckets, topics, secrets, parameters, streams via `awslocal` CLI inside the container
 3. Probe `/_localstack/health` (default healthcheck for this driver)
 
 ## Emitted env vars (prefix `AWS_`)
@@ -101,7 +101,7 @@ secrets:
     value: '{"username":"admin","password":"secret"}'
 ```
 
-Each emits `AWS_SECRET_<FLATTENED_KEY>` env var with the secret name (NOT value — pull live via SDK).
+Each emits `AWS_SECRET_<FLATTENED_KEY>` env var with the secret name (NOT value - pull live via SDK).
 
 ### `parameters: []SsmParameter`
 
@@ -126,13 +126,13 @@ streams: [analytics-events, audit-log]
 
 ## Healthcheck
 
-Default `GET /_localstack/health` — corgi auto-applies for `driver: localstack` if you don't set `healthCheck:`. Override only if you've changed port or disabled the health service.
+Default `GET /_localstack/health` - corgi auto-applies for `driver: localstack` if you don't set `healthCheck:`. Override only if you've changed port or disabled the health service.
 
 ## Bootstrap script
 
 corgi generates `.corgi/corgi_services/db_services/<name>/bootstrap/bootstrap.sh`. Mounted into the container at `/etc/localstack/init/ready.d/`. Localstack auto-runs it after services are up. Logs visible via `docker logs localstack-<name>`.
 
-Idempotent — every `awslocal` call ends with `|| true` so re-runs don't fail on existing resources.
+Idempotent - every `awslocal` call ends with `|| true` so re-runs don't fail on existing resources.
 
 ## Versions
 
@@ -176,29 +176,29 @@ db_services:
 ## Picking driver vs alternatives
 
 - **Use `localstack`** for any AWS service emulation. Single container, multi-service.
-- **Don't use** standalone `sqs`/`s3` drivers — they predate localstack support and only cover one service each.
-- **For Storage S3** — if you're using **Supabase Storage**, prefer the `supabase` driver instead. It exposes an S3-compatible API on `:54321/storage/v1/s3` natively.
+- **Don't use** standalone `sqs`/`s3` drivers - they predate localstack support and only cover one service each.
+- **For Storage S3** - if you're using **Supabase Storage**, prefer the `supabase` driver instead. It exposes an S3-compatible API on `:54321/storage/v1/s3` natively.
 
 ## Troubleshooting
 
-**`localstack` ❌ right after `corgi run`** — services boot async. Wait 5-10s and re-probe with `corgi status`.
+**`localstack` ❌ right after `corgi run`** - services boot async. Wait 5-10s and re-probe with `corgi status`.
 
-**Bootstrap script ran but resources missing** — check `docker logs localstack-<name>` for `awslocal` errors. Common: typos in queue/bucket name or missing service in `services:` list.
+**Bootstrap script ran but resources missing** - check `docker logs localstack-<name>` for `awslocal` errors. Common: typos in queue/bucket name or missing service in `services:` list.
 
-**`subscriptions:` errors** — topic AND queue both must be declared, AND `services:` must include both `sqs` and `sns`.
+**`subscriptions:` errors** - topic AND queue both must be declared, AND `services:` must include both `sqs` and `sns`.
 
-**Secret value with special chars** — wrap in single quotes; bash-escape `$` and `"` if needed:
+**Secret value with special chars** - wrap in single quotes; bash-escape `$` and `"` if needed:
 ```yaml
 secrets:
   - name: my-secret
     value: '{"key":"val\"ue"}'
 ```
 
-**Image pull fails on tag** — verify localstack version. `4.x` may need auth token. Fall back to `3.8`.
+**Image pull fails on tag** - verify localstack version. `4.x` may need auth token. Fall back to `3.8`.
 
-**Port 4566 already taken** — old localstack from another project. `docker ps | grep localstack` and `docker stop <id>`.
+**Port 4566 already taken** - old localstack from another project. `docker ps | grep localstack` and `docker stop <id>`.
 
 ## Related
 
-- [supabase driver](supabase.md) — for local auth + S3-compatible Storage
+- [supabase driver](supabase.md) - for local auth + S3-compatible Storage
 - [healthchecks reference](../../plugins/corgi/skills/corgi/references/healthchecks.md)

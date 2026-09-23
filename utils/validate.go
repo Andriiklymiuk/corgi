@@ -47,7 +47,7 @@ func checkUnknownFields(_ *CorgiCompose) []ValidationIssue {
 	for _, f := range UnknownComposeFields {
 		out = append(out, ValidationIssue{
 			Code:    WarnUnknownField,
-			Message: fmt.Sprintf("unknown field %q in corgi-compose.yml — possible typo; it was ignored", f),
+			Message: fmt.Sprintf("unknown field %q in corgi-compose.yml - possible typo; it was ignored", f),
 			Field:   f,
 		})
 	}
@@ -93,7 +93,7 @@ func checkDuplicateNames(c *CorgiCompose) []ValidationIssue {
 		if dbs[n] {
 			out = append(out, ValidationIssue{
 				Code:    ErrDuplicateName,
-				Message: fmt.Sprintf("name %q is used by both a service and a db_service — names must be unique", n),
+				Message: fmt.Sprintf("name %q is used by both a service and a db_service - names must be unique", n),
 				Field:   fmt.Sprintf("services.%s", n),
 			})
 		}
@@ -101,7 +101,7 @@ func checkDuplicateNames(c *CorgiCompose) []ValidationIssue {
 	for _, dup := range DuplicateComposeKeys {
 		out = append(out, ValidationIssue{
 			Code:    ErrDuplicateName,
-			Message: fmt.Sprintf("duplicate key %q — YAML keeps only the last; remove the duplicate", dup),
+			Message: fmt.Sprintf("duplicate key %q - YAML keeps only the last; remove the duplicate", dup),
 			Field:   dup,
 		})
 	}
@@ -187,7 +187,7 @@ func checkDependencyCycles(c *CorgiCompose) []ValidationIssue {
 	for _, n := range cyclic {
 		out = append(out, ValidationIssue{
 			Code:    ErrDependencyCycle,
-			Message: fmt.Sprintf("service %q is part of a condition:-gated depends_on_services cycle — gated deps in a cycle wait on each other and time out", n),
+			Message: fmt.Sprintf("service %q is part of a condition:-gated depends_on_services cycle - gated deps in a cycle wait on each other and time out", n),
 			Field:   fmt.Sprintf("services.%s.depends_on_services", n),
 		})
 	}
@@ -408,7 +408,7 @@ func checkDependedWithoutHealthcheck(c *CorgiCompose) []ValidationIssue {
 		if depended[s.ServiceName] && s.HealthCheck == "" {
 			out = append(out, ValidationIssue{
 				Code:    WarnNoHealthcheck,
-				Message: fmt.Sprintf("service %q is depended on but has no healthCheck — a TCP probe will be used", s.ServiceName),
+				Message: fmt.Sprintf("service %q is depended on but has no healthCheck - a TCP probe will be used", s.ServiceName),
 				Field:   fmt.Sprintf("services.%s.healthCheck", s.ServiceName),
 			})
 		}
@@ -422,7 +422,7 @@ func checkCloneWithoutBranch(c *CorgiCompose) []ValidationIssue {
 		if s.CloneFrom != "" && s.Branch == "" {
 			out = append(out, ValidationIssue{
 				Code:    WarnNoBranch,
-				Message: fmt.Sprintf("service %q sets cloneFrom but no branch — the default branch will be used", s.ServiceName),
+				Message: fmt.Sprintf("service %q sets cloneFrom but no branch - the default branch will be used", s.ServiceName),
 				Field:   fmt.Sprintf("services.%s.branch", s.ServiceName),
 			})
 		}

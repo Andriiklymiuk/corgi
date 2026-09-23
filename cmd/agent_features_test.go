@@ -159,7 +159,7 @@ func TestRunAgentLogsHumanAndJSON(t *testing.T) {
 
 	utils.JSONOutput = false
 	out := captureStdout(t, func() { runAgentLogs(cmd, []string{"acme"}) })
-	if !strings.Contains(out, "exited · crash — boom") || !strings.Contains(out, "started (pid 9)") {
+	if !strings.Contains(out, "exited · crash - boom") || !strings.Contains(out, "started (pid 9)") {
 		t.Errorf("human timeline missing entries:\n%s", out)
 	}
 
@@ -275,8 +275,8 @@ func TestDescribeEvent(t *testing.T) {
 	cases := map[string]events.Event{
 		"started (pid 7)":                  {Kind: "started", PID: 7},
 		"session https://claude.ai/code/x": {Kind: "session", URL: "https://claude.ai/code/x"},
-		"disabled — auth broke":            {Kind: "disabled", Reason: "auth broke"},
-		"exited · crash — boom":            {Kind: "exited", Cause: "crash", Reason: "boom"},
+		"disabled - auth broke":            {Kind: "disabled", Reason: "auth broke"},
+		"exited · crash - boom":            {Kind: "exited", Cause: "crash", Reason: "boom"},
 		"exited":                           {Kind: "exited"},
 		"weird":                            {Kind: "weird"},
 	}

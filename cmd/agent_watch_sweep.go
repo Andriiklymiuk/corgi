@@ -18,7 +18,7 @@ var agentWatchSweepCmd = &cobra.Command{
 	Use:   "sweep",
 	Short: "Hand every open ticket already assigned to you to the daemon, as if it had just arrived",
 	Long: `The watch only sees what changes after it starts. Work that was already
-yours — assigned last week, sitting in a column the watch takes — never
+yours - assigned last week, sitting in a column the watch takes - never
 arrives on its own. A sweep reads the tracker once for every open ticket
 assigned to you and hands each to the daemon as a new issue. The rules still
 decide (column, labels, action), and a ticket the daemon already ran on, or
@@ -29,7 +29,7 @@ one you told it to ignore, is left alone.
   corgi agent watch sweep                              hand them over
 
 Without --states the workspace's own column list applies, and that list often
-holds In Progress and In Review for the sake of comments — columns where the
+holds In Progress and In Review for the sake of comments - columns where the
 work is already yours by hand. Name the column that means "not started".`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		dir := mustAgentDir()
@@ -74,7 +74,7 @@ work is already yours by hand. Name the column that means "not started".`,
 		}
 		info, _ := daemon.ReadInfo(dir)
 		if info == nil || !info.Commands {
-			return fmt.Errorf("no daemon to hand them to — corgi agent start")
+			return fmt.Errorf("no daemon to hand them to - corgi agent start")
 		}
 		queued := 0
 		for i := range found {

@@ -7,7 +7,7 @@ A planner breaks a goal into tasks on the board; the daemon works through them, 
 ### Synopsis
 
 One goal, handed to a planner (a short claude run on this machine, sonnet by
-default) that writes 2–6 tasks on the board — what to change, where, how a
+default) that writes 2-6 tasks on the board - what to change, where, how a
 session knows it is done, which tasks wait for which. Nothing runs until you
 say so; the tasks sit in Todo for you to read, edit (corgi agent task edit) or
 remove.
@@ -17,8 +17,8 @@ remove.
   corgi agent plan "…" --run --slots 2            start at once, two tasks side by side
 
 Running (corgi agent plan run P-1): the daemon starts each task when its turn
-comes — the same unattended run a ticket gets, in a worktree of its own, the
-workspace's caps, quiet hours and breaker respected — and the next when one
+comes - the same unattended run a ticket gets, in a worktree of its own, the
+workspace's caps, quiet hours and breaker respected - and the next when one
 ends. A task that is Review (a pull request is up) or Done lets the ones after
 it start. A run that failed leaves its task for you; the plan does not retry it.
 The kanban shows the tasks; corgi agent plan status shows the plan.
@@ -34,7 +34,7 @@ corgi agent plan "<goal>" [flags]
 
 ```
   -h, --help               help for plan
-      --max int            at most this many tasks (2–12) (default 6)
+      --max int            at most this many tasks (2-12) (default 6)
       --model string       the planner's model: sonnet (default), opus, haiku
       --run                start working through the tasks at once
       --slots int          how many tasks run at once; more than one needs the workspace watched with --isolate (default 1)

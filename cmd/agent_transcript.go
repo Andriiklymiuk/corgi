@@ -13,8 +13,8 @@ import (
 var agentTranscriptCmd = &cobra.Command{
 	Use:   "transcript <session> [--after N] [--max N]",
 	Short: "A session's conversation: the newest entries, or everything after an offset",
-	Long: `Reads a session's transcript as the phone's chat does — who said what, the
-tools it ran, what they returned — for a panel beside the code or a script.
+	Long: `Reads a session's transcript as the phone's chat does - who said what, the
+tools it ran, what they returned - for a panel beside the code or a script.
 
   corgi agent transcript 2 --json            the newest 40 entries and the offset after them
   corgi agent transcript api --after 84213   what landed after that offset (0 entries: nothing yet)
@@ -23,7 +23,7 @@ tools it ran, what they returned — for a panel beside the code or a script.
 number names the session as everywhere else.
 
 --why reads the whole conversation as steps: what the agent said, the tools it
-ran on the strength of it, the files it touched — plan step, tool call and diff
+ran on the strength of it, the files it touched - plan step, tool call and diff
 side by side. --json prints {steps}; --max caps the steps, newest last.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {

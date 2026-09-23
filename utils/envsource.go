@@ -82,7 +82,7 @@ func placeholderWarning(service Service, envBody string) string {
 	if len(found) == 0 {
 		return ""
 	}
-	return fmt.Sprintf("⚠️  %s env still has placeholder(s): %s — replace with real values",
+	return fmt.Sprintf("⚠️  %s env still has placeholder(s): %s - replace with real values",
 		service.ServiceName, strings.Join(found, ", "))
 }
 

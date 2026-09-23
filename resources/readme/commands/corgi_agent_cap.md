@@ -6,8 +6,8 @@ A token budget for every session, or for one
 
 ### Synopsis
 
-Every session carries what it has spent — the token counts Claude Code
-writes in its transcript, summed on the daemon's sweep — and a budget.
+Every session carries what it has spent - the token counts Claude Code
+writes in its transcript, summed on the daemon's sweep - and a budget.
 "corgi agent cap 50M" is the budget every session runs under; "corgi agent
 cap `<session>` 20M" gives one session its own. The daemon rings once when a
 session passes it and the row says "over budget" on every board; nothing

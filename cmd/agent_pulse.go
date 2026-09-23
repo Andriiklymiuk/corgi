@@ -45,7 +45,7 @@ it emails or messages you. Corgi appends nothing to the URL.
 			if err := writeUserConfig(path, user); err != nil {
 				return err
 			}
-			utils.Info("✓ pulse off — corgi agent restart")
+			utils.Info("✓ pulse off - corgi agent restart")
 			return nil
 		}
 		u, err := url.Parse(args[0])
@@ -56,14 +56,14 @@ it emails or messages you. Corgi appends nothing to the URL.
 		if err := writeUserConfig(path, user); err != nil {
 			return err
 		}
-		utils.Infof("✓ pulse → %s every %s — corgi agent restart\n", maskPulseURL(args[0]), daemon.DefaultPulseEvery)
+		utils.Infof("✓ pulse → %s every %s - corgi agent restart\n", maskPulseURL(args[0]), daemon.DefaultPulseEvery)
 		return nil
 	},
 }
 
 func printPulse(dir, raw string) {
 	if raw == "" {
-		fmt.Println("no pulse — corgi agent pulse <url>")
+		fmt.Println("no pulse - corgi agent pulse <url>")
 		return
 	}
 	st := daemon.ReadPulse(dir)
@@ -74,7 +74,7 @@ func printPulse(dir, raw string) {
 	case !st.At.IsZero():
 		fmt.Printf("last ping %s\n", st.At.Local().Format("15:04:05"))
 	default:
-		fmt.Println("no ping yet — corgi agent restart")
+		fmt.Println("no ping yet - corgi agent restart")
 	}
 }
 

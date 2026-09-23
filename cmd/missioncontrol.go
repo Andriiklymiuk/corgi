@@ -19,8 +19,8 @@ var missionControlCmd = &cobra.Command{
 	Aliases: []string{"mc"},
 	Short:   "One live pane: every service's run state + its branch/PR/CI",
 	Long: `Aggregates, in one refreshing read-only view, each declared service's
-run state (reusing 'corgi status' probes) and its per-service agent work —
-current branch, draft/open/merged PR, and CI status — read locally via git
+run state (reusing 'corgi status' probes) and its per-service agent work -
+current branch, draft/open/merged PR, and CI status - read locally via git
 and gh/glab.
 
   --watch          Repoll and reprint the frame until Ctrl+C.
@@ -211,7 +211,7 @@ func buildMissionFrame(snap MissionSnapshot, interval time.Duration, now time.Ti
 	if interval > 0 {
 		footer = fmt.Sprintf(" every %s", interval)
 	}
-	fmt.Fprintf(&buf, "\n%s🛰️  %d services%s — %d up, %d down, %d open PRs — last update %s%s\n",
+	fmt.Fprintf(&buf, "\n%s🛰️  %d services%s - %d up, %d down, %d open PRs - last update %s%s\n",
 		art.CyanColor, snap.Summary.Total, footer, snap.Summary.Up, snap.Summary.Down,
 		snap.Summary.WithOpenPR, now.Format("15:04:05"), art.WhiteColor)
 	return buf.String()

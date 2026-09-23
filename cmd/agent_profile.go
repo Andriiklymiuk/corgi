@@ -23,7 +23,7 @@ var agentProfileCmd = &cobra.Command{
   corgi agent session start my-stack --profile work
 
 They live in the global corgi config (never a committed repo file), because a
-profile chooses which config directory and binary run — that is capability, and
+profile chooses which config directory and binary run - that is capability, and
 capability must not travel with a clone.`,
 	Run: func(cmd *cobra.Command, _ []string) { _ = cmd.Help() },
 }
@@ -44,7 +44,7 @@ var agentProfileAddCmd = &cobra.Command{
 		}); err != nil {
 			exitWithError("agent_profile_add", err, 1)
 		}
-		utils.Infof("profile %q saved — use it with `corgi agent session start <workspace> --profile %s`\n", args[0], args[0])
+		utils.Infof("profile %q saved - use it with `corgi agent session start <workspace> --profile %s`\n", args[0], args[0])
 	},
 }
 
@@ -181,11 +181,11 @@ func mustAgentDir() string {
 }
 
 func init() {
-	agentProfileAddCmd.Flags().String("config-dir", "", "Claude config directory for this profile (e.g. ~/.claude-work) — the account it runs under")
+	agentProfileAddCmd.Flags().String("config-dir", "", "Claude config directory for this profile (e.g. ~/.claude-work) - the account it runs under")
 	agentProfileAddCmd.Flags().String("bin", "", "Command to run instead of the default `claude` (a real program on PATH, not a shell alias)")
 	agentProfileAddCmd.Flags().String("permission-mode", "", "Permission mode passed to remote control (default|acceptEdits|plan|auto|dontask)")
 	agentProfileAddCmd.Flags().Bool("dangerously-skip-permissions", false,
-		"Run this profile's sessions with permission prompts OFF (--permission-mode bypassPermissions). Removes the gate you answer from your phone — trusted local config only, off by default.")
+		"Run this profile's sessions with permission prompts OFF (--permission-mode bypassPermissions). Removes the gate you answer from your phone - trusted local config only, off by default.")
 	agentProfileCmd.AddCommand(agentProfileAddCmd, agentProfileListCmd, agentProfileRemoveCmd)
 	agentCmd.AddCommand(agentProfileCmd)
 }

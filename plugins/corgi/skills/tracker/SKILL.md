@@ -9,15 +9,15 @@ description: "Tracker-side work for a corgi workspace (Linear or Jira): status (
 
 Read the tracker (Linear or Jira) **and** `corgi-compose.yml`, **tie each ticket to
 its real code state**, and do four jobs: **status**, **triage**, **decompose**,
-**pickup**. Reports, plans, and dispatches to `stories` — never writes code itself.
+**pickup**. Reports, plans, and dispatches to `stories` - never writes code itself.
 
 **Why not just the tracker UI:** it doesn't know your service→repo map, so it can't
 tell you an *In Progress* ticket has no branch or a *Todo* whose PR already merged.
-That correlation is the point — when compose is on disk, never report status without
+That correlation is the point - when compose is on disk, never report status without
 it.
 
 **Exact tracker calls (Linear + Jira tools, JQL, forge queries) live in
-`references/tracker-and-forge.md` — read it before calling the tracker; don't guess a
+`references/tracker-and-forge.md` - read it before calling the tracker; don't guess a
 tool name.**
 
 ## Guardrails
@@ -27,20 +27,20 @@ tool name.**
   asking).
 - **Correlate, don't assume.** True state = tracker status **+** PR/CI. Report
   mismatches; never invent an estimate/status/assignee the tracker lacks.
-- **Plan, don't build** — code → `stories`, ideas → `suggest`.
+- **Plan, don't build** - code → `stories`, ideas → `suggest`.
 - Read `../_shared/conventions.md` first (attribution, `manualRun`, preflight, worktrees).
 
-## Phase 0 — Workspace + tracker + forge
+## Phase 0 - Workspace + tracker + forge
 
-- **Workspace + forge** — preflight per `../_shared/conventions.md`; read service→dir +
+- **Workspace + forge** - preflight per `../_shared/conventions.md`; read service→dir +
   dependency order. Absent → tracker-only; skip Phase 1, say the code column wasn't
   checked.
-- **Tracker** — read `../_shared/tracker-mcp.md` first. Neither connected → name what to
+- **Tracker** - read `../_shared/tracker-mcp.md` first. Neither connected → name what to
   connect, offer a git-only digest.
 
-## Phase 1 — Correlate ticket ↔ code
+## Phase 1 - Correlate ticket ↔ code
 
-Per in-scope ticket (skip only if no compose): find its PRs — prefer the tracker's
+Per in-scope ticket (skip only if no compose): find its PRs - prefer the tracker's
 own git links (Linear attachments / Jira dev-panel), else list PRs whose head branch
 contains the key per repo. Record **none/draft/open/merged/closed** + link + CI.
 Read-only; no checkout. Then flag drift:
@@ -49,14 +49,14 @@ Read-only; no checkout. Then flag drift:
 |---------|------|-----------|
 | In Progress | no branch/PR | **not started** |
 | In Progress | open PR, CI red | **blocked on CI** → `/corgi-debug` |
-| In Review | no PR | drift — nothing to review |
-| Todo/Backlog | PR merged | **stale — close** (gate) |
+| In Review | no PR | drift - nothing to review |
+| Todo/Backlog | PR merged | **stale - close** (gate) |
 | Done | PR open | **premature done** |
 | any | open PR, no review | needs a reviewer → `/corgi-review` |
 
 Hold one cache; the jobs below read it, never re-query.
 
-## Job 1 — Status / standup
+## Job 1 - Status / standup
 
 Group the cache, lead with **blockers + drift**, each line carrying PR + CI:
 ```
@@ -73,7 +73,7 @@ the assignee per line. "Plan next sprint" → propose a set within
 capacity (tracker velocity if exposed, else ask), carry-over first,
 producer-before-consumer; offer to move it in (gate).
 
-## Job 2 — Triage (sort & prioritize the inbox)
+## Job 2 - Triage (sort & prioritize the inbox)
 
 Plain asks: "sort the new bugs", "which of these matter", "clean up the inbox".
 Per untriaged issue, propose (don't apply): **label/area** (map text → service via
@@ -81,7 +81,7 @@ compose + READMEs), **priority** (real signals, else `needs-info` + the question
 **assignee** (by ownership if known, else leave), **duplicate** (link a candidate).
 Table → gate → batch-write. Ambiguous → leave it, flag.
 
-## Job 3 — Decompose epic → tickets
+## Job 3 - Decompose epic → tickets
 
 Feature/epic → **buildable, ordered tickets** (what `stories` wants):
 1. Scope it (read the epic + existing children to not dup). Source = a tracker epic
@@ -96,11 +96,11 @@ Feature/epic → **buildable, ordered tickets** (what `stories` wants):
 4. Preview set + order → gate → create (parented, linked) → offer "build these now?"
    → hand **keys** to `stories` (don't let it re-create them).
 
-## Job 4 — Pickup (build-ready tickets → stories)
+## Job 4 - Pickup (build-ready tickets → stories)
 
-Two ways in, same dispatch. **Read-only here — `stories` owns the build + its spec
+Two ways in, same dispatch. **Read-only here - `stories` owns the build + its spec
 gate.**
-1. **Resolve the set — read the scope from the user's words; default to the `agent`
+1. **Resolve the set - read the scope from the user's words; default to the `agent`
    label:**
    - **explicit links/keys** passed in → exactly those.
    - **no scope said** → the **`agent` queue** (label `agent`).
@@ -117,28 +117,28 @@ gate.**
    All scopes apply the same floor: **not In Progress / not Done, not blocked.** Calls
    per tracker: `references/tracker-and-forge.md`. **A question or singular ask** ("do
    we have bugs?", "what should I start with?") → **answer the inventory first** (count
-   + one line each), then offer to build — don't auto-build the whole set off a
+   + one line each), then offer to build - don't auto-build the whole set off a
    question.
-2. **Drop drift** (Phase 1): skip anything already merged or with an open PR — flag,
+2. **Drop drift** (Phase 1): skip anything already merged or with an open PR - flag,
    don't rebuild. All scopes.
 3. **Present + confirm** (one line each, size + service; tag **"has spec"** when the
-   ticket already carries one — `stories` reuses **and re-verifies** it). Add the
-   `risk` skill's **story forecast** to each line — its `gate` line, `risk 3/10 low ·
-   auto-approve: no — story` — scored from the
+   ticket already carries one - `stories` reuses **and re-verifies** it). Add the
+   `risk` skill's **story forecast** to each line - its `gate` line, `risk 3/10 low ·
+   auto-approve: no - story` - scored from the
    ticket text and the code area it names (`confidence: low`, never auto-approve). It
    is what makes a queue readable at a glance: a forecast of 7+ is a ticket a human
    should own the spec of, not one to hand an agent in an unattended round. Auto-pick
    = all ready for a **batch** ask, **below the caller's risk ceiling** (`autopilot`
    `maxRisk`, default 6; an interactive ask has none); anything above stays in the
-   queue — listed with the forecast's *Before building* items as the reason, never
+   queue - listed with the forecast's *Before building* items as the reason, never
    handed to `stories` by an unattended round. A singular/question ask → present, let
    the user pick.
-4. **Hand picked keys to `stories`** — it builds and, as each branch is created,
+4. **Hand picked keys to `stories`** - it builds and, as each branch is created,
    **moves the ticket to in-progress + self-assigns** (then → the team's review state
-   when its draft PR opens) — `stories` Phases 3 & 5. The in-progress move de-dupes a
+   when its draft PR opens) - `stories` Phases 3 & 5. The in-progress move de-dupes a
    looping `/corgi-queue` (auto-pick takes only not-In-Progress). Loop
    `/loop 1h /corgi-queue` to keep draining on a schedule (each round's batch still
-   passes the one spec gate — not zero-touch). Empty / all-drift → say so.
+   passes the one spec gate - not zero-touch). Empty / all-drift → say so.
 
 ## The write gate
 
@@ -147,9 +147,9 @@ One confirm for the whole batch (never per-issue):
 Write to <Linear|Jira>:  create 3 under EPIC-9 + links · move ABC-118 to Cycle 25 · set GHI-4 High
 apply / edit / cancel
 ```
-On by default (`--yes` skips). **Preflight the MCP is connected** — if not, keep the
+On by default (`--yes` skips). **Preflight the MCP is connected** - if not, keep the
 plan + a paste-ready body + the new-issue URL, stop. Idempotent: match on title/key,
-update not duplicate. **Post one terse comment, not several — don't spam the ticket;
+update not duplicate. **Post one terse comment, not several - don't spam the ticket;
 update an existing comment in place rather than adding new ones.**
 
 ## Hand-offs & degrade

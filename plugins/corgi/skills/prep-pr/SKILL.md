@@ -5,7 +5,7 @@ description: "Use when the user says \"prep my PR\", \"get this ready for review
 
 # Prep PR
 
-**Done when:** every gate is green and the draft PR/MR URL is printed with its risk card — or the first red gate is named with its output after you tried to fix it.
+**Done when:** every gate is green and the draft PR/MR URL is printed with its risk card - or the first red gate is named with its output after you tried to fix it.
 
 Read `../_shared/conventions.md` and `../_shared/forge-commands.md` first.
 
@@ -40,7 +40,7 @@ gate, continue.
 
 Follow `stories` Phase 5: push the branch, create the draft with `forge-commands.md`
 §6, title `<subject> [<key>]`, body with what / how / tests / issue link, then stamp the
-risk card. Add `## Assumptions` — the `align` picks nobody overruled, ≤5 bullets; omit
+risk card. Add `## Assumptions` - the `align` picks nobody overruled, ≤5 bullets; omit
 the section when there are none. Draft only; a human flips it to ready. Multi-repo → one
 PR per repo, sibling links in each body, contract lines on every side.
 

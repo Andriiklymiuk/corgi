@@ -7,9 +7,9 @@ Compare the sessions a fan-out opened on a ticket, and pick one
 ### Synopsis
 
 corgi agent watch work ABC-123 --attempts 3 opens three sessions on the
-ticket, a worktree each. This puts them side by side — status, what each
+ticket, a worktree each. This puts them side by side - status, what each
 built, whether its tests and the workspace's done-when passed, what it cost,
-the pull request it opened — and picks one:
+the pull request it opened - and picks one:
 
   corgi agent attempts                 every fan-out on the board
   corgi agent attempts ABC-123

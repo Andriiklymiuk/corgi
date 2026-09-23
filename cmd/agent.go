@@ -46,7 +46,7 @@ Remote Control already gives you a phone-driven Claude Code session on your own
 machine. Two things stop it being always-on: the local process must keep
 running, and it exits after roughly ten minutes awake without network.
 
-corgi agent supervises it — restarting after a network timeout, holding a wake
+corgi agent supervises it - restarting after a network timeout, holding a wake
 lock so the machine does not sleep mid-session, and running one per workspace
 under that workspace's own Claude config directory.
 
@@ -87,7 +87,7 @@ func warnStrandedAgentData() {
 			return
 		}
 		utils.Infof("corgi: agent data now lives at %s (was %s).\n"+
-			"The old setup is not carried over — re-run `corgi agent init` and re-pair your devices.\n",
+			"The old setup is not carried over - re-run `corgi agent init` and re-pair your devices.\n",
 			newDir, legacy)
 	})
 }
@@ -113,11 +113,11 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 
 	if info, err := daemon.ReadInfo(dir); err == nil && info != nil {
 		exitWithError("agent_already_running",
-			fmt.Errorf("corgi agent is already running (pid %d) — `corgi agent stop` first", info.PID), 1)
+			fmt.Errorf("corgi agent is already running (pid %d) - `corgi agent stop` first", info.PID), 1)
 	}
 	if strays := otherServers(os.Getpid()); len(strays) > 0 {
 		exitWithError("agent_already_running",
-			fmt.Errorf("corgi agent is already running (pid %d) without its record — `corgi agent restart` replaces it", strays[0]), 1)
+			fmt.Errorf("corgi agent is already running (pid %d) without its record - `corgi agent restart` replaces it", strays[0]), 1)
 	}
 
 	configs, err := loadSpawnConfigs(dir, foreground)
@@ -242,7 +242,7 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 		hook := webhookNotifier(user.NotifyUrl, nil)
 		linked := webhookLinkNotifier(user.NotifyUrl, nil)
 		if hook == nil || linked == nil {
-			utils.Infof("⚠ notifyUrl %q is not a usable http(s) URL — webhook notifications are off\n", user.NotifyUrl)
+			utils.Infof("⚠ notifyUrl %q is not a usable http(s) URL - webhook notifications are off\n", user.NotifyUrl)
 		} else {
 			if n := combinedNotifier(d.Notify, hook); n != nil {
 				d.Notify = n
@@ -341,10 +341,10 @@ func remoteResolver(dir string, foreground bool) func(id, profile, name string) 
 		registry.Reconcile(dirIsWorkspace)
 		w, ok := registry.Find(id)
 		if !ok {
-			return supervisor.SpawnConfig{}, fmt.Errorf("no workspace called %q in the registry — run `corgi agent scan` on the laptop", id)
+			return supervisor.SpawnConfig{}, fmt.Errorf("no workspace called %q in the registry - run `corgi agent scan` on the laptop", id)
 		}
 		if w.Status != workspace.StatusOK {
-			return supervisor.SpawnConfig{}, fmt.Errorf("workspace %s is %s — fix the path with `corgi agent workspaces relocate`", w.ID, w.Status)
+			return supervisor.SpawnConfig{}, fmt.Errorf("workspace %s is %s - fix the path with `corgi agent workspaces relocate`", w.ID, w.Status)
 		}
 		user, err := config.LoadUser(agentUserConfigPath(dir))
 		if err != nil {
@@ -356,7 +356,7 @@ func remoteResolver(dir string, foreground bool) func(id, profile, name string) 
 		}
 		resolved := config.Resolve(w.ID, repo, user)
 		if resolved.Sensitive {
-			return supervisor.SpawnConfig{}, fmt.Errorf("workspace %s is marked sensitive — remote session start is refused (start it on the laptop, or unset sensitive in .corgi/agent.yml)", w.ID)
+			return supervisor.SpawnConfig{}, fmt.Errorf("workspace %s is marked sensitive - remote session start is refused (start it on the laptop, or unset sensitive in .corgi/agent.yml)", w.ID)
 		}
 		resolved, err = config.ApplyProfile(resolved, user, profile)
 		if err != nil {
@@ -400,7 +400,7 @@ func spawnConfigForWorkspace(w workspace.Workspace, user *config.UserConfig, for
 	}
 	resolved := config.Resolve(w.ID, repo, user)
 	if !resolved.AutostartEnabled() {
-		utils.Infof("agent: skipping %s (not enabled — run `corgi agent init` there, or set autostart: true)\n", w.ID)
+		utils.Infof("agent: skipping %s (not enabled - run `corgi agent init` there, or set autostart: true)\n", w.ID)
 		return supervisor.SpawnConfig{}, false
 	}
 	cfg := spawnConfigFrom(w, resolved, "", foreground)
@@ -487,10 +487,10 @@ func printStartupDiagnostics(configs []supervisor.SpawnConfig) {
 			utils.Infof("agent: %-20s stripped from child env: %v\n", c.WorkspaceID, stripped)
 		}
 		if c.InheritAPIKey {
-			utils.Infof("agent: %-20s WARNING inheriting ANTHROPIC_API_KEY — remote control refuses to start with one set\n", c.WorkspaceID)
+			utils.Infof("agent: %-20s WARNING inheriting ANTHROPIC_API_KEY - remote control refuses to start with one set\n", c.WorkspaceID)
 		}
 		if c.SkipPermissions {
-			utils.Infof("agent: %-20s ⚠ permissions: SKIPPED — this session runs without the prompts you answer from your phone\n", c.WorkspaceID)
+			utils.Infof("agent: %-20s ⚠ permissions: SKIPPED - this session runs without the prompts you answer from your phone\n", c.WorkspaceID)
 		}
 	}
 }
@@ -619,7 +619,7 @@ func statusWithUsage(dir string, status *daemon.Status) statusJSON {
 func publicURLLines() []string {
 	launcher := launcherURL()
 	if launcher == "" {
-		return []string{"  no public URL yet — corgi agent up opens the tunnel"}
+		return []string{"  no public URL yet - corgi agent up opens the tunnel"}
 	}
 	return []string{
 		"  launcher   " + launcher,
@@ -659,7 +659,7 @@ func printAccountLimits(accounts []accountJSON) {
 			name = strings.Replace(a.ConfigDir, os.Getenv("HOME"), "~", 1)
 		}
 		if a.Limits == nil {
-			fmt.Printf("  %-20s no usage snapshot yet — run /usage once in a session under it\n", name)
+			fmt.Printf("  %-20s no usage snapshot yet - run /usage once in a session under it\n", name)
 			continue
 		}
 		fmt.Printf("  %-20s 5h %d%% · resets %s · week %d%% · as of %s ago%s\n", name,
@@ -710,7 +710,7 @@ func deviceOnlyLine(sessions int) string {
 	if sessions > 0 {
 		return fmt.Sprintf("device · %d session(s) opened on demand", sessions)
 	}
-	return "device only · no session opened at start — create one from the Claude app's device list, or Start it from the launcher"
+	return "device only · no session opened at start - create one from the Claude app's device list, or Start it from the launcher"
 }
 
 func printWorkspaceDiagnostic(d daemon.WorkspaceDiagnostic) {
@@ -757,7 +757,7 @@ func runAgentStop(_ *cobra.Command, _ []string) {
 		utils.Info("stopped")
 	} else {
 		killDaemon(proc)
-		utils.Infof("did not stop in 10s — killed (pid %d)\n", info.PID)
+		utils.Infof("did not stop in 10s - killed (pid %d)\n", info.PID)
 	}
 	stopStrayServers()
 }
@@ -787,7 +787,7 @@ func stopStrayServers() int {
 		for _, pid := range otherServers(os.Getpid()) {
 			if p, err := os.FindProcess(pid); err == nil {
 				killDaemon(p)
-				utils.Infof("a stray did not stop in 10s — killed (pid %d)\n", pid)
+				utils.Infof("a stray did not stop in 10s - killed (pid %d)\n", pid)
 			}
 		}
 	}
@@ -802,7 +802,7 @@ func warnStrayServers(recorded int) {
 		}
 	}
 	if len(strays) > 0 {
-		fmt.Printf("⚠ %d more corgi agent daemon(s) running without a record (pid %s) — `corgi agent restart` leaves one\n", len(strays), strings.Join(strays, ", "))
+		fmt.Printf("⚠ %d more corgi agent daemon(s) running without a record (pid %s) - `corgi agent restart` leaves one\n", len(strays), strings.Join(strays, ", "))
 	}
 }
 
@@ -857,7 +857,7 @@ func runAgentWorkspacesList(_ *cobra.Command, _ []string) {
 }
 
 // workspacesWithAgents is the registry rows plus each one's agent order,
-// when it is more than claude — the surfaces read the list as JSON.
+// when it is more than claude - the surfaces read the list as JSON.
 func workspacesWithAgents(list []workspace.Workspace, user *config.UserConfig) []map[string]any {
 	out := make([]map[string]any, 0, len(list))
 	for _, w := range list {
@@ -920,7 +920,7 @@ var agentWorkspacesPauseCmd = &cobra.Command{
 		if err := setWorkspaceAutostart(args[0], false); err != nil {
 			return err
 		}
-		utils.Infof("%s paused — takes effect when the daemon restarts (corgi agent restart); `corgi agent workspaces resume %s` brings it back\n", args[0], args[0])
+		utils.Infof("%s paused - takes effect when the daemon restarts (corgi agent restart); `corgi agent workspaces resume %s` brings it back\n", args[0], args[0])
 		return nil
 	},
 }
@@ -1035,11 +1035,11 @@ func enqueueSessionCommand(action string, args []string, profile, name string) {
 	}
 	if info == nil {
 		exitWithError("agent_not_running",
-			errors.New("corgi agent is not running — start it with `corgi agent serve`, or `corgi agent install` to start at login"), 1)
+			errors.New("corgi agent is not running - start it with `corgi agent serve`, or `corgi agent install` to start at login"), 1)
 	}
 	if !info.Commands {
 		exitWithError("agent_no_command_support",
-			errors.New("the running corgi agent predates remote session start — restart it: `corgi agent stop` then `corgi agent serve`"), 1)
+			errors.New("the running corgi agent predates remote session start - restart it: `corgi agent stop` then `corgi agent serve`"), 1)
 	}
 
 	c, err := command.Write(dir, command.Command{
@@ -1054,7 +1054,7 @@ func enqueueSessionCommand(action string, args []string, profile, name string) {
 		utils.PrintJSON(map[string]any{"queued": action, "workspaceId": res.Workspace.ID, "commandId": c.ID})
 		return
 	}
-	utils.Infof("%s queued for %s — watch `corgi agent status` for the session URL\n", action, res.Workspace.ID)
+	utils.Infof("%s queued for %s - watch `corgi agent status` for the session URL\n", action, res.Workspace.ID)
 }
 
 var agentResolveCmd = &cobra.Command{

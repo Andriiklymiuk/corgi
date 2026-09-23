@@ -28,7 +28,7 @@ corgi agent claim <file>... [--session <id>] [--release] [flags]
 
 ```
   -h, --help             help for claim
-      --release          Give the files back — the ones named, or all of this session's
+      --release          Give the files back - the ones named, or all of this session's
       --session string   The session the claim is for (default: the one this runs inside, or whose checkout this is)
 ```
 

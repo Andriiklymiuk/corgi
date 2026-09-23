@@ -36,7 +36,7 @@ func (d *Daemon) advancePlans(ctx context.Context) {
 			_, _ = plans.SetState(p.ID, watch.PlanDone, now)
 			utils.Infof("agent: plan %s is done: %d done, %d in review, %d canceled\n", p.Ref(), pr.Done, pr.Review, pr.Canceled)
 			go d.notifyAttentionAt(notifyTitlePrefix+p.Workspace,
-				fmt.Sprintf("plan %s finished: %s — %d in review, %d done", p.Ref(), clipGoal(p.Goal), pr.Review, pr.Done), p.Workspace, "")
+				fmt.Sprintf("plan %s finished: %s - %d in review, %d done", p.Ref(), clipGoal(p.Goal), pr.Review, pr.Done), p.Workspace, "")
 			continue
 		}
 		busy := 0
@@ -65,7 +65,7 @@ func (d *Daemon) advancePlans(ctx context.Context) {
 			_, _ = tasks.Move(t.Ref(), "Doing", now)
 			d.watchState.Fixes.StartFor(e, now)
 			d.spawnFix(ctx, spec, e)
-			utils.Infof("agent: plan %s: started %s — %s\n", p.Ref(), t.Ref(), t.Title)
+			utils.Infof("agent: plan %s: started %s - %s\n", p.Ref(), t.Ref(), t.Title)
 			busy++
 		}
 	}

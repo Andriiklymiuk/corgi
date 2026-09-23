@@ -7,7 +7,7 @@ Run Codex the way this folder's workspace is configured
 ### Synopsis
 
 Starts Codex for the workspace the current directory belongs to, in its
-checkout and under its settings — corgi agent claude with another harness.
+checkout and under its settings - corgi agent claude with another harness.
 The session lands on the board once corgi agent track enable has written
 Codex's notify hook.
 
@@ -26,7 +26,7 @@ corgi agent codex [-- codex args] [flags]
       --attempt int         This session is attempt N of several on the same ticket (corgi agent watch work --attempts): its own worktree on corgi/<ticket>-N, and the board groups them
       --bot string          Open as this bot (corgi agent bot list): its workspace, account, model and persona, resuming its last conversation
   -h, --help                help for codex
-      --isolate             Start in a worktree of its own on a corgi/<ticket> branch — every repository of the stack gets one — so this session never touches your checkout
+      --isolate             Start in a worktree of its own on a corgi/<ticket> branch - every repository of the stack gets one - so this session never touches your checkout
       --model string        Pass --model to codex (opus, sonnet, haiku, or a model id)
       --profile string      Run under this corgi profile's account and settings
       --prompt-id string    Start with the prompt saved under this id by the phone launcher; the file is read once and removed

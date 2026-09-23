@@ -1,6 +1,6 @@
 # supabase driver
 
-Wraps the [supabase CLI](https://supabase.com/docs/guides/local-development) — corgi runs `supabase init`/`start`/`stop` for you and emits the auth + storage env vars consumers need.
+Wraps the [supabase CLI](https://supabase.com/docs/guides/local-development) - corgi runs `supabase init`/`start`/`stop` for you and emits the auth + storage env vars consumers need.
 
 ## Quick start
 
@@ -83,7 +83,7 @@ Override the stock JWT secret. Must match `auth.jwt_secret` in your `supabase/co
 jwtSecret: my-32-character-secret-here-pls-rotate
 ```
 
-Skip for local-only setups — stock secret works.
+Skip for local-only setups - stock secret works.
 
 ### `healthCheck: /path`
 
@@ -91,7 +91,7 @@ Skip for local-only setups — stock secret works.
 
 ### `configTomlPath: string`
 
-Path to a `config.toml` (relative to corgi-compose.yml; absolute also accepted) that corgi copies into the supabase service folder on every `corgi init`. Treat the source file as your single source of truth — git-track it, edit it, share across the team.
+Path to a `config.toml` (relative to corgi-compose.yml; absolute also accepted) that corgi copies into the supabase service folder on every `corgi init`. Treat the source file as your single source of truth - git-track it, edit it, share across the team.
 
 ```yaml
 db_services:
@@ -108,7 +108,7 @@ What changes when set vs unset:
 | Where supabase CLI runs from | project root | the corgi-managed service dir |
 | `supabase init` on first run | yes (creates root supabase/) | no (corgi writes the file directly) |
 
-Always overwrites the destination on each `corgi init`. If the source is missing, init errors. Once you set this, edit the source file only — anything in the destination gets clobbered next init.
+Always overwrites the destination on each `corgi init`. If the source is missing, init errors. Once you set this, edit the source file only - anything in the destination gets clobbered next init.
 
 ### `dbPort` / `studioPort` / `inbucketPort: int`
 
@@ -133,7 +133,7 @@ Convention follows supabase CLI: `<cwd>/supabase/config.toml`. corgi runs the CL
 First `corgi run` triggers `supabase init` automatically. File written with stock defaults. Commit it.
 
 ```
-→ supabase/config.toml missing — running 'supabase init'...
+→ supabase/config.toml missing - running 'supabase init'...
 ```
 
 ### Deleted file
@@ -142,7 +142,7 @@ Next `corgi run` recreates via `supabase init`. Customizations lost (JWT secret,
 
 ### What corgi reads from it
 
-The `[api].port`, `[db].port`, `[studio].port`, `[inbucket].port` values — to emit matching `SUPABASE_*` URLs that align with what supabase actually binds to. Everything else (auth, storage, realtime, edge functions, mailer) is supabase CLI's domain. Compose `port:` overrides `[api].port`; the Makefile patches the file before `supabase start` so both stay aligned.
+The `[api].port`, `[db].port`, `[studio].port`, `[inbucket].port` values - to emit matching `SUPABASE_*` URLs that align with what supabase actually binds to. Everything else (auth, storage, realtime, edge functions, mailer) is supabase CLI's domain. Compose `port:` overrides `[api].port`; the Makefile patches the file before `supabase start` so both stay aligned.
 
 ## Lifecycle
 
@@ -190,7 +190,7 @@ db_services:
 ```
 
 What happens:
-1. corgi env emission reads `[api].port` from `config.toml` but overrides with compose `port:` if set — `SUPABASE_URL=http://...:8000`.
+1. corgi env emission reads `[api].port` from `config.toml` but overrides with compose `port:` if set - `SUPABASE_URL=http://...:8000`.
 2. Makefile `up`: after `supabase init` (if it ran), an awk pass patches `[api].port = 8000` in `supabase/config.toml`. `supabase start` then binds to 8000.
 3. Bind port and emitted URL stay aligned even after first init.
 
@@ -211,7 +211,7 @@ For full pre-baked control, check the file into a templates dir and use `configT
 
 ## Two-database setup
 
-The supabase driver runs its own postgres on `[db].port` (default `54322`) for `auth.users`, storage metadata, realtime subs. **App data should NOT live there** — keep a separate `db_services.<name>` (e.g. postgres driver) for app schema. Reasons:
+The supabase driver runs its own postgres on `[db].port` (default `54322`) for `auth.users`, storage metadata, realtime subs. **App data should NOT live there** - keep a separate `db_services.<name>` (e.g. postgres driver) for app schema. Reasons:
 
 - Supabase upgrades manage their own schema; mixing risks rewrites
 - Prisma / Knex / etc. own their migrations cleanly
@@ -236,4 +236,4 @@ Bootstrap writes captured live values from `supabase status -o env` to `<project
 set -a; . ./.env-supabase-runtime; set +a
 ```
 
-Most users won't need this — supabase rarely rotates these.
+Most users won't need this - supabase rarely rotates these.

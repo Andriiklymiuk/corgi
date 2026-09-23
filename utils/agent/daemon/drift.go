@@ -106,10 +106,10 @@ func driftReasonsFrom(s sessions.Session, lines int, files []string, ok bool) (l
 func loudDriftReasons(s sessions.Session) []string {
 	var loud []string
 	if s.Context != nil && s.Context.Percent >= driftContextAt {
-		loud = append(loud, fmt.Sprintf("context %d%% full — /compact, or fresh from a handoff", s.Context.Percent))
+		loud = append(loud, fmt.Sprintf("context %d%% full - /compact, or fresh from a handoff", s.Context.Percent))
 	}
 	if s.FailStreak >= driftFailsAt {
-		loud = append(loud, fmt.Sprintf("the same tool failed %d times running — step in, or /rewind to before the loop", s.FailStreak))
+		loud = append(loud, fmt.Sprintf("the same tool failed %d times running - step in, or /rewind to before the loop", s.FailStreak))
 	}
 	return loud
 }
@@ -118,7 +118,7 @@ func conflictReason(s sessions.Session) string {
 	if s.Behind == nil || len(s.Behind.Conflicts) == 0 {
 		return ""
 	}
-	return "main moved: would conflict in " + sessions.JoinFiles(s.Behind.Conflicts, 3) + " — rebase before it grows"
+	return "main moved: would conflict in " + sessions.JoinFiles(s.Behind.Conflicts, 3) + " - rebase before it grows"
 }
 
 func sizeReason(lines int, sc scope.Scope, hasScope bool) string {
@@ -133,7 +133,7 @@ func sizeReason(lines int, sc scope.Scope, hasScope bool) string {
 	if hasScope && sc.Lines > 0 {
 		what = fmt.Sprintf("twice the %d-line budget", sc.Lines)
 	}
-	return fmt.Sprintf("diff is %d lines, %s — split it, or trim to the spec", lines, what)
+	return fmt.Sprintf("diff is %d lines, %s - split it, or trim to the spec", lines, what)
 }
 
 func scopeReason(cwd, root string, sc scope.Scope, hasScope bool, files []string) string {

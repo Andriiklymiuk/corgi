@@ -94,14 +94,14 @@ func promoteOnBranch(agentDir, workspace, root string, n int) (string, error) {
 		}
 		return strings.TrimSpace(string(out)), nil
 	}
-	return "pushed " + branch + " — open the pull request by hand", nil
+	return "pushed " + branch + " - open the pull request by hand", nil
 }
 
 var agentLessonPromoteCmd = &cobra.Command{
 	Use:   "promote <n> [--pr]",
 	Short: "Write lesson n into the workspace's CLAUDE.md, where every session reads it",
 	Long: `Takes lesson n from corgi agent lesson list and adds it as a line under a
-"## Lessons" heading in the workspace's CLAUDE.md — once. Without --pr the
+"## Lessons" heading in the workspace's CLAUDE.md - once. Without --pr the
 file in your checkout is edited and left for you to commit. With --pr the
 line goes on a corgi/lesson-… branch in a worktree of its own, is pushed,
 and becomes a pull request (gh); your checkout is not touched.

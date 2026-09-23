@@ -168,7 +168,7 @@ func upgradeViaHomebrew() error {
 	_ = exec.Command("brew", "trust", "andriiklymiuk/tools").Run()
 
 	if exec.Command("brew", "list", "--formula", "corgi").Run() == nil {
-		fmt.Println("corgi is a Homebrew cask now — replacing the old formula install")
+		fmt.Println("corgi is a Homebrew cask now - replacing the old formula install")
 		if err := run("uninstall", "--formula", "corgi"); err != nil {
 			return err
 		}
@@ -277,7 +277,7 @@ func refreshDaemonAfterUpgrade(exePath, installed string) {
 		return
 	}
 	if installedDaemonBinary() != mustStableDaemonBinary() {
-		fmt.Println("The daemon still starts from Homebrew's path — run `corgi agent install` once to stop macOS asking about Documents after every update.")
+		fmt.Println("The daemon still starts from Homebrew's path - run `corgi agent install` once to stop macOS asking about Documents after every update.")
 		return
 	}
 	out, err := exec.Command(exePath, "agent", "install").CombinedOutput()
@@ -291,11 +291,11 @@ func refreshDaemonAfterUpgrade(exePath, installed string) {
 		return
 	}
 	if out, err := exec.Command(exePath, "agent", "restart").CombinedOutput(); err != nil {
-		fmt.Printf("The daemon still runs corgi %s — `corgi agent restart` failed: %s\n%s", old, err, out)
+		fmt.Printf("The daemon still runs corgi %s - `corgi agent restart` failed: %s\n%s", old, err, out)
 		return
 	}
 	if now := runningDaemonVersion(); daemonWantsRestart(now, installed) {
-		fmt.Printf("The daemon still runs corgi %s — run `corgi agent restart` yourself.\n", now)
+		fmt.Printf("The daemon still runs corgi %s - run `corgi agent restart` yourself.\n", now)
 		return
 	}
 	fmt.Printf("Daemon restarted on corgi %s.\n", installed)

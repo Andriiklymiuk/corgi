@@ -482,7 +482,7 @@ func resolveExportsFixedPoint(c *CorgiCompose) (ExportsMap, error) {
 
 	if stuck := findStuckExports(out); len(stuck) > 0 {
 		return nil, fmt.Errorf(
-			"cycle in cross-service exports — could not resolve: %s",
+			"cycle in cross-service exports - could not resolve: %s",
 			strings.Join(stuck, ", "),
 		)
 	}
@@ -572,7 +572,7 @@ func appendEnvironmentLines(envForService string, service Service) (string, erro
 				fmt.Println(
 					art.YellowColor,
 					"ℹ️  dropping env line", envLine, "for", service.ServiceName,
-					"— references ${"+skipped.producer+"."+skipped.varName+"} but",
+					"- references ${"+skipped.producer+"."+skipped.varName+"} but",
 					skipped.producer, "is not in --services run",
 					art.WhiteColor,
 				)

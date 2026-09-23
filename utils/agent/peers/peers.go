@@ -1,6 +1,6 @@
 // Package peers lets two or more laptops that watch the same trackers agree
 // on which one acts. Each laptop pairs with the other exactly the way a
-// phone pairs with it — a device token and an end-to-end key — and the
+// phone pairs with it - a device token and an end-to-end key - and the
 // daemons pulse each other once a minute. For every tracker two laptops
 // share, one of them leads: it starts the fixes and rings the phone; the
 // other stays quiet and takes over when the leader goes silent.
@@ -218,7 +218,7 @@ func LeaderWithBudget(s *Store, me string, mine []string, myBudget int, now time
 
 // LeaderAmong is the full rule: a laptop that cannot work right now (its
 // agent wants a login, its window is spent) never leads while another can,
-// however it was marked — a laptop alone in a room for weeks must not
+// however it was marked - a laptop alone in a room for weeks must not
 // hold the lead with an expired login. myUnwell is this laptop's own state.
 func LeaderAmong(s *Store, me string, mine []string, myBudget int, myUnwell string, now time.Time) string {
 	type cand struct {
@@ -425,7 +425,7 @@ func Join(ctx context.Context, agentDir, rawURL, code string) (Peer, error) {
 		return Peer{}, fmt.Errorf("%s refused: %s", base, firstNonEmpty(ans.Error, res.Status))
 	}
 	if ans.Role != Role {
-		return Peer{}, fmt.Errorf("%s opened a window for %s, not for a laptop — on it run: corgi agent peers invite", base, firstNonEmpty(ans.Role, "a phone"))
+		return Peer{}, fmt.Errorf("%s opened a window for %s, not for a laptop - on it run: corgi agent peers invite", base, firstNonEmpty(ans.Role, "a phone"))
 	}
 	serverPub, err := pairing.ParsePublicKey(ans.ServerPubKey)
 	if err != nil || serverPub == nil {

@@ -43,7 +43,7 @@ func TestRetryHandsASeenEventBackToTheWatch(t *testing.T) {
 	d.handleSessionCommand(context.Background(), command.Command{Action: command.ActionWatch, WatchEvent: &e})
 	time.Sleep(200 * time.Millisecond)
 	if len(fakeRuns(ran)) != 0 {
-		t.Fatal("a seen event is handled once — no run without --retry")
+		t.Fatal("a seen event is handled once - no run without --retry")
 	}
 
 	d.handleSessionCommand(context.Background(), command.Command{Action: command.ActionWatch, WatchEvent: &e, Retry: true})

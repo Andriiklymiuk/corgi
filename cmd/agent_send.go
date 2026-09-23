@@ -65,8 +65,8 @@ The keys are typed the way ` + "`corgi agent send`" + ` types, so the same hosts
 var agentNoteCmd = &cobra.Command{
 	Use:   "note <session> [text]",
 	Short: "Put your own line under a session on the board",
-	Long: `Sets the note a session shows under its label — "waiting on PR review",
-"do not touch" — on every surface that draws the board. No text, or
+	Long: `Sets the note a session shows under its label - "waiting on PR review",
+"do not touch" - on every surface that draws the board. No text, or
 --clearNote, removes it. Notes go when the session is dismissed.`,
 	Args: cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
@@ -85,7 +85,7 @@ var agentNoteCmd = &cobra.Command{
 
 var agentInterruptCmd = &cobra.Command{
 	Use:   "interrupt <session>",
-	Short: "Stop what a session is doing — Escape, as you would press it",
+	Short: "Stop what a session is doing - Escape, as you would press it",
 	Long: `Presses Escape in a working session, the way you would to stop a turn
 that is going the wrong way: Claude Code stops and waits for the next
 message; nothing is closed and nothing is lost. A session that is not
@@ -100,10 +100,10 @@ the same through POST /launch/interrupt.`,
 
 var agentTurnCmd = &cobra.Command{
 	Use:   "turn <session> <message>",
-	Short: "One more turn for a session whose terminal is gone — claude -p --resume, or codex exec resume",
+	Short: "One more turn for a session whose terminal is gone - claude -p --resume, or codex exec resume",
 	Long: `The editor closed, the lid shut on a tab: the session's process is gone
-but its conversation is not. This runs one headless turn for it — claude -p
---resume <id> <message>, or codex exec resume for a codex session — in its own checkout, under its own account, so the
+but its conversation is not. This runs one headless turn for it - claude -p
+--resume <id> <message>, or codex exec resume for a codex session - in its own checkout, under its own account, so the
 conversation goes on and the phone's chat reads the answer. A session that
 still has a terminal is typed into (corgi agent send) and never resumed
 beside itself.
@@ -122,8 +122,8 @@ phone for a gone session does this on its own.`,
 var agentCapCmd = &cobra.Command{
 	Use:   "cap [<session>] <tokens|off>",
 	Short: "A token budget for every session, or for one",
-	Long: `Every session carries what it has spent — the token counts Claude Code
-writes in its transcript, summed on the daemon's sweep — and a budget.
+	Long: `Every session carries what it has spent - the token counts Claude Code
+writes in its transcript, summed on the daemon's sweep - and a budget.
 "corgi agent cap 50M" is the budget every session runs under; "corgi agent
 cap <session> 20M" gives one session its own. The daemon rings once when a
 session passes it and the row says "over budget" on every board; nothing
@@ -155,7 +155,7 @@ is stopped. "off" takes a budget away. No argument prints the default.`,
 				fmt.Printf("%s has no day budget now\n", ws)
 				return
 			}
-			fmt.Printf("%s runs under %s tokens a day — the daemon rings once when a day passes it\n", ws, sessions.Tokens(tokens))
+			fmt.Printf("%s runs under %s tokens a day - the daemon rings once when a day passes it\n", ws, sessions.Tokens(tokens))
 			return
 		}
 		if len(args) == 0 {

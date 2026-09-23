@@ -13,18 +13,18 @@ you actually want:
 
 1. **It is not always on.** Its docs are explicit: *"If you close the terminal,
    quit VS Code, or otherwise stop the `claude` process, the session goes
-   offline"*. An extended network outage ends it too — in server mode, the one
+   offline"*. An extended network outage ends it too - in server mode, the one
    corgi supervises, *"Claude Code gives up after roughly 10 minutes and the
    `claude remote-control` process exits"* (an interactive session instead
    retries for as long as the outage lasts). Either way you have to remember to
-   arm it again — and forgetting is the failure this exists to remove. Check the
+   arm it again - and forgetting is the failure this exists to remove. Check the
    [Remote Control docs](https://code.claude.com/docs/en/remote-control) for the
    current wording; the exact deadlines move.
 2. **It sees one directory.** A corgi stack is several repositories, databases,
    and the env wiring between them. Remote Control sees none of that.
 
 corgi fixes exactly those two. It does not reimplement sessions, streaming,
-approvals, or cost tracking — Remote Control does all of that well, and doing it
+approvals, or cost tracking - Remote Control does all of that well, and doing it
 again would be worse.
 
 ```
@@ -43,13 +43,13 @@ again would be worse.
 
 ## Quick start
 
-One command does the whole phone-startable setup — register this workspace (a
-corgi stack **or any git repository** — no compose file needed), start the
+One command does the whole phone-startable setup - register this workspace (a
+corgi stack **or any git repository** - no compose file needed), start the
 daemon + MCP + tunnel + pairing, and print a QR (and the pairing code):
 
 > A registered workspace is phone-startable, so register directories you mean to
 > work in. In particular, if your `$HOME` is itself a git repo (dotfiles), running
-> `agent up` there registers your entire home directory — probably not what you
+> `agent up` there registers your entire home directory - probably not what you
 > want.
 
 ```bash
@@ -59,7 +59,7 @@ corgi agent up --at-login        # the same, and it all comes back after a reboo
 ```
 
 Everything `agent up` starts is **detached**, so it survives crashes and the
-Remote Control network timeout — but not a reboot, unless you say so once.
+Remote Control network timeout - but not a reboot, unless you say so once.
 
 ### Surviving a reboot
 
@@ -68,7 +68,7 @@ this up, so the daemon repeats it when it next starts itself: the MCP endpoint,
 the tunnel and the pairing server come back with it. In a terminal, a bare
 `agent up` offers the same thing once and remembers your answer.
 
-`corgi agent install` on its own is the daemon half only — supervised sessions
+`corgi agent install` on its own is the daemon half only - supervised sessions
 come back, the endpoint your phone talks to does not. Run it after an `up` and
 it adopts that up; run it on a machine that has never done one and it says so.
 
@@ -76,7 +76,7 @@ it adopts that up; run it on a machine that has never done one and it says so.
 corgi agent up --at-login        # daemon + endpoint + tunnel at login
 corgi agent up --at-login=false  # stop doing that (the service is left alone)
 corgi agent uninstall            # remove the service entirely
-corgi agent status               # "start at login: launchd — daemon, MCP endpoint and tunnel"
+corgi agent status               # "start at login: launchd - daemon, MCP endpoint and tunnel"
 ```
 
 A quick tunnel gets a **new URL** each time it comes back, so the phone has to
@@ -104,7 +104,7 @@ Pick by where the phone will be, not by which tunnel sounds best:
 | one-off, re-pairing is fine | `corgi agent up` | changes on every restart |
 
 The Wi-Fi row uses no tunnel, no DNS and no provider, so it is the fastest and
-the least breakable — reach for it first when you are at home. The launcher is
+the least breakable - reach for it first when you are at home. The launcher is
 token-protected either way, so serving it on the local network is not serving it
 to the internet. The middle two rows keep a fixed origin, which is what keeps
 the phone paired across restarts; the quick tunnel does not.
@@ -112,7 +112,7 @@ the phone paired across restarts; the quick tunnel does not.
 ### What the launcher looks like
 
 One card per repo: a dot, the repo, the checkout under it, what it is doing,
-what it has cost, and the running session on its own row — tap that row and
+what it has cost, and the running session on its own row - tap that row and
 the conversation opens. Above the cards, when the machine has editor windows
 open: the session board with a **New chat** box (prompt, window, model,
 account) and every live session with Allow / Deny / Send under it (see
@@ -127,15 +127,15 @@ The dot is the state, and the line under the path spells it out:
 | dot | state |
 |---|---|
 | green | a session is running (`N live`) |
-| green, pulsing | `starting` — supervised, nothing registered yet |
-| amber | `needs you` — a permission prompt or a question is blocking it |
-| red | `will not start` — the daemon refused, and the reason is on the card |
-| red | `disabled after repeated failures` — the daemon stopped retrying |
+| green, pulsing | `starting` - supervised, nothing registered yet |
+| amber | `needs you` - a permission prompt or a question is blocking it |
+| red | `will not start` - the daemon refused, and the reason is on the card |
+| red | `disabled after repeated failures` - the daemon stopped retrying |
 | grey | nothing running here |
 
 That line also carries what the laptop always knew and the phone did not: how
 long the session has been up, how many restarts it took, which account it runs
-under, and — when Claude Code says so — what it is **waiting** for (*waiting:
+under, and - when Claude Code says so - what it is **waiting** for (*waiting:
 allow or deny the edit*). Next to the path is the branch, with a `*` when the
 checkout has uncommitted work, which is the fastest way to tell two clones of
 the same repo apart.
@@ -152,7 +152,7 @@ refresh never collapses the panel under your thumb.
 
 ### A launcher URL that never changes
 
-The default is a Cloudflare **quick tunnel**: free, no signup — and a **new random
+The default is a Cloudflare **quick tunnel**: free, no signup - and a **new random
 URL every restart**, so the phone bookmark goes stale whenever `agent up` reruns.
 For a permanent URL, use a **named tunnel**:
 
@@ -177,17 +177,17 @@ them; `--tunnel-hostname ""` goes back to a quick tunnel.
 
 Two things soften a quick tunnel (2.22.3). `agent up` says out loud, under
 the QR, that the address changes on every restart and how to get one that
-does not — the same words `--json` carries as `quickTunnel: true`, and the
+does not - the same words `--json` carries as `quickTunnel: true`, and the
 phone's connection sheet repeats them for an address it recognises as a
-free shared domain. And when the address *does* change — a reboot with
-`--at-login`, an `agent restart` — the daemon pushes the new one to every
+free shared domain. And when the address *does* change - a reboot with
+`--at-login`, an `agent restart` - the daemon pushes the new one to every
 paired phone (`category: relink`), and the app moves the laptop to it,
 keeping its token and its key: no QR, no pairing, the board is back on the
 next read. A phone that had no push token registered still needs the new QR.
 
 No domain on Cloudflare? ngrok's free tier already gave your account one static
 `*.ngrok-free.dev` **dev domain** and needs no DNS work. You cannot choose its
-name — picking one is a paid feature — but the assigned one never changes:
+name - picking one is a paid feature - but the assigned one never changes:
 
 ```bash
 brew install ngrok
@@ -200,7 +200,7 @@ The first time the phone opens the page, ngrok's free tier shows its own
 "you are about to visit" interstitial once; tap through. The launcher's own
 requests carry the header that skips it, so pairing and the buttons work.
 
-Either way the launcher lives at the same hostname forever — save it to the
+Either way the launcher lives at the same hostname forever - save it to the
 phone's home screen once. One command does the whole setup and remembers it:
 
 ```bash
@@ -211,7 +211,7 @@ corgi agent tunnel setup <yours>.ngrok-free.dev --provider ngrok
 Per-service stable tunnels: [docs/tunnel.md](tunnel.md#stable-urls-named-mode).
 
 One more knob worth knowing: a workspace's Claude **default model** is not corgi's
-to pick — `claude remote-control` takes no model flag; you choose it per message in
+to pick - `claude remote-control` takes no model flag; you choose it per message in
 the Claude app. But the `model` setting in that workspace's config dir
 (`<configDir>/settings.json`) sets the default a new session starts with, and it
 rides along with `--config-dir` / profiles automatically.
@@ -219,7 +219,7 @@ rides along with `--config-dir` / profiles automatically.
 ### What the daemon does not do: open a conversation for you
 
 `claude remote-control` pre-creates one session in its directory the moment it
-starts — somewhere to type — and leaves that session in claude.ai's list, offline,
+starts - somewhere to type - and leaves that session in claude.ai's list, offline,
 when it stops. Supervised across four workspaces, restarted at login, after the
 ten-minute network exit and after every `corgi agent restart`, that is a list full
 of `corgi · main · 10:00`, `corgi · main · 13:26`, … rows nobody ever opened.
@@ -228,23 +228,23 @@ So a server the daemon starts on its own runs as a **device**: it registers with
 claude.ai and opens no session (`--no-create-session-in-dir`). Sessions come from
 where you actually ask for one:
 
-- the Claude app's **device list** — pick the machine, new session, it lands in a
+- the Claude app's **device list** - pick the machine, new session, it lands in a
   worktree of that workspace;
-- the launcher's **Start** — corgi swaps the device server for one that opens a
+- the launcher's **Start** - corgi swaps the device server for one that opens a
   session and hands you the link;
-- `corgi_session_start` / `corgi agent session start` — the same swap.
+- `corgi_session_start` / `corgi agent session start` - the same swap.
 
 Those sessions are named `<workspace>-brave-otter` instead of
 `<hostname>-brave-otter`, so a list from three repos on one laptop still says which
 is which. **Stop** on a session that belongs to an autostart workspace ends the
-session and puts the device back — the machine stays reachable.
+session and puts the device back - the machine stays reachable.
 
 `corgi agent status` shows the resting state as `online` with *device only · no
 session opened at start*; the launcher card says *online · no session* with a solid
 green dot, and its button is **Start**. A restart of the daemon now leaves nothing
 behind on claude.ai.
 
-Want the old behaviour for one workspace — a session already waiting in the list the
+Want the old behaviour for one workspace - a session already waiting in the list the
 moment the daemon is up? Trusted config, per workspace or under `defaults:`:
 
 ```yaml
@@ -258,7 +258,7 @@ A Claude Code older than the flag rejects it as an unknown option; the daemon no
 on the first exit, drops the flag, starts again at once with the session and says so
 in `corgi agent status` (*note: this Claude Code predates …*). Update Claude Code to
 get the device-only behaviour back. The rows an older corgi already left behind are
-ordinary offline sessions — archive them from the claude.ai list once; new ones will
+ordinary offline sessions - archive them from the claude.ai list once; new ones will
 not appear.
 
 `corgi agent scan <dir>` registers stacks it finds but **does not enable them**.
@@ -283,7 +283,7 @@ corgi agent serve --foreground   # run it in this terminal and watch
 | `corgi agent init` | register this stack, write `.corgi/agent.yml`; the Mac app's **+** next to Workspaces does the same for a folder it is pointed at (`POST /launch/workspaces {path, id}`, 2.28.4) |
 | `corgi agent scan <dir>` | find stacks under a directory and register them (does not enable) |
 | `corgi agent serve` | supervise Remote Control for every enabled workspace |
-| `corgi agent install` / `uninstall` | start (or stop starting) at login — daemon only |
+| `corgi agent install` / `uninstall` | start (or stop starting) at login - daemon only |
 | `corgi agent up --at-login` | the same, plus the endpoint and tunnel that up used |
 | `corgi agent awake [on\|off]` | keep the machine awake for the daemon's whole life |
 | `corgi agent status [--json]` | what is running (`online` = device with no session yet), the launcher and connector URLs, restarts, which account |
@@ -294,71 +294,71 @@ corgi agent serve --foreground   # run it in this terminal and watch
 | `corgi agent resolve <name>` | what "the recipe app" resolves to |
 | `corgi agent brief [id]` | what the last session was working on before it restarted |
 | `corgi agent logs <workspace>` | the session timeline: starts, exits and why, links |
-| `corgi agent restart` | `down` + `up --fresh` in one — run it after `corgi upgrade` |
+| `corgi agent restart` | `down` + `up --fresh` in one - run it after `corgi upgrade` |
 | `corgi agent tunnel setup <host>` | one-time permanent-URL setup, remembered for later runs |
 | `corgi agent hooks enable` / `disable` | notify when a session needs you, and name sessions after what you ask them |
 | `corgi agent track enable` / `disable` | track every Claude session on the machine: the board for a Stream Deck, tab titles, `focus` |
-| `corgi agent sessions [--json\|--watch\|--grouped]` | the board: one line per key, status, account, where the terminal is; `--grouped` folds it by ticket or branch — the sessions, workspaces, worktrees and PRs of one piece of work in one block, the same `groups` sessions.json carries (2.28.27) |
+| `corgi agent sessions [--json\|--watch\|--grouped]` | the board: one line per key, status, account, where the terminal is; `--grouped` folds it by ticket or branch - the sessions, workspaces, worktrees and PRs of one piece of work in one block, the same `groups` sessions.json carries (2.28.27) |
 | `corgi agent focus <session>` | bring that session's window to the front and reveal its terminal tab |
 | `corgi agent pin <key> [--off]` / `page` / `rescan` / `windows` | reserve a key, turn the overflow page, adopt untracked sessions, list connected editor windows |
-| `corgi agent board [--slots N]` | the board's size, or set it — applied to a running daemon at once |
-| `corgi agent new [--window ID] [--workspace ID] [--prompt "…"] [--bot NAME] [--model M] [--profile P] [--isolate] [--agent codex]` | open a new agent session in the editor window in front (the "+" key), or in a workspace's window, with a first prompt, as a bot, under a profile — what the phone's New chat sends through `POST /launch/new`; the terminal runs `corgi agent claude`, or `corgi agent codex` with `--agent codex` (`{agent}` on the route; 2.30.17) |
-| `corgi agent status --json` | the daemon's status plus `usage[]` (tokens today / this week per workspace, with its `configDir`), `accounts[]` (per Claude account, the /usage picture Claude Code last cached: 5-hour and 7-day percent used and reset times) and `dashboardUrl` — what corgi-bar and the deck read |
+| `corgi agent board [--slots N]` | the board's size, or set it - applied to a running daemon at once |
+| `corgi agent new [--window ID] [--workspace ID] [--prompt "…"] [--bot NAME] [--model M] [--profile P] [--isolate] [--agent codex]` | open a new agent session in the editor window in front (the "+" key), or in a workspace's window, with a first prompt, as a bot, under a profile - what the phone's New chat sends through `POST /launch/new`; the terminal runs `corgi agent claude`, or `corgi agent codex` with `--agent codex` (`{agent}` on the route; 2.30.17) |
+| `corgi agent status --json` | the daemon's status plus `usage[]` (tokens today / this week per workspace, with its `configDir`), `accounts[]` (per Claude account, the /usage picture Claude Code last cached: 5-hour and 7-day percent used and reset times) and `dashboardUrl` - what corgi-bar and the deck read |
 | `corgi agent claude [--profile P] [--isolate] [-- args]` | run Claude Code for this folder's workspace: its account (`configDir`), binary and permission mode; plain `claude` outside every workspace. `--isolate` first gives it a worktree of its own |
-| `corgi agent watch pr <ready\|merge\|close\|approve\|request\|comment> <ref\|url> [words]` | a pull request from wherever you are: the first three on one of yours; approve, ask for changes on, or comment on any the inbox knows — the one somebody asked you to review first of all (the phone's ticket sheet has the same buttons; 2.22) |
+| `corgi agent watch pr <ready\|merge\|close\|approve\|request\|comment> <ref\|url> [words]` | a pull request from wherever you are: the first three on one of yours; approve, ask for changes on, or comment on any the inbox knows - the one somebody asked you to review first of all (the phone's ticket sheet has the same buttons; 2.22) |
 | `corgi agent watch work <ref> [--isolate]` | what **Work on it** on the phone runs: a session on that ticket, in the window in front |
 | `corgi agent dismiss <session>` | take a done, idle or closed session off the board until its next event (a closed chat whose process lingers) |
 | `corgi agent send <session> [--enter] <text>` | focus a session and type into it (`--enter` sends it); integrated terminals via the VS Code extension, iTerm2 and Terminal.app via AppleScript, tmux panes via `send-keys` on any OS |
 | `corgi agent answer <session> allow\|always\|deny` | answer the permission prompt a session is waiting on; risky commands (rm, sudo, --force…) are refused unseen |
 | `corgi agent note <session> [text\|--clear]` | your own line under a session on every board |
-| `corgi agent pair [--viewer] [--file] [--mint]` | a fresh pairing window on the running server — the QR again, a read-only one, or a `.corgipair` to AirDrop to the phone (2.22.4). `--mint` prints a launch code with no daemon at all: `corgi agent up --pair-code <code> [--pair-ttl 1h]` on a headless host opens its first window on that code, so a phone prepared ahead pairs a server nobody types on (2.28.27) |
-| `corgi agent mute [1h\|30m\|off]` | nothing rings for a while — no toast, no push, no permission ping; the inbox and the board go on, and `sessions.json` carries `mutedUntil` so a key or a bar shows the bell crossed out (2.22) |
-| `corgi agent transcript <session> [--after N] [--why]` | a session's conversation from the command line, the way the phone's chat reads it — what an editor panel polls (2.22). `--why` folds it into steps: what the agent said, the tools it ran on it, the files it touched — plan step, tool call and diff side by side; `POST /launch/transcript {why:true}` gives the phone the same (2.28.27) |
-| `corgi agent attempts [ref] [pick <ref> <n>]` | the sessions a fan-out opened on a ticket (`watch work --attempts 3 --models opus,sonnet`), side by side — status, changes, tests, done-when, cost, PR — and keep one (2.22) |
-| `corgi agent event <start\|prompt\|tool\|done\|fail\|permission\|stop\|end>` | one event from an agent that is not Claude Code — Codex, Gemini CLI, your own — so its session sits on the board with the agent's name, its tool's risk word and its host (2.22) |
+| `corgi agent pair [--viewer] [--file] [--mint]` | a fresh pairing window on the running server - the QR again, a read-only one, or a `.corgipair` to AirDrop to the phone (2.22.4). `--mint` prints a launch code with no daemon at all: `corgi agent up --pair-code <code> [--pair-ttl 1h]` on a headless host opens its first window on that code, so a phone prepared ahead pairs a server nobody types on (2.28.27) |
+| `corgi agent mute [1h\|30m\|off]` | nothing rings for a while - no toast, no push, no permission ping; the inbox and the board go on, and `sessions.json` carries `mutedUntil` so a key or a bar shows the bell crossed out (2.22) |
+| `corgi agent transcript <session> [--after N] [--why]` | a session's conversation from the command line, the way the phone's chat reads it - what an editor panel polls (2.22). `--why` folds it into steps: what the agent said, the tools it ran on it, the files it touched - plan step, tool call and diff side by side; `POST /launch/transcript {why:true}` gives the phone the same (2.28.27) |
+| `corgi agent attempts [ref] [pick <ref> <n>]` | the sessions a fan-out opened on a ticket (`watch work --attempts 3 --models opus,sonnet`), side by side - status, changes, tests, done-when, cost, PR - and keep one (2.22) |
+| `corgi agent event <start\|prompt\|tool\|done\|fail\|permission\|stop\|end>` | one event from an agent that is not Claude Code - Codex, Gemini CLI, your own - so its session sits on the board with the agent's name, its tool's risk word and its host (2.22) |
 | `corgi agent lesson add\|list` | what the workspace learned the hard way, one line each, outside the repo; `watch enable --lessons` has the daemon write reviews on your PRs, red done-when checks and failed bot runs; the context hook points every new session at the file (2.22) |
-| `corgi agent bot add\|list\|show\|rm\|open <name>` | named sessions you come back to: a workspace, a persona (the soul, appended to the system prompt), a model, an account, a worktree of its own — and the conversation it last had, resumed. `corgi agent claude --bot reviewer`; the phone's, the bar's and the editor's "+" list them. With `--on pr.review,ci.failed` a bot also **acts on its own**: an unattended run under its soul when that event arrives in its workspace, filed under its name (`bot show` lists its runs; the phone's bot sheet too). `--template reviewer\|fixer\|shipper\|chief\|proactive` fills a bot from a ready-made one (2.21; `proactive` runs on a clock, see `routine add suggest --bot proactive`, 2.28.11). A run that fails gets one more try a model up — haiku → sonnet → opus — and the record says `retry`; `bot show` sums a ledger (`roi`: runs, failed, retried, PRs and how many merged, the bill) so a person can tell whether the reviewer earns its keep (2.22) |
-| `corgi agent ask "<question>"` | the chief: one question about the board — what to look at first, what is blocked, who is on what — answered in a few lines by a short claude run on this machine (haiku; it sees sessions, inbox, kanban, workspace names, nothing else). The phone's Ask box, Telegram's `/ask` |
+| `corgi agent bot add\|list\|show\|rm\|open <name>` | named sessions you come back to: a workspace, a persona (the soul, appended to the system prompt), a model, an account, a worktree of its own - and the conversation it last had, resumed. `corgi agent claude --bot reviewer`; the phone's, the bar's and the editor's "+" list them. With `--on pr.review,ci.failed` a bot also **acts on its own**: an unattended run under its soul when that event arrives in its workspace, filed under its name (`bot show` lists its runs; the phone's bot sheet too). `--template reviewer\|fixer\|shipper\|chief\|proactive` fills a bot from a ready-made one (2.21; `proactive` runs on a clock, see `routine add suggest --bot proactive`, 2.28.11). A run that fails gets one more try a model up - haiku → sonnet → opus - and the record says `retry`; `bot show` sums a ledger (`roi`: runs, failed, retried, PRs and how many merged, the bill) so a person can tell whether the reviewer earns its keep (2.22) |
+| `corgi agent ask "<question>"` | the chief: one question about the board - what to look at first, what is blocked, who is on what - answered in a few lines by a short claude run on this machine (haiku; it sees sessions, inbox, kanban, workspace names, nothing else). The phone's Ask box, Telegram's `/ask` |
 | `corgi agent stream [enable\|disable] [--workspace X\|--all]` | which workspaces a paired phone may read as a conversation (off by default); the phone's Chat sheet, `POST /launch/transcript` |
-| `corgi agent awake --display on` | the wake lock keeps the display lit as well (`caffeinate -d`): the lock screen comes from the display sleeping, which the plain lock (`-i -m -s`) does not stop — what people ran `caffeinate -d` by hand for. `keepDisplay` in the user config; `corgi agent restart` after (2.25) |
-| `corgi agent ask --diff <session> [question]` | the chief reads the session's branch (files, counts, patch — bounded) and answers three plain lines and `risk: low\|medium\|high — why`; the phone's **Explain** on the diff sheet (`POST /launch/ask {session, diff:true}`); same gate as the diff: `corgi agent stream enable` (2.23) |
-| `corgi agent claim <file>... [--release] [--session <id>]` · `corgi agent claims` | a session says which files it is on — advisory, nothing is locked: a session starting in the same repository (any worktree of it) reads the claims in its context and leaves those files alone or asks first; the daemon rings once when a session edits a file another claimed. A claim ends with `--release`, when its session leaves the board, or after a day (2.25) |
-| `corgi agent timeline <session>` | one scroll of a session's story: every prompt, the tool calls between them folded into bursts, what it said, the test runs and the gate, the pull request with its checks, reviews, comments, hand-overs and merge — joined from the transcript, the board and the watch; the phone's Timeline (`GET /launch/timeline?session=`, same gate as the transcript) (2.25) |
-| `corgi agent top` | the board in the terminal, live, like top: every session with its standing, what it is doing and its spend, the ones that need you first, refreshed every second; `j`/`k` move, `a` allow, `d` deny, `i` interrupt, `o` open, `q` quit — each through the daemon like a press on the phone. For a laptop with no menu bar (2.24) |
-| `corgi agent cost --by repo\|day\|bot [--days N]` | tokens by workspace, by day, or by bot — the daemon's day ledger (every live session's tokens booked to its workspace as the sweep counts them) plus the fix log (what each unattended run said it cost, with dollars); the phone's repo sheet draws the last 14 days (`GET /launch/cost`) (2.24) |
+| `corgi agent awake --display on` | the wake lock keeps the display lit as well (`caffeinate -d`): the lock screen comes from the display sleeping, which the plain lock (`-i -m -s`) does not stop - what people ran `caffeinate -d` by hand for. `keepDisplay` in the user config; `corgi agent restart` after (2.25) |
+| `corgi agent ask --diff <session> [question]` | the chief reads the session's branch (files, counts, patch - bounded) and answers three plain lines and `risk: low\|medium\|high - why`; the phone's **Explain** on the diff sheet (`POST /launch/ask {session, diff:true}`); same gate as the diff: `corgi agent stream enable` (2.23) |
+| `corgi agent claim <file>... [--release] [--session <id>]` · `corgi agent claims` | a session says which files it is on - advisory, nothing is locked: a session starting in the same repository (any worktree of it) reads the claims in its context and leaves those files alone or asks first; the daemon rings once when a session edits a file another claimed. A claim ends with `--release`, when its session leaves the board, or after a day (2.25) |
+| `corgi agent timeline <session>` | one scroll of a session's story: every prompt, the tool calls between them folded into bursts, what it said, the test runs and the gate, the pull request with its checks, reviews, comments, hand-overs and merge - joined from the transcript, the board and the watch; the phone's Timeline (`GET /launch/timeline?session=`, same gate as the transcript) (2.25) |
+| `corgi agent top` | the board in the terminal, live, like top: every session with its standing, what it is doing and its spend, the ones that need you first, refreshed every second; `j`/`k` move, `a` allow, `d` deny, `i` interrupt, `o` open, `q` quit - each through the daemon like a press on the phone. For a laptop with no menu bar (2.24) |
+| `corgi agent cost --by repo\|day\|bot [--days N]` | tokens by workspace, by day, or by bot - the daemon's day ledger (every live session's tokens booked to its workspace as the sweep counts them) plus the fix log (what each unattended run said it cost, with dollars); the phone's repo sheet draws the last 14 days (`GET /launch/cost`) (2.24) |
 | `corgi agent cap --repo <ws> <tokens\|off>` | a tokens-per-day budget for one workspace (`dayCap` in its watch config); the daemon rings once when a day's sessions pass it (2.24) |
 | `corgi agent guard install\|uninstall\|check` | a git pre-push hook for this checkout: a session on the branch whose done-when gate is red, or whose last test run went red, stops the push and names the command; a branch with no session on it is not its business; `CORGI_FORCE=1 git push` goes through (2.24) |
-| `corgi agent lesson promote <n> [--pr]` | writes lesson n into the workspace's `CLAUDE.md` under a `## Lessons` heading, once — where every session reads it, not only the ones corgi starts; `--pr` puts the line on a `corgi/lesson-…` branch in a worktree of its own and opens a pull request (2.24) |
-| `corgi agent pr-body <session> [--apply]` | the pull request description from the session that made the branch: what was asked (ticket + first prompt), the commits, the files with their counts, the last test run — scrubbed like the transcript; `--apply` writes it onto the pull request the session opened, with the watch's forge token (2.24) |
-| `corgi agent undo <session> [--worktree] [--yes]` | a run went the wrong way: drops every uncommitted edit and new file in the session's own worktree (`git checkout -- .` + `git clean -fd`); `--worktree` removes the worktree and its `corgi/<ref>` branch too. Only a session with a worktree of its own — one on your checkout is refused, a working one is interrupted first; asks unless `--yes`. The phone's Undo (`POST /launch/undo`) holds to confirm (2.24) |
-| `corgi agent turn <session> <message>` | one headless turn for a session whose terminal is gone — `claude -p --resume <id>` in its own checkout under its own account (acceptEdits, log in `watch/runs/continue-<id>.log`); the board keeps the last 20 ended sessions (`ended[]`) so a phone can still read and write to one; `watch enable --headless` lets a phone message do this on its own (2.23) |
+| `corgi agent lesson promote <n> [--pr]` | writes lesson n into the workspace's `CLAUDE.md` under a `## Lessons` heading, once - where every session reads it, not only the ones corgi starts; `--pr` puts the line on a `corgi/lesson-…` branch in a worktree of its own and opens a pull request (2.24) |
+| `corgi agent pr-body <session> [--apply]` | the pull request description from the session that made the branch: what was asked (ticket + first prompt), the commits, the files with their counts, the last test run - scrubbed like the transcript; `--apply` writes it onto the pull request the session opened, with the watch's forge token (2.24) |
+| `corgi agent undo <session> [--worktree] [--yes]` | a run went the wrong way: drops every uncommitted edit and new file in the session's own worktree (`git checkout -- .` + `git clean -fd`); `--worktree` removes the worktree and its `corgi/<ref>` branch too. Only a session with a worktree of its own - one on your checkout is refused, a working one is interrupted first; asks unless `--yes`. The phone's Undo (`POST /launch/undo`) holds to confirm (2.24) |
+| `corgi agent turn <session> <message>` | one headless turn for a session whose terminal is gone - `claude -p --resume <id>` in its own checkout under its own account (acceptEdits, log in `watch/runs/continue-<id>.log`); the board keeps the last 20 ended sessions (`ended[]`) so a phone can still read and write to one; `watch enable --headless` lets a phone message do this on its own (2.23) |
 | `corgi agent interrupt <session>` | Escape into a working session, as you would press it: the turn stops, the session waits; nothing is closed. The phone's and the bar's **Interrupt** (`POST /launch/interrupt`) |
-| `corgi agent cap [<session>] <tokens\|off>` | a token budget every session runs under (`cap 50M`), or one session's own (`cap <session> 20M`); passing it rings once and the row says *over budget* — nothing is stopped |
+| `corgi agent cap [<session>] <tokens\|off>` | a token budget every session runs under (`cap 50M`), or one session's own (`cap <session> 20M`); passing it rings once and the row says *over budget* - nothing is stopped |
 | `corgi agent usage [--json\|--watch]` | every account's 5-hour and 7-day windows, the pace and when they run out, today's tokens by model, how long sessions waited on you |
 | `corgi agent claude --profile auto` | start under whichever of the workspace's listed `accounts:` has the most 5-hour budget left |
 | `corgi agent carry <session> --profile P` | continue a session under another listed account, conversation included (copies the transcript, resumes it in a new terminal). `--fork N [--prompt … --prompt …]` opens N sessions that all continue this conversation (`claude --fork-session`), each with its own first message: read the code once, build N things on it; the original keeps running (2.28.27). `--to codex` (or `--to claude`) hands the work to the other agent: always a fresh start in the same workspace from the handoff packet, allowed only where the workspace lists that agent in its `agents` order; the phone and the Mac have the same button (2.30.17) |
-| `corgi agent digest [--send]` | today's one-message summary; with `digestAt: "20:00"` in the agent config the daemon sends it once a day where notifications go — and, from 2.22, to the phone as a push that opens the brief (`/launch/brief`: the digest plus the standup since yesterday). The brief's **Share** draws a card from `/launch/card` — a fortnight of activity, today's numbers, the waits — with no workspace, ticket, prompt or title on it (2.22.6) |
-| `corgi agent watch [enable\|disable\|run\|hooks\|auth]` | poll Linear/Jira and GitHub/GitLab for new issues, comments and reviews; notify, or run the fix skill; webhooks for instant events. `--hand-over` types a review comment, an asked-for review or a red build into the session already on that branch; `--auto-merge` merges a pull request of mine the moment the forge says checks ✓ and approved (2.21; both also flip from the phone, no restart); `--auto-allow reads` answers a read-only permission prompt itself; `--done-when "go test ./..."` runs the workspace's checks when a session stops and types a red one back; `--compact-at 85` sends /compact to a full session when it stops; `--rebase` rebases a stopped session's clean branch when main moved (2.22); `--rerun-ci` reruns the failed jobs of a red build once before it is worked on or handed over — a runner that died is not a bug in the branch; the second red on the same run goes the usual way (GitHub; 2.23); `--auto-carry` carries a session that hit its five-hour quota to another of the workspace's accounts with budget — transcript copied, a new terminal resuming it there, once per limit, only profiles the `accounts:` list names (2.23); `--slots 3` lets three unattended runs go at once in the workspace, each in worktrees of its own (it turns on `--isolate`; the hour and day caps, quiet hours and days off still count across all of them; 2.23); `--after-merge "Ready for QA"` moves the ticket there once every pull request of its run is merged, `--after-merge-subtasks Done` sends a subtask elsewhere; `--batch 3` lets tickets arriving within 90 s share one run (2.28.35) |
+| `corgi agent digest [--send]` | today's one-message summary; with `digestAt: "20:00"` in the agent config the daemon sends it once a day where notifications go - and, from 2.22, to the phone as a push that opens the brief (`/launch/brief`: the digest plus the standup since yesterday). The brief's **Share** draws a card from `/launch/card` - a fortnight of activity, today's numbers, the waits - with no workspace, ticket, prompt or title on it (2.22.6) |
+| `corgi agent watch [enable\|disable\|run\|hooks\|auth]` | poll Linear/Jira and GitHub/GitLab for new issues, comments and reviews; notify, or run the fix skill; webhooks for instant events. `--hand-over` types a review comment, an asked-for review or a red build into the session already on that branch; `--auto-merge` merges a pull request of mine the moment the forge says checks ✓ and approved (2.21; both also flip from the phone, no restart); `--auto-allow reads` answers a read-only permission prompt itself; `--done-when "go test ./..."` runs the workspace's checks when a session stops and types a red one back; `--compact-at 85` sends /compact to a full session when it stops; `--rebase` rebases a stopped session's clean branch when main moved (2.22); `--rerun-ci` reruns the failed jobs of a red build once before it is worked on or handed over - a runner that died is not a bug in the branch; the second red on the same run goes the usual way (GitHub; 2.23); `--auto-carry` carries a session that hit its five-hour quota to another of the workspace's accounts with budget - transcript copied, a new terminal resuming it there, once per limit, only profiles the `accounts:` list names (2.23); `--slots 3` lets three unattended runs go at once in the workspace, each in worktrees of its own (it turns on `--isolate`; the hour and day caps, quiet hours and days off still count across all of them; 2.23); `--after-merge "Ready for QA"` moves the ticket there once every pull request of its run is merged, `--after-merge-subtasks Done` sends a subtask elsewhere; `--batch 3` lets tickets arriving within 90 s share one run (2.28.35) |
 | `corgi agent standup [--since 24h] [--write]` | what you asked Claude and what got committed, per workspace; `--write` has `claude -p` turn it into three sentences |
 | `corgi agent down` | the mirror of `up`: the daemon and the detached MCP server go down, the public URL with them (`stop` stops only the daemon) |
 | `corgi agent continue [on\|off]` | a session that hit a usage limit waits on a clock, not on you: the daemon plans a resume from the account's reset time, types "continue" when the window is back, gives up after a few tries; the key says *continues 14:02* |
-| `corgi agent dashboard [--print]` | open the dashboard in this machine's browser, authorised on the way — no QR for a browser that can already read the daemon's files |
-| `corgi agent approve <code>` | approve a Claude connector sign-in whose consent page showed a code — proves you are at the machine ([docs/mcp.md](mcp.md#add-corgi-to-claudeai-desktop-or-the-phone)) |
-| `corgi agent today [--since 8h] [--write] [--json]` | what has been done today since midnight: commits, prompts, the watch's unattended runs and their pull requests; `--json` adds `waits` (how often sessions waited on you) and `days` (a fortnight of sessions, prompts and tool calls per day) — the numbers the phone's share card draws. The days come from the daemon's own ledger, `days.json` in the agent dir, fed by the tracking hooks; a daemon that has none reads a fortnight of transcripts once to fill it (2.22.6) |
-| `corgi agent task add\|list\|move\|done <…>` | a ticket you write yourself — title, body, workspace — kept on this machine and shown on the same board as the tracker's: Todo, Doing, Review, Done. `watch work TASK-3` and the phone's **Work on it** start a session on it; nothing about it reaches a tracker |
-| `GET /launch/watch-status` · `GET /launch/status` | `corgi agent watch --json` and `corgi agent status --json` over the launcher, for a client on the machine that cannot run corgi — the Mac app from the store, sandboxed. `corgi agent pair --file` writes `localUrl` into the `.corgipair` for it (2.28) |
-| `GET`/`POST /launch/profiles` | the account profiles, and one added as `corgi agent profile add <name> --config-dir <dir>` would — the Mac app's **Add account** (2.28.4) |
+| `corgi agent dashboard [--print]` | open the dashboard in this machine's browser, authorised on the way - no QR for a browser that can already read the daemon's files |
+| `corgi agent approve <code>` | approve a Claude connector sign-in whose consent page showed a code - proves you are at the machine ([docs/mcp.md](mcp.md#add-corgi-to-claudeai-desktop-or-the-phone)) |
+| `corgi agent today [--since 8h] [--write] [--json]` | what has been done today since midnight: commits, prompts, the watch's unattended runs and their pull requests; `--json` adds `waits` (how often sessions waited on you) and `days` (a fortnight of sessions, prompts and tool calls per day) - the numbers the phone's share card draws. The days come from the daemon's own ledger, `days.json` in the agent dir, fed by the tracking hooks; a daemon that has none reads a fortnight of transcripts once to fill it (2.22.6) |
+| `corgi agent task add\|list\|move\|done <…>` | a ticket you write yourself - title, body, workspace - kept on this machine and shown on the same board as the tracker's: Todo, Doing, Review, Done. `watch work TASK-3` and the phone's **Work on it** start a session on it; nothing about it reaches a tracker |
+| `GET /launch/watch-status` · `GET /launch/status` | `corgi agent watch --json` and `corgi agent status --json` over the launcher, for a client on the machine that cannot run corgi - the Mac app from the store, sandboxed. `corgi agent pair --file` writes `localUrl` into the `.corgipair` for it (2.28) |
+| `GET`/`POST /launch/profiles` | the account profiles, and one added as `corgi agent profile add <name> --config-dir <dir>` would - the Mac app's **Add account** (2.28.4) |
 | `corgi agent watch prune [--older-than 7d] [--dry-run]` | remove the worktrees of isolated runs finished that long ago; the branch and any dirty worktree stay. `watch enable --prune-after 7d` does it from the daemon, hourly (2.28.14) |
-| `corgi agent watch enable --plan-review always\|risk>=N\|off [--workspace X]` | the stories skill waits for a human on the spec before it cuts a branch — always, or when the story's risk forecast reaches N of 10. Asked with a question the phone can answer. Off by default: nothing changes until you turn it on. `planReview` in `corgi_watch_switches` / `corgi_watch_set` too (2.28.27) |
-| `corgi agent watch enable --silent [--workspace X]` | this workspace's watch keeps quiet: fixes run, the inbox and the kanban fill, but nothing rings — no toast, no phone push — until `--silent=false`. For a repository where comments and reviews should just get fixed. A permission prompt in a live session still rings. `silent` in the phone's repo switches too (2.28) |
-| `corgi agent watch enable --mentions [--channel '#incidents'] [--review-channel '#code-review'] [--trust @teammate]` | Slack joins the watch: a mention or a direct message rings like a review comment, a listened channel rings on every message, and a post in a review channel carrying pull-request links is one review to do. `--trust` names who may start an unattended run by mentioning you — empty means nobody, because a channel is open to whoever is in it. Needs `corgi agent watch auth slack` (2.29) |
+| `corgi agent watch enable --plan-review always\|risk>=N\|off [--workspace X]` | the stories skill waits for a human on the spec before it cuts a branch - always, or when the story's risk forecast reaches N of 10. Asked with a question the phone can answer. Off by default: nothing changes until you turn it on. `planReview` in `corgi_watch_switches` / `corgi_watch_set` too (2.28.27) |
+| `corgi agent watch enable --silent [--workspace X]` | this workspace's watch keeps quiet: fixes run, the inbox and the kanban fill, but nothing rings - no toast, no phone push - until `--silent=false`. For a repository where comments and reviews should just get fixed. A permission prompt in a live session still rings. `silent` in the phone's repo switches too (2.28) |
+| `corgi agent watch enable --mentions [--channel '#incidents'] [--review-channel '#code-review'] [--trust @teammate]` | Slack joins the watch: a mention or a direct message rings like a review comment, a listened channel rings on every message, and a post in a review channel carrying pull-request links is one review to do. `--trust` names who may start an unattended run by mentioning you - empty means nobody, because a channel is open to whoever is in it. Needs `corgi agent watch auth slack` (2.29) |
 | `corgi agent chat post "<text>" [--to '#chan'] [--reply <event key>] [--as me\|bot]` · `chat react <event key> <emoji>` | say something back, in the thread the message came from. The bot speaks by default when a bot token is stored; `--as me` posts under your own name. Also the MCP tool `corgi_chat_post`, so a session answers the same way (2.29) |
-| `corgi agent plan "<goal>" [--workspace X] [--max N] [--run --slots N]` · `plan run\|status\|stop <P-n>` | a goal handed to a planner (a short `claude -p`, sonnet by default) that writes 2–6 tasks on the board — what to change, where, how a session knows it is done, which tasks wait for which — and to the daemon, which works through them: each task the same unattended run a ticket gets, in a worktree of its own, `--slots N` at a time, the next when one ends (Review or Done lets the tasks after it start). The workspace's caps, quiet hours and breaker hold; a run that failed leaves its task for you, the plan never retries it. The tasks are ordinary tasks (TASK-n on the kanban, `task edit` before `plan run`); the plan is the order and the slots, in `watch/plans.json`, and a readable `plans/P-n.md` with a Decisions section. Needs the workspace watched with `--isolate`. `GET /launch/plans` for the phone (2.26) |
-| `corgi agent kanban [--workspace X] [--json]` | one card per ticket in a column corgi works out — Inbox, Ready, Running, Blocked, Review, Done — from the inbox, the runs, the sessions on each branch, the handoffs; the phone's Board tab draws the same |
+| `corgi agent plan "<goal>" [--workspace X] [--max N] [--run --slots N]` · `plan run\|status\|stop <P-n>` | a goal handed to a planner (a short `claude -p`, sonnet by default) that writes 2-6 tasks on the board - what to change, where, how a session knows it is done, which tasks wait for which - and to the daemon, which works through them: each task the same unattended run a ticket gets, in a worktree of its own, `--slots N` at a time, the next when one ends (Review or Done lets the tasks after it start). The workspace's caps, quiet hours and breaker hold; a run that failed leaves its task for you, the plan never retries it. The tasks are ordinary tasks (TASK-n on the kanban, `task edit` before `plan run`); the plan is the order and the slots, in `watch/plans.json`, and a readable `plans/P-n.md` with a Decisions section. Needs the workspace watched with `--isolate`. `GET /launch/plans` for the phone (2.26) |
+| `corgi agent kanban [--workspace X] [--json]` | one card per ticket in a column corgi works out - Inbox, Ready, Running, Blocked, Review, Done - from the inbox, the runs, the sessions on each branch, the handoffs; the phone's Board tab draws the same |
 | `corgi agent handoff --ref X --done … --remaining … --next …` / `show X` | a handoff for the next session or person: corgi fills in branch, head, base, uncommitted files, who was writing, budget left; you say what is done, what is not, what was decided; `.corgi/corgi_services/handoffs/<ref>.json` plus a Markdown twin |
-| `corgi agent scope set\|add\|show\|clear <ref>` | the contract a ticket's change stays inside — paths, a line budget, tests, done-when — enforced by the hooks `track enable` installs: a write outside the paths is refused with the way to widen; a diff over budget is said once at the end of the turn |
-| `corgi agent skills install\|status [--from <dir>]` | the corgi skills for **Codex**: Claude reads them from the plugin, Codex from `~/.codex/skills/<name>/SKILL.md`, so corgi copies every skill and the `_shared` files there under one manifest — yours untouched, a dropped one removed. `status` and `corgi agent doctor` say when the copy is behind the plugin; run `install` again after an upgrade. A codex run gets `$stories` / `$review` and the file to read where a claude run gets `/corgi:stories` (2.30.10) |
-| `corgi agent routine catalog\|add\|list\|run\|rm` | runs on a clock through the unattended runner (`add digest`, `add babysit-pr --schedule "every 2h"`, `--prompt … --schedule "daily 03:00"`), with the same caps, quiet hours and budget; each report is one inbox row with the log behind it; restart the daemon after add or rm. A routine that only reads (digest, flaky, suggest) runs in the checkout even under `--isolate`; the ones that push (babysit-pr, deps, release-notes, doc-drift) get worktrees like a fix. `--bot <name>` runs it as that bot — its soul, model and account, filed under its name (2.28.11); `add suggest --bot proactive` is the Proactive bot: once a week, one thing worth building next, on the board as a task with its evidence |
+| `corgi agent scope set\|add\|show\|clear <ref>` | the contract a ticket's change stays inside - paths, a line budget, tests, done-when - enforced by the hooks `track enable` installs: a write outside the paths is refused with the way to widen; a diff over budget is said once at the end of the turn |
+| `corgi agent skills install\|status [--from <dir>]` | the corgi skills for **Codex**: Claude reads them from the plugin, Codex from `~/.codex/skills/<name>/SKILL.md`, so corgi copies every skill and the `_shared` files there under one manifest - yours untouched, a dropped one removed. `status` and `corgi agent doctor` say when the copy is behind the plugin; run `install` again after an upgrade. A codex run gets `$stories` / `$review` and the file to read where a claude run gets `/corgi:stories` (2.30.10) |
+| `corgi agent routine catalog\|add\|list\|run\|rm` | runs on a clock through the unattended runner (`add digest`, `add babysit-pr --schedule "every 2h"`, `--prompt … --schedule "daily 03:00"`), with the same caps, quiet hours and budget; each report is one inbox row with the log behind it; restart the daemon after add or rm. A routine that only reads (digest, flaky, suggest) runs in the checkout even under `--isolate`; the ones that push (babysit-pr, deps, release-notes, doc-drift) get worktrees like a fix. `--bot <name>` runs it as that bot - its soul, model and account, filed under its name (2.28.11); `add suggest --bot proactive` is the Proactive bot: once a week, one thing worth building next, on the board as a task with its evidence |
 | `corgi agent harden [--dry-run]` | deny rules for secrets and destruction (`.env`, keys, `rm -rf`, force push, `--no-verify`) plus a hook that refuses to write a credential into a file, added to the workspace's `.claude/settings.local.json`; `doctor --security` says what is still loose |
 | `corgi agent refresh` | reload everything now: rescan sessions, poll every tracker, publish the board |
 | `corgi agent stop` | stop the daemon |
@@ -396,9 +396,9 @@ conversation), reads the chat id out of that message, writes `notifyUrl` and
 sends a test. `--chat-id` skips the wait if you already know it.
 
 **Slack** is a channel's Incoming Webhook URL, **Discord** a channel →
-Integrations → New Webhook URL — `corgi agent notify set <url>` for either.
+Integrations → New Webhook URL - `corgi agent notify set <url>` for either.
 Anything else gets the ntfy shape (body as plain text, title in the `Title`
-header), which suits a **self-hosted** ntfy — the ntfy.sh iOS app itself is
+header), which suits a **self-hosted** ntfy - the ntfy.sh iOS app itself is
 paid, Android is free.
 
 ```bash
@@ -410,18 +410,18 @@ corgi agent restart       # a running daemon reads notifyUrl at startup
 **The restart is the step people miss.** The webhook is attached when the daemon
 starts, so a `notifyUrl` written under a running daemon reaches nothing until it
 is restarted. Note also that `corgi notifications test` only exercises the
-**desktop** path — `corgi agent notify test` is the one that posts to the URL.
+**desktop** path - `corgi agent notify test` is the one that posts to the URL.
 
 Trusted config only: the URL receives restart reasons, so a committed repo file
-can never set it. Treat the value as a secret — a Telegram token lets anyone
+can never set it. Treat the value as a secret - a Telegram token lets anyone
 post as that bot, so never paste it into a chat, a commit or an issue. If one
 leaks, `/revoke` in @BotFather issues a new one; the chat id does not change.
 
 ### What a session is called
 
 Every supervised session carries a name into claude.ai/code's list. The
-workspace id alone is not enough — four rows called `corgi` say nothing about
-which one to open — so corgi composes the branch it started on and the clock
+workspace id alone is not enough - four rows called `corgi` say nothing about
+which one to open - so corgi composes the branch it started on and the clock
 time with it:
 
 ```
@@ -436,7 +436,7 @@ characters claude.ai shows.
 
 That is the name it **starts** with. After that the name belongs to Claude
 Code, which keeps its own record of it (`<configDir>/sessions/<pid>.json`,
-with a `nameSource` saying who last set it — `user` for one someone typed,
+with a `nameSource` saying who last set it - `user` for one someone typed,
 `derived` or `auto` for one Claude picked, `hook` for one a hook set). A
 session renamed in flight is renamed in corgi's list too: the launcher reads
 that record on every refresh and shows the current name, with *renamed 4m ago*
@@ -448,8 +448,8 @@ in that list is the one remote control registered at start.
 ### Naming a session after what you asked it
 
 A start-time name answers *which machine, which checkout, when*. It cannot
-answer the question you actually scan the list for — what is this session
-doing — because nothing knows that until you say it.
+answer the question you actually scan the list for - what is this session
+doing - because nothing knows that until you say it.
 
 `corgi agent hooks enable` writes a `UserPromptSubmit` hook for that: the
 first thing you ask becomes the name.
@@ -460,36 +460,36 @@ corgi · main · 18:55        →   corgi · fix the login redirect
 
 The workspace stays in front, because claude.ai lists every session you have
 running on every machine and the ask alone does not say where. corgi's own
-list trims it back off — the card it sits on has already said which repo this
+list trims it back off - the card it sits on has already said which repo this
 is.
 
 It renames once, and only a name nobody chose: the one corgi composed (they
 all end in a clock) or the one Claude Code derived from the directory
 (`corgi-3e`). A name you typed from the phone, and the one this hook already
-set, are left alone — a session that renames itself on every prompt flickers
+set, are left alone - a session that renames itself on every prompt flickers
 through "ok", "continue", "now the tests", and a name that changes under you
-is worse than a dull one. Prompts that describe nothing — a slash command,
-"yes", "continue", anything under twelve characters — are ignored.
+is worse than a dull one. Prompts that describe nothing - a slash command,
+"yes", "continue", anything under twelve characters - are ignored.
 
 Skip it with `corgi agent hooks enable --no-title`, and note that the
 `sessionTitle` field it replies with is in Claude Code's own hook schema but
 not in the published hooks reference: if a release stops reading it, the
 session keeps its starting name and nothing else changes.
 
-Name a session yourself and that wins — it says what the session is *for*,
+Name a session yourself and that wins - it says what the session is *for*,
 which no local probe can know:
 
 ```bash
 corgi agent session start acme --name "fix login redirect"
 ```
 
-The launcher asks for it too — the `options` chip on a stopped card — and
+The launcher asks for it too - the `options` chip on a stopped card - and
 `corgi_session_start` takes a `name`.
 
 ### The timeline
 
 Every start, exit (with its classified cause), disable, and captured session
-link is appended to a small per-workspace timeline — never session output,
+link is appended to a small per-workspace timeline - never session output,
 which can hold secrets and is not persisted:
 
 ```bash
@@ -501,8 +501,8 @@ The launcher's per-workspace session list is fed from the same timeline, so
 past sessions survive daemon restarts, and the `corgi_session_events` MCP tool
 exposes it to a connected Claude.
 
-The same list shows every Claude Code process running in the workspace —
-terminal, VS Code, supervised — read from the per-process records under
+The same list shows every Claude Code process running in the workspace -
+terminal, VS Code, supervised - read from the per-process records under
 `<configDir>/sessions/`. A process that registered a web id links straight to
 its conversation on claude.ai; one that has not is marked *local only*, and
 typing `/remote-control` inside it is what gives it a link.
@@ -510,7 +510,7 @@ typing `/remote-control` inside it is what gives it a link.
 ### What it has been costing
 
 Claude Code records token counts in its own transcripts, so corgi can add them
-up per workspace — nothing is sent anywhere, and only the numbers are read:
+up per workspace - nothing is sent anywhere, and only the numbers are read:
 
 ```
 $ corgi agent status
@@ -519,12 +519,12 @@ $ corgi agent status
 ```
 
 The launcher shows the same two numbers on each card. Cache reads are included,
-which is why the totals are large — that is the real traffic against the window.
+which is why the totals are large - that is the real traffic against the window.
 
 ### Hiding a workspace on the phone
 
-Each card has a **hide** chip. Hidden cards collapse into one `N hidden — show`
-button. It is stored in that browser only and changes nothing on the machine —
+Each card has a **hide** chip. Hidden cards collapse into one `N hidden - show`
+button. It is stored in that browser only and changes nothing on the machine -
 it exists for the moment someone else is looking at your screen. To actually
 stop supervising a workspace, `corgi agent workspaces pause <id>` (sets
 `autostart: false`; `resume` puts it back). Takes effect when the daemon restarts.
@@ -537,9 +537,9 @@ like corgi being down:
 - **The Mac sleeps between sessions.** The wake lock is held per session by
   default, so with nothing running the laptop dozes off and a phone tap reaches
   nothing at all. `corgi agent awake on` holds it for as long as the daemon
-  runs. On battery `caffeinate -i` still works — only `-s` is AC-only — so what
+  runs. On battery `caffeinate -i` still works - only `-s` is AC-only - so what
   actually ends a session is a closed lid or a flat battery.
-- **A blocked tunnel domain.** Most networks are fine here — plenty of people
+- **A blocked tunnel domain.** Most networks are fine here - plenty of people
   run a `*.trycloudflare.com` link over cellular for years and never hit this.
   But that domain and `*.loca.lt` are on enough blocklists that *some* carriers
   and filtering resolvers refuse them, and then the same link works on Wi-Fi and
@@ -562,7 +562,7 @@ like corgi being down:
 corgi agent up --http 0.0.0.0:8765     # prints http://<lan-ip>:8765/app too
 ```
 
-That path has no DNS, no provider and no public exposure — it is the one to
+That path has no DNS, no provider and no public exposure - it is the one to
 reach for first when you are at home, and the fallback when a tunnel misbehaves.
 Back to loopback with `corgi agent restart --http 127.0.0.1:8765`.
 
@@ -574,11 +574,11 @@ curl -so /dev/null -w '%{http_code} %{time_total}s\n' http://127.0.0.1:8765/app
 curl -so /dev/null -w '%{http_code} %{time_total}s\n' https://<public-host>/app
 ```
 
-A slow or failing loopback request means corgi itself — `corgi agent status`,
+A slow or failing loopback request means corgi itself - `corgi agent status`,
 then `corgi agent restart`. A fast loopback and a failing public one means the
 tunnel is not delivering; switch provider, or use the Wi-Fi path above. Both
 fast means the machine's side is healthy and the phone's network is the
-problem. Confirm that on the phone itself, with Wi-Fi turned off — the machine
+problem. Confirm that on the phone itself, with Wi-Fi turned off - the machine
 shares its own DNS and route with that second request, so a `200` there does not
 prove a phone on cellular can resolve the name. Do not substitute a public web
 proxy for the phone: ngrok and Cloudflare throttle them, and the `522` you get
@@ -600,14 +600,14 @@ corgi agent hooks enable --no-title      # skip the one that names a session aft
 Only the permission prompt notifies by default: it blocks the session until you
 answer, while a finished turn fires constantly once several workspaces are busy.
 
-Claude fires the same hook for a second thing — a **60-second idle nudge**
+Claude fires the same hook for a second thing - a **60-second idle nudge**
 ("Claude is waiting for your input") that arrives when nothing is blocked at all.
 corgi drops that one: a notification for a session that wants nothing is how
 people learn to ignore all of them. `corgi agent hooks enable --idle` keeps it.
-Notifications go to the machine running corgi — **set `notifyUrl` to reach your
+Notifications go to the machine running corgi - **set `notifyUrl` to reach your
 phone**, or the hooks only reach the desk you were trying to leave. On macOS with
 `terminal-notifier` installed, clicking the desktop toast brings the session's own
-window forward — the VS Code window, iTerm or Terminal tab, or tmux pane it runs
+window forward - the VS Code window, iTerm or Terminal tab, or tmux pane it runs
 in, the same as `corgi agent focus`. A session with no window on this Mac (one the
 daemon runs headless, or a workspace with nothing open) opens its session URL
 instead, or the launcher when corgi does not know one.
@@ -617,7 +617,7 @@ one served from **localhost**, not the public tunnel URL: no round trip out to
 the internet and back, and it still works when the tunnel is down. The phone
 push keeps the public URL, which is the only one that is any use to a phone.
 
-`notifyUrl` picks its payload from the host, so it is not ntfy-only — useful
+`notifyUrl` picks its payload from the host, so it is not ntfy-only - useful
 because ntfy's **iOS** app is paid:
 
 | host | what it sends | free on iOS |
@@ -632,13 +632,13 @@ For Telegram put the chat in the URL and corgi copies it into the body:
 carries the title, the detail, and the link to open.
 
 They call `corgi agent hook`, which reports to the daemon, which sends the same
-notification as a restart — including the phone push when `notifyUrl` is set.
+notification as a restart - including the phone push when `notifyUrl` is set.
 It covers every Claude session in that directory, supervised or not.
 `corgi agent hooks disable` removes them and leaves your other hooks alone.
 
 #### Reads answered for you
 
-Every prompt carries a risk word — `reads`, `writes`, `destructive` — read
+Every prompt carries a risk word - `reads`, `writes`, `destructive` - read
 off the tool and its input. A workspace can say the first kind is not worth
 waking anyone for:
 
@@ -653,13 +653,13 @@ prompt is drawn, and the session's row counts what it allowed
 configurable: a Bash command is never a read, however it looks (`cat` and `rm`
 share a prompt shape); anything that writes waits for a person; and only a
 session in iTerm2 or tmux is answered, because those are the hosts corgi can
-type into without bringing a window forward — in VS Code or Terminal.app the
+type into without bringing a window forward - in VS Code or Terminal.app the
 prompt rings as before. The switch flips from the phone too, on the repo's sheet,
 and takes at the next prompt.
 
 #### Done means the checks say so
 
-A session that stops is *done* on the board the moment Claude stops typing —
+A session that stops is *done* on the board the moment Claude stops typing -
 whether or not the tests pass. A workspace can say what finished means:
 
 ```bash
@@ -670,9 +670,9 @@ When a session in that workspace stops with changes on its branch (the
 minute sweep saw files, or it ran tests itself), the daemon runs those
 commands in the session's directory, in order. All green: the row's tests
 line says ✓ and the session is done. One red: the last twelve lines it
-printed are typed into the session as the next message — *Not done yet:
+printed are typed into the session as the next message - *Not done yet:
 `go test ./...` failed after you stopped … fix it, run it again, and stop
-when it is green* — and the session is working again. The row carries the
+when it is green* - and the session is working again. The row carries the
 run as `gate` (`ok`, `cmd`, `fails`) and the tests line shows ✗ with the
 command. After three reds in a row the daemon stops arguing with a model and
 rings you instead. An interrupted session is never gated: you stopped it.
@@ -687,22 +687,22 @@ workspace can have the daemon do it:
 corgi agent watch enable --compact-at 85
 ```
 
-A session past that fill is sent `/compact` the next time it stops — never
-mid-turn — once per episode (ten minutes between two), and the row counts
+A session past that fill is sent `/compact` the next time it stops - never
+mid-turn - once per episode (ten minutes between two), and the row counts
 it (`compacted`, `compactedAt`). 0 turns it off. Also a phone switch.
 
 #### When main moves
 
 The minute sweep also measures every live branch against its base
 (`origin/main`, or `main`): how many commits main gained since the branch
-left it, and — from `git merge-tree`, without touching the tree — which
+left it, and - from `git merge-tree`, without touching the tree - which
 files a rebase would stop on. The session carries it as `behind`
 (`{commits, conflicts, upstream}`), a key shows *main moved 12 · conflicts
 in api.go*, and a conflict is a drift reason. Two switches act on it when
 the session stops:
 
 ```bash
-corgi agent watch enable --hand-over   # would conflict: the files are typed into the session — rebase, resolve, test, stop
+corgi agent watch enable --hand-over   # would conflict: the files are typed into the session - rebase, resolve, test, stop
 corgi agent watch enable --rebase      # no conflict, clean tree: rebased onto main where it sits
 ```
 
@@ -714,7 +714,7 @@ anything on the machine made.
 #### Lessons
 
 What a workspace learned the hard way, one line each, in
-`<agentDir>/lessons/<workspace>.md` — outside the repository, so nothing
+`<agentDir>/lessons/<workspace>.md` - outside the repository, so nothing
 shows in `git status`:
 
 ```bash
@@ -727,7 +727,7 @@ With the switch on the daemon writes its own: a review or a comment on a
 pull request of yours (`pr.review acme/api#7 (dan): retries need a cap`), a
 done-when check that stayed red three times, a bot run that failed. A line
 is never written twice. The SessionStart context hook tells every new
-session in the workspace how many there are, where, and the last one — so
+session in the workspace how many there are, where, and the last one - so
 the same thing is not learned twice by two sessions.
 
 ### Sessions on a Stream Deck
@@ -737,8 +737,8 @@ in the macOS menu bar, the [VS Code extension](https://marketplace.visualstudio.
 and [Corgi Agent Deck](https://github.com/Andriiklymiuk/corgi-agent-deck) on a
 Stream Deck. They run the commands below.
 
-`corgi agent hooks` covers one workspace. The other question — *which of the
-seven Claude sessions across three VS Code windows is the one waiting on me* —
+`corgi agent hooks` covers one workspace. The other question - *which of the
+seven Claude sessions across three VS Code windows is the one waiting on me* -
 needs every session, wherever it was started. That is `corgi agent track`:
 
 ```bash
@@ -758,7 +758,7 @@ corgi agent focus acme-api        # that window, that terminal tab
  6  +2  (press to page)
 ```
 
-What it is: a fixed board of keys (six, a Stream Deck Mini — `corgi agent
+What it is: a fixed board of keys (six, a Stream Deck Mini - `corgi agent
 board --slots N` for another deck, applied to a running daemon at once) that the daemon assigns and publishes as `sessions.json` in the
 agent data directory. A Stream Deck plugin only has to watch that file and shell
 out to `corgi agent focus`, `pin` and `page` on a press; it holds no state of
@@ -766,13 +766,13 @@ its own, so it can be restarted, reinstalled or replaced without the board
 moving. `corgi agent sessions --json` prints the file's path along with it.
 
 How it knows: the hooks call `corgi agent hook emit` on every event that
-changes what a session is doing — start, prompt, tool, permission, notification,
+changes what a session is doing - start, prompt, tool, permission, notification,
 stop, failure, end. Each is asynchronous and exits 0 whatever happens, so a
 daemon that is down costs a millisecond and shows nothing in the transcript.
 `emit` reads only the session id, the event, the directory and the tool name;
 prompts, tool inputs and the transcript never leave the hook. Two things are
 reduced on the spot before anything is written: the tool input becomes one
-safe word (`registry.go`, `git push`, `api.github.com` — the file's name, the
+safe word (`registry.go`, `git push`, `api.github.com` - the file's name, the
 program and its subcommand, a host; never a path, a flag or a value), and on
 Stop the transcript's newest assistant turn becomes a context number (see
 below), the chat's title, and one line of what Claude said. It also records
@@ -802,15 +802,15 @@ and no board it says nothing.
 | status | when | key |
 |---|---|---|
 | `working` | the model is running or a tool is executing | amber |
-| `needs_input` | a permission prompt, a question, an API failure | red — the one that matters |
-| `limited` | the account hit its usage limit; `detail` says when it resets | blue — come back later, nothing to answer |
+| `needs_input` | a permission prompt, a question, an API failure | red - the one that matters |
+| `limited` | the account hit its usage limit; `detail` says when it resets | blue - come back later, nothing to answer |
 | `done` | the turn finished; waiting for a prompt | green |
 | `stale` | alive, but nothing for 30 minutes | gray |
 | `gone` | the process exited, but the key is pinned | dimmed |
 
 Claude's "waiting for your input" nudge a minute after a turn ends is **not**
 `needs_input`: a finished session that wants nothing stays `done`. The same
-nudge mid-turn — a question you have not seen — is.
+nudge mid-turn - a question you have not seen - is.
 
 The **reaper** probes every session's pid every five seconds, so a force-quit
 window frees its key within that, `SessionEnd` or no `SessionEnd`. On start
@@ -826,14 +826,14 @@ unpinned key becomes a `+N` pager and `corgi agent page` rotates the others
 through the overflow.
 
 **Focus.** On macOS `open -a "Visual Studio Code" <folder>` brings the window
-that has the folder open to the front — no Accessibility permission. Getting
+that has the folder open to the front - no Accessibility permission. Getting
 to the exact terminal *tab* needs code inside that window, which is what the
 [corgi VS Code extension](https://github.com/Andriiklymiuk/corgi_vscode_extension)
 does: it puts `CORGI_VSCODE_WINDOW` into every integrated terminal, reports its
 terminals' shell pids and its own extension-host pid to the daemon, and reveals
 the tab (or the Claude Code panel, whose `claude` is a child of that extension
 host) when asked. Without the extension, focus is window-level, matched by
-folder. `corgi agent doctor` lists any session with `unknown` host — the first
+folder. `corgi agent doctor` lists any session with `unknown` host - the first
 thing to check when a key press goes nowhere. For iTerm2 and Terminal.app the
 hook records the `claude` process's controlling tty, and focus selects that
 exact tab through the emulator's own scripting; with no tty the app comes
@@ -841,7 +841,7 @@ forward on its own.
 
 **tmux, on any OS.** A `claude` started inside tmux carries `TMUX_PANE`, and
 the hook records it. Focus becomes `tmux select-window` + `select-pane`, and
-typing goes through `tmux send-keys` — no AppleScript, no Accessibility
+typing goes through `tmux send-keys` - no AppleScript, no Accessibility
 permission, and the only way a terminal session on Linux (or over SSH) takes
 text from the phone. The pane counts as a host corgi can type into without
 raising a window, so the workspace reads policy answers there as it does in
@@ -850,7 +850,7 @@ iTerm2.
 **Tab titles.** A second, synchronous hook prints a terminal title on the
 events that change status, so every terminal tab running Claude reads
 `● acme-api`, `▲ acme-api NEEDS YOU` or `✓ acme-api` with no deck at all.
-VS Code's default tab title is `${process}` — the word "claude" — so set
+VS Code's default tab title is `${process}` - the word "claude" - so set
 `terminal.integrated.tabs.title` to `${sequence}` (the corgi VS Code extension
 offers to, once). `--no-tab-title` skips the hook.
 
@@ -902,58 +902,58 @@ Everything lives in the agent data directory (`sessions.json`, `windows/`,
 
 Every session on the board carries, when known:
 
-- `context` — how full its context window is: `{tokens, window, percent,
+- `context` - how full its context window is: `{tokens, window, percent,
   model}`. Read from the transcript's newest assistant turn (its input plus
   what it read from and wrote to the cache is the context the next turn
   starts from) on every Stop, tool result and prompt. Slots carry the
   percent. Past 60% a key goes amber, past 85% red: `/compact` before it
   forgets. The terminal tab title carries it too from 50% up (`✓ acme-api
   71%`).
-- `title` — the chat's name as its Claude Code panel tab shows it, so a
+- `title` - the chat's name as its Claude Code panel tab shows it, so a
   window with several chats open reveals the right one on focus.
-- `pending` — the permission prompt it is waiting on: `{tool, subject,
+- `pending` - the permission prompt it is waiting on: `{tool, subject,
   risk}`. What `corgi agent answer` answers, and what an Allow button shows
-  first. `risk` is one word about what the tool would do — `reads`,
-  `writes`, `destructive` — so a surface colours Allow by it; slots carry
+  first. `risk` is one word about what the tool would do - `reads`,
+  `writes`, `destructive` - so a surface colours Allow by it; slots carry
   it as `risk` beside `pending`.
-- `note` — yours, from `corgi agent note`.
-- `stuck` — working, but no hook event for twelve minutes. Probably
+- `note` - yours, from `corgi agent note`.
+- `stuck` - working, but no hook event for twelve minutes. Probably
   spinning or waiting on a call that died; a key shows SLOW.
-- `branch` — the checkout the cwd is on, read from `.git` at each prompt.
-- `summary` — the first prose line of what Claude last said, and `pr` the
+- `branch` - the checkout the cwd is on, read from `.git` at each prompt.
+- `summary` - the first prose line of what Claude last said, and `pr` the
   last pull request link it mentioned, both from the transcript on Stop.
   What a phone row shows under the label, and what a PR button opens.
-- `turnStartedAt` — when the current turn began; slots carry `turnS`, so a
+- `turnStartedAt` - when the current turn began; slots carry `turnS`, so a
   surface can say a turn has run fourteen minutes before `stuck` does.
-- `changes` — what its branch has built up since it left its base: `{files,
+- `changes` - what its branch has built up since it left its base: `{files,
   lines, touched[]}`, measured once a minute (`git diff` against the
   merge-base; lock files and bundles never count as lines). The base is
   what origin calls its default branch (`origin/HEAD`), else the first of
-  main, master, trunk, develop on origin, else the same names locally —
+  main, master, trunk, develop on origin, else the same names locally -
   so a trunk repo with a stale local master is measured against trunk.
   `drift`, `behind`, `corgi agent diff` and the scope hook read the same
   base. Slots carry it
-  as one line, *4 files · 120 lines* — the number an operator reads before
+  as one line, *4 files · 120 lines* - the number an operator reads before
   opening the diff.
-- `overlap` — the other live sessions in the same repository touching the
+- `overlap` - the other live sessions in the same repository touching the
   same files, `[{id, session, files}]`, or `{sameCheckout: true}` when two
   sessions simply share one working tree. Work crossing streams, said on
   the board the minute it starts (and rung once) rather than found at merge
   time. Slots carry *api·2 on registry.go*. A session starting in a
   workspace is told what its siblings touch, in the same line that names
   them.
-- `tests` — the last test command the session ran and how it went:
+- `tests` - the last test command the session ran and how it went:
   `{ok, at, cmd}` from the Bash hook (`go test`, `bun test`, `pytest`,
   `make check`, a `test` script…). Slots say *tests ✓* or *tests ✗ go test*.
-- `spend` — what the session has cost so far: `{tokens, turns, at}`, every
+- `spend` - what the session has cost so far: `{tokens, turns, at}`, every
   usage row Claude Code wrote in its transcript (cache reads included, as
   the account is billed), summed on the sweep from where the last one
   stopped. `cap` is the budget it runs under and `overCap` says it passed
   it. Slots carry *52.3M*, and *over budget* when it is. The budget stops
   nothing: the daemon rings once and the row keeps saying so, which is the
-  point — a session burning a window is seen from the phone, not from the
+  point - a session burning a window is seen from the phone, not from the
   invoice.
-- `standing` — where the session stands, in one word and a clause:
+- `standing` - where the session stands, in one word and a clause:
   `{word, why}`, worked out once by the daemon from everything above and
   the forge's word on its pull request. One ladder, highest rung wins:
   *merged* › *closed* › *blocked* › *needs you* (a permission prompt, a
@@ -963,17 +963,17 @@ Every session on the board carries, when known:
   *working* › *done* › *idle* › *gone*. Kanban cards and inbox rows carry
   the same `standing`, so the phone, the menu bar, the editor and the deck
   print the word rather than each reading the facts its own way; slots
-  carry the word. `why` is the clause a row shows after it — *checks ✓ ·
+  carry the word. `why` is the clause a row shows after it - *checks ✓ ·
   approved*, *allow Bash rm -rf build?*, *main moved 4 · conflicts in
   x.go* (2.23).
 
 And the board carries `accounts[]`: every account the sessions run under (and
 every profile in the config, whether in use or not) with the /usage picture
-Claude Code last cached — `limits.fiveHour` and `limits.sevenDay`, percent
-and reset time — and a `forecast`: the daemon keeps a reading per minute
+Claude Code last cached - `limits.fiveHour` and `limits.sevenDay`, percent
+and reset time - and a `forecast`: the daemon keeps a reading per minute
 (one per fetch; `usage/<profile>.jsonl` in the agent dir), fits a line
 through the last ninety minutes and says `percentPerHour`, `exhaustAt`, and
-`safe` — whether the reset comes before the window runs out. `corgi agent
+`safe` - whether the reset comes before the window runs out. `corgi agent
 usage` prints the same as a sentence: *5h: 60%/h, RUNS OUT 2:32pm (before
 the 4:10pm reset)*.
 
@@ -988,13 +988,13 @@ integrated terminal takes the text through the VS Code extension (a reveal
 request with `text` and `enter`; Enter is a literal carriage return, so the
 Claude Code TUI reads it as the Return key and nothing is ever run as a shell
 command). iTerm2 takes it through `write text`, Terminal.app through System
-Events keystrokes, a tmux pane through `send-keys` (Linux included). The Claude Code panel takes nothing from here — its input
-is a web view — so the send fails with a `focusError` saying so and a surface
+Events keystrokes, a tmux pane through `send-keys` (Linux included). The Claude Code panel takes nothing from here - its input
+is a web view - so the send fails with a `focusError` saying so and a surface
 falls back to its own keystrokes after the focus it already got.
 
 `corgi agent answer` types the keys a permission prompt takes: Return for
 allow, `2` then Return for always, Escape for deny. It refuses to allow a
-Bash command whose subject the board recognises as risky — `rm`, `sudo`,
+Bash command whose subject the board recognises as risky - `rm`, `sudo`,
 `--force`, `--hard`, `drop` and the like: those you look at.
 
 The phone launcher does both from its session rows: **Allow**, **Always**
@@ -1022,7 +1022,7 @@ A workspace that lists more than one agent shows an **Agent** row too
 (2.30.17).
 
 **Carry from the phone** (2.30.17): `POST /launch/carry {session, to |
-profile | fresh}` is `corgi agent carry` — **Hand to codex** (or to claude)
+profile | fresh}` is `corgi agent carry` - **Hand to codex** (or to claude)
 under a session whose workspace lists the other agent, a fresh session there
 from the handoff packet; **Carry to <account>** under a limited one; **Start
 fresh** under any. A session that already runs through the named agent, or a
@@ -1030,8 +1030,8 @@ workspace that does not list it, is a 400 with the reason.
 
 **The stream** (2.23): instead of asking every few seconds whether anything
 changed, a phone or an editor keeps one `GET /launch/stream` open and is
-told the moment something does — `event: change`, `data: {seq, what:
-["board","inbox"], at}` — then reads only the feeds named. A frame says
+told the moment something does - `event: change`, `data: {seq, what:
+["board","inbox"], at}` - then reads only the feeds named. A frame says
 *what* moved, never what it holds; a device that paired with a key gets
 every frame sealed like any answer (`X-Corgi-E2E: 1` on the stream), and a
 device that did not gets it plain. The launcher looks at the daemon's files
@@ -1044,7 +1044,7 @@ the stream again in a minute.
 
 **Preview** (2.23): the phone opens the web app the workspace's stack is
 serving on the laptop. A WebView cannot send a header with every asset it
-loads, so the phone asks — sealed, as a paired device — `POST
+loads, so the phone asks - sealed, as a paired device - `POST
 /launch/preview {workspace, service}` and gets a *ticket*: a long random
 path prefix, `/launch/preview/<ticket>/`, that names one running service
 of that stack and dies in ten minutes. Pages and assets load through it
@@ -1059,10 +1059,10 @@ it is short-lived and single-purpose by design.
 When a session leaves `needs_input` or `limited`, the daemon records how
 long it sat there (`waits.jsonl`). `corgi agent usage` sums the day: how many
 waits, the median, the longest and which session, and how long limits cost.
-A limit lifting is one notification the moment it lifts — "limit lifted on
-skp — back to work", the account named when the board has more than one
+A limit lifting is one notification the moment it lifts - "limit lifted on
+skp - back to work", the account named when the board has more than one
 (a profile, or codex / gemini), after a 20 s grace so a prompt that hits the
-wall again is not called a lift — and one more when the turn it resumed
+wall again is not called a lift - and one more when the turn it resumed
 comes to rest ("the turn resumed after the limit on skp is done"). The
 work resumes by itself.
 
@@ -1070,13 +1070,13 @@ work resumes by itself.
 
 corgi cannot restore the conversation. What it can keep is the half that
 survives on disk, captured in the gap between the old process exiting and the
-new one starting — the only moment that state is both final and current:
+new one starting - the only moment that state is both final and current:
 
 ```bash
 $ corgi agent brief acme-stack
 acme-stack
   ended   2026-08-14 14:32 (network-timeout)
-  reason  remote control restarted — the previous session ended (network timeout)
+  reason  remote control restarted - the previous session ended (network timeout)
   state   was on feature/referral · 1 repo has uncommitted changes
     api              feature/referral (worktree)
     web              feature/referral · uncommitted changes (worktree)
@@ -1092,7 +1092,7 @@ removal. Creating files is the most common thing an agent does, and a note
 calling that "clean" would be worse than no note. `.gitignore` is respected, so
 build output does not inflate the count.
 
-A session that ends because you asked it to gets no brief — you do not need a
+A session that ends because you asked it to gets no brief - you do not need a
 handover note for something you just closed. Only the most recent is kept per
 workspace, and `corgi agent workspaces forget` drops it, so a reused id cannot
 surface another stack's branches.
@@ -1107,7 +1107,7 @@ Not every exit is worth retrying:
 | network timeout | restart, notify |
 | crash | restart with backoff, notify |
 | exits immediately, repeatedly | stop after 5, disable the workspace, notify |
-| auth failure | **do not restart** — retrying cannot produce credentials |
+| auth failure | **do not restart** - retrying cannot produce credentials |
 | `corgi agent stop` | stay stopped |
 
 ## Watching the tracker and your pull requests
@@ -1131,12 +1131,12 @@ corgi agent watch test issue.comment --body "still needed?"  # one made-up event
 corgi agent restart
 ```
 
-**When a row leaves the inbox.** One rule for every surface — the phone,
+**When a row leaves the inbox.** One rule for every surface - the phone,
 the menu bar, the editor, `watch status`: a row goes when its ticket reaches
 a finished state or is picked up, when every pull request it is about is
 merged or closed (a chat review request counts the pull requests its message
 links), when you reviewed every pull request a review request is about after it came in, or when a run already handled it (the review is posted, the comment
-answered — a run on the same pull request that started after the comment
+answered - a run on the same pull request that started after the comment
 counts). Anything else waits until you act or ignore it. `corgi agent watch
 ignore --all [--workspace ID]` clears what the inbox shows now; the phone's
 **Clear** on a workspace does the same through `POST /launch/inbox/ignore
@@ -1159,11 +1159,11 @@ interval off, up to ten times, instead of hammering the API.
 
 **Webhooks** remove the polling delay; they never replace polling. Each
 source of a workspace is either *webhook + poll* or *poll* alone, and a
-workspace can mix them — GitLab on webhooks while Jira polls, GitHub on
+workspace can mix them - GitLab on webhooks while Jira polls, GitHub on
 webhooks while Linear polls. Polling stays on beside every webhook: it
 catches what came while the laptop was off or the tunnel was down (a forge
 disables a hook that keeps failing), and it is the only way in for the kinds
-the webhooks here do not send — review requests, red builds, a ticket
+the webhooks here do not send - review requests, red builds, a ticket
 assigned to you. The two never run a comment twice: a webhook and a poll
 give the same comment the same key (`github:<repo>#<n>:c<id>` / `:r<id>`,
 `gitlab:note:<id>`, `linear:<KEY>:c<id>`, `jira:<KEY>:c<id>`), and a key is
@@ -1177,7 +1177,7 @@ review comments); running it again updates in place, and `--rotate
 --install` pushes a new secret everywhere. The watch token only ever has to
 read; when it cannot write, `--install` uses your `glab` / `gh` login for
 the setup alone. A repo it cannot set up says why: the token's scope, or the
-role — on GitHub only a repo admin may add a hook, and an org owner can add
+role - on GitHub only a repo admin may add a hook, and an org owner can add
 one org webhook (same URL, secret and events) that covers every repo. Linear and Jira webhooks are one
 per organisation and are added by hand (the command prints the exact URL).
 Linear and GitHub payloads are checked against an HMAC of the body, GitLab
@@ -1190,7 +1190,7 @@ source with no filter, or is dropped. A GitLab project hook sends every note
 on every merge request; only a note on a merge request you opened is yours
 to fix (matched by your GitLab user id, which the poll learns). `corgi agent
 watch status` shows, per source, when the last poll ran and when the last
-webhook came in — a source with no webhook time after a comment is a hook
+webhook came in - a source with no webhook time after a comment is a hook
 that is not arriving.
 
 
@@ -1221,16 +1221,16 @@ the plain `search:read` is the one.
 **A review channel** is the shape most teams already have: one post per
 ticket listing the pull requests, the reviewer answering in the thread. Put
 that channel in `--review-channel` and a post carrying links becomes **one**
-review — `/corgi:review` over every link at once, which is what reviewing a
-corgi workspace means — answered in the thread with a line per pull request.
-The reply under the post says what landed on each pull request — `approved
-✅`, `comments added (2)`, `changes requested` — read back from the forge,
+review - `/corgi:review` over every link at once, which is what reviewing a
+corgi workspace means - answered in the thread with a line per pull request.
+The reply under the post says what landed on each pull request - `approved
+✅`, `comments added (2)`, `changes requested` - read back from the forge,
 never from what the run said; the post gets ✅ on an approval and 💬 when
 comments went up. A review request runs `/corgi:review <links>` plainly, the
 same prompt a person types, in the checkout, no worktrees. The author's later "@you updated"
 in the thread arrives as a mention carrying the parent's links, so the
 second pass reviews at the new head. **Your own post** is not a review for
-you — those are your pull requests — and a colleague's reply under it is a
+you - those are your pull requests - and a colleague's reply under it is a
 word on your work: it rings (with or without `--mentions`; the channel is
 opted in), and with `--hand-over` it is typed into the session on that
 branch. A fix for review feedback merges the base branch in first when the
@@ -1241,7 +1241,7 @@ green checks (`--auto-merge`), never for a "LGTM" in the thread.
 reach your machine, so it is gated on a list of people rather than on
 anything about the message: `--trust @teammate @reviewer`. Empty means nobody.
 The message reaches the prompt fenced and labelled as a colleague's request
-rather than as instructions — but the list is the guard; the fence is the
+rather than as instructions - but the list is the guard; the fence is the
 second line.
 
 **Notify** sends the same notification a waiting session does: desktop,
@@ -1259,19 +1259,19 @@ ends. A fix runs unattended only for a workspace enabled with
 
 **What each kind gets.** A new issue assigned to you: `/corgi:stories
 <key>`, draft PRs, CI watched to green. A comment on an issue assigned to
-you: claude reads it and decides — a question or a request for information
+you: claude reads it and decides - a question or a request for information
 is answered as a comment on the ticket through the tracker, with no PR; a
 request for a change is applied on the ticket's existing branch (found by
 the key in branch names), or through `/corgi:stories <key>` when there is
 none. A review or comment on your PR: `/corgi:review <url>` in its
-address-feedback mode — apply the valid comments, push back on the wrong
-ones, reply and resolve the threads, push — never a fresh review of your
+address-feedback mode - apply the valid comments, push back on the wrong
+ones, reply and resolve the threads, push - never a fresh review of your
 own PR.
 
 **Budget.** A fix costs tokens, so a workspace starts at most three an hour
 and ten a day (`--max-per-hour`, `--max-per-day`), none during `--quiet
 23:00-07:00` (local time, may cross midnight), none on a `--days-off`
-day (`weekends`, or `sat,sun`, or any days — the watch sleeps through the
+day (`weekends`, or `sat,sun`, or any days - the watch sleeps through the
 whole day: no polling, no run, nothing rings; the reload button still polls
 once), and none while the account's
 five-hour or seven-day window is at 95 % or more, as Claude Code last
@@ -1287,7 +1287,7 @@ the caps, the quiet hours, `fixes today: N (last HH:MM)` and how many wait.
 `issue.comment`, `pr.comment`, `pr.review`; `--ref`, `--url`, `--body`)
 synthesizes one event and walks it through routing, the rules, the seen
 list, the fix claim and the budget, then prints the prompt and argv the fix
-would run — without running it or recording anything.
+would run - without running it or recording anything.
 
 **Dead polls.** A source the rules take nothing from is not polled: with
 `prs` off, GitHub and GitLab only ever emit PR kinds, so they are skipped
@@ -1335,7 +1335,7 @@ corgi agent watch enable --action fix --auto-for all                # what fix u
 | `comments` | `issue.comment`, `pr.comment` | someone said what to change |
 | `reviews` | `pr.review` | the threads are the checklist |
 | `prs` | both PR kinds | |
-| `ci` | `ci.failed` | brings its own test for "done" — the safest to hand over |
+| `ci` | `ci.failed` | brings its own test for "done" - the safest to hand over |
 | `tickets` | `issue.new` | a blank page; leave it reporting longest |
 | `requests` | `review.requested` | someone else's PR. Rarely what you want |
 | `all` | everything | |
@@ -1380,7 +1380,7 @@ a worktree of its own on `corgi/ABC-123-N`, on the models named in turn,
 the same prompt each. The board knows them by `attempt` (`ABC-123/2`), and
 `corgi agent attempts` puts them side by side: status, what each built,
 whether its tests and the workspace's done-when passed, what it cost, the
-pull request it opened, its last word. `pick` keeps one — a note on it, an
+pull request it opened, its last word. `pick` keeps one - a note on it, an
 interrupt and a note on each other still working; their worktrees stay
 until you remove them (`corgi agent watch undo`). The phone reads and picks
 the same through `/launch/attempts`; `/launch/work-on` takes `attempts` and
@@ -1420,9 +1420,9 @@ corgi agent claude --bot reviewer  # in this terminal
 A session is a process; a bot is who you come back to. A bot is a
 workspace, a persona (its *soul*, passed to Claude Code as
 `--append-system-prompt`), a model, an account, and whether it always gets a
-worktree of its own — under one name, in `agent/bots.json` (`0600`: a soul
+worktree of its own - under one name, in `agent/bots.json` (`0600`: a soul
 can say what a repository should not). Opening it starts Claude Code there,
-as that, and when its last conversation is still on disk, `--resume`s it —
+as that, and when its last conversation is still on disk, `--resume`s it -
 so *Code Reviewer* on the phone is the same chat as on the desk. The daemon
 records the thread from the session's first event (`CORGI_BOT` in the
 environment, `bot` on the session row). `GET /launch/bots` lists them
@@ -1441,7 +1441,7 @@ A bot that runs on a clock rather than on an event: the `suggest` routine
 runs under its soul, model and account (`--bot` on any routine does this),
 reads the stack, the READMEs, the memory and the board, picks one thing a
 user would feel or a developer trips on, and puts it on the board as a task
-with the evidence — `corgi agent task add` — where **Work on it** hands it to
+with the evidence - `corgi agent task add` - where **Work on it** hands it to
 a session. It changes no code and files nothing on the tracker. The run is
 filed under the bot (`bot show proactive`), the headline is one inbox row.
 `corgi suggest-history` keeps it to one idea a week and never the same twice.
@@ -1457,14 +1457,14 @@ corgi agent stream                          # what is allowed
 
 Off until this machine says so. Then a session's sheet on the phone has
 **Chat**: your prompts, Claude's words, each tool call with its subject
-(*Edit auth/session.go*, *Bash go test*), each result folded — read from
+(*Edit auth/session.go*, *Bash go test*), each result folded - read from
 the transcript Claude Code writes, tailed (`POST /launch/transcript
 {session, after, wait}`: `after` 0 opens at the newest 200 entries, a
 later `after` continues, `wait` holds the answer up to 25 s until a line
 lands). Send, Allow / Deny and Interrupt sit under it, so the phone is a
 seat at the session, not only a remote.
 
-A picture goes too — a screenshot of the bug, a photo of the whiteboard:
+A picture goes too - a screenshot of the bug, a photo of the whiteboard:
 the phone's **+** sends it sealed (`POST /launch/upload {session, name,
 data}` → `{path}`), the laptop keeps it under its own agent folder
 (`uploads/<session>/`, never in the repository, gone after seven days,
@@ -1473,20 +1473,20 @@ path, so Claude reads the file the way it would one dragged into the
 terminal.
 
 What keeps it safe: the allowlist lives in the trusted user config, never a
-repository; nothing is pushed — the phone pulls only while its Chat sheet
+repository; nothing is pushed - the phone pulls only while its Chat sheet
 is open, and the session's row shows *👁 phone reading* for a minute after
 each read, so the laptop always knows; what looks like a credential in a
 message or a tool result (`sk-…`, `ghp_…`, `AKIA…`, `Bearer …`,
 `password=`, private keys, JWTs) is replaced with `•••` before it leaves;
 each entry is cut at 2 000 characters; thinking, side chains and Claude
 Code's own reminders never go; every body is end-to-end encrypted; and
-the phone keeps the conversation in memory only — nothing of it in its
+the phone keeps the conversation in memory only - nothing of it in its
 offline cache. A scrubber cannot catch every secret a `cat .env` prints:
 the workspace list is the real control.
 
 ### The chief
 
-`corgi agent ask "what should I look at first?"` — and the Ask box on the
+`corgi agent ask "what should I look at first?"` - and the Ask box on the
 phone, `/ask` on Telegram. The board (sessions with what they are doing,
 their ticket, diff, tests, cost, overlaps; the inbox; the kanban; the
 workspace names) goes to one short `claude -p` run on this machine, on the
@@ -1508,18 +1508,18 @@ ticket the same morning.
 Worth knowing, because these look like the watch being broken:
 
 - a comment on a ticket already **done, closed or resolved**, or on a pull
-  request already **merged** — chatter, not work. `--states` naming that
+  request already **merged** - chatter, not work. `--states` naming that
   column overrides it.
 - a ticket closed as a **duplicate**, cancelled, won't-do or rejected.
-- a new ticket already **in flight** — In Progress, Code review, QA and the
-  like — someone is on it. `--states` naming that column takes it anyway.
+- a new ticket already **in flight** - In Progress, Code review, QA and the
+  like - someone is on it. `--states` naming that column takes it anyway.
 - a ticket a **live session is on**, here or on a peer laptop: one whose
   ticket or branch names it. The run would double a person's work; the board
   says who has it.
-- **several comments on one pull request** in one poll — one notification.
+- **several comments on one pull request** in one poll - one notification.
 - a ticket **another machine has claimed** (`--lease`).
-- a review summary whose verdict is **approve** — nothing to change.
-- anything, once the same wall — a missing credential, a refused permission —
+- a review summary whose verdict is **approve** - nothing to change.
+- anything, once the same wall - a missing credential, a refused permission -
   has failed **twice in two hours**.
 - a run that would cost more of the five-hour window than is left. Each run
   records what it spent, and the cap is the median of those rather than a
@@ -1528,7 +1528,7 @@ Worth knowing, because these look like the watch being broken:
   `--limit-ceiling 100` on a workspace takes it down (only the caps and quiet
   hours hold then), a lower number moves it.
 - review feedback on **several pull requests of one story** (the ticket key
-  in their titles) settles into **one run** over the set — `/corgi:review
+  in their titles) settles into **one run** over the set - `/corgi:review
   ABC-123` addresses them together, one checkout per repo, one pass.
 
 Every unattended run also reviews its own diff before it reports, and stamps
@@ -1570,7 +1570,7 @@ enable --prune-after 7d` has the daemon do it on its own, once an hour
 ## Wake lock
 
 A machine that sleeps mid-session kills the session, the stack, and any tunnel.
-Remote Control does not take a lock, so corgi does — scoped to the session, not
+Remote Control does not take a lock, so corgi does - scoped to the session, not
 to forever, because an always-awake laptop is a flat battery.
 
 - macOS: `caffeinate -i -m -s -w <pid>`. The `-w` ties the lock to the
@@ -1601,12 +1601,12 @@ machine that never sleeps is a flat battery and that is the owner's call.
 (prevent idle sleep) is honoured on battery too, so an idle laptop on battery
 does *not* doze off with the lock held. What still ends a session is closing the
 lid, or the battery running out. `sudo pmset -a disablesleep 1` lets the lid
-close (plugged in — see [Leaving it alone for weeks](#leaving-it-alone-for-weeks));
+close (plugged in - see [Leaving it alone for weeks](#leaving-it-alone-for-weeks));
 otherwise "lid closed on the train" needs a machine that stays on.
 
 ## What counts as a new ticket
 
-A ticket created assigned to you, or an old one a person hands over: assigned to you, or moved to a column, by someone else. Jira's changelog and Linear's issue history say who did it, so your own moves and an automation's (Linear's GitHub link moving an issue to In Progress) are not news. A parent whose open subtasks are yours is left alone — the subtasks are the work — and a subtask's run is told which parent it belongs to. A run that crashed gets one more go 30 minutes later, then the breaker. Work that was already yours before the watch started never arrives on its own: `corgi agent watch sweep --states "Ready for dev" --dry-run` lists it, and without `--dry-run` hands it to the daemon as new issues (seen, ran, ignored and blocked tickets stay put).
+A ticket created assigned to you, or an old one a person hands over: assigned to you, or moved to a column, by someone else. Jira's changelog and Linear's issue history say who did it, so your own moves and an automation's (Linear's GitHub link moving an issue to In Progress) are not news. A parent whose open subtasks are yours is left alone - the subtasks are the work - and a subtask's run is told which parent it belongs to. A run that crashed gets one more go 30 minutes later, then the breaker. Work that was already yours before the watch started never arrives on its own: `corgi agent watch sweep --states "Ready for dev" --dry-run` lists it, and without `--dry-run` hands it to the daemon as new issues (seen, ran, ignored and blocked tickets stay put).
 
 ## Leaving it alone for weeks
 
@@ -1629,8 +1629,8 @@ corgi agent restart
 bullets a morning, on the phone), turns on worktrees and a seven-day prune
 where fixes run unattended, runs `harden` there, and then prints the rest as a
 list. `corgi agent doctor --away` is the same list without the changes:
-updates, lid, power, FileVault, disk, network (a captive portal shows up here
-— hotel Wi-Fi often asks again every day, and a closed laptop cannot click
+updates, lid, power, FileVault, disk, network (a captive portal shows up here -
+hotel Wi-Fi often asks again every day, and a closed laptop cannot click
 "accept"; a travel router or a spare phone's hotspot avoids that), heat, pulse,
 tunnel, phone, digest, isolation, and whether Claude Code may update itself
 mid-trip.
@@ -1639,13 +1639,13 @@ While you are away:
 
 - **Pictures.** A screenshot a tool returned inside a session (the simulator
   through argent or agent-device) shows in the phone's Chat under the tool
-  line — `POST /launch/picture {session, id}` hands the bytes over, sealed
+  line - `POST /launch/picture {session, id}` hands the bytes over, sealed
   like every other route; nothing is pushed for it.
 - **Heat.** A laptop in a bag throttles itself. While macOS reports a CPU
   speed limit under 60%, no fix starts; you get one push, and runs resume when
   it cools.
-- **Disk.** Under 10 GB free, no fix starts either — worktrees and images
-  pile up over weeks — with one push naming the prune commands.
+- **Disk.** Under 10 GB free, no fix starts either - worktrees and images
+  pile up over weeks - with one push naming the prune commands.
 - **A trip cap.** `corgi agent watch enable --max-total 5` lets a workspace
   fix at most five tickets from now on, on top of the hourly and daily caps;
   run it again to reset the count, `--max-total 0` clears it.
@@ -1662,8 +1662,8 @@ something to set up from a hotel); corgi does not upgrade itself while away.
 
 ## Supervising an agent other than Claude Code
 
-Everything the supervisor actually does — restart after the ways a session dies,
-hold a wake lock, scope credentials and config directory per workspace — is the
+Everything the supervisor actually does - restart after the ways a session dies,
+hold a wake lock, scope credentials and config directory per workspace - is the
 same whichever agent CLI is running. Only the launch details differ, so those
 are a `kind`:
 
@@ -1700,18 +1700,18 @@ rather than merely convenient:
   and `--yolo` smuggled through `args`, and a `permissionMode: bypassPermissions`
   string, are rejected. The one way to skip prompts is the explicit
   `dangerouslySkipPermissions` boolean in your trusted user config (see [Running
-  more than one Claude account](#running-more-than-one-claude-account)) — never
+  more than one Claude account](#running-more-than-one-claude-account)) - never
   a committed repo file.
 - **A setting that cannot take effect is an error.** `spawn` and
   `permissionMode` on a `custom` kind are rejected rather than dropped, and so
-  is a `configDir` with no `configDirEnv` to put it in — silently ignoring the
+  is a `configDir` with no `configDirEnv` to put it in - silently ignoring the
   last one would leave the workspace on the default account, which looks exactly
   like being on the right one.
 
 ### Its sessions on the board
 
-Supervision keeps another agent alive; the board — the keys, the phone, the
-bar — only knows what an agent tells it, and only Claude Code has hooks corgi
+Supervision keeps another agent alive; the board - the keys, the phone, the
+bar - only knows what an agent tells it, and only Claude Code has hooks corgi
 writes for it. Any agent CLI that can run a command on an event joins the
 same board through `corgi agent event`, one call per event:
 
@@ -1731,7 +1731,7 @@ process chain for the host (so Focus lands on the right tab), and the
 agent's name on the session (`agent: codex`) for every surface to show.
 `--stdin` reads `{session_id, cwd, tool_name, tool_input}` instead of
 flags, the shape Claude Code's hooks use, for CLIs that copied it. Without
-`--session` the id is the calling process — fine for one conversation per
+`--session` the id is the calling process - fine for one conversation per
 process. It never prints and never fails: the agent is unaffected whatever
 corgi's state is. Answering a permission from a key or the phone works when
 the agent takes Enter/Escape at its prompt the way Claude Code does; where
@@ -1748,7 +1748,7 @@ alias claude-work='CLAUDE_CONFIG_DIR=~/.claude-work claude'
 ```
 
 **launchd and systemd never source your shell rc files.** A supervised session
-would therefore run under your *default* account — no error, no warning,
+would therefore run under your *default* account - no error, no warning,
 correct-looking output, wrong account.
 
 So corgi sets `CLAUDE_CONFIG_DIR` per workspace explicitly:
@@ -1759,7 +1759,7 @@ corgi agent init --config-dir ~/.claude-work
 
 Each supervised process gets an environment corgi builds itself, rather than
 inheriting the daemon's. Ambient `ANTHROPIC_API_KEY` and
-`CLAUDE_CODE_OAUTH_TOKEN` are **stripped** unless a workspace opts in — Remote
+`CLAUDE_CODE_OAUTH_TOKEN` are **stripped** unless a workspace opts in - Remote
 Control refuses to start with an API key set, and an inherited one bills the API
 instead of your subscription.
 
@@ -1785,7 +1785,7 @@ agent carry <session> --profile work` moves a session that hit its limit to
 the other one: the transcript is copied into that account's config directory
 and a new terminal in the same window runs `corgi agent claude --profile work
 -- --resume <id>`, so the conversation carries on. A workspace that lists no
-accounts never switches and cannot be carried — the list is the permission.
+accounts never switches and cannot be carried - the list is the permission.
 
 This is environment and config-path scoping, not a sandbox. It prevents
 accidents. It does not contain a compromised session. For a real boundary,
@@ -1795,7 +1795,7 @@ give each account its own config directory and keep sensitive stacks separate.
 
 Settings live in two files with different trust levels.
 
-**`.corgi/agent.yml` — committed, untrusted.** It arrives with a `git clone`
+**`.corgi/agent.yml` - committed, untrusted.** It arrives with a `git clone`
 and was written by whoever wrote the repository, who may not be you. So it holds
 identity only:
 
@@ -1807,7 +1807,7 @@ workspace:
   sensitive: false      # true ⇒ never open a public tunnel for this workspace
 ```
 
-**The user-level file — never committed, `chmod 600`, trusted.** It holds
+**The user-level file - never committed, `chmod 600`, trusted.** It holds
 everything that grants capability, and corgi refuses to read it if it is
 readable by other users:
 
@@ -1832,7 +1832,7 @@ Claude session for each of them is a surprise measured in gigabytes.
 
 The rule: **untrusted config may restrict, never relax.** A cloned repository
 can mark itself `sensitive`, which only removes capability. It cannot choose
-which binary runs, which account is used, or which permission mode applies —
+which binary runs, which account is used, or which permission mode applies -
 otherwise cloning a repository would be a way to run code on your machine.
 
 Those prompts are what you answer from your phone, and they are the main defence
@@ -1854,7 +1854,7 @@ even so:
   trusted user config; `.corgi/agent.yml` has no such field, so cloning a
   repository cannot make your machine skip prompts. A stray
   `permissionMode: bypassPermissions` string, or a `--dangerously` flag smuggled
-  through `args:`, is still rejected — the boolean above is the one sanctioned
+  through `args:`, is still rejected - the boolean above is the one sanctioned
   route.
 - **It is never silent.** `corgi agent up`/`serve` print
   `⚠ permissions: SKIPPED` for any workspace running this way, and
@@ -1876,8 +1876,8 @@ phone; they also work from any other MCP client.
 | tool | what it does |
 |---|---|
 | `corgi_session_brief` | what the previous session was working on before it restarted |
-| `corgi_sessions` | every Claude session on the machine and its status — "is anything waiting on me" |
-| `corgi_sessions` | every Claude session on the machine and its status — "is anything waiting on me" |
+| `corgi_sessions` | every Claude session on the machine and its status - "is anything waiting on me" |
+| `corgi_sessions` | every Claude session on the machine and its status - "is anything waiting on me" |
 | `corgi_session_events` | the workspace timeline: starts, exits and why, session links |
 | `corgi_workspaces` | every stack registered on this machine |
 | `corgi_workspace_resolve` | "the recipe app" → one stack, or candidates |
@@ -1890,7 +1890,7 @@ phone; they also work from any other MCP client.
 | `corgi_preview_stop` | tear it down |
 
 `corgi_worktrees_*` mutate, so they join the same tunnel gate that already
-covers `corgi_exec` and `corgi_db_query` — see [exposure
+covers `corgi_exec` and `corgi_db_query` - see [exposure
 tiers](#exposure-local-private-public) for when that gate is closed.
 
 ### Resolution never guesses
@@ -1937,7 +1937,7 @@ branch in exactly one. Re-running is idempotent and keeps uncommitted work.
 ```
 
 No tunnel, no running stack, survives bad signal. Newly created files are
-included — `git diff` alone says nothing about an untracked file, and creating
+included - `git diff` alone says nothing about an untracked file, and creating
 files is the most common thing an agent does. `.gitignore` is respected, so an
 ignored secrets file never reaches a transcript. Very large patches are
 truncated rather than dropped.
@@ -1945,7 +1945,7 @@ truncated rather than dropped.
 ## Live preview
 
 A tunnel onto a service the agent is editing, so the change can be watched from
-a phone. corgi needs no refresh mechanism — the dev server already hot reloads.
+a phone. corgi needs no refresh mechanism - the dev server already hot reloads.
 It needs to keep one tunnel open and be honest about the build state.
 
 ```
@@ -1961,14 +1961,14 @@ which is the same shape corgi already uses for detached services. So a preview
 outlives the session that started it, and a later corgi run can still find it.
 
 **States, because a banner beats a white screen.** Mid-task a worktree is often
-in a broken intermediate state — a half-written file, an import that does not
+in a broken intermediate state - a half-written file, an import that does not
 resolve. `broken` means the tunnel is up but nothing answers on the port, which
 usually means a build in progress. Show that, rather than handing over a URL
 that renders a stack trace.
 
 **Freeze** pins a preview so idle reaping leaves it alone while someone is
 reading it. **Idle reaping** tears down anything unwatched for 20 minutes by
-default and actually kills the tunnel — a forgotten preview is a public URL onto
+default and actually kills the tunnel - a forgotten preview is a public URL onto
 seeded data.
 
 Tunnels are off unless asked for, and a workspace marked `sensitive` refuses one
@@ -1984,11 +1984,11 @@ using for your stack:
   you get a page that loads but does not update, which is worse than knowing.
 - **Vite and Next need the tunnel host allowed** (`allowedHosts` /
   `allowedDevOrigins`) or every preview is a blocked-host error. corgi does not
-  inject that yet — add it to your dev server config.
+  inject that yet - add it to your dev server config.
 - **A quick tunnel changes URL when it restarts**, which breaks the link already
   open on a phone. Declare a named tunnel in the service's `tunnel:` block in
-  `corgi-compose.yml` for anything you want to keep open — there is no command
-  line flag for it — and corgi reports `quickTunnel: true` so you know which
+  `corgi-compose.yml` for anything you want to keep open - there is no command
+  line flag for it - and corgi reports `quickTunnel: true` so you know which
   kind you have.
 
 Try it by hand before relying on it. `corgi_diff` needs none of this and is the
@@ -2008,8 +2008,8 @@ sorts the endpoint into a tier:
 | `public` | anyone holding the URL can reach it | blocked unless `CORGI_MCP_ALLOW_DANGEROUS_TUNNEL=1` |
 
 `private` is **only ever reached by observing it**. When the tunnel URL is
-published, corgi makes one unauthenticated request to **`/mcp`** — the route the
-tools are actually served on — and looks at what comes back: a redirect to an
+published, corgi makes one unauthenticated request to **`/mcp`** - the route the
+tools are actually served on - and looks at what comes back: a redirect to an
 Access login, a `cf-access-*` header, a challenge naming a realm. Nothing in any
 config file can assert protection, because a gate that relaxes on a claim is a
 gate that fails open on a typo.
@@ -2021,14 +2021,14 @@ private, and re-enable `corgi_exec` on a route anyone with the URL can reach.
 
 ```
 🌐 ✓ public MCP endpoint: https://corgi.example/mcp
-🌐 exposure: private — cloudflare-access (unauthenticated request redirected to the Access login).
+🌐 exposure: private - cloudflare-access (unauthenticated request redirected to the Access login).
    corgi_exec/corgi_db_query stay enabled; no CORGI_MCP_ALLOW_DANGEROUS_TUNNEL needed.
 ```
 
 corgi's own bearer check answers 401 too, and is deliberately **not** counted:
 treating it as protection would let the endpoint declare itself private on the
-strength of the very token the gate exists to protect. Anything unrecognised —
-including a probe that could not connect — stays `public`. The gate starts
+strength of the very token the gate exists to protect. Anything unrecognised -
+including a probe that could not connect - stays `public`. The gate starts
 closed and opens only on evidence.
 
 The practical result is that `CORGI_MCP_ALLOW_DANGEROUS_TUNNEL=1`, which is set
@@ -2040,14 +2040,14 @@ Two things this does **not** do. It does not check previews: `corgi_preview_*`
 opens a tunnel onto a dev server, and probing it would mean a network call
 inside an MCP handler, which must never block. A preview is public, `sensitive`
 workspaces refuse one, and idle reaping still tears it down. And it is a
-reachability check, not an authorization model — it tells you an unauthenticated
+reachability check, not an authorization model - it tells you an unauthenticated
 request does not reach corgi, nothing about who is on the other side once it
 does.
 
 ## Pairing a phone
 
 A phone reaches corgi over the MCP HTTP endpoint, and should never be handed the
-server's own bearer token — that token reaches `corgi_exec` and `corgi_db_query`.
+server's own bearer token - that token reaches `corgi_exec` and `corgi_db_query`.
 
 ```bash
 corgi mcp --http 127.0.0.1:8765 --pair
@@ -2055,14 +2055,14 @@ corgi mcp --http 127.0.0.1:8765 --pair
 
 prints a single-use code, valid ten minutes, which a client exchanges once for
 its own revocable token. `corgi mcp devices revoke <name>` kills exactly one
-device without disturbing the others — which is the whole reason not to share
+device without disturbing the others - which is the whole reason not to share
 one token. Full detail: [docs/mcp.md](mcp.md).
 
 ### Next to the Mac: no tunnel, no QR
 
 With corgi-bar 0.22 running, the Mac is findable by a phone beside it the
-way AirDrop finds it — Bonjour over Bluetooth, peer-to-peer Wi-Fi and the
-local network (Apple's Network framework, `includePeerToPeer`) — and the
+way AirDrop finds it - Bonjour over Bluetooth, peer-to-peer Wi-Fi and the
+local network (Apple's Network framework, `includePeerToPeer`) - and the
 bar relays every byte to the daemon's launcher endpoint on localhost. The
 app links to it by itself when it is near and goes back to the tunnel when
 it is not; the token and the sealed bodies are the same either way, and a
@@ -2073,19 +2073,19 @@ Pairing loses its QR too:
 ```bash
 corgi agent pair            # a fresh window on the running server: a new QR and code
 corgi agent pair --viewer   # a read-only window, for a teammate
-corgi agent pair --file     # ~/Desktop/<laptop>.corgipair — AirDrop it to the phone
+corgi agent pair --file     # ~/Desktop/<laptop>.corgipair - AirDrop it to the phone
 ```
 
 The phone opens the file with corgi and is paired: the code inside is
 single-use and dies in ten minutes, the phone's own token is minted on the
 laptop as always, and AirDrop carries the file end-to-end encrypted between
 your own devices. The bar's footer does the same in one click. On the pair
-screen a laptop nearby is listed by name — tap it, type the code, done.
+screen a laptop nearby is listed by name - tap it, type the code, done.
 
 **Handoff**: the session in front on the Mac (the bar publishes it as an
 `NSUserActivity`) shows corgi's icon on the iPhone's lock screen and in its
 app switcher; a tap opens that chat. Same iCloud account, Bluetooth on, and
-the bar signed by the same team as the app — the released bar, not one from
+the bar signed by the same team as the app - the released bar, not one from
 `make app`.
 
 ### A teammate's phone, read-only
@@ -2095,9 +2095,9 @@ corgi agent up --fresh --viewer     # or: corgi mcp --http … --pair --viewer
 ```
 
 opens a pairing window whose token only reads. The device that scans it
-sees what yours sees — the board, the inbox, the diffs, the brief — and can
+sees what yours sees - the board, the inbox, the diffs, the brief - and can
 do nothing: every POST is refused (`this device only reads the board`), and
-so are the reads that are the laptop's own business — a transcript (which
+so are the reads that are the laptop's own business - a transcript (which
 can hold a secret), the doctor's report, the workspace session links. The role
 is the machine's choice, never the device's, and the pairing answer carries
 it (`role: viewer`) so the app hides its buttons. `corgi mcp devices list`
@@ -2113,7 +2113,7 @@ pairs with a public key: `POST /pair {code, device, pubKey}` answers with
 the machine's `serverPubKey` (a static X25519 key minted once, `agent/e2e.key`,
 `0600`), both sides derive one AES-256 key (X25519 → HKDF-SHA256, machine
 key then device key in the info), and from then on every request and
-response body on `/launch/*` is an envelope `{v, t, n, c}` — AES-GCM with
+response body on `/launch/*` is an envelope `{v, t, n, c}` - AES-GCM with
 the method, path and timestamp bound as associated data, header
 `X-Corgi-E2E: 1`. A sealed *allow* cannot be replayed as a *deny*, nor two
 minutes later. A device with a key is refused plaintext, so a token sniffed
@@ -2121,14 +2121,14 @@ off the Wi-Fi is not enough on its own; the web page and an older app,
 which pair without a key, keep talking as before. `corgi mcp devices list`
 says which is which. What stays in the clear: the path and its query
 (`?workspace=api`), the status code, and the token in the `Authorization`
-header — the token alone opens nothing.
+header - the token alone opens nothing.
 
 ## When corgi cannot find its data directory
 
 corgi keeps its registry beside its other state. On macOS that is the Homebrew
 `var/corgi` directory when one already exists, otherwise
 `~/Library/Application Support/corgi`. The location is decided by looking at the
-filesystem, never by running `brew` — launchd's PATH does not include it, and
+filesystem, never by running `brew` - launchd's PATH does not include it, and
 shelling out would give the daemon and your shell two different directories.
 
 If you use a custom Homebrew prefix and `HOMEBREW_PREFIX` is not exported, point
@@ -2146,7 +2146,7 @@ the bots and every headless fix are plain processes, so a Linux box with
 the phone, Telegram, or an editor on another machine.
 
 ```bash
-# 1. the binaries — once
+# 1. the binaries - once
 curl -fsSL https://raw.githubusercontent.com/Andriiklymiuk/corgi/main/install.sh | sh   # or the .deb/.rpm, see docs/install.md
 curl -fsSL https://claude.ai/install.sh | bash                                          # Claude Code
 claude auth login          # no browser here: it prints a URL, open it anywhere, paste the code back
@@ -2186,7 +2186,7 @@ each thing is, `corgi agent brief` what a run was on.
   that needs the database or the API against a live stack has one. Docker on
   Linux is started through `systemctl start docker` when it is down.
 - **The phone.** `corgi agent up` opens a tunnel (cloudflared or ngrok, from
-  the vendor's packages — `brew` is rarely on a server) and prints the QR.
+  the vendor's packages - `brew` is rarely on a server) and prints the QR.
   On a private network, `corgi agent up --http 0.0.0.0:8765` needs no
   tunnel; on the open internet put your own TLS in front or use the tunnel,
   never plain HTTP.
@@ -2213,14 +2213,14 @@ each thing is, `corgi agent brief` what a run was on.
 
 | | supported |
 |---|---|
-| macOS | yes — launchd, `caffeinate` |
-| Linux | yes — systemd user unit (`loginctl enable-linger` on a server, see above), `systemd-inhibit`, `notify-send`; port owners come from `/proc`, so `lsof` is optional; run `claude` inside **tmux** and focus, send and answer reach the pane (see below) |
+| macOS | yes - launchd, `caffeinate` |
+| Linux | yes - systemd user unit (`loginctl enable-linger` on a server, see above), `systemd-inhibit`, `notify-send`; port owners come from `/proc`, so `lsof` is optional; run `claude` inside **tmux** and focus, send and answer reach the pane (see below) |
 | Windows | **not yet.** `corgi agent install` exits 2 and says so rather than half-installing. Run `corgi agent serve` under your own supervisor. |
 
 ## macOS keeps asking to let corgi read Documents
 
 macOS puts `~/Desktop`, `~/Documents`, `~/Downloads` and iCloud Drive behind
-TCC. The first time corgi reads one it has to ask — and the answer is filed
+TCC. The first time corgi reads one it has to ask - and the answer is filed
 against that exact binary. corgi ships **ad-hoc signed**, with no Developer ID,
 so every upgrade is a new identity as far as TCC is concerned and the dialog
 comes back. Homebrew makes it worse: the real path is versioned
@@ -2232,7 +2232,7 @@ codesign -dv "$(readlink -f "$(which corgi)")" 2>&1 | grep -E 'Signature|TeamIde
 ```
 
 The fix that needs nobody's certificate is to keep workspaces **outside** those
-four folders — `~/dev`, `~/code`, `~/src` are not gated, and macOS never asks
+four folders - `~/dev`, `~/code`, `~/src` are not gated, and macOS never asks
 about them at all:
 
 ```bash
@@ -2251,15 +2251,15 @@ the whole fix.
 - Config split by trust; a cloned repo cannot grant itself capability.
 - `bin` must be a command name on PATH, never a path.
 - Permission prompts are only skipped when your trusted config explicitly sets
-  `dangerouslySkipPermissions` — never from a committed repo file, a
+  `dangerouslySkipPermissions` - never from a committed repo file, a
   `permissionMode` string, or a smuggled `--dangerously` arg; and never silently.
 - Ambient credentials stripped from supervised processes and reported.
 - The user config must be `0600` or corgi refuses to read it; briefs are written
-  `0600` for the same reason — they name repository paths and branches.
+  `0600` for the same reason - they name repository paths and branches.
 - A custom kind's `args` cannot carry `--dangerously-*` or `--yolo`.
 - Exposure is downgraded to `private` only on an observed interception, never on
   a config claim, and corgi's own 401 does not count as one.
-- No secret material in the launchd plist or systemd unit — those are
+- No secret material in the launchd plist or systemd unit - those are
   world-readable and land in backups.
 - Supervised output is not mirrored to the daemon's log unless you pass
   `--foreground`; a session's output can contain env values and tokens.
@@ -2275,8 +2275,8 @@ the whole fix.
 ## The stack from the phone
 
 `/launch/stack?workspace=<id>` is the workspace's `corgi-compose.yml` at a
-glance — every service and database, running or not, on what port (what
-`corgi ps --json` says) — and `compose: false` for a workspace without one,
+glance - every service and database, running or not, on what port (what
+`corgi ps --json` says) - and `compose: false` for a workspace without one,
 so the phone shows nothing there. `POST {workspace, do, services}` runs the
 stack the way the keyboard would, in the workspace's directory: `run`
 (`corgi run --detach --ci --logs`, `--services` when some are picked),
@@ -2290,17 +2290,17 @@ dashes; anything else is refused before anything runs. Also `all=1` on
 
 Agent mode needs no compose file: the sessions, the inbox, the board, the
 bots and every switch above work in any registered repository. What a
-`corgi-compose.yml` adds is the **stack** — the thing a session, a run and a
+`corgi-compose.yml` adds is the **stack** - the thing a session, a run and a
 person all need before the code can be tried:
 
 - **One declaration, every runner.** Services, databases, ports, env, the
-  `test` and `e2e` scripts, what depends on what — written once. A session
+  `test` and `e2e` scripts, what depends on what - written once. A session
   opened from the phone, an unattended run in a worktree, a teammate's
   fresh clone and you at the keyboard all start the same stack the same
   way (`corgi run`), with the same env. No README of commands to remember,
   no "works on my machine".
 - **The phone sees and steers it.** The repo sheet lists what runs at a
-  glance and starts, stops, restarts or tests it — some services or all —
+  glance and starts, stops, restarts or tests it - some services or all -
   because the daemon can read the declaration; without one there is nothing
   to read, so the section stays away.
 - **Done means the stack said so.** `--done-when "corgi test"` or
@@ -2312,22 +2312,22 @@ person all need before the code can be tried:
   session never has to be told a connection string.
 
 Setting one up is `corgi create` in the repository (it asks what runs and
-writes the file) or a hand-written `corgi-compose.yml` — a `services:` map
+writes the file) or a hand-written `corgi-compose.yml` - a `services:` map
 with a `path` and a `start` script each, `db_services:` with an image and a
-port — then `corgi init` clones what is missing and `corgi run` starts it.
+port - then `corgi init` clones what is missing and `corgi run` starts it.
 [docs/getting-started.md](getting-started.md) walks the file.
 
 ## A phone app
 
-The Claude app already covers the conversation. What it has no concept of —
-which stacks exist, whether the daemon is up, a cross-repo diff — is sketched in
+The Claude app already covers the conversation. What it has no concept of -
+which stacks exist, whether the daemon is up, a cross-repo diff - is sketched in
 [corgi-remote](remote-app.md). Nothing is built; the document mostly records
 what *not* to build.
 
 ## Licensing
 
 Supervising `claude remote-control` on your own machine, for your own work,
-under your own login is ordinary individual use — Remote Control is a
+under your own login is ordinary individual use - Remote Control is a
 first-party feature built for exactly that.
 
 Hosting it for other people, or routing anyone else's requests through your

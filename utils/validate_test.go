@@ -356,7 +356,7 @@ func TestAbortOnValidationErrors(t *testing.T) {
 
 func TestKnownDriversNonEmpty(t *testing.T) {
 	if len(KnownDrivers) == 0 {
-		t.Fatal("KnownDrivers is empty — driver options tag failed to parse")
+		t.Fatal("KnownDrivers is empty - driver options tag failed to parse")
 	}
 	want := map[string]bool{"postgres": false, "image": false, "supabase": false, "localstack": false}
 	for _, d := range KnownDrivers {

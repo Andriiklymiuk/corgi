@@ -28,7 +28,7 @@ var agentSessionsCmd = &cobra.Command{
 session's label, status, what it is doing, its account and where its terminal
 lives. --json prints the same board as sessions.json, plus the file's path, so
 a plugin can find and watch it. --watch redraws on every change. --grouped
-folds the sessions by the ticket (or branch) they work on — the sessions, the
+folds the sessions by the ticket (or branch) they work on - the sessions, the
 workspaces, the worktrees and the PRs of one piece of work in one block; the
 same grouping sessions.json carries under "groups".
 
@@ -74,7 +74,7 @@ session exits the key stays reserved and dimmed until unpinned.`,
 var agentDismissCmd = &cobra.Command{
 	Use:   "dismiss <session>",
 	Short: "Take a finished session off the board until its next event",
-	Long: `Frees the key of a session that is done, idle or closed — a chat tab you
+	Long: `Frees the key of a session that is done, idle or closed - a chat tab you
 closed while Claude Code kept its process, say. The session is not touched;
 its next hook event puts it back on a key. A working or waiting session is
 refused. Same references as focus: id, id prefix, label, or key number.`,
@@ -108,7 +108,7 @@ var agentRescanCmd = &cobra.Command{
 	Use:   "rescan",
 	Short: "Look for running Claude sessions no hook has reported",
 	Run: func(_ *cobra.Command, _ []string) {
-		sendBoardCommand(command.Command{Action: command.ActionRescan, Source: "cli"}, "rescan requested — `corgi agent sessions` in a moment")
+		sendBoardCommand(command.Command{Action: command.ActionRescan, Source: "cli"}, "rescan requested - `corgi agent sessions` in a moment")
 	},
 }
 
@@ -141,7 +141,7 @@ session takes the lowest free key within a second. The "+" key on a deck.`,
 			run = daemon.NewSessionCommandFor(agent, args...)
 		}
 		sendBoardCommand(command.Command{Action: command.ActionNew, WindowID: window, Command: run, Source: "cli"},
-			"asked the editor for a new "+firstNonEmpty(agent, "Claude")+" session — `corgi agent sessions` in a moment")
+			"asked the editor for a new "+firstNonEmpty(agent, "Claude")+" session - `corgi agent sessions` in a moment")
 	},
 }
 
@@ -210,7 +210,7 @@ var agentRefreshCmd = &cobra.Command{
 	Short: "Reload everything now: rescan sessions, poll every tracker, publish",
 	Args:  cobra.NoArgs,
 	Run: func(cmd *cobra.Command, _ []string) {
-		sendBoardCommand(command.Command{Action: command.ActionRefresh, Source: "cli"}, "refresh requested — every surface reads the new picture in a moment")
+		sendBoardCommand(command.Command{Action: command.ActionRefresh, Source: "cli"}, "refresh requested - every surface reads the new picture in a moment")
 	},
 }
 
@@ -221,7 +221,7 @@ func sendBoardCommand(c command.Command, done string) {
 		exitWithError("agent_daemon", err, 1)
 	}
 	if info == nil {
-		exitWithError("agent_daemon", fmt.Errorf("corgi agent is not running — `corgi agent serve`, or `corgi agent install` to start it at login"), 1)
+		exitWithError("agent_daemon", fmt.Errorf("corgi agent is not running - `corgi agent serve`, or `corgi agent install` to start it at login"), 1)
 	}
 	if _, err := command.Write(dir, c); err != nil {
 		exitWithError("agent_command", err, 1)
@@ -369,7 +369,7 @@ func watchBoard(ctx context.Context, dir string, last time.Time, redraw func(boa
 
 func printBoard(rep boardReport, now time.Time) {
 	if !rep.Running {
-		fmt.Println("corgi agent is not running — the board below is the last one it published.")
+		fmt.Println("corgi agent is not running - the board below is the last one it published.")
 		fmt.Println("`corgi agent serve` starts it now, `corgi agent install` at login.")
 	}
 	if len(rep.Sessions) == 0 {
@@ -415,9 +415,9 @@ func printPeerBoards(list []sessions.PeerBoard) {
 				line += " · " + s.Ticket
 			}
 			if s.Pending != "" {
-				line += " — waiting on " + s.Pending
+				line += " - waiting on " + s.Pending
 			} else if s.Detail != "" {
-				line += " — " + s.Detail
+				line += " - " + s.Detail
 			}
 			fmt.Println(line)
 		}
@@ -549,7 +549,7 @@ func runAgentWindows(_ *cobra.Command, _ []string) {
 		return
 	}
 	if len(rep.Windows) == 0 {
-		fmt.Println("no editor windows connected — install the corgi VS Code extension, or reopen a window")
+		fmt.Println("no editor windows connected - install the corgi VS Code extension, or reopen a window")
 		return
 	}
 	for _, w := range rep.Windows {
@@ -582,8 +582,8 @@ var agentBoardCmd = &cobra.Command{
 	Use:   "board",
 	Short: "Show or set how many keys the session board has",
 	Long: `Without flags, prints the board's size and how many sessions are on it.
-With --slots, sets the number of keys — the size of the Stream Deck the
-board is drawn on — and applies it to a running daemon at once; seats past
+With --slots, sets the number of keys - the size of the Stream Deck the
+board is drawn on - and applies it to a running daemon at once; seats past
 the new edge move to the overflow, nothing is lost. The size is remembered
 for the next daemon start.`,
 	Run: runAgentBoard,
@@ -621,11 +621,11 @@ func runAgentBoard(cmd *cobra.Command, _ []string) {
 	}
 	fmt.Printf("%d keys · %d session(s) · %d in overflow · %d waiting on you\n", rep.Size, len(rep.Sessions), rep.Overflow, rep.NeedsInput)
 	if !rep.Running {
-		fmt.Println("corgi agent is not running — sizes apply once it does")
+		fmt.Println("corgi agent is not running - sizes apply once it does")
 	}
 }
 
 func init() {
-	agentBoardCmd.Flags().Int("slots", 0, "Number of keys on the board (1–64)")
+	agentBoardCmd.Flags().Int("slots", 0, "Number of keys on the board (1-64)")
 	agentCmd.AddCommand(agentBoardCmd)
 }

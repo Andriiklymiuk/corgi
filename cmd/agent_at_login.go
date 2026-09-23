@@ -61,10 +61,10 @@ func enableAtLogin(dir string, settings *upSettings) {
 		}
 	}
 	setAtLogin(dir, settings, true)
-	utils.Info("✓ starts at login — after a reboot the daemon, the MCP endpoint and this tunnel come back on their own")
+	utils.Info("✓ starts at login - after a reboot the daemon, the MCP endpoint and this tunnel come back on their own")
 	startMenuBarIfInstalled(func(s string) { utils.Info(s) })
 	if !stayAwakeEnabled(dir) {
-		utils.Info("  it still sleeps between sessions though — `corgi agent awake on` keeps it reachable")
+		utils.Info("  it still sleeps between sessions though - `corgi agent awake on` keeps it reachable")
 	}
 }
 
@@ -77,7 +77,7 @@ func hintAtLogin() {
 	if !installSupported() {
 		return
 	}
-	utils.Info("↻ this does not survive a reboot yet — `corgi agent up --at-login` once, and it comes back on its own")
+	utils.Info("↻ this does not survive a reboot yet - `corgi agent up --at-login` once, and it comes back on its own")
 }
 
 func confirmAtLogin() bool {
@@ -122,11 +122,11 @@ func restoreUpAtLogin(dir string) {
 	}
 	tunnelFlags, err := tunnelArgs(settings.Provider, settings.TunnelName, settings.TunnelHostname)
 	if err != nil {
-		utils.Infof("agent: not restoring the tunnel — %v\n", err)
+		utils.Infof("agent: not restoring the tunnel - %v\n", err)
 		return
 	}
 	if err := spawnDetachedMCP(dir, addr, tunnelFlags); err != nil {
-		utils.Infof("agent: could not restore the MCP endpoint — %v\n", err)
+		utils.Infof("agent: could not restore the MCP endpoint - %v\n", err)
 		return
 	}
 	utils.Infof("agent: restoring the MCP endpoint on %s from your last `corgi agent up`\n", addr)
@@ -153,7 +153,7 @@ func stopStaleMCP(dir, addr string) bool {
 	if was == "" {
 		was = "an older corgi"
 	}
-	utils.Infof("agent: restarting the MCP endpoint — it was started by %s, this is %s\n", was, APP_VERSION)
+	utils.Infof("agent: restarting the MCP endpoint - it was started by %s, this is %s\n", was, APP_VERSION)
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
 		if !mcpListening(addr) {

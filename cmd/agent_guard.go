@@ -26,10 +26,10 @@ func guardVerdict(st sessions.State, repo, branch string) (bool, string) {
 		}
 		who := firstNonEmpty(s.Display, s.Label)
 		if s.Gate != nil && !s.Gate.OK {
-			return false, fmt.Sprintf("%s's gate is red: %s (failed %d×) — fix it, or CORGI_FORCE=1 git push", who, s.Gate.Cmd, max(1, s.Gate.Fails))
+			return false, fmt.Sprintf("%s's gate is red: %s (failed %d×) - fix it, or CORGI_FORCE=1 git push", who, s.Gate.Cmd, max(1, s.Gate.Fails))
 		}
 		if s.Tests != nil && !s.Tests.OK {
-			return false, fmt.Sprintf("%s's last test run went red: %s — fix it, or CORGI_FORCE=1 git push", who, s.Tests.Cmd)
+			return false, fmt.Sprintf("%s's last test run went red: %s - fix it, or CORGI_FORCE=1 git push", who, s.Tests.Cmd)
 		}
 	}
 	return true, ""
@@ -48,7 +48,7 @@ func hooksDir(repo string) (string, error) {
 }
 
 const guardHook = `#!/bin/sh
-` + guardMarker + ` — refuses a push of a branch whose session's gate or tests are red
+` + guardMarker + ` - refuses a push of a branch whose session's gate or tests are red
 # (corgi agent guard uninstall removes it; CORGI_FORCE=1 pushes anyway)
 [ -n "$CORGI_FORCE" ] && exit 0
 command -v corgi >/dev/null 2>&1 || exit 0
@@ -65,7 +65,7 @@ func installGuard(repo string, force bool) (string, error) {
 	}
 	path := filepath.Join(dir, "pre-push")
 	if data, err := os.ReadFile(path); err == nil && !strings.Contains(string(data), guardMarker) && !force {
-		return "", fmt.Errorf("%s already has a pre-push hook that is not corgi's — --force replaces it", repo)
+		return "", fmt.Errorf("%s already has a pre-push hook that is not corgi's - --force replaces it", repo)
 	}
 	return path, os.WriteFile(path, []byte(guardHook), 0o755)
 }

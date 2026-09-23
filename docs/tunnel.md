@@ -14,12 +14,12 @@ corgi tunnel --port 3030           # raw port, skip compose lookup
 corgi tunnel --provider ngrok      # switch provider
 ```
 
-Default provider is `cloudflared` (Cloudflare Quick Tunnels — free, no signup).
+Default provider is `cloudflared` (Cloudflare Quick Tunnels - free, no signup).
 
 ## Output
 
 ```
-🌐 Tunnels (cloudflared) — Ctrl+C to stop
+🌐 Tunnels (cloudflared) - Ctrl+C to stop
 
   api                            :3030  → starting...
   web                            :3010  → starting...
@@ -35,7 +35,7 @@ Default provider is `cloudflared` (Cloudflare Quick Tunnels — free, no signup)
 | Provider | Auth required | URLs | Install |
 |----------|---------------|------|---------|
 | `cloudflared` (default) | None for Quick Tunnels | `*.trycloudflare.com`, rotate per restart | `brew install cloudflared` |
-| `ngrok` | Yes — free authtoken | Free static `*.ngrok-free.dev` (one per account) or random per restart | `brew install ngrok` |
+| `ngrok` | Yes - free authtoken | Free static `*.ngrok-free.dev` (one per account) or random per restart | `brew install ngrok` |
 | `localtunnel` | None | `*.localtunnel.me`, random per restart, or requested label via `--subdomain` (best-effort) | `npm install -g localtunnel` or `brew install localtunnel` |
 
 Auth-needing providers are detected before any tunnel spawns:
@@ -75,7 +75,7 @@ services:
 2. The service's runtime `.env` at `<service-dir>/.env` (where devs edit and `corgi run` reads from)
 3. The source env file declared by `copyEnvFromFilePath` (e.g. `env/source/<svc>.env`)
 
-Missing vars produce a strict error — no silent fallback to Quick mode.
+Missing vars produce a strict error - no silent fallback to Quick mode.
 
 CLI override: `corgi tunnel api --provider ngrok` swaps the provider while keeping the same hostname.
 
@@ -94,7 +94,7 @@ echo 'export API_TUNNEL_HOST=api.dev.example.com' >> ~/.zshrc
 
 ### ngrok one-time setup (per dev)
 
-Free static domain — one per ngrok account, on `*.ngrok-free.dev`. No DNS work.
+Free static domain - one per ngrok account, on `*.ngrok-free.dev`. No DNS work.
 
 ```bash
 # 1. Sign up at ngrok.com (free)
@@ -121,7 +121,7 @@ tunnel:
   hostname: my-api        # bare label only, no .localtunnel.me suffix
 ```
 
-Then `corgi tunnel api` runs `lt --port 3030 --subdomain my-api`. URL printed reflects what the server actually granted — could be `https://my-api.localtunnel.me` or a random fallback. Best-effort by design.
+Then `corgi tunnel api` runs `lt --port 3030 --subdomain my-api`. URL printed reflects what the server actually granted - could be `https://my-api.localtunnel.me` or a random fallback. Best-effort by design.
 
 ## Limitations of Cloudflare Quick Tunnels
 
@@ -131,7 +131,7 @@ Worth knowing before relying on them for anything but ephemeral testing:
 - **5MB request body cap.**
 - **200 concurrent connection cap.**
 - **No IPv6 origin.**
-- **Subject to anti-abuse limits.** Don't run sustained load through Quick Tunnels — use a Named Tunnel.
+- **Subject to anti-abuse limits.** Don't run sustained load through Quick Tunnels - use a Named Tunnel.
 
 Small webhook POSTs (most provider integrations) fit Quick Tunnels comfortably. Sustained traffic / large payloads / SSE need a Named Tunnel or another provider.
 
@@ -147,6 +147,6 @@ Reference: https://developers.cloudflare.com/cloudflare-one/connections/connect-
 
 ## Credits
 
-- [cloudflared](https://github.com/cloudflare/cloudflared) by Cloudflare ([Apache 2.0](https://github.com/cloudflare/cloudflared/blob/master/LICENSE)). Quick Tunnels are an extraordinarily generous free service — thanks for shipping it open.
-- [ngrok](https://ngrok.com) — closed source but a long-running staple of this niche.
-- [localtunnel](https://github.com/localtunnel/localtunnel) ([MIT](https://github.com/localtunnel/localtunnel/blob/master/LICENSE)) — minimal, no-account fallback.
+- [cloudflared](https://github.com/cloudflare/cloudflared) by Cloudflare ([Apache 2.0](https://github.com/cloudflare/cloudflared/blob/master/LICENSE)). Quick Tunnels are an extraordinarily generous free service - thanks for shipping it open.
+- [ngrok](https://ngrok.com) - closed source but a long-running staple of this niche.
+- [localtunnel](https://github.com/localtunnel/localtunnel) ([MIT](https://github.com/localtunnel/localtunnel/blob/master/LICENSE)) - minimal, no-account fallback.

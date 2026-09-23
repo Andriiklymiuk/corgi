@@ -6,7 +6,7 @@ One card per ticket: Inbox, Ready, Running, Blocked, Review, Done
 
 ### Synopsis
 
-The board corgi derives from what it knows — the inbox, the unattended runs,
+The board corgi derives from what it knows - the inbox, the unattended runs,
 the sessions on each branch, the handoffs, the tracker's own columns. A card
 is Running because a run or a session is on it, Review because a pull request
 is open, Blocked because the breaker tripped or a run said so, Ready because

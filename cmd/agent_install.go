@@ -98,7 +98,7 @@ func reportLoginInstall(withUp bool) {
 		utils.Info("it also restores the MCP endpoint and tunnel from your last `corgi agent up`")
 		return
 	}
-	utils.Info("that is the daemon only — run `corgi agent up --at-login` in a stack to also restore the tunnel and pairing server")
+	utils.Info("that is the daemon only - run `corgi agent up --at-login` in a stack to also restore the tunnel and pairing server")
 }
 
 func adoptSavedUpAtLogin() bool {
@@ -287,7 +287,7 @@ func installSystemd(binary, logDir string) error {
 
 	utils.Infof("installed %s\n", unitPath)
 	if on, known := lingerEnabled(); known && !on {
-		utils.Info("it stops when your last login ends — `loginctl enable-linger $USER` keeps it up on a server")
+		utils.Info("it stops when your last login ends - `loginctl enable-linger $USER` keeps it up on a server")
 	} else if !known {
 		utils.Info("If it should survive logout too: `loginctl enable-linger $USER`")
 	}
@@ -316,7 +316,7 @@ func renderedSystemdUnit(binary string, env map[string]string) string {
 		fmt.Fprintf(&envLines, "Environment=\"%s=%s\"\n", kv[0], kv[1])
 	}
 	return fmt.Sprintf(`[Unit]
-Description=corgi agent — keeps Claude Code Remote Control running
+Description=corgi agent - keeps Claude Code Remote Control running
 After=network-online.target
 
 [Service]

@@ -8,7 +8,7 @@ Browse and follow persisted service logs
 
 Browse logs captured by corgi run (capture is on unless --logs=false).
 
-Without flags: interactive picker — choose a service then a run, and
+Without flags: interactive picker - choose a service then a run, and
 the log is streamed to stdout (follows new writes like tail -f).
 
 Examples:

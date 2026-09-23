@@ -790,7 +790,7 @@ func launchDevicesHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if name == me {
-			writeLaunchError(w, http.StatusBadRequest, "this device cannot revoke itself — do it from the laptop with `corgi mcp devices revoke`")
+			writeLaunchError(w, http.StatusBadRequest, "this device cannot revoke itself - do it from the laptop with `corgi mcp devices revoke`")
 			return
 		}
 		store, err := pairing.Load(path)
@@ -1567,7 +1567,7 @@ const launcherPageHTML = `<!doctype html>
     </button>
     <button class="tip" data-copy="corgi agent hooks enable --all">
       <span class="tip-t">Tell me when a session needs me</span>
-      <span class="tip-d">A session waiting on a permission prompt is invisible from here. <b>--all</b> covers every repo in this list. These reach the laptop only — <b>corgi agent notify telegram --token …</b> sends them to this phone too.</span>
+      <span class="tip-d">A session waiting on a permission prompt is invisible from here. <b>--all</b> covers every repo in this list. These reach the laptop only - <b>corgi agent notify telegram --token …</b> sends them to this phone too.</span>
       <span class="tip-cmd"><code>corgi agent hooks enable --all</code><span class="tip-copy">COPY</span></span>
     </button>
     <p class="tipnote" id="tipmsg">Tap a row to copy its command.</p>
@@ -1585,10 +1585,10 @@ const launcherPageHTML = `<!doctype html>
     <p id="copymsg" class="msg"></p>
 
     <h3>This browser</h3>
-    <p>The <b>open in</b> pill on each card cycles where session links open: <b>app</b> deep-links into the Claude app, <b>browser</b> keeps them here, <b>chrome</b> forces Chrome — the one to pick for a repo on a different Claude account. Remembered per workspace, here only.</p>
+    <p>The <b>open in</b> pill on each card cycles where session links open: <b>app</b> deep-links into the Claude app, <b>browser</b> keeps them here, <b>chrome</b> forces Chrome - the one to pick for a repo on a different Claude account. Remembered per workspace, here only.</p>
     <p><b>hide</b> tucks a card away when you are showing this screen to someone. Hidden cards collapse into one button; nothing on the machine changes.</p>
     <label class="toggle"><input type="checkbox" id="showbridges"> Show hand-started (bridge) sessions</label>
-    <p>A bridge is a session started on the laptop itself. Its claude.ai page shows only what you send from here, so it looks empty at first — the full transcript stays on the laptop.</p>
+    <p>A bridge is a session started on the laptop itself. Its claude.ai page shows only what you send from here, so it looks empty at first - the full transcript stays on the laptop.</p>
 
     <h3>Devices</h3>
     <p>Everything that scanned a pairing QR. Revoking one leaves the others working.</p>
@@ -1598,7 +1598,7 @@ const launcherPageHTML = `<!doctype html>
     <p>The same checks as <code>corgi agent doctor</code>, run from here.</p>
     <button id="rundoctor">Run doctor</button>
     <div id="doctor"></div>
-    <p>For a push to this phone when a session needs you, set <code>notifyUrl</code> in the agent config on the laptop. A Discord, Slack or Telegram webhook works as well as an ntfy topic — corgi picks the payload from the host, which matters because ntfy's iOS app is paid. Without it, notifications only reach the laptop.</p>
+    <p>For a push to this phone when a session needs you, set <code>notifyUrl</code> in the agent config on the laptop. A Discord, Slack or Telegram webhook works as well as an ntfy topic - corgi picks the payload from the host, which matters because ntfy's iOS app is paid. Without it, notifications only reach the laptop.</p>
   </details>
   <p class="foot">
     <a id="allsessions" target="_blank" rel="noopener">See all your sessions on claude.ai ↗</a>
@@ -1660,7 +1660,7 @@ const launcherPageHTML = `<!doctype html>
   // this is a user navigation to the Claude session list, not a loaded asset.
   try { document.getElementById('allsessions').href = 'https://claude.ai/code'; } catch {}
 
-  // One failure, one line, over the thumb — never a red block that pushes the
+  // One failure, one line, over the thumb - never a red block that pushes the
   // card you were aiming at somewhere else.
   const REFRESH_MS = 15000;
   let toastTimer = 0;
@@ -1689,7 +1689,7 @@ const launcherPageHTML = `<!doctype html>
 
   if (!token) {
     // The tabs have nothing to show without a token, and the message used to
-    // land in a pane that is hidden unless you happen to be on Stacks — which
+    // land in a pane that is hidden unless you happen to be on Stacks - which
     // is how this page came to render as a blank screen.
     document.getElementById('tabs').hidden = true;
     for (const p of document.querySelectorAll('[data-pane]')) {
@@ -1699,7 +1699,7 @@ const launcherPageHTML = `<!doctype html>
     pair.className = 'empty';
     pair.innerHTML = '<h2>Pair this browser</h2><p>This page needs a key before it can show ' +
       'anything. On the laptop run <code>corgi agent up</code> and open the <b>pair:</b> link it ' +
-      'prints — in this browser for this machine, or by scanning the QR on a phone.</p>' +
+      'prints - in this browser for this machine, or by scanning the QR on a phone.</p>' +
       '<p>The key is kept in this browser only, and pairing again replaces it.</p>';
     document.querySelector('main').prepend(pair);
     document.getElementById('refresh').hidden = true;
@@ -1719,13 +1719,13 @@ const launcherPageHTML = `<!doctype html>
 
   // A session's name and its state both change while you are looking at them:
   // Claude renames a session as the work takes shape, a permission prompt
-  // arrives, a session exits. Refresh on a slow tick — only while the page is
+  // arrives, a session exits. Refresh on a slow tick - only while the page is
   // on screen, and never while a panel is open under the thumb, since
   // re-rendering would collapse it.
   function initRefresh() {
     const btn = document.getElementById('refresh');
     // The button is a real reload: the daemon rescans and polls every tracker
-    // now, and this page — with the phone and the menu bar — re-reads once
+    // now, and this page - with the phone and the menu bar - re-reads once
     // it has had a moment to publish.
     btn.onclick = () => {
       btn.classList.add('spin');
@@ -1780,7 +1780,7 @@ const launcherPageHTML = `<!doctype html>
           tip.classList.add('copied');
           const label = tip.querySelector('.tip-copy');
           if (label) label.textContent = 'COPIED';
-          msg.textContent = 'Copied — paste it in a terminal on that machine.';
+          msg.textContent = 'Copied - paste it in a terminal on that machine.';
           setTimeout(() => {
             tip.classList.remove('copied');
             if (label) label.textContent = 'COPY';
@@ -1841,7 +1841,7 @@ const launcherPageHTML = `<!doctype html>
       for (const c of checks) {
         const el = document.createElement('div');
         el.className = 'chk' + (c.ok ? '' : ' bad');
-        el.innerHTML = '<span class="mark">' + (c.ok ? '✓' : '✗') + '</span><span><b>' + esc(c.name) + '</b> — ' +
+        el.innerHTML = '<span class="mark">' + (c.ok ? '✓' : '✗') + '</span><span><b>' + esc(c.name) + '</b> - ' +
           esc(c.detail || '') + (c.fix ? '<span class="fix">fix: ' + esc(c.fix) + '</span>' : '') + '</span>';
         box.appendChild(el);
       }
@@ -2028,7 +2028,7 @@ const launcherPageHTML = `<!doctype html>
     prof.hidden = !profiles.length;
     // Which checkout it opens in. A phone has no folder of its own, so
     // without this the chat lands wherever that editor window happened to
-    // be — the wrong repo, under the wrong account.
+    // be - the wrong repo, under the wrong account.
     const ws = card.querySelector('.nws');
     let ids = lastWorkspaces.map(w => w.id).filter(Boolean);
     if (!ids.length) {
@@ -2100,7 +2100,7 @@ const launcherPageHTML = `<!doctype html>
       box.appendChild(sessionOpener(s.label || s.display, s.url, 'Open \u2197', ''));
     } else if (s.id && (s.status === 'done' || s.status === 'stale')) {
       // No web link yet: corgi can ask the session for one. Only while it is
-      // idle — typing into a session mid-turn lands in its own work.
+      // idle - typing into a session mid-turn lands in its own work.
       button('Link', '', async (e) => {
         const b = e.currentTarget;
         b.disabled = true; b.textContent = 'Linking\u2026';
@@ -2109,7 +2109,7 @@ const launcherPageHTML = `<!doctype html>
             body: JSON.stringify({ session: s.id, text: '/remote-control' }) });
           const j = await r.json().catch(() => ({}));
           if (!r.ok) { toast(j.error || 'could not reach that session', true); b.disabled = false; b.textContent = 'Link'; return; }
-          toast('asked ' + name + ' for a web link — it appears in a moment');
+          toast('asked ' + name + ' for a web link - it appears in a moment');
           setTimeout(loadBoard, 6000);
         } catch { toast('no connection', true); b.disabled = false; b.textContent = 'Link'; }
       });
@@ -2283,7 +2283,7 @@ const launcherPageHTML = `<!doctype html>
   }
 
   // The kanban: one card per ticket, column worked out by corgi. A card is
-  // moved on the tracker, worked on, or unblocked — the column follows.
+  // moved on the tracker, worked on, or unblocked - the column follows.
   async function loadKanban() {
     const box = document.getElementById('kanban');
     let cards = [], columns = [], boards = {};
@@ -2321,7 +2321,7 @@ const launcherPageHTML = `<!doctype html>
       h.appendChild(n);
       kc.appendChild(h);
       if (!rows.length) {
-        const e = document.createElement('div'); e.className = 'empty'; e.textContent = '—';
+        const e = document.createElement('div'); e.className = 'empty'; e.textContent = '-';
         kc.appendChild(e);
       }
       for (const c of rows) {
@@ -2463,8 +2463,8 @@ const launcherPageHTML = `<!doctype html>
       box.appendChild(head);
       box.appendChild(bar);
 
-      // Only new issues can be handed to one session together — a review
-      // comment is about its own thread — but anything can be moved or
+      // Only new issues can be handed to one session together - a review
+      // comment is about its own thread - but anything can be moved or
       // dismissed in a batch.
       const workable = () => [...picked].filter((k) => {
         const ev = rows.find((r) => r.key === k);
@@ -2732,7 +2732,7 @@ const launcherPageHTML = `<!doctype html>
       if (j.host) bits.push(j.host);
       if (j.version) bits.push('corgi ' + j.version);
       bits.push(j.daemon ? 'daemon up' : 'daemon down');
-      if (j.latest) bits.push('v' + j.latest + ' available — corgi upd');
+      if (j.latest) bits.push('v' + j.latest + ' available - corgi upd');
       const el = document.getElementById('host');
       el.textContent = '';
       bits.forEach((bit, i) => {
@@ -2754,7 +2754,7 @@ const launcherPageHTML = `<!doctype html>
     const note = document.getElementById('hostnote');
     if (!note.hidden) { note.hidden = true; return; }
     note.textContent = up
-      ? 'The corgi daemon is the process on that machine that starts your sessions and keeps them running — after a crash, after a reboot, and while the laptop would otherwise sleep. This page talks to it.'
+      ? 'The corgi daemon is the process on that machine that starts your sessions and keeps them running - after a crash, after a reboot, and while the laptop would otherwise sleep. This page talks to it.'
       : 'The corgi daemon is not running on that machine, so nothing here can start a session. On the laptop run: corgi agent up';
     note.hidden = false;
   }
@@ -2850,7 +2850,7 @@ const launcherPageHTML = `<!doctype html>
     if (hiddenCount || revealHidden) {
       const b = document.createElement('button');
       b.className = 'chip revealer';
-      b.textContent = revealHidden ? 'hide again' : hiddenCount + ' hidden — show';
+      b.textContent = revealHidden ? 'hide again' : hiddenCount + ' hidden - show';
       b.onclick = () => { revealHidden = !revealHidden; render(lastWorkspaces); };
       list.appendChild(b);
     }
@@ -2870,7 +2870,7 @@ const launcherPageHTML = `<!doctype html>
     return more > 0 ? 'sessions +' + more + ' \u2304' : 'sessions \u2304';
   }
 
-  // Inside one repo's card the leading workspace name is noise — the card
+  // Inside one repo's card the leading workspace name is noise - the card
   // already says which repo this is, so the branch and the time get the width.
   function shortSessionName(name, id) {
     const full = String(name || '');
@@ -2878,8 +2878,8 @@ const launcherPageHTML = `<!doctype html>
     return full.indexOf(prefix) === 0 ? full.slice(prefix.length) : full;
   }
 
-  // Claude Code owns a session's name after it starts — /rename, a hook, or its
-  // own naming all rewrite the record corgi reads — so this row shows what the
+  // Claude Code owns a session's name after it starts - /rename, a hook, or its
+  // own naming all rewrite the record corgi reads - so this row shows what the
   // session is called right now, and says when that last changed.
   function nameNote(top) {
     if (!top.nameSource || top.nameSource === 'user') return '';
@@ -2988,7 +2988,7 @@ const launcherPageHTML = `<!doctype html>
     return box;
   }
 
-  // The branch a session here would start on, with a * for uncommitted work —
+  // The branch a session here would start on, with a * for uncommitted work -
   // the answer to "which of these two checkouts am I looking at?". Clamped,
   // because a branch name has no upper bound and the path is sharing the line.
   function branchSuffix(ws) {
@@ -3026,7 +3026,7 @@ const launcherPageHTML = `<!doctype html>
       const m = openMode(ws.id);
       if (m === 'browser') el.onclick = (e) => { e.preventDefault(); window.open(url, '_blank', 'noopener'); };
       if (m === 'chrome') el.onclick = (e) => { e.preventDefault(); location.href = chromeUrl(url); };
-      const tag = o.bridge ? '<span class="tag" title="Hand-started on the laptop \u2014 its web page may look empty">bridge</span>' : '';
+      const tag = o.bridge ? '<span class="tag" title="Hand-started on the laptop - its web page may look empty">bridge</span>' : '';
       const text = o.label ? esc(o.label) : esc(url.split('/').pop().slice(0, 14)) + '\u2026';
       const dot = o.past ? '' : '<i class="sdot"></i>';
       el.innerHTML = '<span>' + dot + '<span class="tname">' + text + '</span>' + tag + '</span>' +
@@ -3054,7 +3054,7 @@ const launcherPageHTML = `<!doctype html>
               body: JSON.stringify({ session: sess.id, text: '/remote-control' }) });
             const j = await r.json().catch(() => ({}));
             if (!r.ok) { toast(j.error || 'could not reach that session', true); link.disabled = false; link.textContent = 'Link'; return; }
-            toast('asked ' + esc(label) + ' for a web link — it appears in a moment');
+            toast('asked ' + esc(label) + ' for a web link - it appears in a moment');
             setTimeout(load, 6000);
           } catch { toast('no connection', true); link.disabled = false; link.textContent = 'Link'; }
         };
@@ -3122,7 +3122,7 @@ const launcherPageHTML = `<!doctype html>
       }
       if (localOnly) note('local only = running on the laptop with no web link yet. Link asks the session for one; a busy session has to be asked by hand with /remote-control.');
       if (bridgeRows) note('bridge = started by hand on the laptop; its page shows only what you send from it.');
-      if (bridgeHidden) note(bridgeHidden + ' bridge session' + (bridgeHidden > 1 ? 's' : '') + ' hidden \u2014 enable in Settings.');
+      if (bridgeHidden) note(bridgeHidden + ' bridge session' + (bridgeHidden > 1 ? 's' : '') + ' hidden - enable in Settings.');
 
       if (older.length) {
         group('earlier \u00b7 not running');
@@ -3138,7 +3138,7 @@ const launcherPageHTML = `<!doctype html>
       for (const ev of evs) {
         const el = document.createElement('div');
         el.className = 'evrow';
-        const what = ev.kind + (ev.cause ? ' \u00b7 ' + ev.cause : '') + (ev.reason ? ' \u2014 ' + ev.reason : '');
+        const what = ev.kind + (ev.cause ? ' \u00b7 ' + ev.cause : '') + (ev.reason ? ' - ' + ev.reason : '');
         el.innerHTML = '<b>' + esc(what.slice(0, 90)) + '</b><span>' + esc(fmtWhen(ev.at)) + '</span>';
         box.appendChild(el);
       }
@@ -3160,10 +3160,10 @@ const launcherPageHTML = `<!doctype html>
     if (ws.restarts > 0) facts.push(['restarts', String(ws.restarts) + (ws.lastCause ? ' \u00b7 last ' + ws.lastCause : '')]);
     else if (ws.lastCause) facts.push(['last exit', ws.lastCause]);
     if (ws.wakeLock) facts.push(['wake lock', 'the machine is held awake while this runs']);
-    if (ws.deviceOnly) facts.push(['device', 'online with no session — Start opens one here, or create one from the Claude app’s device list']);
+    if (ws.deviceOnly) facts.push(['device', 'online with no session - Start opens one here, or create one from the Claude app’s device list']);
     if (ws.remark) facts.push(['note', ws.remark]);
     if (ws.pid) facts.push(['pid', String(ws.pid)]);
-    if (ws.disabled) facts.push(['disabled', 'the daemon stopped retrying this one \u2014 fix the cause, then Start']);
+    if (ws.disabled) facts.push(['disabled', 'the daemon stopped retrying this one - fix the cause, then Start']);
     return facts;
   }
 
@@ -3230,16 +3230,16 @@ const launcherPageHTML = `<!doctype html>
 
   // Only ever derived from a URL that already passed safeClaudeUrl, so the
   // scheme swap cannot smuggle an arbitrary scheme. googlechromes:// is iOS
-  // Chrome's https handler — it forces Chrome even when this page runs in
+  // Chrome's https handler - it forces Chrome even when this page runs in
   // Safari or the Claude app's webview.
   const chromeUrl = u => u.replace(/^https:\/\//, 'googlechromes://');
 
   // app mode uses a real anchor tap so iOS deep-links into the Claude app;
   // browser mode opens via JS, which keeps the session in this browser; chrome
   // mode forces Chrome via its URL scheme (right for a workspace signed into a
-  // different Claude account than the app — e.g. work vs personal).
+  // different Claude account than the app - e.g. work vs personal).
   // Where a session link opens is a per-workspace choice, so every session
-  // link has to honour it — not only the one on the Stacks card, which is
+  // link has to honour it - not only the one on the Stacks card, which is
   // where the setting happens to live.
   function sessionOpener(workspaceId, url, label, cls) {
     const mode = openMode(workspaceId);
@@ -3267,7 +3267,7 @@ const launcherPageHTML = `<!doctype html>
     const cur = openMode(id);
     const b = document.createElement('button');
     b.className = 'chip';
-    b.title = 'Where session links open — tap to change';
+    b.title = 'Where session links open - tap to change';
     b.innerHTML = 'open in <b>' + esc(cur) + '</b> ▾';
     b.onclick = () => { setOpenMode(id, order[(order.indexOf(cur) + 1) % order.length]); render(lastWorkspaces); };
     return b;
@@ -3323,7 +3323,7 @@ const launcherPageHTML = `<!doctype html>
       const r = await fetch('/launch/workspaces', { headers: auth });
       const j = await r.json();
       const ws = (j.workspaces || []).find(w => w.id === id);
-      // Got the link, or the daemon reported why it won't start — either way, stop
+      // Got the link, or the daemon reported why it won't start - either way, stop
       // polling and re-render so the reason (or the Open button) shows.
       if (ws && (ws.sessionUrl || (!ws.running && ws.note))) {
         render(j.workspaces);
@@ -3522,7 +3522,7 @@ func launchSendHandler(w http.ResponseWriter, r *http.Request) {
 	if session.Status == sessions.StatusGone {
 		dir, _ := agentDir()
 		if !policyFor(dir, session.Cwd).Headless {
-			writeLaunchError(w, http.StatusConflict, "that session is closed — corgi agent watch enable --headless lets a message run it a turn anyway")
+			writeLaunchError(w, http.StatusConflict, "that session is closed - corgi agent watch enable --headless lets a message run it a turn anyway")
 			return
 		}
 		launchBoardCommand(w, command.Command{Action: command.ActionContinue, SessionID: session.ID, Text: text, Source: "phone"})
@@ -4030,7 +4030,7 @@ func launchTicketHandler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if target == nil {
-			writeLaunchError(w, http.StatusNotFound, "no live session is on "+event.Ref+" — Work on it opens one")
+			writeLaunchError(w, http.StatusNotFound, "no live session is on "+event.Ref+" - Work on it opens one")
 			return
 		}
 		from := firstNonEmptyString(r.URL.Query().Get("from"), "phone")
@@ -4328,7 +4328,7 @@ func workOnCommand(dir string, keys []string, opt workOnOptions) (command.Comman
 	}
 	for _, e := range events[1:] {
 		if e.Workspace != events[0].Workspace {
-			return command.Command{}, http.StatusBadRequest, "those are in different workspaces — take one workspace at a time"
+			return command.Command{}, http.StatusBadRequest, "those are in different workspaces - take one workspace at a time"
 		}
 	}
 	prompt := daemon.BatchPrompt(events)

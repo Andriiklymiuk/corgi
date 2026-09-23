@@ -32,7 +32,7 @@ corgi exec <service> -- <cmd> [args...] [flags]
       --ready-timeout duration         Max time to wait for dependencies when --ensure-deps is set. (default 15s)
       --service-branch stringArray     Run a service on a git branch via a reused worktree under
                                        corgi_services/.worktrees: --service-branch name=branch (repeatable).
-                                       Non-destructive — the main checkout is untouched. Clean up with: corgi worktree prune.
+                                       Non-destructive - the main checkout is untouched. Clean up with: corgi worktree prune.
       --service-checkout stringArray   Run a service on a git branch by checking it out in place:
                                        --service-checkout name=branch (repeatable). Refuses on a dirty tree; leaves the
                                        repo on that branch afterwards.

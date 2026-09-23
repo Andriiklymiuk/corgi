@@ -52,7 +52,7 @@ func runLeases(cmd *cobra.Command, _ []string) {
 		return
 	}
 	if len(leases) == 0 {
-		utils.Info("no leases — corgi run --isolate <name> creates one")
+		utils.Info("no leases - corgi run --isolate <name> creates one")
 		return
 	}
 	w := tabwriter.NewWriter(utils.ConsoleOut(), 0, 4, 2, ' ', 0)
@@ -86,5 +86,5 @@ func runLeaseRelease(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	utils.Infof("released lease %q — stop anything still running under it first\n", args[0])
+	utils.Infof("released lease %q - stop anything still running under it first\n", args[0])
 }

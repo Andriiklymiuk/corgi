@@ -120,7 +120,7 @@ func warnDataDirFallback(dir string) {
 		}
 		fmt.Fprintf(os.Stderr,
 			"corgi: using %s for its data.\n"+
-				"If your saved paths look missing, your Homebrew prefix is elsewhere — set:\n"+
+				"If your saved paths look missing, your Homebrew prefix is elsewhere - set:\n"+
 				"  export CORGI_DATA_DIR=\"$(brew --prefix)/var/corgi\"\n", dir)
 	})
 }

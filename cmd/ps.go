@@ -23,7 +23,7 @@ type psRow struct {
 var psCmd = &cobra.Command{
 	Use:   "ps",
 	Short: "Runtime snapshot of declared services and db_services",
-	Long: `Reports the topology declared in corgi-compose.yml — name, kind, port —
+	Long: `Reports the topology declared in corgi-compose.yml - name, kind, port -
 and infers running/stopped from a port-listening probe where a port is known.
 
 Unlike a single 'corgi run', 'corgi ps' is a separate process and cannot see

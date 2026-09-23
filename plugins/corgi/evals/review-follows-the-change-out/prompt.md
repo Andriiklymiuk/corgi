@@ -1,1 +1,1 @@
-Review this PR: https://github.com/acme/api/pull/57 — it adds RATE_LIMIT_PER_MINUTE to .env.example, calls checkRateLimit() in the login handler, and adds a unit test that asserts the decorator metadata on the handler.
+Review this PR: https://github.com/acme/api/pull/57 - it adds RATE_LIMIT_PER_MINUTE to .env.example, calls checkRateLimit() in the login handler, and adds a unit test that asserts the decorator metadata on the handler.

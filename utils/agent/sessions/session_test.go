@@ -13,7 +13,7 @@ func TestALimitIsQuotaOrOverload(t *testing.T) {
 		reset        string
 	}{
 		{"rate_limit", "You've hit your usage limit. It resets at 2pm (Europe/Kiev).", LimitQuota, "2pm (Europe/Kiev)"},
-		{"", "Weekly limit reached — resets Tue 08:59", LimitQuota, "Tue 08:59"},
+		{"", "Weekly limit reached - resets Tue 08:59", LimitQuota, "Tue 08:59"},
 		{"rate_limit", "API error 529: Overloaded. Please try again later.", LimitOverload, ""},
 		{"", "The service is temporarily unavailable due to capacity", LimitOverload, ""},
 		{"rate_limit", "rate limit", LimitQuota, ""},

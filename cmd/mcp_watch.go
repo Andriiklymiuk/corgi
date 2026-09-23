@@ -104,7 +104,7 @@ func mcpWatchStatus(args watchStatusArgs) (map[string]any, error) {
 		out = append(out, row)
 	}
 	if args.Workspace != "" && len(out) == 0 {
-		return nil, fmt.Errorf("%q is not a registered workspace — `corgi agent init` there first", args.Workspace)
+		return nil, fmt.Errorf("%q is not a registered workspace - `corgi agent init` there first", args.Workspace)
 	}
 	return map[string]any{"workspaces": out, "agentDir": dir}, nil
 }
@@ -181,7 +181,7 @@ func mcpWatchEnable(args watchEnableArgs) (map[string]any, error) {
 		}
 	}
 	if !known {
-		return nil, fmt.Errorf("%q is not a registered workspace — `corgi agent init` there first", id)
+		return nil, fmt.Errorf("%q is not a registered workspace - `corgi agent init` there first", id)
 	}
 	if t := strings.TrimSpace(args.Tracker); t != "" && t != "linear" && t != "jira" {
 		return nil, fmt.Errorf("tracker must be linear or jira")

@@ -24,4 +24,4 @@ if awk "BEGIN { exit !($total < $FLOOR) }"; then
   echo "coverage-floor: total $total% is below floor $FLOOR%" >&2
   exit 1
 fi
-echo "coverage-floor: total $total% >= floor $FLOOR% — ok"
+echo "coverage-floor: total $total% >= floor $FLOOR% - ok"

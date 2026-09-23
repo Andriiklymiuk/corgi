@@ -15,9 +15,9 @@ import (
 
 var agentMuteCmd = &cobra.Command{
 	Use:   "mute [1h|30m|off]",
-	Short: "Nothing rings for a while — no toast, no push; the board goes on",
-	Long: `Holds every notification — the desktop toast, the phone push, the permission
-ping — until the time passes; the inbox, the board and the rows are as they
+	Short: "Nothing rings for a while - no toast, no push; the board goes on",
+	Long: `Holds every notification - the desktop toast, the phone push, the permission
+ping - until the time passes; the inbox, the board and the rows are as they
 were. Without an argument: an hour. off ends it early.
 
   corgi agent mute           an hour
@@ -58,7 +58,7 @@ were. Without an argument: an hour. off ends it early.
 			fmt.Println("Ringing again.")
 			return
 		}
-		fmt.Printf("Muted until %s — nothing rings; the board goes on.\n", until.Local().Format("15:04"))
+		fmt.Printf("Muted until %s - nothing rings; the board goes on.\n", until.Local().Format("15:04"))
 	},
 }
 

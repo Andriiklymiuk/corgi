@@ -2,12 +2,12 @@
 
 ## corgi agent mute
 
-Nothing rings for a while — no toast, no push; the board goes on
+Nothing rings for a while - no toast, no push; the board goes on
 
 ### Synopsis
 
-Holds every notification — the desktop toast, the phone push, the permission
-ping — until the time passes; the inbox, the board and the rows are as they
+Holds every notification - the desktop toast, the phone push, the permission
+ping - until the time passes; the inbox, the board and the rows are as they
 were. Without an argument: an hour. off ends it early.
 
   corgi agent mute           an hour

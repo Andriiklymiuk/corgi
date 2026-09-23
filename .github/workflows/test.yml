@@ -3,7 +3,7 @@ name: CI
 on:
   pull_request:
     branches: [main]
-  # Pushes to main run this via release.yml, which invokes it as a gate —
+  # Pushes to main run this via release.yml, which invokes it as a gate -
   # no separate push trigger, or every push would run CI (and Sonar) twice.
   workflow_call:
     secrets:

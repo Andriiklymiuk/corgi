@@ -10,7 +10,7 @@ Read `../_shared/conventions.md` first (finish what you start, attribution, unat
 **Done when:** the pictures are rendered from the script, you looked at each one, and the README (or listing) points at them.
 
 Pictures drawn from the product's own output, not from a design tool. A
-terminal session, a menu bar dropdown, a VS Code window, a phone page — each
+terminal session, a menu bar dropdown, a VS Code window, a phone page - each
 is an HTML mockup whose every line is the string the code prints, rendered by
 headless Chrome at 2x, cut and joined by ImageMagick. Re-run the script after
 a UI change and the README is current again.
@@ -55,7 +55,7 @@ a UI change and the README is current again.
 10. **Two machines are two names, one story.** A multi-laptop feature is
     told from one terminal: the other laptop appears only as the product
     prints it (`on home-mbp (awake, leads):`, a ring "by home-mbp"), never
-    as a second window — two terminals side by side are unreadable at
+    as a second window - two terminals side by side are unreadable at
     README width. Use `yourdomain.com` for hostnames a user would own.
 
 ## Layout of the work
@@ -112,8 +112,8 @@ show gaps.
 ```
 
 300 x 650 is an iPhone's ratio (393 x 852). Every phone gets the same
-three pieces of chrome — a status bar (time, signal, Wi-Fi, battery as
-inline SVG), the Dynamic Island, the home indicator — from one shared
+three pieces of chrome - a status bar (time, signal, Wi-Fi, battery as
+inline SVG), the Dynamic Island, the home indicator - from one shared
 `statusBar` string, so a lock screen, a chat and the app look like the same
 device. Put the product's own page CSS inside `.screen` (copy its palette
 and card rules from the source), and a lock screen or camera frame for the
@@ -121,15 +121,15 @@ and card rules from the source), and a lock screen or camera frame for the
 
 **The tab bar.** Read the app's tab layout (`app/(tabs)/_layout.tsx` in an
 Expo app) for the labels and the SF Symbol names, and draw those symbols as
-inline SVG paths — not Unicode box glyphs (▤ ▥ ▮), which read as broken. A
+inline SVG paths - not Unicode box glyphs (▤ ▥ ▮), which read as broken. A
 system tab bar is a glass capsule: `border-radius:30px`, a translucent
 fill, a 1 px hairline, the selected tab a lighter pill. Content scrolls
 *under* it, so put a gradient (`transparent → page colour`, ~130 px) behind
 the bar, or the rows collide with it. A badge is a red pill in the tab's
 top-right corner.
 
-**A Live Activity with buttons** needs two rows on a 300 px phone — title
-and laptop on top, the ask and the buttons below — or everything truncates
+**A Live Activity with buttons** needs two rows on a 300 px phone - title
+and laptop on top, the ask and the buttons below - or everything truncates
 to "Login re…". Show the pressed state (a ring on the button) and the state
 after (the word the app writes, "allowed") as two more frames: the reader
 sees the answer land.

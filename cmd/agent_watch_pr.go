@@ -28,7 +28,7 @@ works too.
 
 Never automatic: this is a person's call. ready, merge and close are refused
 on a pull request that is not yours; approve, request and comment go on any
-the inbox knows — the one somebody asked you to review first of all.`,
+the inbox knows - the one somebody asked you to review first of all.`,
 	Args: cobra.MinimumNArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 		verb := strings.ToLower(strings.TrimSpace(args[0]))

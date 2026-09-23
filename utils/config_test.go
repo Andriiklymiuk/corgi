@@ -1195,10 +1195,10 @@ func TestCleanCorgiServicesFolderPreservesSnapshotsDoesNotFollowSymlinks(t *test
 		t.Error("symlink inside corgi_services should be removed")
 	}
 	if _, err := os.Stat(filepath.Join(outside, "a.txt")); err != nil {
-		t.Error("external file a.txt must survive — symlink target must not be followed")
+		t.Error("external file a.txt must survive - symlink target must not be followed")
 	}
 	if _, err := os.Stat(filepath.Join(outside, "nested", "b.txt")); err != nil {
-		t.Error("external file nested/b.txt must survive — symlink target must not be followed")
+		t.Error("external file nested/b.txt must survive - symlink target must not be followed")
 	}
 }
 

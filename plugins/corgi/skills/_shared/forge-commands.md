@@ -3,22 +3,22 @@
 Shared by review, stories, prep-pr, tracker, risk and debug. Copy-pasteable commands
 for fetching PR/MR data, posting review output, and opening draft PRs/MRs.
 Review cites §0 to §5; stories and prep-pr cite §6. **Both
-forges are first-class and kept at parity** — every GitHub command has a GitLab
+forges are first-class and kept at parity** - every GitHub command has a GitLab
 equivalent below; resolve the forge per ref (P0) and use the matching block.
 
 GitLab repo selector `<repo>` = `<host>/<group>/<proj>` (or `OWNER/REPO`), passed
-with `-R` — no URL-encoding needed. The raw-API fallback (§3b) needs the
+with `-R` - no URL-encoding needed. The raw-API fallback (§3b) needs the
 URL-encoded project path `<group>%2F<proj>` plus `--hostname <host>` instead.
 
-## 0. Output filters — the diff stays full-fidelity
+## 0. Output filters - the diff stays full-fidelity
 
 Some machines route `git`/`gh`/`glab` through an output filter such as `rtk` (a
 hook rewrites the command; `command -v rtk` says whether it is installed). Filtered
-metadata, status and list output is fine — the review does not need those verbatim.
+metadata, status and list output is fine - the review does not need those verbatim.
 
 **One hard exception: the diff that gets reviewed must be full-fidelity.** A
 filtered/truncated diff = a bad review. Fetch the reviewable diff **raw**, and
-**combined** — `--patch` returns a per-commit patch series, so a file touched by
+**combined** - `--patch` returns a per-commit patch series, so a file touched by
 several commits arrives several times and its hunk headers number an intermediate
 state, not head. Anchoring off those lands comments on the wrong code:
 
@@ -39,35 +39,35 @@ Fetch metadata + anchoring SHAs in **one call per PR/MR** (don't make a second c
 just for the SHA):
 
 ```bash
-# GitHub — metadata + head/base SHAs in one --json call
+# GitHub - metadata + head/base SHAs in one --json call
 gh pr view <n> --repo <owner>/<repo> \
   --json title,body,author,baseRefName,headRefName,state,isDraft,files,url,headRefOid,baseRefOid,commits
 
-# GitLab — metadata INCLUDING diff_refs (base_sha/head_sha/start_sha) + commits in one call
+# GitLab - metadata INCLUDING diff_refs (base_sha/head_sha/start_sha) + commits in one call
 glab mr view <n> -R <repo> -F json    # read .diff_refs, .state, .draft, .source_branch, .commits from the JSON
 ```
 
-Reviewable diff (raw, see §0 — `rtk proxy` prefix when rtk is installed):
+Reviewable diff (raw, see §0 - `rtk proxy` prefix when rtk is installed):
 ```bash
 gh pr diff <n> --repo <owner>/<repo>
 glab mr diff <n> -R <repo> --color=never
 ```
 
-CI / pipeline status — cross-check for SKILL P3.6 ("is a build/test-fails finding real?"):
+CI / pipeline status - cross-check for SKILL P3.6 ("is a build/test-fails finding real?"):
 ```bash
 gh pr view <n> --repo <owner>/<repo> --json statusCheckRollup    # GitHub: rollup + per-check state
 glab ci status -R <repo> --branch <source_branch>                # GitLab: per-job pass/fail
 glab mr view <n> -R <repo> -F json -q '.pipeline.status'         # GitLab: head-pipeline status
 ```
 A GitLab pipeline reads `success` even when an `allow_failure` job failed (the
-"passed with warnings" badge) — scan the per-job list for a failed allow_failure job;
+"passed with warnings" badge) - scan the per-job list for a failed allow_failure job;
 it's often the real red spec a finding points at. Pull a failing job's log to confirm:
 ```bash
 gh run view <run-id> --repo <owner>/<repo> --log-failed           # GitHub
 glab ci trace -R <repo> --branch <source_branch>                  # GitLab (pick the failed job)
 ```
 
-**Sibling enumeration** (P0 auto-detect — find same-branch PRs/MRs in other repos):
+**Sibling enumeration** (P0 auto-detect - find same-branch PRs/MRs in other repos):
 ```bash
 gh pr list --head <branch> --repo <owner>/<repo> --json number,title,url,state,isDraft
 glab mr list --source-branch <branch> -R <repo> -F json
@@ -75,7 +75,7 @@ glab mr list --source-branch <branch> -R <repo> -F json
 
 Note: `gh pr diff`/`glab mr diff` diff each PR/MR against **its own base branch**.
 For a stacked PR (B's commits contain A's) isolate B's own commits with the
-compare API — **no checkout** (never `git diff A..B` against a tree you didn't
+compare API - **no checkout** (never `git diff A..B` against a tree you didn't
 fetch):
 ```bash
 gh api repos/<owner>/<repo>/compare/<A-headRefOid>...<B-headRefOid> -q '.files[].filename'
@@ -85,7 +85,7 @@ If it can't be isolated cleanly, review the full diff and note the double-review
 
 ---
 
-## 2. GitHub — post summary + inline suggestions in one review
+## 2. GitHub - post summary + inline suggestions in one review
 
 Build a JSON payload, pipe via `--input -`. Each suggestion is a fenced
 ` ```suggestion ` block inside the comment body. `line` = line in the **new** file
@@ -110,7 +110,7 @@ JSON
 ```
 Multi-line suggestion target: add `"start_line": <m>, "start_side": "RIGHT"` (range m..line).
 
-**Update on re-run** (don't PATCH a review body — that route doesn't exist):
+**Update on re-run** (don't PATCH a review body - that route doesn't exist):
 ```bash
 # edit an existing INLINE comment (note: pulls/comments, NOT pulls/<n>/comments):
 gh api --method PATCH "repos/<owner>/<repo>/pulls/comments/<comment_id>" -f body='...'
@@ -120,9 +120,9 @@ gh api --method PUT "repos/<owner>/<repo>/pulls/<n>/reviews/<review_id>" -f body
 
 ---
 
-## 3. GitLab — post summary + inline suggestions
+## 3. GitLab - post summary + inline suggestions
 
-### 3a. Native flags (primary — simplest, no diff_refs/position needed)
+### 3a. Native flags (primary - simplest, no diff_refs/position needed)
 
 `glab mr note create` posts diff comments directly. `-m` omitted → **reads the body
 from stdin** (so a multi-line summary pipes in cleanly; `--message -` would post a
@@ -146,12 +146,12 @@ glab mr note create <n> -R <repo> --file src/foo.py --old-line 7 -m '<!-- corgi-
 Why was this removed?'
 ```
 `--file/--line` are EXPERIMENTAL and **absent from many `glab` builds** (not just
-flaky — some installs lack the flags entirely). Probe once instead of guessing:
+flaky - some installs lack the flags entirely). Probe once instead of guessing:
 ```bash
 glab mr note create --help 2>&1 | grep -q -- --file || echo "no --file → use §3b"
 ```
 Missing or erroring → §3b (the raw discussions API; every `glab` has it). The
-` ```suggestion:-0+0 ` block in the comment body works on **both** paths — keep it
+` ```suggestion:-0+0 ` block in the comment body works on **both** paths - keep it
 when you fall back to §3b; don't downgrade an applicable suggestion to plain prose.
 
 ### 3b. Raw discussions API (fallback)
@@ -162,7 +162,7 @@ Needs the URL-encoded project path in the URL (glab does **not** fill `:id` from
 
 > **Send the position as ONE JSON object via `--input`. NEVER build it from
 > `-F 'position[position_type]=text' -F 'position[new_line]=42'` bracket fields.**
-> glab does not encode nested bracket form params — the API silently ignores them
+> glab does not encode nested bracket form params - the API silently ignores them
 > and the note posts as a **general MR comment with `position: null`**, returning
 > **HTTP 201 (success)** with no error. The comment is NOT attached to the file/line,
 > a ` ```suggestion ` block in it renders as plain text (no Apply button), and you
@@ -193,7 +193,7 @@ For a complex body (multi-line ` ```suggestion `, backticks), write the JSON to 
 temp file and `--input file.json` rather than wrestling heredoc/shell quoting.
 
 **Output-filter caveat for POST calls (rtk installed).** A hook that rewrites
-`glab`→`rtk glab` passes through only a subset of flags — it can drop `--input`,
+`glab`→`rtk glab` passes through only a subset of flags - it can drop `--input`,
 `-H`, or nested `-F`, so a posting call routed through it lands malformed. For any
 **write** (`reviews`, `discussions`, `notes`, `--input` bodies) invoke the real
 binary directly (`$(command -v glab)` / full path) or `rtk proxy glab …`; don't
@@ -207,7 +207,7 @@ rely on the auto-rewrite. Read/list/status calls through the filter are fine (§
   `<!-- corgi-review:<file>:<line> -->`; the summary with `<!-- corgi-review -->`.
   Dedup on the MARKER, never on the (LLM-generated, unstable) finding title.
 - **Skip duplicates before posting.** List existing comments and skip any whose
-  body already carries the matching marker. **Always `--paginate`** — the default
+  body already carries the matching marker. **Always `--paginate`** - the default
   page is ~20, so on a busy MR (many bot/review threads) a prior corgi summary or
   finding sits on page 2+ and a non-paginated list silently misses it → you post a
   duplicate or wrongly conclude "no existing comments":
@@ -216,7 +216,7 @@ rely on the auto-rewrite. Read/list/status calls through the filter are fine (§
   glab api --paginate "projects/<group>%2F<proj>/merge_requests/<n>/discussions" --hostname <host> -q '.[].notes[].body'
   ```
   GitLab native posting can also pass `--unique` as a backstop.
-- **GitLab — verify each inline note actually anchored (silent-unanchored guard).**
+- **GitLab - verify each inline note actually anchored (silent-unanchored guard).**
   GitLab returns 201 even when a position is malformed/ignored (§3b warning), so a
   successful exit code does **not** mean the comment attached. After posting, re-fetch
   and assert every inline note carries a non-null `position`:
@@ -226,13 +226,13 @@ rely on the auto-rewrite. Read/list/status calls through the filter are fine (§
   ```
   Any `anchored:false` landed as a general comment → **delete it and repost via §3b
   JSON** (don't leave the broken one). The note-id `DELETE` works directly off the
-  MR (no discussion-id needed) — handy for cleaning up a batch of unanchored notes:
+  MR (no discussion-id needed) - handy for cleaning up a batch of unanchored notes:
   ```bash
   glab api --method DELETE \
     "projects/<group>%2F<proj>/merge_requests/<n>/notes/<note_id>" --hostname <host>
   # (or the discussions/<discussion_id>/notes/<note_id> form if you have the discussion id)
   ```
-  (GitHub doesn't have this trap — its reviews API rejects an off-diff line with a
+  (GitHub doesn't have this trap - its reviews API rejects an off-diff line with a
   loud `422` instead of posting unanchored. GitHub inline cleanup, if ever needed:
   `gh api --method DELETE repos/<owner>/<repo>/pulls/comments/<comment_id>`.)
 - **Finding not in the diff** → can't inline → append to the summary body.
@@ -251,17 +251,17 @@ rely on the auto-rewrite. Read/list/status calls through the filter are fine (§
 
 ---
 
-## 5. Mode B — read incoming threads, reply, resolve
+## 5. Mode B - read incoming threads, reply, resolve
 
 For the **address-review** mode (SKILL Mode B). Read the **human** review threads,
 reply, and resolve **only** the ones you addressed. (**Mode A** uses the *read*
-commands here too — to prune findings a human already raised, the author already
-answered, or that sit on a resolved thread — but never the reply/resolve ones.) Push fixes with `git push` (no
-force) from the PR's branch — never merge, never undraft.
+commands here too - to prune findings a human already raised, the author already
+answered, or that sit on a resolved thread - but never the reply/resolve ones.) Push fixes with `git push` (no
+force) from the PR's branch - never merge, never undraft.
 
 **GitHub** (review-thread resolution state lives only in GraphQL):
 ```bash
-# inline review comments — id, path, line, author, reply chain, body
+# inline review comments - id, path, line, author, reply chain, body
 gh api repos/<owner>/<repo>/pulls/<n>/comments \
   -q '.[] | {id, path, line, user: .user.login, reply_to: .in_reply_to_id, body}'
 # thread ids + isResolved (skip resolved; skip your own <!-- corgi-review --> bodies):
@@ -271,7 +271,7 @@ gh api graphql -F o=<owner> -F r=<repo> -F n=<n> -f query='
       id isResolved comments(first:1){nodes{path line author{login} body}}}}}}}'
 # reply into a thread (in_reply_to = the thread's ROOT comment id):
 gh api --method POST repos/<owner>/<repo>/pulls/<n>/comments \
-  -F in_reply_to=<root_comment_id> -f body='Fixed in <sha> — …'
+  -F in_reply_to=<root_comment_id> -f body='Fixed in <sha> - …'
 # resolve a thread you addressed (threadId from the GraphQL above):
 gh api graphql -F t=<thread_id> -f query='
   mutation($t:ID!){resolveReviewThread(input:{threadId:$t}){thread{isResolved}}}'
@@ -279,23 +279,23 @@ gh api graphql -F t=<thread_id> -f query='
 
 **GitLab** (discussions carry `resolvable`/`resolved` inline):
 ```bash
-# discussions — each .notes[] has author.username, resolvable, resolved, body
+# discussions - each .notes[] has author.username, resolvable, resolved, body
 glab api "projects/<group>%2F<proj>/merge_requests/<n>/discussions" --hostname <host> \
   -q '.[] | {id, notes: [.notes[] | {author: .author.username, resolvable, resolved, body}]}'
 # reply into a discussion:
 glab api --method POST \
   "projects/<group>%2F<proj>/merge_requests/<n>/discussions/<discussion_id>/notes" \
-  --hostname <host> -f body='Fixed in <sha> — …'
+  --hostname <host> -f body='Fixed in <sha> - …'
 # resolve a discussion you addressed:
 glab api --method PUT \
   "projects/<group>%2F<proj>/merge_requests/<n>/discussions/<discussion_id>?resolved=true" \
   --hostname <host>
 ```
 
-Keep an unaddressed / pushed-back thread **open** — only resolve what you applied.
+Keep an unaddressed / pushed-back thread **open** - only resolve what you applied.
 
 **Anti-pattern:** replying with `gh pr comment` / `glab mr note create -m`. Both post
-a **standalone PR/MR-level note**, not a thread reply — the reviewer's thread stays
+a **standalone PR/MR-level note**, not a thread reply - the reviewer's thread stays
 visually unanswered and the reply floats detached. Always use the thread forms above
 (`in_reply_to` / `discussions/<id>/notes`).
 
@@ -337,16 +337,16 @@ Failing job log: `gh run view <run-id> --log-failed` / `glab ci trace --branch <
 ### 6a. Images in a PR/MR body (screenshots, before/after)
 
 An image link the reviewer's browser cannot fetch renders as an empty box, and the
-posting call still exits 0 — so check the **form** of the link, not the exit code.
+posting call still exits 0 - so check the **form** of the link, not the exit code.
 
-**GitLab** — the project upload endpoint, `--form` (a file), not `-F` (a form field,
+**GitLab** - the project upload endpoint, `--form` (a file), not `-F` (a form field,
 which returns `400 Bad Request` on a file):
 ```bash
 glab api --method POST "projects/<group>%2F<proj>/uploads" --form "file=@<scratch>/1-<what>.png"
-# → .markdown is "![1-<what>](/uploads/<hash>/1-<what>.png)" — paste it verbatim
+# → .markdown is "![1-<what>](/uploads/<hash>/1-<what>.png)" - paste it verbatim
 ```
 
-**GitHub (and any forge, one line)** — `gh` has no upload endpoint and the
+**GitHub (and any forge, one line)** - `gh` has no upload endpoint and the
 drag-and-drop host (`user-attachments`) is browser-only. Commit the images to a
 long-lived assets branch of the same repo and link them through the blob viewer:
 ```bash
@@ -354,23 +354,23 @@ corgi assets push <scratch>/*.png --key <key> --dir <repo dir>     # --json for 
 ```
 It commits the files to `docs/pr-assets/<key>/` on `pr-assets/<key>` (created from
 `origin/<base>` the first time, appended to after), pushes, confirms origin has that
-head, and prints one `![name](url)` per file plus a one-row table — paste those. The
+head, and prints one `![name](url)` per file plus a one-row table - paste those. The
 user's checkout is untouched (a throwaway worktree does the work). Link form it
-prints — the only one a private repo renders; it works on a public one too:
+prints - the only one a private repo renders; it works on a public one too:
 ```
 https://github.com/<owner>/<repo>/blob/pr-assets/<key>/docs/pr-assets/<key>/1-<what>.png?raw=true
 https://<gitlab host>/<group>/<proj>/-/raw/pr-assets/<key>/docs/pr-assets/<key>/1-<what>.png
 ```
-Never `raw.githubusercontent.com/…` (a private repo answers 404 to the browser — the
+Never `raw.githubusercontent.com/…` (a private repo answers 404 to the browser - the
 box is empty and GitHub shows no error), never a `file://` or local path, never an
 image on the PR branch itself (it dies with the branch after the merge; a squash makes
 the commit unreachable). The assets branch is never merged and never deleted; one
 branch per story key, more images appended to it on a later run.
 
 Verify before posting: `corgi assets push` already checked origin has the head; still
-`grep` the body for `raw.githubusercontent.com` and local paths — none. Then post.
+`grep` the body for `raw.githubusercontent.com` and local paths - none. Then post.
 
-**Tracker comment (Linear / Jira)** — a forge link needs a forge session the tracker
+**Tracker comment (Linear / Jira)** - a forge link needs a forge session the tracker
 does not have, so an image posted to the ticket goes through the tracker's own upload:
 Linear `prepare_attachment_upload` → `PUT` the bytes to the returned URL with the
 returned headers → `![<what>](<assetUrl>)` in the comment; Jira the issue attachments
@@ -381,5 +381,5 @@ endpoint. The forge link stays for the PR; the tracker gets its own copy.
 ## Context
 
 - The hidden markers `<!-- corgi-review -->` (summary) and
-  `<!-- corgi-review:<file>:<line> -->` (inline) MUST appear exactly — they are the
+  `<!-- corgi-review:<file>:<line> -->` (inline) MUST appear exactly - they are the
   idempotency keys.

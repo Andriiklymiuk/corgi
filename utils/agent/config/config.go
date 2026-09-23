@@ -106,7 +106,7 @@ func LoadUser(path string) (*UserConfig, error) {
 	if runtime.GOOS != "windows" {
 		if mode := info.Mode().Perm(); mode&0o077 != 0 {
 			return nil, fmt.Errorf(
-				"%s is readable by other users (mode %04o) — run: chmod 600 %s",
+				"%s is readable by other users (mode %04o) - run: chmod 600 %s",
 				path, mode, path)
 		}
 	}
@@ -120,7 +120,7 @@ func LoadUser(path string) (*UserConfig, error) {
 	}
 	if c.Defaults.DangerouslySkipPermissions {
 		return nil, fmt.Errorf(
-			"%s: dangerouslySkipPermissions cannot be set under defaults: — set it per-workspace or per-profile, so each bypass is a deliberate opt-in with an opt-out",
+			"%s: dangerouslySkipPermissions cannot be set under defaults: - set it per-workspace or per-profile, so each bypass is a deliberate opt-in with an opt-out",
 			path)
 	}
 	if c.Workspaces == nil {
@@ -528,7 +528,7 @@ func ApplyProfile(r Resolved, user *UserConfig, name string) (Resolved, error) {
 		return r, nil
 	}
 	if user == nil || len(user.Profiles) == 0 {
-		return r, fmt.Errorf("no profiles defined — add a profiles: section to the agent config")
+		return r, fmt.Errorf("no profiles defined - add a profiles: section to the agent config")
 	}
 	p, ok := user.Profiles[name]
 	if !ok {

@@ -46,7 +46,7 @@ func runAgentLogs(cmd *cobra.Command, args []string) {
 		return
 	}
 	if len(timeline) == 0 {
-		utils.Infof("no events recorded for %s yet — the timeline fills as the daemon runs sessions\n", res.Workspace.ID)
+		utils.Infof("no events recorded for %s yet - the timeline fills as the daemon runs sessions\n", res.Workspace.ID)
 		return
 	}
 	for _, e := range timeline {
@@ -61,14 +61,14 @@ func describeEvent(e events.Event) string {
 	case "session":
 		return "session " + e.URL
 	case "disabled":
-		return "disabled — " + e.Reason
+		return "disabled - " + e.Reason
 	case "exited":
 		s := "exited"
 		if e.Cause != "" {
 			s += " · " + e.Cause
 		}
 		if e.Reason != "" {
-			s += " — " + e.Reason
+			s += " - " + e.Reason
 		}
 		return s
 	}

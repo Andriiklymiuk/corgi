@@ -299,7 +299,7 @@ func TestConnectFirstAwsVpnProfile_DoesNotLeakProfileName(t *testing.T) {
 	}
 	for _, token := range extractQuoted(capturedScript) {
 		if !allowedQuoted[token] {
-			t.Errorf("script contains unexpected quoted token %q — possible profile-name leak", token)
+			t.Errorf("script contains unexpected quoted token %q - possible profile-name leak", token)
 		}
 	}
 }
@@ -388,6 +388,6 @@ func TestAwsVpnLinux_NoPgrepMeansNoBlindLaunch(t *testing.T) {
 	launched := false
 	withLinuxVpn(t, func() (bool, error) { return false, errNoPgrep }, func() error { launched = true; return nil })
 	if err := awsVpnInitLinux(); err != nil || launched {
-		t.Fatalf("err=%v launched=%v — without pgrep corgi must neither fail nor launch", err, launched)
+		t.Fatalf("err=%v launched=%v - without pgrep corgi must neither fail nor launch", err, launched)
 	}
 }

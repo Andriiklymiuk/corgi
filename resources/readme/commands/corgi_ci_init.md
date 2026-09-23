@@ -16,7 +16,7 @@ GitHub gets .github/workflows/stack-e2e.yml, which installs corgi through the
 official action and reads the cache plan from its outputs.
 
 GitLab gets .gitlab-ci.yml, which includes corgi's published job template, plus
-.gitlab/corgi-cache.yml generated from this compose — GitLab cannot read the
+.gitlab/corgi-cache.yml generated from this compose - GitLab cannot read the
 plan at runtime, so it is committed and guarded by
 `corgi cache paths --gitlab --check`.
 

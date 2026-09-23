@@ -36,7 +36,7 @@ func TestAttemptsGroupAndPick(t *testing.T) {
 	if len(cmds) != 3 || cmds[0].Action != command.ActionNote || cmds[0].SessionID != "a" || cmds[0].Note != "picked of ABC-1" {
 		t.Fatalf("%+v", cmds)
 	}
-	if cmds[1].Action != command.ActionInterrupt || cmds[1].SessionID != "b" || cmds[2].Action != command.ActionNote || cmds[2].Note != "not picked — attempt 1 was" {
+	if cmds[1].Action != command.ActionInterrupt || cmds[1].SessionID != "b" || cmds[2].Action != command.ActionNote || cmds[2].Note != "not picked - attempt 1 was" {
 		t.Fatalf("%+v", cmds[1:])
 	}
 }

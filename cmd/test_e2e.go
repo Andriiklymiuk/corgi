@@ -22,7 +22,7 @@ func runE2ESuite(cmd *cobra.Command) {
 
 	suite := corgi.E2E
 	if suite == nil || suite.Run == "" {
-		failE2E("no e2e: block in corgi-compose.yml — declare one with workdir/install/run, or drop --e2e to run each service's test script")
+		failE2E("no e2e: block in corgi-compose.yml - declare one with workdir/install/run, or drop --e2e to run each service's test script")
 	}
 
 	workdir := filepath.Join(utils.CorgiComposePathDir, suite.Workdir)
@@ -76,7 +76,7 @@ func collectE2EArtifacts(cmd *cobra.Command, suite *utils.E2ESuite, workdir stri
 		info, statErr := os.Stat(src)
 		if statErr != nil {
 			utils.Infof(
-				"⚠️  e2e artifacts: %q not found under the suite workdir (%s) — `artifacts:` paths are relative to `workdir:`\n",
+				"⚠️  e2e artifacts: %q not found under the suite workdir (%s) - `artifacts:` paths are relative to `workdir:`\n",
 				declared, workdir,
 			)
 			continue

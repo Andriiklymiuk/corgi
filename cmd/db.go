@@ -82,7 +82,7 @@ func init() {
 		"Run a single query/command non-interactively and exit.\n"+
 			"For redis-family drivers the query is split on whitespace, so quoted\n"+
 			"arguments containing spaces (e.g. SET foo \"hello world\") are not\n"+
-			"preserved — wrap them in a script file or use the interactive shell.")
+			"preserved - wrap them in a script file or use the interactive shell.")
 	dbCmd.AddCommand(dbShellCmd)
 
 	dbSnapshotCmd.Flags().BoolVar(&snapList, "list", false, "List snapshots for the service")

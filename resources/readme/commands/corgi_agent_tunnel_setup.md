@@ -10,11 +10,11 @@ Does the permanent-URL setup end to end and remembers it for later runs.
 
 For cloudflared (the default) it logs you in if needed, creates the named
 tunnel when it does not exist, routes the DNS name to it, and saves both flags
-so a plain `corgi agent restart` keeps the same URL — and the phone
+so a plain `corgi agent restart` keeps the same URL - and the phone
 stays paired, because the origin never changes.
 
 For ngrok it checks the authtoken and saves the domain. Every free account
-already has one static `*.ngrok-free.dev` dev domain — copy it from
+already has one static `*.ngrok-free.dev` dev domain - copy it from
 dashboard.ngrok.com/domains; its name cannot be chosen on the free tier.
 
 ```

@@ -40,7 +40,7 @@ func (d *Daemon) continueHeadless(ctx context.Context, ref, text string) {
 		s = ended
 	}
 	if s.Status != sessions.StatusGone {
-		err := fmt.Errorf("%s still has a terminal — Send types into it; a headless turn is for a session whose terminal is gone", label(s))
+		err := fmt.Errorf("%s still has a terminal - Send types into it; a headless turn is for a session whose terminal is gone", label(s))
 		utils.Infof("agent: continue %s: %v\n", ref, err)
 		d.Sessions.SetNotice(err)
 		return

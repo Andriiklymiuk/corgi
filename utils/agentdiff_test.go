@@ -95,7 +95,7 @@ func TestDiffIncludesUntrackedFiles(t *testing.T) {
 
 	files := got.Repos[0].Files
 	if len(files) != 1 {
-		t.Fatalf("files = %d, want 1 — a newly created file must not read as an empty diff", len(files))
+		t.Fatalf("files = %d, want 1 - a newly created file must not read as an empty diff", len(files))
 	}
 	if !files[0].New {
 		t.Error("a new file should be flagged as such")
@@ -282,7 +282,7 @@ func TestDiffCountsAServiceSharedRepoOnce(t *testing.T) {
 	}, "main", true)
 
 	if len(got.Repos) != 1 {
-		t.Fatalf("repos = %d, want 1 — both services live in one repository", len(got.Repos))
+		t.Fatalf("repos = %d, want 1 - both services live in one repository", len(got.Repos))
 	}
 	if len(got.Repos[0].AlsoServing) != 1 {
 		t.Errorf("alsoServing = %v, want the second service named", got.Repos[0].AlsoServing)

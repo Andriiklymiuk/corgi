@@ -1,6 +1,6 @@
 # image driver
 
-Generic Docker-image driver. Use for any service that ships as a public image — gotenberg (PDF conversion), mailhog (SMTP catcher), jaeger (tracing), meilisearch (search), redis-commander, and so on.
+Generic Docker-image driver. Use for any service that ships as a public image - gotenberg (PDF conversion), mailhog (SMTP catcher), jaeger (tracing), meilisearch (search), redis-commander, and so on.
 
 Lives under `db_services:` because corgi treats it as infra (declared, lifecycle-managed, env-emitting), not a code repo.
 
@@ -38,7 +38,7 @@ services:
         envAlias: PDF_SERVICE   # → PDF_SERVICE_URL=http://localhost:3100
 ```
 
-`envAlias: none` collapses the prefix entirely (just `URL=`, `HOST=`, `PORT=`) — usually not what you want for `image` because emitted vars would clash with other drivers.
+`envAlias: none` collapses the prefix entirely (just `URL=`, `HOST=`, `PORT=`) - usually not what you want for `image` because emitted vars would clash with other drivers.
 
 ## Fields
 
@@ -84,7 +84,7 @@ db_services:
       - ./meili_data:/meili_data
 ```
 
-Bind mounts (`./local:/inside`) and named volumes (`my-vol:/inside`) both supported. Named volumes need a top-level `volumes:` block in docker-compose, which corgi doesn't auto-emit yet — bind mounts only for now.
+Bind mounts (`./local:/inside`) and named volumes (`my-vol:/inside`) both supported. Named volumes need a top-level `volumes:` block in docker-compose, which corgi doesn't auto-emit yet - bind mounts only for now.
 
 ### `command: []string`
 
@@ -118,9 +118,9 @@ db_services:
 
 ## When NOT to use the image driver
 
-- **Service ships from your own repo with a Dockerfile** — use `services:` with `runner: { name: docker }` instead.
-- **Service is a database with first-class corgi support** (postgres, redis, mysql, etc.) — use the dedicated driver. You get DB-specific env emission (`DB_HOST`, `DB_PORT`, etc.) and seeding helpers (`seedFromFilePath:`, `seedFromDb:`).
-- **Service has corgi-emitted bootstrap logic** (supabase, localstack) — use those drivers; they handle config files, JWT signing, queue creation, etc.
+- **Service ships from your own repo with a Dockerfile** - use `services:` with `runner: { name: docker }` instead.
+- **Service is a database with first-class corgi support** (postgres, redis, mysql, etc.) - use the dedicated driver. You get DB-specific env emission (`DB_HOST`, `DB_PORT`, etc.) and seeding helpers (`seedFromFilePath:`, `seedFromDb:`).
+- **Service has corgi-emitted bootstrap logic** (supabase, localstack) - use those drivers; they handle config files, JWT signing, queue creation, etc.
 
 The `image` driver is for the long tail of "useful third-party stateless tools" where corgi has no bespoke driver and probably never will.
 
@@ -129,6 +129,6 @@ The `image` driver is for the long tail of "useful third-party stateless tools" 
 - No `depends_on:` between db_services (corgi has no inter-service ordering for db_services yet).
 - No `restart:` policy override (hardcoded `unless-stopped`).
 - No `networks:` override (uses corgi's default `corgi-network` bridge).
-- No top-level named-volume declaration — only bind mounts work without manual docker-compose edits.
+- No top-level named-volume declaration - only bind mounts work without manual docker-compose edits.
 
 These can be added when the first user needs them.

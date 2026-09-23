@@ -83,7 +83,7 @@ func TestWatchSinkNotifiesAndFixesOnce(t *testing.T) {
 	d.handleWatchEvent(context.Background(), e)
 
 	got := collectNotes(t, notes, "fixed ABC-1")
-	if !got["new issue ABC-1 — Login loops"] || !got["fixed ABC-1 — Login loops\napi: https://github.com/acme/api/pull/412"] {
+	if !got["new issue ABC-1 - Login loops"] || !got["fixed ABC-1 - Login loops\napi: https://github.com/acme/api/pull/412"] {
 		t.Fatalf("notices %v", got)
 	}
 	if len(*ran) != 1 || !strings.Contains((*ran)[0], "--dangerously-skip-permissions") || !strings.Contains((*ran)[0], "/corgi:stories ABC-1") {
@@ -111,10 +111,10 @@ func TestATicketIWroteMyselfFixesWithoutRinging(t *testing.T) {
 	d.handleWatchEvent(context.Background(), watch.Event{Key: "linear:ABC-1", Source: "linear", Kind: watch.KindIssueNew, Ref: "ABC-1", Title: "Login loops", Mine: true, Self: true, Author: "Andrii", At: time.Now()})
 
 	got := collectNotes(t, notes, "fixed ABC-1")
-	if got["new issue ABC-1 — Login loops"] {
+	if got["new issue ABC-1 - Login loops"] {
 		t.Fatalf("a ticket I wrote rang as news: %v", got)
 	}
-	if !got["fixed ABC-1 — Login loops\napi: https://github.com/acme/api/pull/412"] || len(*ran) != 1 {
+	if !got["fixed ABC-1 - Login loops\napi: https://github.com/acme/api/pull/412"] || len(*ran) != 1 {
 		t.Fatalf("the fix must still run and report: %v, runs %v", got, *ran)
 	}
 	if data, _ := os.ReadFile(filepath.Join(d.Dir, "watch", "events.jsonl")); !strings.Contains(string(data), "ABC-1") {
@@ -135,7 +135,7 @@ func TestDeferredFixIsNotRunAndNotRetried(t *testing.T) {
 	d.handleWatchEvent(context.Background(), first)
 	d.handleWatchEvent(context.Background(), second)
 	got := collectNotes(t, notes, "fixed ABC-1", "fix deferred")
-	if !got["new issue ABC-2 — two (fix deferred: 1/h cap)"] {
+	if !got["new issue ABC-2 - two (fix deferred: 1/h cap)"] {
 		t.Fatalf("notices %v", got)
 	}
 	if len(*ran) != 1 {
@@ -600,7 +600,7 @@ func TestTicketsArrivingTogetherShareOneRun(t *testing.T) {
 		d.handleWatchEvent(context.Background(), watch.Event{Key: "linear:" + ref, Source: "linear", Kind: watch.KindIssueNew, Ref: ref, Title: "Story " + ref, Mine: true, At: time.Now()})
 	}
 	got := collectNotes(t, notes, "fixed ABC-1 + ABC-2")
-	if !got["fixed ABC-1 + ABC-2 — Story ABC-1\napi: https://github.com/acme/api/pull/412"] {
+	if !got["fixed ABC-1 + ABC-2 - Story ABC-1\napi: https://github.com/acme/api/pull/412"] {
 		t.Fatalf("one notice for the batch: %v", got)
 	}
 	if len(*ran) != 1 || !strings.Contains((*ran)[0], "/corgi:stories ABC-1 ABC-2") {

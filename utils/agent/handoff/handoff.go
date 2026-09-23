@@ -240,7 +240,7 @@ func (p Packet) Markdown() string {
 	writeSection(&b, "Done", p.Done)
 	writeSection(&b, "Remaining", p.Remaining)
 	writeSection(&b, "Decisions", p.Decisions)
-	writeSection(&b, "Uncertain — ask before assuming", p.Uncertain)
+	writeSection(&b, "Uncertain - ask before assuming", p.Uncertain)
 	if p.Verification != nil {
 		fmt.Fprintf(&b, "\n## Verified\n`%s` → exit %d", p.Verification.Cmd, p.Verification.Exit)
 		if p.Verification.At != "" {
@@ -259,7 +259,7 @@ func (p Packet) writeHeading(b *strings.Builder) {
 	fmt.Fprintf(b, "# Handoff · %s\n\n", p.Ref)
 	fmt.Fprintf(b, "state: **%s**", p.State)
 	if p.Blocked != "" {
-		fmt.Fprintf(b, " — %s", p.Blocked)
+		fmt.Fprintf(b, " - %s", p.Blocked)
 	}
 	if p.Draft {
 		b.WriteString(" _(draft: assembled by corgi, not written by the run)_")

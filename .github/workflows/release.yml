@@ -9,7 +9,7 @@ jobs:
   gate:
     # Reuse the CI workflow as the gate: lint + test must pass before release.
     # Pass only the one secret the gate needs (GITHUB_TOKEN is auto-provided to
-    # reusable workflows) — never `secrets: inherit`.
+    # reusable workflows) - never `secrets: inherit`.
     uses: ./.github/workflows/test.yml
     secrets:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

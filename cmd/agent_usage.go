@@ -108,7 +108,7 @@ func printUsageReport(rep usageReport) {
 			name += " (" + strings.Replace(a.ConfigDir, os.Getenv("HOME"), "~", 1) + ")"
 		}
 		if a.Limits == nil {
-			fmt.Printf("  %-28s no usage snapshot yet — run /usage once in a session under it\n", name)
+			fmt.Printf("  %-28s no usage snapshot yet - run /usage once in a session under it\n", name)
 			continue
 		}
 		fmt.Printf("  %-28s 5h %s  week %s  · %d session(s) · as of %s ago\n", name,
@@ -226,7 +226,7 @@ func digestText(dir string, now time.Time) string {
 		lines = append(lines, fmt.Sprintf("%s: %d sessions, %d messages, %d tool calls", d.Profile, d.Sessions, d.Messages, d.ToolCalls))
 	}
 	if rep.Waits.Count > 0 {
-		lines = append(lines, fmt.Sprintf("waited on you %d× — median %s, longest %s (%s)", rep.Waits.Count,
+		lines = append(lines, fmt.Sprintf("waited on you %d× - median %s, longest %s (%s)", rep.Waits.Count,
 			shortDuration(time.Duration(rep.Waits.Median)*time.Second), shortDuration(time.Duration(rep.Waits.Longest)*time.Second), rep.Waits.LongestLabel))
 	}
 	if rep.Limited.Count > 0 {

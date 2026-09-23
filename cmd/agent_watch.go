@@ -54,7 +54,7 @@ const (
 
 var agentWatchCmd = &cobra.Command{
 	Use:   "watch",
-	Short: "Watch the tracker and your pull requests: new issues, new comments, reviews — notify, or fix",
+	Short: "Watch the tracker and your pull requests: new issues, new comments, reviews - notify, or fix",
 	Long: `The daemon polls Linear or Jira and GitHub or GitLab for the workspaces that
 opted in, with a saved cursor so each round asks only for what changed, and
 dedupes locally. Webhooks (corgi agent watch hooks) feed the same pipeline
@@ -114,7 +114,7 @@ var agentWatchEnableCmd = &cobra.Command{
 				return fmt.Errorf("--interval: %w", err)
 			}
 			if d < time.Minute {
-				return fmt.Errorf("--interval is at least 1m — polling always runs, beside webhooks too (GitHub asks for 60s between notification polls)")
+				return fmt.Errorf("--interval is at least 1m - polling always runs, beside webhooks too (GitHub asks for 60s between notification polls)")
 			}
 			wc.Interval = v
 		}
@@ -320,7 +320,7 @@ var agentWatchEnableCmd = &cobra.Command{
 		if err := writeUserConfig(path, user); err != nil {
 			return err
 		}
-		utils.Infof("watching %s — %s\n", id, describeWatch(wc))
+		utils.Infof("watching %s - %s\n", id, describeWatch(wc))
 		if order := entry.AgentOrder(); len(order) > 1 || order[0] != harness.Claude {
 			utils.Infof("agent: unattended runs here go through %s\n", agentsWord(order))
 		}
@@ -370,7 +370,7 @@ var agentWatchRunCmd = &cobra.Command{
 			return err
 		}
 		if len(specs) == 0 {
-			utils.Info("no watched workspaces — `corgi agent watch enable` inside one")
+			utils.Info("no watched workspaces - `corgi agent watch enable` inside one")
 			return nil
 		}
 		dryRun, _ := cmd.Flags().GetBool(watchFlagDryRun)
@@ -399,7 +399,7 @@ var agentWatchRunCmd = &cobra.Command{
 			return nil
 		}
 		for _, e := range found {
-			utils.Infof("%-14s %-8s %s — %s\n", e.Kind, e.Workspace, e.Ref, firstLineOf(e.Title))
+			utils.Infof("%-14s %-8s %s - %s\n", e.Kind, e.Workspace, e.Ref, firstLineOf(e.Title))
 		}
 		return nil
 	},
@@ -414,7 +414,7 @@ func handBackDeferred(dir string, fixes *watch.FixLog) {
 	if info == nil || !info.Commands {
 		utils.Infof("%d deferred fix(es), no daemon to hand them to:\n", len(deferred))
 		for _, e := range deferred {
-			utils.Infof("  %-14s %-8s %s — %s\n", e.Kind, e.Workspace, e.Ref, firstLineOf(e.Title))
+			utils.Infof("  %-14s %-8s %s - %s\n", e.Kind, e.Workspace, e.Ref, firstLineOf(e.Title))
 		}
 		return
 	}
@@ -445,7 +445,7 @@ real event.`,
 			return err
 		}
 		if len(specs) == 0 {
-			return fmt.Errorf("no watched workspaces — `corgi agent watch enable` inside one")
+			return fmt.Errorf("no watched workspaces - `corgi agent watch enable` inside one")
 		}
 		ref, _ := cmd.Flags().GetString("ref")
 		url, _ := cmd.Flags().GetString("url")
@@ -466,19 +466,19 @@ real event.`,
 			utils.PrintJSON(map[string]any{"event": e, "routed": routed, "probe": probe})
 			return nil
 		}
-		fmt.Printf("event      %s %s — key %s\n", e.Kind, e.Ref, e.Key)
+		fmt.Printf("event      %s %s - key %s\n", e.Kind, e.Ref, e.Key)
 		if !routed {
-			fmt.Println("workspace  none — no watched workspace owns it and no rules take it")
+			fmt.Println("workspace  none - no watched workspace owns it and no rules take it")
 			return nil
 		}
 		fmt.Printf("workspace  %s\n", probe.Workspace)
 		if !probe.Matched {
-			fmt.Printf("rules      no match — %s\n", probe.Why)
+			fmt.Printf("rules      no match - %s\n", probe.Why)
 			return nil
 		}
 		fmt.Println("rules      match")
 		if probe.Seen {
-			fmt.Println("seen       yes — a duplicate, dropped before the sink")
+			fmt.Println("seen       yes - a duplicate, dropped before the sink")
 		} else {
 			fmt.Println("seen       no")
 		}
@@ -511,7 +511,7 @@ func synthesizeWatchEvent(kind watch.Kind, specs []daemon.WatchSpec, ref, url, b
 	case watch.KindCIFailed:
 		synthesizeCIEvent(&e, first)
 	default:
-		return e, fmt.Errorf("kind %q — want issue.new, issue.comment, pr.comment, pr.review, review.requested or ci.failed", kind)
+		return e, fmt.Errorf("kind %q - want issue.new, issue.comment, pr.comment, pr.review, review.requested or ci.failed", kind)
 	}
 	e.Key = "test:" + string(kind) + ":" + e.Ref
 	return e, nil
@@ -588,7 +588,7 @@ var agentWatchHooksCmd = &cobra.Command{
 Polling stays on beside it whatever you set up: it catches what came while the
 laptop was off or the tunnel was down, and the kinds a webhook here does not
 send (review requests, red builds, a ticket assigned to you). The same comment
-from both is one event — they share its key — so a mix never runs twice.
+from both is one event - they share its key - so a mix never runs twice.
 
 Each source of a workspace can be webhook + poll or poll alone, independently:
 GitLab on webhooks while Jira polls, or GitHub on webhooks while Linear polls.
@@ -608,15 +608,15 @@ A webhook for a repo or project no watched workspace lists is dropped.
 				return err
 			}
 			if rotate && !install {
-				utils.Info("new secret — every webhook set up with the old one now fails until it is updated; --install does GitHub and GitLab")
+				utils.Info("new secret - every webhook set up with the old one now fails until it is updated; --install does GitHub and GitLab")
 			}
 		}
 		base := launcherURL()
 		if base == "" {
 			if install {
-				return fmt.Errorf("no public URL for the webhooks to reach — `corgi agent up` (a named tunnel keeps the URL stable)")
+				return fmt.Errorf("no public URL for the webhooks to reach - `corgi agent up` (a named tunnel keeps the URL stable)")
 			}
-			utils.Info("no public URL yet — `corgi agent up` first; a named tunnel keeps these URLs stable")
+			utils.Info("no public URL yet - `corgi agent up` first; a named tunnel keeps these URLs stable")
 			base = "https://<your-tunnel>"
 		} else {
 			base = strings.TrimSuffix(base, "/app")
@@ -631,11 +631,11 @@ A webhook for a repo or project no watched workspace lists is dropped.
 		}
 		wc := user.Workspaces[id].Watch
 		if wc == nil || !wc.Enabled {
-			return fmt.Errorf("%s is not watched — `corgi agent watch enable` there first", id)
+			return fmt.Errorf("%s is not watched - `corgi agent watch enable` there first", id)
 		}
 		ws := watch.LoadSecretsFor(dir, id)
 		plan := hookPlanFor(wc, ws)
-		fmt.Printf("%s — webhooks at %s/hooks/<source>, polling every %s beside them\n\n", id, base, firstNonEmptyString(wc.Interval, "3m"))
+		fmt.Printf("%s - webhooks at %s/hooks/<source>, polling every %s beside them\n\n", id, base, firstNonEmptyString(wc.Interval, "3m"))
 		// The watch token only has to read; setting a hook up needs a write.
 		// A read-only token hands over to the forge CLI's own login for this.
 		glAuth := map[string]string{"PRIVATE-TOKEN": ws.GitLab}
@@ -669,7 +669,7 @@ A webhook for a repo or project no watched workspace lists is dropped.
 			fmt.Println(line)
 		}
 		if plan.githubAny {
-			fmt.Println("  github  every repo (no --repos) — --install needs a list; set --repos, or add an org webhook by hand")
+			fmt.Println("  github  every repo (no --repos) - --install needs a list; set --repos, or add an org webhook by hand")
 		}
 		if !install && (len(plan.gitlab) > 0 || len(plan.github) > 0) {
 			fmt.Println("\n  --install creates or updates these (GitLab: Maintainer; GitHub: repo admin). By hand:")
@@ -768,7 +768,7 @@ var agentWatchAuthCmd = &cobra.Command{
 	Long: `Without --local the token is the machine-wide one every watched
 workspace falls back to. With --local (run inside the workspace) or
 --workspace <id> it is stored for that workspace only and beats both the
-machine-wide token and the environment — one Jira per client, a second
+machine-wide token and the environment - one Jira per client, a second
 Linear key, a self-hosted GitLab.
 
 Tokens are never written into the repository. They live in the user-level
@@ -957,7 +957,7 @@ func runAgentWatchStatus(_ *cobra.Command, _ []string) {
 	printWatchPolls(state.Summaries())
 	printWatchFixes(state.Fixes.RecentFixes("", 5), now)
 	if n := countWatchEventsToday(dir); n > 0 {
-		fmt.Printf("\n%d event(s) today — %s\n", n, filepath.Join(dir, "watch", "events.jsonl"))
+		fmt.Printf("\n%d event(s) today - %s\n", n, filepath.Join(dir, "watch", "events.jsonl"))
 	}
 }
 
@@ -976,7 +976,7 @@ func printWatchedWorkspaces(specs []daemon.WatchSpec, fixes *watch.FixLog, now t
 		if s.Action == "fix" {
 			fmt.Printf("  %-20s %s\n", "", fixBudgetLine(s, fixes, now))
 		} else if s.Quiet != "" {
-			fmt.Printf("  %-20s quiet %s — held until the window opens\n", "", s.Quiet)
+			fmt.Printf("  %-20s quiet %s - held until the window opens\n", "", s.Quiet)
 		}
 		if line := chatStatusLine(s); line != "" {
 			fmt.Printf("  %-20s %s\n", "", line)
@@ -1283,7 +1283,7 @@ func watchTargetWorkspace(dir string, flags *pflag.FlagSet) (string, error) {
 			return id, nil
 		}
 	}
-	return "", fmt.Errorf("%q is not a registered workspace — `corgi agent init` there first", id)
+	return "", fmt.Errorf("%q is not a registered workspace - `corgi agent init` there first", id)
 }
 
 func currentWorkspaceID(dir string) (string, error) {
@@ -1309,7 +1309,7 @@ func currentWorkspaceID(dir string) (string, error) {
 		}
 	}
 	if best == "" {
-		return "", fmt.Errorf("%s is not a registered workspace — `corgi agent init` here first", cwd)
+		return "", fmt.Errorf("%s is not a registered workspace - `corgi agent init` here first", cwd)
 	}
 	return best, nil
 }
@@ -1433,7 +1433,7 @@ func init() {
 	f.String("tracker", "", "linear or jira (default: whichever has a token)")
 	f.String("repos", "", "GitHub repos to watch for PR feedback, comma-separated owner/repo (default: any)")
 	f.String("interval", "", "Poll interval, e.g. 3m; 0 means webhooks only")
-	f.String("action", "", "notify (default) or fix — fix starts a headless claude with the matching skill, draft PRs only")
+	f.String("action", "", "notify (default) or fix - fix starts a headless claude with the matching skill, draft PRs only")
 	f.String("workspace", "", "Workspace id to change; omitted means the one you are in")
 	agentWatchDisableCmd.Flags().String("workspace", "", "Workspace id to stop watching; omitted means the one you are in")
 	f.Bool("auto", false, "Shorthand for --action fix --prs --comments (not --reviews: reviewing someone else's PR is a separate ask): work on what arrives without being asked, draft PRs only")
@@ -1442,9 +1442,9 @@ func init() {
 	f.Int(watchFlagMaxPerHour, 0, "With --action fix: at most this many fixes an hour (default 3); more are deferred")
 	f.Int(watchFlagMaxPerDay, 0, "With --action fix: at most this many fixes a day (default 10)")
 	f.Int(watchFlagLimitCeiling, 0, "With --action fix: the usage-window percent past which no run starts here (default 95; 100 never waits on usage, only on the caps)")
-	f.Int(watchFlagMaxTotal, 0, "With --action fix: at most this many fixes in total, counted from now — a cap for a trip; run enable --max-total again to reset, 0 clears")
+	f.Int(watchFlagMaxTotal, 0, "With --action fix: at most this many fixes in total, counted from now - a cap for a trip; run enable --max-total again to reset, 0 clears")
 	f.String("quiet", "", "Local hours to stay quiet in, e.g. 23:00-07:00: no fix starts and nothing buzzes; one summary when it opens")
-	f.String(watchFlagDaysOff, "", "Days the watch sleeps through — weekends, or sat,sun, or mon,fri: no polling, no fix, nothing rings until the next working day (none clears)")
+	f.String(watchFlagDaysOff, "", "Days the watch sleeps through - weekends, or sat,sun, or mon,fri: no polling, no fix, nothing rings until the next working day (none clears)")
 	f.String("pickup", "", "Column a ticket moves to when it is picked up, e.g. \"In Progress\"; empty writes nothing")
 	f.String(watchFlagReviewStatus, "", "Column a ticket moves to once a run opened a pull request for it, e.g. \"In Review\"")
 	f.Bool("lease", false, "Claim a ticket on the tracker before working it, so a second machine watching the same board leaves it alone")
@@ -1453,31 +1453,31 @@ func init() {
 	f.StringSlice("agents", nil, "The agents to try in order, e.g. claude,codex: the next takes a run when the first cannot")
 	f.String(watchFlagPruneAfter, "", "Remove an isolated run's worktrees this long after it finished, e.g. 7d; the branch stays, a dirty worktree stays (empty keeps them until `watch undo` or `watch prune`)")
 	f.Bool(watchFlagNoRetry, false, "Leave deferred fixes to a manual `watch run` instead of starting them when the budget returns")
-	f.Bool("reviews", false, "Also pull requests someone asked me to review — theirs, not mine")
+	f.Bool("reviews", false, "Also pull requests someone asked me to review - theirs, not mine")
 	f.Bool(watchFlagAutoMerge, false, "Merge a pull request of mine the moment its checks pass and it is approved (read from the forge once a round)")
 	f.Int("batch", 1, "Tickets that arrive within 90 s of each other share one run, up to this many (1 is off); one preflight and one context for the lot")
-	f.String(watchFlagAfterMerge, "", "Move the ticket to this column once every pull request of its run is merged — a name from `corgi agent watch board`; empty leaves it where it is")
+	f.String(watchFlagAfterMerge, "", "Move the ticket to this column once every pull request of its run is merged - a name from `corgi agent watch board`; empty leaves it where it is")
 	f.String(watchFlagAfterMergeSubtasks, "", "Where a subtask goes instead when its pull request merges (Done, say); empty means the same column as --after-merge")
 	f.Bool("bots", false, "Comments from bot accounts count too (a review bot whose findings are to be fixed); off, a bot is not a person waiting")
 	f.Bool("approve", false, "An unattended review of a pull request I was asked to review may approve it when nothing blocks and the risk card allows")
 	f.Bool(watchFlagHandOver, false, "Type a review comment, a red build or an asked-for review into the session already on that branch")
 	f.Bool("headless", false, "Let a message for a session whose terminal is gone run as one headless turn (claude -p --resume, or codex exec resume; acceptEdits) in its own checkout, so the phone's chat keeps working")
-	f.Bool("silent", false, "Nothing about this workspace's watch rings — no toast, no phone push: fixes run, the inbox and the kanban fill, and you look when you like (--silent=false to ring again)")
+	f.Bool("silent", false, "Nothing about this workspace's watch rings - no toast, no phone push: fixes run, the inbox and the kanban fill, and you look when you like (--silent=false to ring again)")
 	f.Bool(watchFlagRerunCI, false, "Rerun the failed jobs of a red build once before it is worked on or handed over; a second red on the same run goes the usual way (GitHub)")
 	f.Bool(watchFlagAutoCarry, false, "Carry a session that hit its five-hour quota to another of the workspace's accounts with budget, once per limit (only profiles the accounts list names)")
 	f.Int("slots", 1, "How many unattended runs may go at once in this workspace (1 to 8); above 1 turns on --isolate so each has worktrees of its own")
-	f.Bool("lessons", false, "Write what the workspace learned the hard way — a review on a PR of mine, a check that stayed red, a bot that failed — one line each for every new session to read (corgi agent lesson list)")
+	f.Bool("lessons", false, "Write what the workspace learned the hard way - a review on a PR of mine, a check that stayed red, a bot that failed - one line each for every new session to read (corgi agent lesson list)")
 	f.Bool("rebase", false, "Rebase a session's branch onto main where it sits when the session stops behind main with a clean tree and no conflicts (a branch that would conflict is typed into the session under --hand-over)")
-	f.Int(watchFlagCompactAt, 0, "Type /compact into a session past this much context the next time it stops — 85 is where the board goes red; 0 is off")
-	f.String(watchFlagDoneWhen, "", "What finished means here, comma separated: commands run in the session's directory when it stops with changes — `go test ./...,pnpm lint`; a red one is typed back as the next message. Empty is off")
-	f.String(watchFlagPlanReview, "", "Stop for a human before code on a story: always, risk>=N (the story's forecast, 1 to 10), or off. Off means the stories skill gates as today; on, the spec waits for an answer — from the terminal or the phone — before a branch is cut")
-	f.String(watchFlagAutoAllow, "", "Answer a permission prompt for a tool that only reads — Read, Grep, Glob, a web search — on the daemon's own: reads, or off (Bash always waits for a person; iTerm2 and tmux sessions only)")
-	f.Bool("ci", false, "Also builds that went red on something of mine — the one kind that brings its own test for done")
+	f.Int(watchFlagCompactAt, 0, "Type /compact into a session past this much context the next time it stops - 85 is where the board goes red; 0 is off")
+	f.String(watchFlagDoneWhen, "", "What finished means here, comma separated: commands run in the session's directory when it stops with changes - `go test ./...,pnpm lint`; a red one is typed back as the next message. Empty is off")
+	f.String(watchFlagPlanReview, "", "Stop for a human before code on a story: always, risk>=N (the story's forecast, 1 to 10), or off. Off means the stories skill gates as today; on, the spec waits for an answer - from the terminal or the phone - before a branch is cut")
+	f.String(watchFlagAutoAllow, "", "Answer a permission prompt for a tool that only reads - Read, Grep, Glob, a web search - on the daemon's own: reads, or off (Bash always waits for a person; iTerm2 and tmux sessions only)")
+	f.Bool("ci", false, "Also builds that went red on something of mine - the one kind that brings its own test for done")
 	f.String("from", "", "Only comments and reviews from these people (comma separated); empty is anyone")
 	f.Bool("mentions", false, "Ring when someone names you in Slack or writes to you directly (needs corgi agent watch auth slack)")
 	f.StringSlice("channel", nil, "Slack channels every message of which is news, e.g. #incidents (repeatable)")
 	f.StringSlice("review-channel", nil, "Slack channels where pull requests are posted for review: a post with links is one review, answered in its thread (repeatable)")
-	f.StringSlice("trust", nil, "Colleagues whose Slack mention may start an unattended run — the person who WROTE the message, e.g. @teammate (repeatable). Empty means nobody: a mention only rings")
+	f.StringSlice("trust", nil, "Colleagues whose Slack mention may start an unattended run - the person who WROTE the message, e.g. @teammate (repeatable). Empty means nobody: a mention only rings")
 	f.String("post-to", "", "Default Slack channel for corgi agent chat post")
 	f.String("reply-as", "", "Whose voice a reply speaks in: bot or me (default: the bot when a bot token is stored)")
 	f.String(watchFlagAutoFor, "", "With --action fix, what to work on unattended: tickets, comments, reviews (comma separated). Empty means everything")

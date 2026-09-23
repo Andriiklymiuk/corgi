@@ -119,7 +119,7 @@ func (j *Jira) Move(ctx context.Context, ref, status string) error {
 	if len(names) == 0 {
 		return fmt.Errorf("jira: %s cannot move anywhere from where it is", ref)
 	}
-	return fmt.Errorf("jira: %s cannot move to %q from where it is — it can go to: %s", ref, status, strings.Join(names, ", "))
+	return fmt.Errorf("jira: %s cannot move to %q from where it is - it can go to: %s", ref, status, strings.Join(names, ", "))
 }
 
 func (j *Jira) Assign(ctx context.Context, ref, userID string) error {
@@ -227,7 +227,7 @@ func (l *Linear) Move(ctx context.Context, ref, status string) error {
 	for _, s := range statuses {
 		names = append(names, s.Name)
 	}
-	return fmt.Errorf("linear: no status %q — it has: %s", status, strings.Join(names, ", "))
+	return fmt.Errorf("linear: no status %q - it has: %s", status, strings.Join(names, ", "))
 }
 
 func (l *Linear) Assign(ctx context.Context, ref, userID string) error {

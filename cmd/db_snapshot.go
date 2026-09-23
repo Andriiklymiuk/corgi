@@ -23,7 +23,7 @@ func findNamedPostgresService(name string, dbs []utils.DatabaseService) (utils.D
 	for _, d := range dbs {
 		if d.ServiceName == name {
 			if !utils.IsPostgresFamilyDriver(d.Driver) {
-				return d, fmt.Errorf("db snapshot/restore: driver %q is not supported — postgres-family only (postgres, postgis, pgvector, timescaledb)", d.Driver)
+				return d, fmt.Errorf("db snapshot/restore: driver %q is not supported - postgres-family only (postgres, postgis, pgvector, timescaledb)", d.Driver)
 			}
 			return d, nil
 		}
@@ -48,7 +48,7 @@ func pickSolePostgresService(dbs []utils.DatabaseService) (utils.DatabaseService
 		for i, d := range family {
 			names[i] = d.ServiceName
 		}
-		return utils.DatabaseService{}, fmt.Errorf("multiple postgres-family dbs — name one: %s", strings.Join(names, ", "))
+		return utils.DatabaseService{}, fmt.Errorf("multiple postgres-family dbs - name one: %s", strings.Join(names, ", "))
 	}
 }
 
@@ -129,7 +129,7 @@ func createSnapshot(args []string, dbs []utils.DatabaseService) {
 	}
 
 	if utils.IsStackSupervised(utils.CorgiComposePathDir) {
-		utils.Info("a detached `corgi run` is managing this stack — run `corgi stop` first")
+		utils.Info("a detached `corgi run` is managing this stack - run `corgi stop` first")
 		exitProcess(1)
 	}
 
@@ -175,7 +175,7 @@ func runDbRestore(cmd *cobra.Command, args []string) {
 	}
 
 	if utils.IsStackSupervised(utils.CorgiComposePathDir) {
-		utils.Info("a detached `corgi run` is managing this stack — run `corgi stop` first")
+		utils.Info("a detached `corgi run` is managing this stack - run `corgi stop` first")
 		exitProcess(1)
 	}
 
