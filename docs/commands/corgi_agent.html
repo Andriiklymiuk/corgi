@@ -5,7 +5,7 @@
 <meta name="generator" content="Docusaurus v3.10.0">
 <title data-rh="true">corgi agent | Corgi docs 🐶</title><meta data-rh="true" name="viewport" content="width=device-width,initial-scale=1"><meta data-rh="true" name="twitter:card" content="summary_large_image"><meta data-rh="true" property="og:image" content="https://andriiklymiuk.github.io/corgi/img/corgi-social-card.png"><meta data-rh="true" name="twitter:image" content="https://andriiklymiuk.github.io/corgi/img/corgi-social-card.png"><meta data-rh="true" property="og:url" content="https://andriiklymiuk.github.io/corgi/docs/commands/corgi_agent"><meta data-rh="true" property="og:locale" content="en"><meta data-rh="true" name="docusaurus_locale" content="en"><meta data-rh="true" name="docsearch:language" content="en"><meta data-rh="true" name="docusaurus_version" content="current"><meta data-rh="true" name="docusaurus_tag" content="docs-default-current"><meta data-rh="true" name="docsearch:version" content="current"><meta data-rh="true" name="docsearch:docusaurus_tag" content="docs-default-current"><meta data-rh="true" property="og:title" content="corgi agent | Corgi docs 🐶"><meta data-rh="true" name="description" content="corgi agent"><meta data-rh="true" property="og:description" content="corgi agent"><link data-rh="true" rel="icon" href="/corgi/img/favicon.ico"><link data-rh="true" rel="canonical" href="https://andriiklymiuk.github.io/corgi/docs/commands/corgi_agent"><link data-rh="true" rel="alternate" href="https://andriiklymiuk.github.io/corgi/docs/commands/corgi_agent" hreflang="en"><link data-rh="true" rel="alternate" href="https://andriiklymiuk.github.io/corgi/docs/commands/corgi_agent" hreflang="x-default"><script data-rh="true" type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Commands","item":"https://andriiklymiuk.github.io/corgi/docs/category/commands"},{"@type":"ListItem","position":2,"name":"corgi agent","item":"https://andriiklymiuk.github.io/corgi/docs/commands/corgi_agent"}]}</script><link rel="alternate" type="application/rss+xml" href="/corgi/blog/rss.xml" title="Corgi docs 🐶 RSS Feed">
 <link rel="alternate" type="application/atom+xml" href="/corgi/blog/atom.xml" title="Corgi docs 🐶 Atom Feed"><link rel="stylesheet" href="/corgi/assets/css/styles.d43d84bd.css">
-<script src="/corgi/assets/js/runtime~main.dd10740b.js" defer="defer"></script>
+<script src="/corgi/assets/js/runtime~main.450c5c2c.js" defer="defer"></script>
 <script src="/corgi/assets/js/main.ed089438.js" defer="defer"></script>
 </head>
 <body>
@@ -20,7 +20,7 @@
 <p>Remote Control already gives you a phone-driven Claude Code session on your own
 machine. Two things stop it being always-on: the local process must keep
 running, and it exits after roughly ten minutes awake without network.</p>
-<p>corgi agent supervises it — restarting after a network timeout, holding a wake
+<p>corgi agent supervises it - restarting after a network timeout, holding a wake
 lock so the machine does not sleep mid-session, and running one per workspace
 under that workspace&#x27;s own Claude config directory.</p>
 <p>Getting started:
@@ -56,7 +56,7 @@ corgi agent status    # what is running, and under which account</p>
 <li class=""><a class="" href="/corgi/docs/commands/corgi_agent_digest">corgi agent digest</a>	 - Today&#x27;s one-message summary, as the daily digest would send it</li>
 <li class=""><a class="" href="/corgi/docs/commands/corgi_agent_dismiss">corgi agent dismiss</a>	 - Take a finished session off the board until its next event</li>
 <li class=""><a class="" href="/corgi/docs/commands/corgi_agent_doctor">corgi agent doctor</a>	 - Check whether agent mode can actually work here</li>
-<li class=""><a class="" href="/corgi/docs/commands/corgi_agent_down">corgi agent down</a>	 - Stop everything <code>corgi agent up</code> started — the daemon and the detached MCP + tunnel</li>
+<li class=""><a class="" href="/corgi/docs/commands/corgi_agent_down">corgi agent down</a>	 - Stop everything <code>corgi agent up</code> started - the daemon and the detached MCP + tunnel</li>
 <li class=""><a class="" href="/corgi/docs/commands/corgi_agent_event">corgi agent event</a>	 - Report one event from an agent that is not Claude Code, so it sits on the board</li>
 <li class=""><a class="" href="/corgi/docs/commands/corgi_agent_focus">corgi agent focus</a>	 - Bring a session&#x27;s window to the front and reveal its terminal tab</li>
 <li class=""><a class="" href="/corgi/docs/commands/corgi_agent_guard">corgi agent guard</a>	 - A pre-push hook that refuses a branch whose session&#x27;s gate or tests are red</li>
@@ -65,16 +65,16 @@ corgi agent status    # what is running, and under which account</p>
 <li class=""><a class="" href="/corgi/docs/commands/corgi_agent_hooks">corgi agent hooks</a>	 - Get notified when a session in this workspace needs you</li>
 <li class=""><a class="" href="/corgi/docs/commands/corgi_agent_init">corgi agent init</a>	 - Opt this stack into agent mode</li>
 <li class=""><a class="" href="/corgi/docs/commands/corgi_agent_install">corgi agent install</a>	 - Start agent mode at login (launchd on macOS, systemd on Linux)</li>
-<li class=""><a class="" href="/corgi/docs/commands/corgi_agent_interrupt">corgi agent interrupt</a>	 - Stop what a session is doing — Escape, as you would press it</li>
+<li class=""><a class="" href="/corgi/docs/commands/corgi_agent_interrupt">corgi agent interrupt</a>	 - Stop what a session is doing - Escape, as you would press it</li>
 <li class=""><a class="" href="/corgi/docs/commands/corgi_agent_kanban">corgi agent kanban</a>	 - One card per ticket: Inbox, Ready, Running, Blocked, Review, Done</li>
-<li class=""><a class="" href="/corgi/docs/commands/corgi_agent_lesson">corgi agent lesson</a>	 - What this workspace learned the hard way — read by every new session</li>
+<li class=""><a class="" href="/corgi/docs/commands/corgi_agent_lesson">corgi agent lesson</a>	 - What this workspace learned the hard way - read by every new session</li>
 <li class=""><a class="" href="/corgi/docs/commands/corgi_agent_logs">corgi agent logs</a>	 - Show a workspace&#x27;s session timeline (starts, exits, why)</li>
-<li class=""><a class="" href="/corgi/docs/commands/corgi_agent_mute">corgi agent mute</a>	 - Nothing rings for a while — no toast, no push; the board goes on</li>
+<li class=""><a class="" href="/corgi/docs/commands/corgi_agent_mute">corgi agent mute</a>	 - Nothing rings for a while - no toast, no push; the board goes on</li>
 <li class=""><a class="" href="/corgi/docs/commands/corgi_agent_new">corgi agent new</a>	 - Open a new agent session (Claude Code, or codex with --agent) in the editor window in front</li>
 <li class=""><a class="" href="/corgi/docs/commands/corgi_agent_note">corgi agent note</a>	 - Put your own line under a session on the board</li>
 <li class=""><a class="" href="/corgi/docs/commands/corgi_agent_notify">corgi agent notify</a>	 - Where notifications go when you are away from this machine</li>
 <li class=""><a class="" href="/corgi/docs/commands/corgi_agent_page">corgi agent page</a>	 - Turn the board&#x27;s overflow page when more sessions run than keys</li>
-<li class=""><a class="" href="/corgi/docs/commands/corgi_agent_pair">corgi agent pair</a>	 - Open a fresh pairing window and print its QR — or write a .corgipair file to AirDrop</li>
+<li class=""><a class="" href="/corgi/docs/commands/corgi_agent_pair">corgi agent pair</a>	 - Open a fresh pairing window and print its QR - or write a .corgipair file to AirDrop</li>
 <li class=""><a class="" href="/corgi/docs/commands/corgi_agent_peers">corgi agent peers</a>	 - The other laptops on your trackers: who leads, who is awake</li>
 <li class=""><a class="" href="/corgi/docs/commands/corgi_agent_pin">corgi agent pin</a>	 - Reserve a key for the session on it (--off to release)</li>
 <li class=""><a class="" href="/corgi/docs/commands/corgi_agent_plan">corgi agent plan</a>	 - A planner breaks a goal into tasks on the board; the daemon works through them, a worktree each</li>
@@ -99,17 +99,17 @@ corgi agent status    # what is running, and under which account</p>
 <li class=""><a class="" href="/corgi/docs/commands/corgi_agent_stream">corgi agent stream</a>	 - Which workspaces a paired phone may read as a conversation</li>
 <li class=""><a class="" href="/corgi/docs/commands/corgi_agent_task">corgi agent task</a>	 - Tasks of your own on the board: add one for later, pick it up, move it along</li>
 <li class=""><a class="" href="/corgi/docs/commands/corgi_agent_timeline">corgi agent timeline</a>	 - What happened in a session, in order: prompts, tool bursts, tests, the pull request and its reviews</li>
-<li class=""><a class="" href="/corgi/docs/commands/corgi_agent_today">corgi agent today</a>	 - What has been done today — yours and the watch&#x27;s</li>
+<li class=""><a class="" href="/corgi/docs/commands/corgi_agent_today">corgi agent today</a>	 - What has been done today - yours and the watch&#x27;s</li>
 <li class=""><a class="" href="/corgi/docs/commands/corgi_agent_top">corgi agent top</a>	 - The board in the terminal, live: every session, its standing, what it is doing</li>
 <li class=""><a class="" href="/corgi/docs/commands/corgi_agent_track">corgi agent track</a>	 - Track every Claude Code session on this machine for a Stream Deck or the CLI</li>
 <li class=""><a class="" href="/corgi/docs/commands/corgi_agent_transcript">corgi agent transcript</a>	 - A session&#x27;s conversation: the newest entries, or everything after an offset</li>
 <li class=""><a class="" href="/corgi/docs/commands/corgi_agent_tunnel">corgi agent tunnel</a>	 - Set up the permanent launcher URL</li>
-<li class=""><a class="" href="/corgi/docs/commands/corgi_agent_turn">corgi agent turn</a>	 - One more turn for a session whose terminal is gone — claude -p --resume, or codex exec resume</li>
+<li class=""><a class="" href="/corgi/docs/commands/corgi_agent_turn">corgi agent turn</a>	 - One more turn for a session whose terminal is gone - claude -p --resume, or codex exec resume</li>
 <li class=""><a class="" href="/corgi/docs/commands/corgi_agent_undo">corgi agent undo</a>	 - Drop what a session left uncommitted in its own worktree; --worktree drops the worktree and its branch too</li>
 <li class=""><a class="" href="/corgi/docs/commands/corgi_agent_uninstall">corgi agent uninstall</a>	 - Stop starting agent mode at login</li>
 <li class=""><a class="" href="/corgi/docs/commands/corgi_agent_up">corgi agent up</a>	 - One command from a stack directory to phone-startable: register, daemon, tunnel, pairing</li>
 <li class=""><a class="" href="/corgi/docs/commands/corgi_agent_usage">corgi agent usage</a>	 - Every account&#x27;s limits, where they are heading, and today&#x27;s numbers</li>
-<li class=""><a class="" href="/corgi/docs/commands/corgi_agent_watch">corgi agent watch</a>	 - Watch the tracker and your pull requests: new issues, new comments, reviews — notify, or fix</li>
+<li class=""><a class="" href="/corgi/docs/commands/corgi_agent_watch">corgi agent watch</a>	 - Watch the tracker and your pull requests: new issues, new comments, reviews - notify, or fix</li>
 <li class=""><a class="" href="/corgi/docs/commands/corgi_agent_while-away">corgi agent while-away</a>	 - What happened while you were gone</li>
 <li class=""><a class="" href="/corgi/docs/commands/corgi_agent_windows">corgi agent windows</a>	 - List the editor windows the corgi VS Code extension has connected</li>
 <li class=""><a class="" href="/corgi/docs/commands/corgi_agent_workspaces">corgi agent workspaces</a>	 - List and manage the workspaces agent mode knows about</li>
