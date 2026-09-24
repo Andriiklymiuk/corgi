@@ -386,3 +386,37 @@ func (g *GitLab) PullStatus(ctx context.Context, ref string) (PullStatus, bool) 
 	}
 	return out, true
 }
+
+// TokenScopes asks GitLab what the token may do. A token that reads the
+// tracker fine still merges nothing without the api scope, and the forge only
+// says so at the merge.
+func (g *GitLab) TokenScopes(ctx context.Context) ([]string, error) {
+	if g.Token == "" {
+		return nil, ErrNoToken
+	}
+	base := g.URL
+	if base == "" {
+		base = "https://gitlab.com"
+	}
+	var out struct {
+		Scopes []string `json:"scopes"`
+	}
+	if err := g.getInto(ctx, strings.TrimRight(base, "/")+"/api/v4/personal_access_tokens/self", &out); err != nil {
+		return nil, err
+	}
+	return out.Scopes, nil
+}
+
+// CanWrite says whether a scope list covers writing: api, or nothing known
+// (a token GitLab will not describe, such as an OAuth one, is not judged).
+func GitLabScopesCanWrite(scopes []string) bool {
+	if len(scopes) == 0 {
+		return true
+	}
+	for _, s := range scopes {
+		if s == "api" {
+			return true
+		}
+	}
+	return false
+}

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"time"
 
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/agent/config"
@@ -827,7 +829,46 @@ func checkUnattended(dir string) []agentCheck {
 	if codexAnywhere {
 		checks = append(checks, codexNotifyCheck())
 	}
+	checks = append(checks, autoMergeTokenChecks(dir, registry, user)...)
 	return checks
+}
+
+// autoMergeTokenChecks: a workspace merges on its own, so its GitLab token
+// must carry the api scope - read_api polls the tracker fine and merges
+// nothing, and the forge only says so at the first green pull request.
+func autoMergeTokenChecks(dir string, registry *workspace.Registry, user *config.UserConfig) []agentCheck {
+	if user == nil || registry == nil {
+		return nil
+	}
+	var checks []agentCheck
+	seen := map[string]bool{}
+	for _, ws := range registry.Sorted() {
+		wc, ok := user.Workspaces[ws.ID]
+		if !ok || wc.Watch == nil || !wc.Watch.Enabled || !wc.Watch.AutoMerge {
+			continue
+		}
+		secrets := watch.LoadSecretsFor(dir, ws.ID)
+		if secrets.GitLab == "" || seen[secrets.GitLab] {
+			continue
+		}
+		seen[secrets.GitLab] = true
+		checks = append(checks, gitlabMergeScopeCheck(ws.ID, watch.NewGitLab(secrets)))
+	}
+	return checks
+}
+
+func gitlabMergeScopeCheck(workspaceID string, g *watch.GitLab) agentCheck {
+	name := "auto-merge · gitlab token · " + workspaceID
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	scopes, err := g.TokenScopes(ctx)
+	if err != nil {
+		return agentCheck{Name: name, OK: true, Detail: "could not read the token's scopes (" + err.Error() + ") - the first merge will say"}
+	}
+	if watch.GitLabScopesCanWrite(scopes) {
+		return agentCheck{Name: name, OK: true, Detail: "the token can merge (" + strings.Join(scopes, ", ") + ")"}
+	}
+	return agentCheck{Name: name, Detail: "auto-merge is on, but the GitLab token only reads (" + strings.Join(scopes, ", ") + ") - every merge would be refused", Fix: "corgi agent watch auth gitlab, with a token that has the api scope"}
 }
 
 // codexNotifyCheck: a workspace lists codex, so its sessions should reach
