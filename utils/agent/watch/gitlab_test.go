@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 var gitlabTodos = `[
@@ -262,5 +263,40 @@ func TestTokenScopesReadsTheSelfEndpoint(t *testing.T) {
 	scopes, err := g.TokenScopes(context.Background())
 	if err != nil || len(scopes) != 1 || scopes[0] != "read_api" {
 		t.Fatalf("scopes %v, err %v", scopes, err)
+	}
+}
+
+func TestGitLabAnsweredSinceNeedsANoteAndAPushAfterIt(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/merge_requests/5/notes"):
+			_, _ = w.Write([]byte(`[
+			  {"id":89,"body":"done, see 3f2a","system":false,"created_at":"2026-09-22T10:04:00Z","author":{"username":"me"}},
+			  {"id":88,"body":"added 1 commit","system":true,"created_at":"2026-09-22T10:03:00Z","author":{"username":"me"}},
+			  {"id":87,"body":"rename this to fetchWithRetry","system":false,"created_at":"2026-09-22T10:02:00Z","author":{"username":"ann"}}]`))
+		case strings.HasSuffix(r.URL.Path, "/merge_requests/5"):
+			_, _ = w.Write([]byte(`{"iid":5,"state":"opened","sha":"3f2a"}`))
+		case strings.HasSuffix(r.URL.Path, "/repository/commits/3f2a"):
+			_, _ = w.Write([]byte(`{"id":"3f2a","committed_date":"2026-09-22T10:03:30Z"}`))
+		default:
+			t.Errorf("unexpected request %s", r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	g := &GitLab{URL: srv.URL, Token: "tok", Me: "me"}
+
+	note := time.Date(2026, 9, 22, 10, 2, 0, 0, time.UTC)
+	if why := g.AnsweredSince(context.Background(), "acme/api!5", note); why == "" {
+		t.Error("my note at 10:04 and the push at 10:03:30 answer ann's note at 10:02")
+	}
+	if why := g.AnsweredSince(context.Background(), "acme/api!5", note.Add(105*time.Second)); why != "" {
+		t.Errorf("my note at 10:04 is after 10:03:45 but the push is not, got %q", why)
+	}
+	if why := g.AnsweredSince(context.Background(), "acme/api!5", note.Add(3*time.Minute)); why != "" {
+		t.Errorf("nothing of mine after 10:05, got %q", why)
+	}
+	if why := (&GitLab{URL: srv.URL, Token: "tok"}).AnsweredSince(context.Background(), "acme/api!5", note); why != "" {
+		t.Errorf("not knowing who I am, nothing can be mine, got %q", why)
 	}
 }

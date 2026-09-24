@@ -81,3 +81,11 @@ func (l *StateLog) SetFrom(key, status, was string, at time.Time) error {
 type RefStater interface {
 	RefState(ctx context.Context, ref string) string
 }
+
+// Answerer says whether feedback on a pull request was answered after a moment:
+// a reply by me and a push, both after it. That is what a fix by hand or an
+// earlier run leaves behind, and a run on it would find nothing to do and still
+// spend a session.
+type Answerer interface {
+	AnsweredSince(ctx context.Context, ref string, at time.Time) string
+}
