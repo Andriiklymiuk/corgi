@@ -328,7 +328,7 @@ func (d *Daemon) runDynamic(ctx context.Context, configs []supervisor.SpawnConfi
 			return err
 		}
 	}
-	d.startedAt = time.Now().UTC()
+	d.markStarted()
 	d.rememberAutostart(configs)
 	d.buildRunners(configs)
 	if err := d.writeInfoIDs(d.runnerIDs()); err != nil {
@@ -891,12 +891,13 @@ func (d *Daemon) Runners() []*supervisor.Runner {
 func (d *Daemon) Status() Status {
 	d.mu.Lock()
 	diags := append([]WorkspaceDiagnostic(nil), d.diags...)
+	startedAt := d.startedAt
 	d.mu.Unlock()
 
 	s := Status{
 		Running:      true,
 		PID:          os.Getpid(),
-		StartedAt:    d.startedAt,
+		StartedAt:    startedAt,
 		Version:      d.Version,
 		WakeLockable: supervisor.Supported(),
 		Diagnostics:  diags,
@@ -942,14 +943,23 @@ func (d *Daemon) writeInfo(configs []supervisor.SpawnConfig) error {
 	return d.writeInfoIDs(ids)
 }
 
-func (d *Daemon) writeInfoIDs(ids []string) error {
-	exe, _ := os.Executable()
+// markStarted stamps the daemon's start once, under the lock the status
+// reader takes.
+func (d *Daemon) markStarted() time.Time {
+	d.mu.Lock()
+	defer d.mu.Unlock()
 	if d.startedAt.IsZero() {
 		d.startedAt = time.Now().UTC()
 	}
+	return d.startedAt
+}
+
+func (d *Daemon) writeInfoIDs(ids []string) error {
+	exe, _ := os.Executable()
+	startedAt := d.markStarted()
 	return writeJSONAtomic(d.InfoPath(), Info{
 		PID: os.Getpid(), Version: d.Version, Executable: exe,
-		StartedAt: d.startedAt, Workspaces: ids,
+		StartedAt: startedAt, Workspaces: ids,
 		Commands: d.ResolveWorkspace != nil,
 	})
 }

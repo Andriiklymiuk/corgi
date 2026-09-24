@@ -680,10 +680,13 @@ func TestIdleDeviceRestartRingsNoOne(t *testing.T) {
 	done := make(chan struct{})
 	go func() { defer close(done); _ = r.Run(ctx) }()
 
-	waitFor(t, func() bool { return *calls >= 2 && r.State().Running })
+	waitFor(t, func() bool { s := r.State(); return s.Restarts >= 1 && s.Running })
 	cancel()
 	<-done
 
+	if *calls < 2 {
+		t.Fatalf("started %d processes, want the restart", *calls)
+	}
 	mu.Lock()
 	defer mu.Unlock()
 	if len(notified) != 0 {

@@ -66,8 +66,9 @@ func agentUnwell(spec WatchSpec, name string, log *watch.FixLog, now time.Time) 
 	if log == nil {
 		return ""
 	}
-	for i := len(log.Started) - 1; i >= 0; i-- {
-		r := log.Started[i]
+	records := log.Records()
+	for i := len(records) - 1; i >= 0; i-- {
+		r := records[i]
 		if r.FinishedAt.IsZero() || r.Workspace != spec.Workspace {
 			continue
 		}

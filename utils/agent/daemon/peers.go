@@ -305,8 +305,9 @@ func unwellFrom(log *watch.FixLog, budget int, now time.Time) string {
 	if log == nil {
 		return ""
 	}
-	for i := len(log.Started) - 1; i >= 0; i-- {
-		r := log.Started[i]
+	records := log.Records()
+	for i := len(records) - 1; i >= 0; i-- {
+		r := records[i]
 		if r.FinishedAt.IsZero() {
 			continue
 		}
@@ -347,8 +348,9 @@ func peerRunsOf(log *watch.FixLog, now time.Time) []peers.PeerRun {
 		return out
 	}
 	blocks := log.AllBlocks()
-	for i := len(log.Started) - 1; i >= 0 && len(out) < 50; i-- {
-		r := log.Started[i]
+	records := log.Records()
+	for i := len(records) - 1; i >= 0 && len(out) < 50; i-- {
+		r := records[i]
 		at := r.FinishedAt
 		if at.IsZero() {
 			at = r.StartedAt
