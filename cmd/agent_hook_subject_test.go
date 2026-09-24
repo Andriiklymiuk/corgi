@@ -8,7 +8,7 @@ import (
 func TestRiskOfAToolInput(t *testing.T) {
 	cases := []struct{ tool, input, want string }{
 		{"Read", `{"file_path":"/x/a.go"}`, "reads"},
-		{"Grep", `{"pattern":"x"}`, "reads"},
+		{"Grep", `{"pattern":"x"}`, "reads"}, {"AskUserQuestion", `{"questions":[]}`, "reads"},
 		{"Edit", `{"file_path":"/x/a.go"}`, "writes"},
 		{"Bash", `{"command":"go test ./..."}`, "writes"},
 		{"Bash", `{"command":"git push origin main"}`, "writes"},

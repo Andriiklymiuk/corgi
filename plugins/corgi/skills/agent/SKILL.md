@@ -340,11 +340,14 @@ A restarted session starts with none of the earlier conversation. Call
 `corgi_session_brief { workspace }` first when the user picks up where they left
 off: it reports the branch each repository was on, which held uncommitted
 changes, and which cross-repo worktrees exist. `null` means nothing restarted,
-which is the ordinary case. The common reasons:
+which is the ordinary case. `exitOutput`, when present, is the last lines the
+process printed before it died - read it before guessing at a crash. The common
+reasons:
 
 | reason | what to say |
 |---|---|
 | network timeout | Remote Control exits after ~10 min awake with no network. corgi restarted it. **The previous conversation's context is gone** - the new session starts clean. |
+| unexpected exit (code N after Xh) | the process died; the reason carries its exit code, uptime and last output line, `exitOutput` the tail. A restart is already running - say what it printed, do not restart it again. |
 | auth failure | corgi deliberately did not retry; retrying cannot produce credentials. Run `corgi agent doctor`. |
 | exited immediately, repeatedly | corgi stopped after 5 attempts and disabled the workspace. Something is wrong with the setup, not the network. |
 

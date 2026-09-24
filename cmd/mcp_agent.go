@@ -314,7 +314,11 @@ func mcpSessionBrief(workspace string) (any, error) {
 				"note":  "no restart recorded for this workspace since the daemon started",
 			}, nil
 		}
-		return map[string]any{"brief": b, "summary": b.Summary()}, nil
+		out := map[string]any{"brief": b, "summary": b.Summary()}
+		if tail := exitOutputTail(events.ExitOutputPath(dir, workspace), exitOutputLines); len(tail) > 0 {
+			out["exitOutput"] = tail
+		}
+		return out, nil
 	}
 	briefs, err := brief.List(dir)
 	if err != nil {

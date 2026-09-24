@@ -10,6 +10,7 @@ import (
 
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/agent/brief"
+	"andriiklymiuk/corgi/utils/agent/events"
 	"andriiklymiuk/corgi/utils/art"
 
 	"github.com/spf13/cobra"
@@ -92,6 +93,7 @@ func repoState(service, path string, worktree bool) (brief.RepoState, bool) {
 		Branch:   st.Branch,
 		Dirty:    st.Dirty,
 		Worktree: worktree,
+		Default:  st.Branch != "" && st.Branch == utils.LocalDefaultBranchOf(path),
 	}, true
 }
 
@@ -144,6 +146,7 @@ func runAgentBrief(cmd *cobra.Command, args []string) {
 			return
 		}
 		printBriefs([]brief.Brief{*b}, false)
+		printExitOutput(dir, args[0])
 		return
 	}
 
@@ -152,6 +155,40 @@ func runAgentBrief(cmd *cobra.Command, args []string) {
 		exitWithError("agent_brief", err, 1)
 	}
 	printBriefs(briefs, asJSON)
+}
+
+const exitOutputLines = 8
+
+// printExitOutput shows the tail of what the process printed before it died -
+// the reason line names one line; the rest is here for the crash nobody expected.
+func printExitOutput(dir, workspaceID string) {
+	lines := exitOutputTail(events.ExitOutputPath(dir, workspaceID), exitOutputLines)
+	if len(lines) == 0 {
+		return
+	}
+	utils.Infof("  output  (last %d lines before the exit, %s)\n", len(lines), events.ExitOutputPath(dir, workspaceID))
+	for _, line := range lines {
+		utils.Infof("    %s\n", line)
+	}
+}
+
+func exitOutputTail(path string, n int) []string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	var lines []string
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimRight(line, " ")
+		if strings.TrimSpace(line) == "" || strings.HasPrefix(line, "# ") {
+			continue
+		}
+		lines = append(lines, line)
+	}
+	if len(lines) > n {
+		lines = lines[len(lines)-n:]
+	}
+	return lines
 }
 
 func printBriefs(briefs []brief.Brief, asJSON bool) {

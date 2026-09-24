@@ -118,3 +118,29 @@ func readLines(path string) []string {
 	}
 	return out
 }
+
+// ExitOutputPath is where the last non-requested exit's process output lives -
+// the only place to look when a session died and the notification said little.
+func (l *Log) ExitOutputPath(workspaceID string) string {
+	if l == nil {
+		return ""
+	}
+	return filepath.Join(l.dir, sanitizeID(workspaceID)+".exit.log")
+}
+
+func ExitOutputPath(agentDir, workspaceID string) string {
+	return NewLog(agentDir).ExitOutputPath(workspaceID)
+}
+
+func (l *Log) KeepExitOutput(workspaceID, cause, reason, tail string) {
+	if l == nil || workspaceID == "" {
+		return
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if err := os.MkdirAll(l.dir, 0o700); err != nil {
+		return
+	}
+	header := "# " + time.Now().Format(time.RFC3339) + " " + cause + ": " + reason + "\n"
+	_ = atomicfile.Write(l.ExitOutputPath(workspaceID), []byte(header+strings.TrimRight(tail, "\n")+"\n"), 0o600)
+}

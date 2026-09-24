@@ -43,7 +43,9 @@ func TestEmptyIsTrueWhenThereIsNothingToSay(t *testing.T) {
 	}{
 		{"no repos", nil, true},
 		{"repos with no branch or changes", []RepoState{{Service: "api", Dir: "/s/api"}}, true},
-		{"a branch", []RepoState{{Service: "api", Branch: "main"}}, false},
+		{"a work branch", []RepoState{{Service: "api", Branch: "feature/referral"}}, false},
+		{"resting on main is nothing to say", []RepoState{{Service: "api", Branch: "main"}}, true},
+		{"resting on the repo's own default branch", []RepoState{{Service: "api", Branch: "release", Default: true}}, true},
 		{"uncommitted work", []RepoState{{Service: "api", Dirty: true}}, false},
 	}
 	for _, tt := range tests {
@@ -70,17 +72,60 @@ func TestSummaryNamesTheBranchAndCountsTheRest(t *testing.T) {
 	}
 }
 
-func TestSummaryListsEveryDistinctBranch(t *testing.T) {
+func TestSummaryListsEveryDistinctWorkBranch(t *testing.T) {
 	b := Capture(Params{WorkspaceID: "acme"}, []RepoState{
 		{Service: "api", Branch: "feature/referral"},
+		{Service: "worker", Branch: "fix/retry"},
 		{Service: "web", Branch: "main"},
+		{Service: "sdk", Branch: "develop"},
+		{Service: "legacy", Branch: "trunk"},
+		{Service: "docs", Branch: "release", Default: true},
 	})
 
 	got := b.Summary()
-	for _, want := range []string{"feature/referral", "main"} {
+	for _, want := range []string{"feature/referral", "fix/retry"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("summary %q missing branch %q", got, want)
 		}
+	}
+	for _, noise := range []string{"main", "develop", "trunk", "release"} {
+		if strings.Contains(got, noise) {
+			t.Errorf("summary %q names %q - a repo resting on its base branch is not something to come back to", got, noise)
+		}
+	}
+}
+
+func TestSummaryCapsTheBranchListAndCountsTheRest(t *testing.T) {
+	b := Capture(Params{WorkspaceID: "acme"}, []RepoState{
+		{Service: "a", Branch: "corgi/a!1", Worktree: true},
+		{Service: "b", Branch: "corgi/b!2", Worktree: true},
+		{Service: "c", Branch: "corgi/c!3", Worktree: true},
+		{Service: "d", Branch: "corgi/d!4", Worktree: true},
+		{Service: "e", Branch: "feature/e", Worktree: true},
+	})
+
+	got := b.Summary()
+	if want := "was on corgi/a!1, corgi/b!2, corgi/c!3 and 2 more"; got != want {
+		t.Errorf("Summary() = %q, want %q - a notification is one line, not a branch dump", got, want)
+	}
+}
+
+func TestSummaryOfCleanReposOnBaseBranchesIsEmpty(t *testing.T) {
+	b := Capture(Params{WorkspaceID: "acme"}, []RepoState{
+		{Service: "api", Branch: "develop"},
+		{Service: "web", Branch: "master"},
+	})
+	if got := b.Summary(); got != "" {
+		t.Errorf("Summary() = %q, want empty - there is nothing to come back to", got)
+	}
+}
+
+func TestSummaryStillCountsDirtyReposOnABaseBranch(t *testing.T) {
+	b := Capture(Params{WorkspaceID: "acme"}, []RepoState{
+		{Service: "api", Branch: "main", Dirty: true},
+	})
+	if got := b.Summary(); got != "1 repo has uncommitted changes" {
+		t.Errorf("Summary() = %q, want just the dirty count", got)
 	}
 }
 

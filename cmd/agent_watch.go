@@ -1471,7 +1471,7 @@ func init() {
 	f.Int(watchFlagCompactAt, 0, "Type /compact into a session past this much context the next time it stops - 85 is where the board goes red; 0 is off")
 	f.String(watchFlagDoneWhen, "", "What finished means here, comma separated: commands run in the session's directory when it stops with changes - `go test ./...,pnpm lint`; a red one is typed back as the next message. Empty is off")
 	f.String(watchFlagPlanReview, "", "Stop for a human before code on a story: always, risk>=N (the story's forecast, 1 to 10), or off. Off means the stories skill gates as today; on, the spec waits for an answer - from the terminal or the phone - before a branch is cut")
-	f.String(watchFlagAutoAllow, "", "Answer a permission prompt for a tool that only reads - Read, Grep, Glob, a web search - on the daemon's own: reads, or off (Bash always waits for a person; iTerm2 and tmux sessions only)")
+	f.String(watchFlagAutoAllow, "", "Answer a permission prompt for a tool that only reads - Read, Grep, Glob, a web search, a question for you - on the daemon's own: reads, or off (Bash always waits for a person; iTerm2 and tmux sessions only)")
 	f.Bool("ci", false, "Also builds that went red on something of mine - the one kind that brings its own test for done")
 	f.String("from", "", "Only comments and reviews from these people (comma separated); empty is anyone")
 	f.Bool("mentions", false, "Ring when someone names you in Slack or writes to you directly (needs corgi agent watch auth slack)")

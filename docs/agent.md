@@ -643,9 +643,13 @@ off the tool and its input. A workspace can say the first kind is not worth
 waking anyone for:
 
 ```bash
-corgi agent watch enable --auto-allow reads   # Read, Grep, Glob, a web search
+corgi agent watch enable --auto-allow reads   # Read, Grep, Glob, a web search, a question for you
 corgi agent watch enable --auto-allow off
 ```
+
+A question the session wants to ask you (`AskUserQuestion`) counts as a read:
+the tool itself changes nothing, and the question is the next thing you
+answer - a prompt to allow the asking first was one round trip too many.
 
 The daemon then presses Enter into the session itself, a beat after the
 prompt is drawn, and the session's row counts what it allowed
@@ -1087,6 +1091,18 @@ repositories is invisible from a fresh session's working directory, and nothing
 else would tell the new session it exists. The summary line is appended to the
 restart notification, so the lock screen says *where* as well as *that*.
 
+A repository resting on its default branch (`main`, `master`, `develop`,
+`trunk`, or whatever `origin/HEAD` says) is not something to come back to, so
+the summary leaves it out; three branches are named, the rest counted ("and 2
+more"). A stack whose repositories all sit clean on their base branch has
+nothing to hand over, and the notification is the reason alone.
+
+The reason names what git cannot: the exit code, how long the session had been
+up, and the last line it printed (`code 137 after 3h12m - last output: ...`).
+The full tail it printed before dying is kept next to the event log
+(`events/<workspace>.exit.log`); `corgi agent brief <id>` shows its last lines,
+and `corgi_session_brief` returns them as `exitOutput`.
+
 Uncommitted work counts untracked files, unlike the check that guards worktree
 removal. Creating files is the most common thing an agent does, and a note
 calling that "clean" would be worse than no note. `.gitignore` is respected, so
@@ -1106,6 +1122,7 @@ Not every exit is worth retrying:
 |---|---|
 | network timeout | restart, notify |
 | crash | restart with backoff, notify |
+| either, on a device-only process nobody had a session in, with nothing to hand over | restart, no notification - the event log has it |
 | exits immediately, repeatedly | stop after 5, disable the workspace, notify |
 | auth failure | **do not restart** - retrying cannot produce credentials |
 | `corgi agent stop` | stay stopped |
