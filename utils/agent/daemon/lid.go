@@ -126,7 +126,7 @@ func plural(n int, word string) string {
 func (d *Daemon) ringLid(body string) {
 	utils.Infof("agent: lid: %s\n", body)
 	if d.Push != nil {
-		go d.Push(push.Message{Title: "corgi agent · laptop", Body: body, Category: "lid", Data: map[string]string{"needs": "1", "lid": "1"}, Thread: "lid"})
+		go d.Push(push.Message{Title: "corgi agent · laptop", Body: body, Category: "lid", Data: map[string]string{"needs": "1", "lid": "1", "at": time.Now().Format("15:04")}, Thread: "lid"})
 	}
 	if d.Notify != nil {
 		d.Notify("corgi agent · laptop", body)
