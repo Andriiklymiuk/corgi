@@ -133,6 +133,20 @@ func DefaultBranchOf(dir string) string {
 	return ""
 }
 
+// LocalDefaultBranchOf answers from what git already knows - no network round
+// trip - so callers on a hot path (session end, hooks) can afford it.
+func LocalDefaultBranchOf(dir string) string {
+	if branch := originHeadBranch(dir); branch != "" {
+		return branch
+	}
+	for _, candidate := range []string{"main", "master"} {
+		if _, err := gitOut(dir, gitRevParse, "--verify", "--quiet", "refs/heads/"+candidate); err == nil {
+			return candidate
+		}
+	}
+	return ""
+}
+
 func originHeadBranch(dir string) string {
 	out, err := gitOut(dir, "symbolic-ref", "--short", "refs/remotes/origin/HEAD")
 	if err != nil {

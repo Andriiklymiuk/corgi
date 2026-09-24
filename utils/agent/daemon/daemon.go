@@ -170,6 +170,10 @@ func (d *Daemon) recordEvent(workspaceID string) func(supervisor.RunEvent) {
 		d.Events.Append(workspaceID, events.Event{
 			Kind: e.Kind, PID: e.PID, Cause: e.Cause, Reason: e.Reason, URL: e.URL,
 		})
+		if e.Tail != "" && e.Cause != string(supervisor.CauseRequested) {
+			utils.Infof("agent: %s %s (%s): %s\n", workspaceID, e.Kind, e.Cause, e.Reason)
+			d.Events.KeepExitOutput(workspaceID, e.Cause, e.Reason, e.Tail)
+		}
 		if e.Cause == string(supervisor.CauseUnsupportedFlag) {
 			d.forgetDeviceOnly(workspaceID)
 		}
@@ -890,6 +894,7 @@ func (d *Daemon) Status() Status {
 	s := Status{
 		Running:      true,
 		PID:          os.Getpid(),
+		StartedAt:    d.startedAt,
 		Version:      d.Version,
 		WakeLockable: supervisor.Supported(),
 		Diagnostics:  diags,

@@ -75,7 +75,7 @@ func commandSubject(command string) string {
 
 func riskOf(tool string, input json.RawMessage) string {
 	switch tool {
-	case "Read", "Grep", "Glob", "WebFetch", "WebSearch", "Task", "Agent", "Skill", "TodoWrite":
+	case "Read", "Grep", "Glob", "WebFetch", "WebSearch", "Task", "Agent", "Skill", "TodoWrite", "AskUserQuestion":
 		return "reads"
 	case "Edit", "Write", "MultiEdit", "NotebookEdit":
 		return "writes"

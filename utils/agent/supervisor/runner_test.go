@@ -652,3 +652,77 @@ func TestSetSessionURLIgnoresARepeat(t *testing.T) {
 		t.Errorf("sessionURL = %q", r.State().SessionURL)
 	}
 }
+
+func TestIdleDeviceRestartRingsNoOne(t *testing.T) {
+	start, calls := scriptedStarter(
+		&fakeProcess{pid: 1, code: 1, uptime: 20 * time.Millisecond},
+	)
+	r := testRunner(t, start)
+	r.Config.DeviceOnly = true
+
+	var notified []string
+	var mu sync.Mutex
+	r.Notify = func(_, body string) {
+		mu.Lock()
+		notified = append(notified, body)
+		mu.Unlock()
+	}
+	var exits []RunEvent
+	r.OnEvent = func(e RunEvent) {
+		if e.Kind == "exited" {
+			mu.Lock()
+			exits = append(exits, e)
+			mu.Unlock()
+		}
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { defer close(done); _ = r.Run(ctx) }()
+
+	waitFor(t, func() bool { return *calls >= 2 && r.State().Running })
+	cancel()
+	<-done
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(notified) != 0 {
+		t.Errorf("notified %q - nobody had a session open and nothing was left behind, so there is nothing to ring about", notified)
+	}
+	if len(exits) == 0 || exits[0].Cause != string(CauseCrash) {
+		t.Fatalf("exit events %+v, want the crash on record even when it rings no one", exits)
+	}
+}
+
+func TestIdleDeviceRestartStillRingsWhenASessionWasOpen(t *testing.T) {
+	start, _ := scriptedStarter(
+		&fakeProcess{pid: 1, code: 1, uptime: 300 * time.Millisecond},
+	)
+	r := testRunner(t, start)
+	r.Config.DeviceOnly = true
+
+	var notified []string
+	var mu sync.Mutex
+	r.Notify = func(_, body string) {
+		mu.Lock()
+		notified = append(notified, body)
+		mu.Unlock()
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { defer close(done); _ = r.Run(ctx) }()
+
+	waitFor(t, func() bool { return r.State().Running })
+	r.addSessionLink("abc123")
+
+	waitFor(t, func() bool { mu.Lock(); defer mu.Unlock(); return len(notified) > 0 })
+	cancel()
+	<-done
+
+	mu.Lock()
+	defer mu.Unlock()
+	if !strings.Contains(notified[0], "unexpected exit") {
+		t.Errorf("notification %q should say the session crashed - someone was in it", notified[0])
+	}
+}

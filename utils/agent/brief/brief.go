@@ -28,6 +28,17 @@ type RepoState struct {
 	Branch   string `json:"branch,omitempty"`
 	Dirty    bool   `json:"dirty,omitempty"`
 	Worktree bool   `json:"worktree,omitempty"`
+	Default  bool   `json:"default,omitempty"`
+}
+
+var restingBranchNames = map[string]bool{
+	"main": true, "master": true, "develop": true, "dev": true, "trunk": true,
+}
+
+// Resting is true when the repo sits on its default branch (or one of the
+// usual base names) - nothing a restarted session needs to be told about.
+func (r RepoState) Resting() bool {
+	return r.Default || restingBranchNames[r.Branch]
 }
 
 type Params struct {
@@ -59,11 +70,27 @@ func Capture(p Params, repos []RepoState) Brief {
 
 func (b Brief) Empty() bool {
 	for _, r := range b.Repos {
-		if r.Branch != "" || r.Dirty {
+		if (r.Branch != "" && !r.Resting()) || r.Dirty {
 			return false
 		}
 	}
 	return true
+}
+
+const maxNamedBranches = 3
+
+func (b Brief) workBranches() []string {
+	seen := map[string]bool{}
+	var branches []string
+	for _, r := range b.Repos {
+		if r.Branch == "" || r.Resting() || seen[r.Branch] {
+			continue
+		}
+		seen[r.Branch] = true
+		branches = append(branches, r.Branch)
+	}
+	sort.Strings(branches)
+	return branches
 }
 
 func (b Brief) Summary() string {
@@ -71,27 +98,22 @@ func (b Brief) Summary() string {
 		return ""
 	}
 
-	var branches []string
-	seen := map[string]bool{}
+	branches := b.workBranches()
 	dirty := 0
 	for _, r := range b.Repos {
-		if r.Branch != "" && !seen[r.Branch] {
-			seen[r.Branch] = true
-			branches = append(branches, r.Branch)
-		}
 		if r.Dirty {
 			dirty++
 		}
 	}
-	sort.Strings(branches)
 
 	var parts []string
-	switch len(branches) {
-	case 0:
-	case 1:
-		parts = append(parts, "was on "+branches[0])
-	default:
+	switch {
+	case len(branches) == 0:
+	case len(branches) <= maxNamedBranches:
 		parts = append(parts, "was on "+strings.Join(branches, ", "))
+	default:
+		rest := len(branches) - maxNamedBranches
+		parts = append(parts, fmt.Sprintf("was on %s and %d more", strings.Join(branches[:maxNamedBranches], ", "), rest))
 	}
 	if dirty == 1 {
 		parts = append(parts, "1 repo has uncommitted changes")

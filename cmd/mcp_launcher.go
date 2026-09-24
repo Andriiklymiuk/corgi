@@ -3158,7 +3158,7 @@ const launcherPageHTML = `<!doctype html>
       facts.push(['supervised', 'for ' + fmtSpan(Date.now() - ws.startedAt) + how]);
     }
     if (ws.restarts > 0) facts.push(['restarts', String(ws.restarts) + (ws.lastCause ? ' \u00b7 last ' + ws.lastCause : '')]);
-    else if (ws.lastCause) facts.push(['last exit', ws.lastCause]);
+    if (ws.note && ws.running) facts.push(['last exit', ws.note]);
     if (ws.wakeLock) facts.push(['wake lock', 'the machine is held awake while this runs']);
     if (ws.deviceOnly) facts.push(['device', 'online with no session - Start opens one here, or create one from the Claude app’s device list']);
     if (ws.remark) facts.push(['note', ws.remark]);

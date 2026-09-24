@@ -1,6 +1,7 @@
 package supervisor
 
 import (
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -135,7 +136,7 @@ func Decide(e Exit, attempt, consecutiveStartupFailures int) Decision {
 			Restart: true,
 			Delay:   backoffFor(attempt),
 			Notify:  true,
-			Reason:  "remote control restarted - the previous session ended (network timeout), worktrees kept",
+			Reason:  "remote control restarted - the previous session ended after " + roughUptime(e.Uptime) + " (network timeout), worktrees kept",
 		}
 
 	default:
@@ -144,8 +145,35 @@ func Decide(e Exit, attempt, consecutiveStartupFailures int) Decision {
 			Restart: true,
 			Delay:   backoffFor(attempt),
 			Notify:  true,
-			Reason:  "remote control restarted after an unexpected exit",
+			Reason: withLastOutputLine(
+				"remote control restarted after an unexpected exit ("+exitDetail(e)+")",
+				e.Output),
 		}
+	}
+}
+
+func exitDetail(e Exit) string {
+	if e.Code < 0 {
+		return "killed by a signal after " + roughUptime(e.Uptime)
+	}
+	return "code " + strconv.Itoa(e.Code) + " after " + roughUptime(e.Uptime)
+}
+
+func roughUptime(d time.Duration) string {
+	switch {
+	case d < time.Minute:
+		return strconv.Itoa(int(d.Seconds())) + "s"
+	case d < time.Hour:
+		return strconv.Itoa(int(d.Minutes())) + "m"
+	case d < 48*time.Hour:
+		h := int(d.Hours())
+		m := int(d.Minutes()) % 60
+		if m == 0 {
+			return strconv.Itoa(h) + "h"
+		}
+		return strconv.Itoa(h) + "h" + strconv.Itoa(m) + "m"
+	default:
+		return strconv.Itoa(int(d.Hours()/24)) + "d"
 	}
 }
 
@@ -159,11 +187,20 @@ func withLastOutputLine(reason, output string) string {
 
 const maxReasonLineLen = 160
 
+var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(\x07|\x1b\\)|\x1b[@-Z\\-_]`)
+
+// CleanOutput is the process tail with terminal escapes gone, so it can go in
+// a log file or a notification.
+func CleanOutput(output string) string {
+	cleaned := ansiEscape.ReplaceAllString(output, "")
+	return strings.ReplaceAll(cleaned, "\r", "")
+}
+
 func lastOutputLine(output string) string {
-	lines := strings.Split(output, "\n")
+	lines := strings.Split(CleanOutput(output), "\n")
 	for i := len(lines) - 1; i >= 0; i-- {
-		line := strings.TrimSpace(lines[i])
-		if line == "" {
+		line := strings.TrimSpace(strings.ReplaceAll(lines[i], "\r", ""))
+		if line == "" || strings.Trim(line, "─│┌┐└┘├┤┬┴┼═║╔╗╚╝╠╣╦╩╬╭╮╯╰ ") == "" {
 			continue
 		}
 		if len(line) > maxReasonLineLen {

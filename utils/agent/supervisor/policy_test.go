@@ -174,3 +174,33 @@ func TestBackoffIsMonotonic(t *testing.T) {
 		}
 	}
 }
+
+func TestDecideCrashTellsWhatHappened(t *testing.T) {
+	d := Decide(Exit{Code: 137, Uptime: 3*time.Hour + 12*time.Minute, Output: "\x1b[31mfatal: out of memory\x1b[0m\r\n\x1b[2K\n"}, 0, 0)
+
+	if d.Cause != CauseCrash || !d.Restart || !d.Notify {
+		t.Fatalf("Decide() = %+v, want a notified restart", d)
+	}
+	for _, want := range []string{"code 137", "after 3h12m", "last output: fatal: out of memory"} {
+		if !strings.Contains(d.Reason, want) {
+			t.Errorf("reason %q missing %q - a bare 'unexpected exit' gives the user nothing to act on", d.Reason, want)
+		}
+	}
+	if strings.Contains(d.Reason, "\x1b") {
+		t.Errorf("reason %q leaks terminal escapes into a push notification", d.Reason)
+	}
+}
+
+func TestDecideCrashBySignalSaysSo(t *testing.T) {
+	d := Decide(Exit{Code: -1, Uptime: 90 * time.Minute}, 0, 0)
+	if !strings.Contains(d.Reason, "killed by a signal after 1h30m") {
+		t.Errorf("reason = %q, want the signal named rather than a fake exit code", d.Reason)
+	}
+}
+
+func TestLastOutputLineSkipsBoxDrawing(t *testing.T) {
+	got := lastOutputLine("Error: token expired\n╰──────────────╯\n")
+	if got != "Error: token expired" {
+		t.Errorf("lastOutputLine() = %q, want the message, not the TUI frame", got)
+	}
+}

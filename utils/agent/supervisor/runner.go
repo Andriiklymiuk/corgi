@@ -44,6 +44,7 @@ type RunEvent struct {
 	Cause  string
 	Reason string
 	URL    string
+	Tail   string
 }
 
 type Runner struct {
@@ -237,7 +238,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		healthy := decision.Cause != CauseStartupFailure
 		s.observe(healthy)
 
-		r.record(decision, 0, decision.Disable)
+		r.record(decision, exit.Output, decision.Disable)
 		r.announce(decision, r.captureSessionEnd(decision))
 
 		if !decision.Restart {
@@ -385,23 +386,26 @@ func (r *Runner) notifyChange() {
 	}
 }
 
-func (r *Runner) record(d Decision, pid int, disabled bool) {
-	r.recordLocked(d, pid, disabled)
+func (r *Runner) record(d Decision, tail string, disabled bool) {
+	r.recordLocked(d, disabled)
 	kind := "exited"
 	if disabled {
 		kind = "disabled"
 	}
-	r.emit(RunEvent{Kind: kind, Cause: string(d.Cause), Reason: d.Reason})
+	if d.Cause == CauseRequested {
+		tail = ""
+	}
+	r.emit(RunEvent{Kind: kind, Cause: string(d.Cause), Reason: d.Reason, Tail: CleanOutput(tail)})
 	r.notifyChange()
 }
 
-func (r *Runner) recordLocked(d Decision, pid int, disabled bool) {
+func (r *Runner) recordLocked(d Decision, disabled bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.proc = nil
 	r.state.Running = false
 	r.state.SessionURL = ""
-	r.state.PID = pid
+	r.state.PID = 0
 	r.state.LastCause = d.Cause
 	r.state.LastReason = d.Reason
 	if disabled {
@@ -419,8 +423,14 @@ func (r *Runner) captureSessionEnd(d Decision) string {
 	return r.OnSessionEnd(d)
 }
 
+// announce rings the phone about an exit. A device-only process that nobody had
+// opened a session in, restarted with nothing to come back to, rings no one:
+// no conversation was lost, and the event log has the exit.
 func (r *Runner) announce(d Decision, detail string) {
 	if !d.Notify || r.Notify == nil {
+		return
+	}
+	if d.Restart && detail == "" && r.idleDevice() {
 		return
 	}
 	body := d.Reason
@@ -428,6 +438,12 @@ func (r *Runner) announce(d Decision, detail string) {
 		body += " · " + detail
 	}
 	r.Notify("corgi agent · "+r.Config.WorkspaceID, body)
+}
+
+func (r *Runner) idleDevice() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.Config.DeviceOnly && r.state.SessionsThisRun == 0
 }
 
 func (r *Runner) healthyAfter() time.Duration {
