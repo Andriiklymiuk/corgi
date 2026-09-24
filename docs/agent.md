@@ -1252,7 +1252,12 @@ word on your work: it rings (with or without `--mentions`; the channel is
 opted in), and with `--hand-over` it is typed into the session on that
 branch. A fix for review feedback merges the base branch in first when the
 pull request conflicts. A merge still waits for the forge's approval and
-green checks (`--auto-merge`), never for a "LGTM" in the thread.
+green checks (`--auto-merge`), never for a "LGTM" in the thread. A merge the
+forge refuses is said once, with the fix when the token is the reason (GitLab
+wants the `api` scope, `read_api` merges nothing): that pull request is not
+tried again until the daemon restarts, since the answer would be the same.
+Any other refusal is tried again half an hour later, quietly unless the
+error changed.
 
 **A mention can start a run**, and that is the one place a stranger could
 reach your machine, so it is gated on a list of people rather than on

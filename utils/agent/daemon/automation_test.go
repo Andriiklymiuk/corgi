@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -410,5 +411,67 @@ func TestAMergedStoryMovesItsTicketOnceEveryPullIsIn(t *testing.T) {
 	d.pullChanged(context.Background(), spec, "acme/api#9", "https://github.com/acme/api/pull/9", open, merged, true)
 	if len(moved) != 2 || moved[1] != "acme ABC-8 → Done" {
 		t.Fatalf("a subtask goes to its own column: %v", moved)
+	}
+}
+
+func TestAMergeTheForgeRefusesIsSaidOnceAndNotRetried(t *testing.T) {
+	d := testDaemon(t)
+	notes := make(chan string, 8)
+	d.Notify = func(_, body string) { notes <- body }
+	attempts := 0
+	d.MergePull = func(_ context.Context, workspace, link string) error {
+		attempts++
+		return errors.New(`merging ` + link + `: HTTP 403: {"error":"insufficient_scope","error_description":"The request requires higher privileges than provided by the access token."}`)
+	}
+	writeWatchConfig(t, d, "acme", "      autoMerge: true\n")
+	spec := WatchSpec{Workspace: "acme", Dir: t.TempDir(), AgentDir: d.Dir}
+	link := "https://gitlab.com/acme/api/-/merge_requests/85"
+	ready := watch.PullStatus{State: "open", Checks: "passing", Review: "approved", Mine: true, At: time.Now()}
+
+	for i := 0; i < 3; i++ {
+		d.pullChanged(context.Background(), spec, "acme/api!85", link, watch.PullStatus{}, ready, false)
+	}
+	if attempts != 1 {
+		t.Fatalf("asked the forge %d times - a token short of a scope stays short", attempts)
+	}
+	got := collectNotes(t, notes, "could not merge "+link)
+	for body := range got {
+		if !strings.Contains(body, "api scope") {
+			t.Errorf("notification %q should say what to fix", body)
+		}
+	}
+	select {
+	case body := <-notes:
+		t.Fatalf("rang again: %q", body)
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+func TestAMergeThatFailedForNowIsTriedAgainLater(t *testing.T) {
+	d := testDaemon(t)
+	d.Notify = func(string, string) {}
+	attempts := 0
+	d.MergePull = func(_ context.Context, workspace, link string) error {
+		attempts++
+		return errors.New("merging " + link + ": HTTP 405: Method Not Allowed: not mergeable yet")
+	}
+	writeWatchConfig(t, d, "acme", "      autoMerge: true\n")
+	spec := WatchSpec{Workspace: "acme", Dir: t.TempDir(), AgentDir: d.Dir}
+	link := "https://github.com/acme/api/pull/7"
+	ready := watch.PullStatus{State: "open", Checks: "passing", Review: "approved", Mine: true, At: time.Now()}
+
+	d.pullChanged(context.Background(), spec, "acme/api#7", link, watch.PullStatus{}, ready, false)
+	d.pullChanged(context.Background(), spec, "acme/api#7", link, watch.PullStatus{}, ready, false)
+	if attempts != 1 {
+		t.Fatalf("asked %d times within the same half hour", attempts)
+	}
+	d.mergeMu.Lock()
+	f := d.mergeFailed[link]
+	f.at = f.at.Add(-mergeRetryAfter)
+	d.mergeFailed[link] = f
+	d.mergeMu.Unlock()
+	d.pullChanged(context.Background(), spec, "acme/api#7", link, watch.PullStatus{}, ready, false)
+	if attempts != 2 {
+		t.Fatalf("asked %d times - a passing refusal deserves another try after a while", attempts)
 	}
 }
