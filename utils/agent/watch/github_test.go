@@ -75,6 +75,16 @@ func newGitHubFake(t *testing.T) *githubFake {
 			_, _ = w.Write([]byte(`{"body":"rebased","user":{"login":"andrii","type":"User"}}`))
 		case "/repos/acme/api/pulls/9/reviews/77":
 			_, _ = w.Write([]byte(`{"body":"looks good, one nit inline","state":"COMMENTED","user":{"login":"maria","type":"User"}}`))
+		case "/repos/acme/api/pulls/29/reviews":
+			_, _ = w.Write([]byte(`[
+  {"id":3001,"state":"COMMENTED","body":"## Review\n\nI1 the label step is only reached on your own PR","submitted_at":"2026-09-24T15:31:01Z","user":{"login":"maria","type":"User"}},
+  {"id":3002,"state":"COMMENTED","body":"","submitted_at":"2026-09-24T15:31:02Z","user":{"login":"maria","type":"User"}},
+  {"id":3003,"state":"COMMENTED","body":"Fixed in 5307e4b.","submitted_at":"2026-09-24T16:00:27Z","user":{"login":"andrii","type":"User"}}
+]`))
+		case "/repos/acme/api/pulls/30/reviews":
+			_, _ = w.Write([]byte(`[
+  {"id":4001,"state":"APPROVED","body":"ship it","submitted_at":"2026-09-20T09:00:00Z","user":{"login":"maria","type":"User"}}
+]`))
 		default:
 			http.NotFound(w, r)
 		}
@@ -211,5 +221,53 @@ func TestGitHubPollSkipsAuthorActivityWithoutAComment(t *testing.T) {
 	}
 	if e := events[0]; e.Ref != "acme/api#9" || e.Author != "maria" || e.Body != "looks good, one nit inline" {
 		t.Errorf("review event = %+v", e)
+	}
+}
+
+const githubReviewIsTheSummary = `[
+  {"id":"q1","reason":"author","updated_at":"2026-09-24T15:31:01Z",
+   "subject":{"title":"Mobile compatibility (0.16.0)","url":"https://api.github.com/repos/acme/api/pulls/29","type":"PullRequest",
+              "latest_comment_url":"https://api.github.com/repos/acme/api/pulls/29"},
+   "repository":{"full_name":"acme/api"}},
+  {"id":"q2","reason":"author","updated_at":"2026-09-24T18:00:00Z",
+   "subject":{"title":"Retry queue","url":"https://api.github.com/repos/acme/api/pulls/30","type":"PullRequest",
+              "latest_comment_url":"https://api.github.com/repos/acme/api/pulls/30"},
+   "repository":{"full_name":"acme/api"}}
+]`
+
+// A review submitted with its summary in the body, and no comment after it, is
+// a thread whose latest_comment_url is the pull request itself. It is still the
+// review to work on - keyed the way the webhook keys it, so every poll while the
+// thread stays unread is the same event, not a run each. An old review under a
+// thread raised by something else (a push, a merge) is not raised again.
+func TestGitHubPollReadsTheReviewBehindAnAuthorThread(t *testing.T) {
+	f := newGitHubFake(t)
+	f.notifications = githubReviewIsTheSummary
+	g := &GitHub{Token: "tok", URL: f.srv.URL}
+
+	events, _, err := g.Poll(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("events = %d, want the one review with words in it: %+v", len(events), events)
+	}
+	e := events[0]
+	if e.Kind != KindPRReview || e.Key != "github:acme/api#29:r3001" {
+		t.Errorf("kind/key = %s %s, want pr.review github:acme/api#29:r3001", e.Kind, e.Key)
+	}
+	if e.Author != "maria" || !e.Mine || e.Bot {
+		t.Errorf("review event = %+v", e)
+	}
+	if e.Body == "" || e.Body[:9] != "## Review" {
+		t.Errorf("body = %q, want the review summary", e.Body)
+	}
+
+	again, _, err := g.Poll(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(again) != 1 || again[0].Key != e.Key {
+		t.Errorf("second poll = %+v, want the same key so the daemon's seen set holds it", again)
 	}
 }
