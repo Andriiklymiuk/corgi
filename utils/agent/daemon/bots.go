@@ -109,17 +109,17 @@ func (d *Daemon) runBot(ctx context.Context, spec WatchSpec, b bots.Bot, e watch
 		d.watchState.Fixes.Finish(key, nil, "", runErr.Error(), time.Now())
 		d.learn(spec, "bot "+b.Name, "failed on "+e.Ref+": "+lastLine(string(out))+" ("+runErr.Error()+")")
 		if e.Kind == watch.KindRoutine {
-			d.routineReport(spec, e, string(out), runErr)
+			d.routineReport(spec, e, string(out), runErr, logPath)
 			return
 		}
 		go d.notifyAttentionAt(notifyTitlePrefix+b.Display(), fmt.Sprintf("%s on %s failed: %v - log: %s", b.Display(), e.Ref, runErr, logPath), spec.Workspace, e.URL)
 		return
 	}
 	links := uniqueStrings(prLink.FindAllString(string(out), -1))
-	note := clipText(lastLine(string(out)), 200)
+	note := clipText(plainLine(lastLine(string(out))), 200)
 	d.watchState.Fixes.Finish(key, links, note, "", time.Now())
 	if e.Kind == watch.KindRoutine {
-		d.routineReport(spec, e, string(out), nil)
+		d.routineReport(spec, e, string(out), nil, logPath, links...)
 		return
 	}
 	body := b.Display() + " on " + e.Ref
