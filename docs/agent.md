@@ -350,6 +350,8 @@ corgi agent serve --foreground   # run it in this terminal and watch
 | `GET`/`POST /launch/profiles` | the account profiles, and one added as `corgi agent profile add <name> --config-dir <dir>` would - the Mac app's **Add account** (2.28.4) |
 | `corgi agent watch prune [--older-than 7d] [--dry-run]` | remove the worktrees of isolated runs finished that long ago; the branch and any dirty worktree stay. `watch enable --prune-after 7d` does it from the daemon, hourly (2.28.14) |
 | `corgi agent watch enable --plan-review always\|risk>=N\|off [--workspace X]` | the stories skill waits for a human on the spec before it cuts a branch - always, or when the story's risk forecast reaches N of 10. Asked with a question the phone can answer. Off by default: nothing changes until you turn it on. `planReview` in `corgi_watch_switches` / `corgi_watch_set` too (2.28.27) |
+| `corgi agent watch enable --night-shift [--workspace X]` | the quiet hours stop ringing, not working: fixes and routines run through them as by day, every word about them is held, and one "N while you were away" says it all when the quiet hours end. Days off still sleep. The phone's repo sheet has the switch (2.31) |
+| `corgi agent lid [on\|off\|lock\|shutdown] [--hours 08:00-23:00]` | a laptop left closed in a room says when it wakes or its lid opens, by day (inside `--hours`; at night the one opening it is you): one push per opening, never twice in ten minutes. When it was not you, the push has Lock (screen saver, password to get back in) and Shut down (as the Apple menu does) behind Face ID; neither needs root, neither is stopped by a `caffeinate` in a terminal or `pmset disablesleep`. `lock` and `shutdown` work from here too. Restart the daemon after on/off (2.31) |
 | `corgi agent watch enable --silent [--workspace X]` | this workspace's watch keeps quiet: fixes run, the inbox and the kanban fill, but nothing rings - no toast, no phone push - until `--silent=false`. For a repository where comments and reviews should just get fixed. A permission prompt in a live session still rings. `silent` in the phone's repo switches too (2.28) |
 | `corgi agent watch enable --mentions [--channel '#incidents'] [--review-channel '#code-review'] [--trust @teammate]` | Slack joins the watch: a mention or a direct message rings like a review comment, a listened channel rings on every message, and a post in a review channel carrying pull-request links is one review to do. `--trust` names who may start an unattended run by mentioning you - empty means nobody, because a channel is open to whoever is in it. Needs `corgi agent watch auth slack` (2.29) |
 | `corgi agent chat post "<text>" [--to '#chan'] [--reply <event key>] [--as me\|bot]` · `chat react <event key> <emoji>` | say something back, in the thread the message came from. The bot speaks by default when a bot token is stored; `--as me` posts under your own name. Also the MCP tool `corgi_chat_post`, so a session answers the same way (2.29) |
@@ -1294,7 +1296,8 @@ own PR.
 
 **Budget.** A fix costs tokens, so a workspace starts at most three an hour
 and ten a day (`--max-per-hour`, `--max-per-day`), none during `--quiet
-23:00-07:00` (local time, may cross midnight), none on a `--days-off`
+23:00-07:00` (local time, may cross midnight; with `--night-shift` the
+work goes on through it and only the phone sleeps), none on a `--days-off`
 day (`weekends`, or `sat,sun`, or any days - the watch sleeps through the
 whole day: no polling, no run, nothing rings; the reload button still polls
 once), and none while the account's

@@ -64,6 +64,7 @@ type WatchSpec struct {
 	CapSince        time.Time
 	Quiet           string
 	DaysOff         []time.Weekday
+	NightShift      bool
 }
 
 func ParseDaysOff(list []string) ([]time.Weekday, error) {
@@ -845,7 +846,7 @@ func fixDeferral(spec WatchSpec, log *watch.FixLog, now time.Time) string {
 	if dayOff(spec, now) {
 		return "day off"
 	}
-	if q, err := ParseQuiet(spec.Quiet); err == nil && q.Contains(now) {
+	if q, err := ParseQuiet(spec.Quiet); err == nil && q.Contains(now) && !spec.NightShift {
 		return "quiet hours"
 	}
 	if tooHot(now) {

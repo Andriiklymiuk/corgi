@@ -37,6 +37,7 @@ type WatchSwitches struct {
 	RerunCI    bool     `json:"rerunCI"`
 	Silent     bool     `json:"silent"`
 	Headless   bool     `json:"headless"`
+	NightShift bool     `json:"nightShift"`
 }
 
 func switchesOf(id string, wc *config.WatchConfig) WatchSwitches {
@@ -59,6 +60,7 @@ func switchesOf(id string, wc *config.WatchConfig) WatchSwitches {
 		out.DoneWhen = wc.DoneWhen
 	}
 	out.CompactAt, out.Rebase, out.Lessons, out.AutoCarry, out.RerunCI, out.Headless, out.Silent = wc.CompactAt, wc.Rebase, wc.Lessons, wc.AutoCarry, wc.RerunCI, wc.Headless, wc.Silent
+	out.NightShift = wc.NightShift
 	out.PlanReview = wc.PlanReview
 	out.Slots = max(1, wc.Slots)
 	return out
@@ -115,6 +117,7 @@ func launchWatchHandler(w http.ResponseWriter, r *http.Request) {
 			RerunCI    *bool     `json:"rerunCI"`
 			Silent     *bool     `json:"silent"`
 			Headless   *bool     `json:"headless"`
+			NightShift *bool     `json:"nightShift"`
 			PlanReview *string   `json:"planReview"`
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(&req); err != nil {
@@ -226,6 +229,9 @@ func launchWatchHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.Silent != nil {
 			wc.Silent, restart = *req.Silent, true
+		}
+		if req.NightShift != nil {
+			wc.NightShift = *req.NightShift
 		}
 		if req.Headless != nil {
 			wc.Headless = *req.Headless

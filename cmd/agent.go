@@ -136,6 +136,7 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 			d.Digest = func(now time.Time) string { return digestText(dir, now) }
 		}
 		d.AutoContinue = user.AutoContinue
+		d.Lid = strings.TrimSpace(user.Lid)
 		d.Sessions.AutoContinue = user.AutoContinue
 		supervisor.KeepDisplay = user.KeepDisplay
 		d.SessionCap = user.SessionCap
