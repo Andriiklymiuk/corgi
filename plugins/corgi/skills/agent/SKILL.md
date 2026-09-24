@@ -970,6 +970,10 @@ CLI or the phone's repo sheet, no restart:
   bot runs are written one line each to `<agentDir>/lessons/<workspace>.md`;
   `corgi agent lesson add|list`; the SessionStart hook tells you how many
   and the last one. **Read them before changing code.**
+- `--night-shift`: the quiet hours hold the phone, not the work - fixes and
+  routines run through the night, one summary in the morning. `--quiet` must
+  be set for it to mean anything. The lid guard (`corgi agent lid on`) is
+  machine-wide, not a watch flag: a wake or an open lid by day rings once.
 - `--hand-over`, `--auto-merge`: feedback typed into the session on
   the branch; a ready pull request merged.
 - `--after-merge "<column>"`: once **every** pull request of a run is

@@ -111,23 +111,26 @@ type Daemon struct {
 	CommandTick      time.Duration
 	IdleTick         time.Duration
 
-	Sessions       *sessions.Registry
-	Ledger         *usage.Ledger
-	MergePull      func(ctx context.Context, workspace, link string) error
-	MoveTicket     func(ctx context.Context, workspace, ref, status string) error
-	RerunCI        func(ctx context.Context, workspace, repo string, since time.Time) (watch.Rerun, error)
-	Policy         func(s sessions.Session) Policy
-	Carry          func(s sessions.Session) (string, error)
-	Shell          func(ctx context.Context, dir, cmd string) ([]byte, error)
-	Raise          func(ctx context.Context, t sessions.FocusTarget) error
-	Alive          func(pid int) bool
-	ListProcesses  func() ([]proc.Process, error)
-	Cwd            func(pid int) string
-	ReapTick       time.Duration
-	AccountDirs    func() []string
-	TypeText       func(ctx context.Context, t sessions.FocusTarget, text string, enter bool) error
-	AutoContinue   bool
-	SessionCap     int64
+	Sessions      *sessions.Registry
+	Ledger        *usage.Ledger
+	MergePull     func(ctx context.Context, workspace, link string) error
+	MoveTicket    func(ctx context.Context, workspace, ref, status string) error
+	RerunCI       func(ctx context.Context, workspace, repo string, since time.Time) (watch.Rerun, error)
+	Policy        func(s sessions.Session) Policy
+	Carry         func(s sessions.Session) (string, error)
+	Shell         func(ctx context.Context, dir, cmd string) ([]byte, error)
+	Raise         func(ctx context.Context, t sessions.FocusTarget) error
+	Alive         func(pid int) bool
+	ListProcesses func() ([]proc.Process, error)
+	Cwd           func(pid int) string
+	ReapTick      time.Duration
+	AccountDirs   func() []string
+	TypeText      func(ctx context.Context, t sessions.FocusTarget, text string, enter bool) error
+	AutoContinue  bool
+	SessionCap    int64
+	// Lid is the local HH:MM-HH:MM window in which a wake or a lid opening
+	// rings the phone; empty means no lid guard.
+	Lid            string
 	spent          map[string]spendMark
 	DigestAt       string
 	Digest         func(now time.Time) string
@@ -341,6 +344,9 @@ func (d *Daemon) runDynamic(ctx context.Context, configs []supervisor.SpawnConfi
 	publishDone := make(chan struct{})
 	go func() { defer close(publishDone); d.publishStatus(publishCtx) }()
 	defer func() { stopPublishing(); <-publishDone }()
+	guardDone := make(chan struct{})
+	go func() { defer close(guardDone); d.watchLid(publishCtx) }()
+	defer func() { stopPublishing(); <-guardDone }()
 
 	var wg sync.WaitGroup
 	launch := func(r *supervisor.Runner) {
@@ -593,6 +599,10 @@ func (d *Daemon) notifyAttentionFull(title, body, workspaceID, link, key, sessio
 		utils.Infof("agent: (silent %s) %s: %s\n", workspaceID, title, body)
 		return
 	}
+	if sessionID == "" && d.heldForMorning(workspaceID, key, body, time.Now()) {
+		utils.Infof("agent: (held until morning %s) %s: %s\n", workspaceID, title, body)
+		return
+	}
 	if link == "" && d.LinkFor != nil {
 		link = d.LinkFor(workspaceID)
 	}
@@ -655,6 +665,28 @@ func inWindow(s sessions.Session) bool {
 	}
 	switch s.Host.Kind {
 	case sessions.HostVSCodeTerminal, sessions.HostVSCodePanel, sessions.HostITerm, sessions.HostTerminalApp, sessions.HostTmux:
+		return true
+	}
+	return false
+}
+
+// heldForMorning keeps a night-shift workspace's word until its quiet hours
+// end: the work went on, the phone slept, and releaseHeld says it all at once.
+// A live session's word (a permission, a question) is not held - someone is
+// in that chat now.
+func (d *Daemon) heldForMorning(workspaceID, key, body string, now time.Time) bool {
+	if workspaceID == "" || d.watchState == nil {
+		return false
+	}
+	for _, spec := range d.Watches {
+		if !spec.NightShift || spec.Workspace != workspaceID || !quietNow(spec, now) {
+			continue
+		}
+		if key != "" {
+			d.watchState.HoldEvent(workspaceID, key, body, now)
+		} else {
+			d.watchState.Hold(workspaceID, body, now)
+		}
 		return true
 	}
 	return false

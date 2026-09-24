@@ -223,6 +223,9 @@ var agentWatchEnableCmd = &cobra.Command{
 		if flags.Changed("silent") {
 			wc.Silent, _ = flags.GetBool("silent")
 		}
+		if flags.Changed("night-shift") {
+			wc.NightShift, _ = flags.GetBool("night-shift")
+		}
 		if flags.Changed("headless") {
 			wc.Headless, _ = flags.GetBool("headless")
 		}
@@ -1073,7 +1076,7 @@ func watchSpecOf(dir string, w workspace.Workspace, resolved config.Resolved) (d
 	spec := daemon.WatchSpec{Workspace: w.ID, Dir: w.AbsPath, ConfigDir: expandTilde(resolved.ConfigDir), Kind: resolved.Kind, Agents: resolved.AgentOrder(), Bin: expandTilde(resolved.Bin), Project: wc.Project, Repos: wc.Repos,
 		Rules:    watch.Rules{Enabled: true, Labels: wc.Labels, States: wc.States, Assignee: wc.Assignee, Comments: wc.Comments, PRs: wc.PRs, CI: wc.CI, Reviews: wc.Reviews, From: wc.From, Bots: wc.Bots},
 		Interval: 3 * time.Minute, Action: "notify", SkipPermissions: resolved.DangerouslySkipPermissions,
-		MaxFixesPerHour: wc.MaxFixesPerHour, MaxFixesPerDay: wc.MaxFixesPerDay, LimitCeiling: wc.LimitCeiling, MaxFixesTotal: wc.MaxFixesTotal, CapSince: wc.CapSince, Quiet: wc.Quiet, FixKinds: wc.FixKinds, DoneWhen: wc.DoneWhen, PlanReview: wc.PlanReview, Lease: wc.Lease, Isolate: wc.Isolate, Slots: wc.Slots, Batch: wc.Batch, RerunCI: wc.RerunCI, Silent: wc.Silent, NoRetry: wc.NoRetry, ReviewStatus: wc.ReviewStatus, Approve: wc.Approve, Models: resolved.Models, Routines: resolved.Routines}
+		MaxFixesPerHour: wc.MaxFixesPerHour, MaxFixesPerDay: wc.MaxFixesPerDay, LimitCeiling: wc.LimitCeiling, MaxFixesTotal: wc.MaxFixesTotal, CapSince: wc.CapSince, Quiet: wc.Quiet, NightShift: wc.NightShift, FixKinds: wc.FixKinds, DoneWhen: wc.DoneWhen, PlanReview: wc.PlanReview, Lease: wc.Lease, Isolate: wc.Isolate, Slots: wc.Slots, Batch: wc.Batch, RerunCI: wc.RerunCI, Silent: wc.Silent, NoRetry: wc.NoRetry, ReviewStatus: wc.ReviewStatus, Approve: wc.Approve, Models: resolved.Models, Routines: resolved.Routines}
 	if wc.Action == "fix" {
 		spec.Action = "fix"
 	}
@@ -1341,6 +1344,7 @@ func describeWatchParts(wc *config.WatchConfig) []string {
 		{wc.PRs, "PR reviews and comments"},
 		{wc.HandOver, "handed to the session on the branch"},
 		{wc.AutoMerge, "merged when green and approved"},
+		{wc.NightShift && wc.Quiet != "", "works through " + wc.Quiet + ", the phone hears in the morning"},
 		{wc.AfterMerge != "", "then the ticket goes to " + wc.AfterMerge + subtaskColumn(wc.AfterMergeSubtasks)},
 		{wc.Batch > 1, fmt.Sprintf("up to %d tickets arriving together share one run", wc.Batch)},
 		{wc.Approve, "review requests approved when clean"},
@@ -1462,6 +1466,7 @@ func init() {
 	f.Bool("approve", false, "An unattended review of a pull request I was asked to review may approve it when nothing blocks and the risk card allows")
 	f.Bool(watchFlagHandOver, false, "Type a review comment, a red build or an asked-for review into the session already on that branch")
 	f.Bool("headless", false, "Let a message for a session whose terminal is gone run as one headless turn (claude -p --resume, or codex exec resume; acceptEdits) in its own checkout, so the phone's chat keeps working")
+	f.Bool("night-shift", false, "Work through the quiet hours: fixes and routines run as by day, nothing rings until the quiet hours end, then one 'N while you were away' says what happened (--night-shift=false to sleep through them again)")
 	f.Bool("silent", false, "Nothing about this workspace's watch rings - no toast, no phone push: fixes run, the inbox and the kanban fill, and you look when you like (--silent=false to ring again)")
 	f.Bool(watchFlagRerunCI, false, "Rerun the failed jobs of a red build once before it is worked on or handed over; a second red on the same run goes the usual way (GitHub)")
 	f.Bool(watchFlagAutoCarry, false, "Carry a session that hit its five-hour quota to another of the workspace's accounts with budget, once per limit (only profiles the accounts list names)")

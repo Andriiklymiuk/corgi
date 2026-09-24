@@ -25,12 +25,15 @@ type RepoWorkspace struct {
 }
 
 type UserConfig struct {
-	Version      int                        `yaml:"version"`
-	Workspaces   map[string]WorkspaceConfig `yaml:"workspaces"`
-	Defaults     WorkspaceConfig            `yaml:"defaults"`
-	NotifyUrl    string                     `yaml:"notifyUrl"`
-	DigestAt     string                     `yaml:"digestAt"`
-	StayAwake    bool                       `yaml:"stayAwake"`
+	Version    int                        `yaml:"version"`
+	Workspaces map[string]WorkspaceConfig `yaml:"workspaces"`
+	Defaults   WorkspaceConfig            `yaml:"defaults"`
+	NotifyUrl  string                     `yaml:"notifyUrl"`
+	DigestAt   string                     `yaml:"digestAt"`
+	StayAwake  bool                       `yaml:"stayAwake"`
+	// Lid is the window (HH:MM-HH:MM, local) in which the laptop waking up
+	// or its lid opening rings the phone - a closed laptop left in a room.
+	Lid          string                     `yaml:"lid,omitempty"`
 	PulseUrl     string                     `yaml:"pulseUrl,omitempty"`
 	KeepDisplay  bool                       `yaml:"keepDisplay,omitempty"`
 	AutoContinue bool                       `yaml:"autoContinue"`
@@ -221,44 +224,47 @@ func (s *SlackWatch) MayRun(author string) bool {
 }
 
 type WatchConfig struct {
-	Enabled         bool        `yaml:"enabled"`
-	Interval        string      `yaml:"interval"`
-	Tracker         string      `yaml:"tracker"`
-	Project         string      `yaml:"project"`
-	Labels          []string    `yaml:"labels"`
-	States          []string    `yaml:"states"`
-	Assignee        string      `yaml:"assignee"`
-	Comments        bool        `yaml:"comments"`
-	PRs             bool        `yaml:"prs"`
-	Repos           []string    `yaml:"repos"`
-	Action          string      `yaml:"action"`
-	MaxFixesPerHour int         `yaml:"maxFixesPerHour,omitempty"`
-	MaxFixesPerDay  int         `yaml:"maxFixesPerDay,omitempty"`
-	LimitCeiling    int         `yaml:"limitCeiling,omitempty"`
-	MaxFixesTotal   int         `yaml:"maxFixesTotal,omitempty"`
-	CapSince        time.Time   `yaml:"capSince,omitempty"`
-	Quiet           string      `yaml:"quiet,omitempty"`
-	DaysOff         []string    `yaml:"daysOff,omitempty"`
-	Lease           bool        `yaml:"lease,omitempty"`
-	NoRetry         bool        `yaml:"noRetry,omitempty"`
-	Isolate         bool        `yaml:"isolate,omitempty"`
-	PruneAfter      string      `yaml:"pruneAfter,omitempty"`
-	DayCap          int64       `yaml:"dayCap,omitempty"`
-	Headless        bool        `yaml:"headless,omitempty"`
-	RerunCI         bool        `yaml:"rerunCI,omitempty"`
-	Chat            *ChatConfig `yaml:"chat,omitempty"`
-	Silent          bool        `yaml:"silent,omitempty"`
-	AutoCarry       bool        `yaml:"autoCarry,omitempty"`
-	Slots           int         `yaml:"slots,omitempty"`
-	Batch           int         `yaml:"batch,omitempty"`
-	Reviews         bool        `yaml:"reviews,omitempty"`
-	CI              bool        `yaml:"ci,omitempty"`
-	From            []string    `yaml:"from,omitempty"`
-	Bots            bool        `yaml:"bots,omitempty"`
-	FixKinds        []string    `yaml:"fixKinds,omitempty"`
-	ReviewStatus    string      `yaml:"reviewStatus,omitempty"`
-	PickupStatus    string      `yaml:"pickupStatus,omitempty"`
-	AutoMerge       bool        `yaml:"autoMerge,omitempty"`
+	Enabled         bool      `yaml:"enabled"`
+	Interval        string    `yaml:"interval"`
+	Tracker         string    `yaml:"tracker"`
+	Project         string    `yaml:"project"`
+	Labels          []string  `yaml:"labels"`
+	States          []string  `yaml:"states"`
+	Assignee        string    `yaml:"assignee"`
+	Comments        bool      `yaml:"comments"`
+	PRs             bool      `yaml:"prs"`
+	Repos           []string  `yaml:"repos"`
+	Action          string    `yaml:"action"`
+	MaxFixesPerHour int       `yaml:"maxFixesPerHour,omitempty"`
+	MaxFixesPerDay  int       `yaml:"maxFixesPerDay,omitempty"`
+	LimitCeiling    int       `yaml:"limitCeiling,omitempty"`
+	MaxFixesTotal   int       `yaml:"maxFixesTotal,omitempty"`
+	CapSince        time.Time `yaml:"capSince,omitempty"`
+	Quiet           string    `yaml:"quiet,omitempty"`
+	DaysOff         []string  `yaml:"daysOff,omitempty"`
+	// NightShift keeps the fixes and routines going through the quiet hours;
+	// only the phone sleeps, and hears about it all in the morning.
+	NightShift   bool        `yaml:"nightShift,omitempty"`
+	Lease        bool        `yaml:"lease,omitempty"`
+	NoRetry      bool        `yaml:"noRetry,omitempty"`
+	Isolate      bool        `yaml:"isolate,omitempty"`
+	PruneAfter   string      `yaml:"pruneAfter,omitempty"`
+	DayCap       int64       `yaml:"dayCap,omitempty"`
+	Headless     bool        `yaml:"headless,omitempty"`
+	RerunCI      bool        `yaml:"rerunCI,omitempty"`
+	Chat         *ChatConfig `yaml:"chat,omitempty"`
+	Silent       bool        `yaml:"silent,omitempty"`
+	AutoCarry    bool        `yaml:"autoCarry,omitempty"`
+	Slots        int         `yaml:"slots,omitempty"`
+	Batch        int         `yaml:"batch,omitempty"`
+	Reviews      bool        `yaml:"reviews,omitempty"`
+	CI           bool        `yaml:"ci,omitempty"`
+	From         []string    `yaml:"from,omitempty"`
+	Bots         bool        `yaml:"bots,omitempty"`
+	FixKinds     []string    `yaml:"fixKinds,omitempty"`
+	ReviewStatus string      `yaml:"reviewStatus,omitempty"`
+	PickupStatus string      `yaml:"pickupStatus,omitempty"`
+	AutoMerge    bool        `yaml:"autoMerge,omitempty"`
 	// Where a ticket goes once every pull request of its run is merged; subtasks may go elsewhere.
 	AfterMerge         string   `yaml:"afterMerge,omitempty"`
 	AfterMergeSubtasks string   `yaml:"afterMergeSubtasks,omitempty"`
