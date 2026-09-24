@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os/exec"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -150,17 +151,29 @@ func (g *GitHub) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 		at, _ := time.Parse(time.RFC3339, t.UpdatedAt)
 		state := g.pullState(ctx, states, t.Subject.URL)
 		author, body, bot, hasComment := g.latestComment(ctx, t.Subject.LatestCommentURL, t.Subject.URL)
-		if r.kind == KindPRComment && (!hasComment || (author != "" && strings.EqualFold(author, g.Me))) {
-			continue
-		}
+		kind := r.kind
 		key := "github:" + ref + ":" + t.ID + ":" + t.UpdatedAt
 		if id := githubCommentKey(t.Subject.LatestCommentURL); id != "" {
 			key = "github:" + ref + ":" + id
 		}
+		if !hasComment && r.kind == KindPRComment {
+			// A review submitted with a body and nothing after it leaves the thread's
+			// latest_comment_url pointing at the pull request itself, so the review that
+			// raised the thread has to be read off the pull request. Its key is the one
+			// the webhook gives the same review, so the two are one event.
+			if rv, ok := g.reviewBehind(ctx, t.Repository.FullName, number, at); ok {
+				author, body, bot, hasComment = rv.author, rv.body, rv.bot, true
+				kind = KindPRReview
+				key = "github:" + ref + ":r" + rv.id
+			}
+		}
+		if r.kind == KindPRComment && (!hasComment || (author != "" && strings.EqualFold(author, g.Me))) {
+			continue
+		}
 		events = append(events, Event{
 			Key:    key,
 			Source: g.Name(),
-			Kind:   r.kind,
+			Kind:   kind,
 			Ref:    ref,
 			Title:  t.Subject.Title,
 			Body:   body,
@@ -200,6 +213,58 @@ func (g *GitHub) latestComment(ctx context.Context, commentURL, subjectURL strin
 	}
 	bot = githubBot(c.User.Login, c.User.Type)
 	return c.User.Login, clip(strings.TrimSpace(c.Body), bodyMax), bot, true
+}
+
+type githubReview struct {
+	id, author, body string
+	bot              bool
+}
+
+// reviewBehind is the review that raised a thread whose latest_comment_url is
+// the pull request itself: the newest one by someone else, with words in it and
+// not older than the thread's activity, so a stale review cannot be raised again
+// by a push or a merge. An inline-only review carries no body and arrives as its
+// comments instead.
+func (g *GitHub) reviewBehind(ctx context.Context, repo, num string, at time.Time) (githubReview, bool) {
+	var reviews []struct {
+		ID          int64  `json:"id"`
+		State       string `json:"state"`
+		Body        string `json:"body"`
+		SubmittedAt string `json:"submitted_at"`
+		User        struct {
+			Login string `json:"login"`
+			Type  string `json:"type"`
+		} `json:"user"`
+	}
+	resp, err := g.get(ctx, "/repos/"+repo+"/pulls/"+num+"/reviews?per_page=100", "")
+	if err != nil || githubDecode(resp, &reviews) != nil {
+		return githubReview{}, false
+	}
+	var best githubReview
+	var bestAt time.Time
+	for _, r := range reviews {
+		if r.State == "PENDING" || strings.TrimSpace(r.Body) == "" {
+			continue
+		}
+		if g.Me != "" && strings.EqualFold(r.User.Login, g.Me) {
+			continue
+		}
+		submitted := trackerTime(r.SubmittedAt)
+		if !at.IsZero() && submitted.Before(at.Add(-2*time.Minute)) {
+			continue
+		}
+		if submitted.Before(bestAt) {
+			continue
+		}
+		bestAt = submitted
+		best = githubReview{
+			id:     strconv.FormatInt(r.ID, 10),
+			author: r.User.Login,
+			body:   clip(strings.TrimSpace(r.Body), bodyMax),
+			bot:    githubBot(r.User.Login, r.User.Type),
+		}
+	}
+	return best, best.id != ""
 }
 
 func (g *GitHub) pullState(ctx context.Context, cache map[string]string, apiURL string) string {
