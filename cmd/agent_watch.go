@@ -1197,7 +1197,11 @@ func sourceNames(s daemon.WatchSpec) []string {
 
 func fixBudgetLine(s daemon.WatchSpec, fixes *watch.FixLog, now time.Time) string {
 	b := daemon.BudgetFor(s, fixes, now)
-	line := fmt.Sprintf("caps %d/h %d/day · quiet %s · fixes today: %d", b.PerHour, b.PerDay, firstNonEmptyString(s.Quiet, "none"), b.Today)
+	quiet := firstNonEmptyString(s.Quiet, "none")
+	if s.NightShift && s.Quiet != "" {
+		quiet += " (night shift: the work goes on, the phone waits)"
+	}
+	line := fmt.Sprintf("caps %d/h %d/day · quiet %s · fixes today: %d", b.PerHour, b.PerDay, quiet, b.Today)
 	if len(s.FixKinds) > 0 {
 		line = "auto for " + strings.Join(s.FixKinds, ", ") + " · " + line
 	}
