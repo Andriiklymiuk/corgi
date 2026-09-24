@@ -57,3 +57,35 @@ func TestAPeerSessionHoldsItsTicketToo(t *testing.T) {
 		t.Fatalf("the other laptop's session counts, got %q", why)
 	}
 }
+
+type answeredSource struct{ why string }
+
+func (answeredSource) Name() string { return "fake" }
+func (answeredSource) Poll(context.Context, watch.Cursor) ([]watch.Event, watch.Cursor, error) {
+	return nil, nil, nil
+}
+func (a answeredSource) AnsweredSince(context.Context, string, time.Time) string { return a.why }
+
+// Feedback already answered - by hand, or by an earlier run - is not fixed
+// again: the run would find nothing to do and still spend a session. Only
+// review feedback asks; a new ticket has no reply to look for.
+func TestFeedbackAlreadyAnsweredIsNotFixedAgain(t *testing.T) {
+	d := testDaemon(t)
+	spec := ticketSpec(t)
+	spec.Sources = []watch.Source{answeredSource{why: "you replied and pushed after it"}}
+	at := time.Date(2026, 9, 24, 15, 31, 1, 0, time.UTC)
+
+	for _, kind := range []watch.Kind{watch.KindPRReview, watch.KindPRComment} {
+		why := d.stillWorthFixing(context.Background(), spec, watch.Event{Kind: kind, Key: "github:acme/api#29:r3001", Ref: "acme/api#29", Mine: true, At: at, Body: "I1 ..."})
+		if !strings.Contains(why, "already answered") {
+			t.Errorf("%s: answered feedback should not start a run, got %q", kind, why)
+		}
+	}
+	if why := d.stillWorthFixing(context.Background(), spec, watch.Event{Kind: watch.KindIssueNew, Key: "linear:HUM-14", Ref: "HUM-14", State: "Ready", Mine: true, At: at}); why != "" {
+		t.Errorf("a new ticket is not feedback, got %q", why)
+	}
+	spec.Sources = []watch.Source{answeredSource{}}
+	if why := d.stillWorthFixing(context.Background(), spec, watch.Event{Kind: watch.KindPRReview, Key: "github:acme/api#29:r3001", Ref: "acme/api#29", Mine: true, At: at}); why != "" {
+		t.Errorf("unanswered feedback runs, got %q", why)
+	}
+}

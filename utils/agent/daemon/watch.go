@@ -607,6 +607,15 @@ func (d *Daemon) stillWorthFixing(ctx context.Context, spec WatchSpec, e watch.E
 		}
 		break
 	}
+	if e.Kind == watch.KindPRComment || e.Kind == watch.KindPRReview {
+		for _, src := range spec.Sources {
+			if a, ok := src.(watch.Answerer); ok {
+				if why := a.AnsweredSince(ctx, e.Ref, e.At); why != "" {
+					return "already answered: " + why
+				}
+			}
+		}
+	}
 	return ""
 }
 

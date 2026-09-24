@@ -298,6 +298,53 @@ func (g *GitLab) RefState(ctx context.Context, ref string) string {
 	return mr.State
 }
 
+// AnsweredSince is the Answerer for a merge request: a note of mine after the
+// moment, and a head commit after it.
+func (g *GitLab) AnsweredSince(ctx context.Context, ref string, at time.Time) string {
+	project, num, ok := strings.Cut(ref, "!")
+	if !ok || g.Token == "" || g.Me == "" || at.IsZero() {
+		return ""
+	}
+	base := g.URL
+	if base == "" {
+		base = "https://gitlab.com"
+	}
+	mrURL := base + "/api/v4/projects/" + url.PathEscape(project) + "/merge_requests/" + num
+	var notes []gitlabNote
+	if err := g.getInto(ctx, mrURL+"/notes?sort=desc&order_by=created_at&per_page=20", &notes); err != nil {
+		return ""
+	}
+	replied := false
+	for _, n := range notes {
+		if n.System || !isMe(g.Me, n.Author.Username) {
+			continue
+		}
+		if t, err := time.Parse(time.RFC3339, n.CreatedAt); err == nil && !t.Before(at) {
+			replied = true
+			break
+		}
+	}
+	if !replied {
+		return ""
+	}
+	var mr struct {
+		SHA string `json:"sha"`
+	}
+	if err := g.getInto(ctx, mrURL, &mr); err != nil || mr.SHA == "" {
+		return ""
+	}
+	var c struct {
+		CommittedDate string `json:"committed_date"`
+	}
+	if err := g.getInto(ctx, base+"/api/v4/projects/"+url.PathEscape(project)+"/repository/commits/"+mr.SHA, &c); err != nil {
+		return ""
+	}
+	if t, err := time.Parse(time.RFC3339, c.CommittedDate); err != nil || t.Before(at) {
+		return ""
+	}
+	return "you replied and pushed after it"
+}
+
 func (g *GitLab) getInto(ctx context.Context, endpoint string, out any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {

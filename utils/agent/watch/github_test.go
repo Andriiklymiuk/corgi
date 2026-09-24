@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 const githubNotifications = `[
@@ -81,6 +82,17 @@ func newGitHubFake(t *testing.T) *githubFake {
   {"id":3002,"state":"COMMENTED","body":"","submitted_at":"2026-09-24T15:31:02Z","user":{"login":"maria","type":"User"}},
   {"id":3003,"state":"COMMENTED","body":"Fixed in 5307e4b.","submitted_at":"2026-09-24T16:00:27Z","user":{"login":"andrii","type":"User"}}
 ]`))
+		case "/repos/acme/api/pulls/29":
+			_, _ = w.Write([]byte(`{"state":"open","head":{"sha":"abc123"}}`))
+		case "/repos/acme/api/commits/abc123":
+			_, _ = w.Write([]byte(`{"commit":{"committer":{"date":"2026-09-24T16:05:00Z"}}}`))
+		case "/repos/acme/api/pulls/29/comments":
+			_, _ = w.Write([]byte(`[
+  {"id":7001,"body":"I2 the step is only reached on your own PR","created_at":"2026-09-24T15:31:02Z","user":{"login":"maria"}},
+  {"id":7002,"body":"Fixed in 5307e4b.","created_at":"2026-09-24T16:00:27Z","user":{"login":"andrii"}}
+]`))
+		case "/repos/acme/api/issues/29/comments":
+			_, _ = w.Write([]byte(`[]`))
 		case "/repos/acme/api/pulls/30/reviews":
 			_, _ = w.Write([]byte(`[
   {"id":4001,"state":"APPROVED","body":"ship it","submitted_at":"2026-09-20T09:00:00Z","user":{"login":"maria","type":"User"}}
@@ -269,5 +281,29 @@ func TestGitHubPollReadsTheReviewBehindAnAuthorThread(t *testing.T) {
 	}
 	if len(again) != 1 || again[0].Key != e.Key {
 		t.Errorf("second poll = %+v, want the same key so the daemon's seen set holds it", again)
+	}
+}
+
+// Feedback answered by hand - a reply and a push after it - is not a run.
+// A reply alone is a promise; a push alone could be anything.
+func TestGitHubAnsweredSinceNeedsAReplyAndAPushAfterIt(t *testing.T) {
+	f := newGitHubFake(t)
+	g := &GitHub{Token: "tok", URL: f.srv.URL}
+
+	review := time.Date(2026, 9, 24, 15, 31, 1, 0, time.UTC)
+	if why := g.AnsweredSince(context.Background(), "acme/api#29", review); why == "" {
+		t.Error("a reply at 16:00 and a push at 16:05 answer a review at 15:31")
+	}
+	if why := g.AnsweredSince(context.Background(), "acme/api#29", review.Add(30*time.Minute)); why != "" {
+		t.Errorf("a review at 16:01 has a push after it but no reply, got %q", why)
+	}
+	if why := g.AnsweredSince(context.Background(), "acme/api#29", review.Add(35*time.Minute)); why != "" {
+		t.Errorf("nothing after 16:06, got %q", why)
+	}
+	if why := g.AnsweredSince(context.Background(), "acme/api#30", review); why != "" {
+		t.Errorf("a pull request with no comments of mine, got %q", why)
+	}
+	if why := g.AnsweredSince(context.Background(), "acme/api#29", time.Time{}); why != "" {
+		t.Errorf("no moment to compare against, got %q", why)
 	}
 }

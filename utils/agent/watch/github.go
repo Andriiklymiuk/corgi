@@ -527,6 +527,40 @@ func (g *GitHub) MyReviewSince(ctx context.Context, ref string, since time.Time)
 	return out, true
 }
 
+// AnsweredSince is the Answerer for a pull request: a comment of mine after
+// the moment, and a head commit after it.
+func (g *GitHub) AnsweredSince(ctx context.Context, ref string, at time.Time) string {
+	if at.IsZero() {
+		return ""
+	}
+	out, ok := g.MyReviewSince(ctx, ref, at)
+	if !ok || out.Comments == 0 {
+		return ""
+	}
+	repo, num, _ := strings.Cut(ref, "#")
+	var pr struct {
+		Head struct {
+			SHA string `json:"sha"`
+		} `json:"head"`
+	}
+	resp, err := g.get(ctx, "/repos/"+repo+"/pulls/"+num, "")
+	if err != nil || githubDecode(resp, &pr) != nil || pr.Head.SHA == "" {
+		return ""
+	}
+	var c struct {
+		Commit struct {
+			Committer struct {
+				Date string `json:"date"`
+			} `json:"committer"`
+		} `json:"commit"`
+	}
+	resp, err = g.get(ctx, "/repos/"+repo+"/commits/"+pr.Head.SHA, "")
+	if err != nil || githubDecode(resp, &c) != nil || trackerTime(c.Commit.Committer.Date).Before(at) {
+		return ""
+	}
+	return "you replied and pushed after it"
+}
+
 var githubCommentID = regexp.MustCompile(`/(?:issues/comments|pulls/comments|reviews)/(\d+)$`)
 
 // githubCommentKey names a comment the way its webhook does (c<id> for a
