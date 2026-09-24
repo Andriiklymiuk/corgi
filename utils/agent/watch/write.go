@@ -383,15 +383,17 @@ func closeGitLabMR(ctx context.Context, s Secrets, link string) error {
 	return doClose(req, link)
 }
 
-func doClose(req *http.Request, link string) error {
+func doClose(req *http.Request, link string) error { return doRequest(req, link, "closing") }
+
+func doRequest(req *http.Request, link, verb string) error {
 	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
 	if err != nil {
-		return fmt.Errorf("closing %s: %w", link, err)
+		return fmt.Errorf("%s %s: %w", verb, link, err)
 	}
 	defer resp.Body.Close()
 	answer, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if resp.StatusCode >= 300 {
-		return fmt.Errorf("closing %s: HTTP %d: %s", link, resp.StatusCode, clip(string(answer), bodyMax))
+		return fmt.Errorf("%s %s: HTTP %d: %s", verb, link, resp.StatusCode, clip(string(answer), bodyMax))
 	}
 	return nil
 }
@@ -676,7 +678,7 @@ func MergePR(ctx context.Context, s Secrets, link string) error {
 		req.Header.Set("Authorization", "Bearer "+s.GitHub)
 		req.Header.Set("Accept", "application/vnd.github+json")
 		req.Header.Set("Content-Type", "application/json")
-		return doClose(req, link)
+		return doRequest(req, link, "merging")
 	case strings.Contains(link, "/-/merge_requests/"):
 		if s.GitLab == "" {
 			return ErrNoToken
@@ -691,10 +693,36 @@ func MergePR(ctx context.Context, s Secrets, link string) error {
 			return err
 		}
 		req.Header.Set("PRIVATE-TOKEN", s.GitLab)
-		return doClose(req, link)
+		return doRequest(req, link, "merging")
 	}
 	return fmt.Errorf("%s is not a GitHub pull request or a GitLab merge request", link)
 }
+
+// WriteFix names what to do about a forge refusing a write, or "" when the
+// refusal is not about the token. A token short of a scope stays short until
+// someone replaces it; retrying cannot change the answer.
+func WriteFix(err error) string {
+	if err == nil {
+		return ""
+	}
+	msg := err.Error()
+	switch {
+	case strings.Contains(msg, "insufficient_scope"):
+		if strings.Contains(msg, "github.com/") {
+			return "the GitHub token cannot write - it needs the repo scope; corgi agent watch auth"
+		}
+		return "the GitLab token cannot write - it needs the api scope, read_api is not enough; corgi agent watch auth"
+	case strings.Contains(msg, "HTTP 401"):
+		return "the token was refused - corgi agent watch auth"
+	case strings.Contains(msg, "HTTP 403"):
+		return "the token may not do that on this repository - corgi agent watch auth, or a maintainer role"
+	}
+	return ""
+}
+
+// Permanent is true when a forge refusal will not change on its own: a token
+// without the scope, a role the account lacks.
+func Permanent(err error) bool { return WriteFix(err) != "" }
 
 func (j *Jira) RecentComments(ctx context.Context, ref string, limit int) ([]Comment, error) {
 	var page struct {

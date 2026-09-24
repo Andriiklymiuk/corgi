@@ -59,6 +59,8 @@ type WorkspaceDiagnostic struct {
 type Daemon struct {
 	attentionMu     sync.Mutex
 	recentAttention map[string]time.Time
+	mergeMu         sync.Mutex
+	mergeFailed     map[string]mergeFailure
 	limitWatch      map[string]bool
 	LiftGrace       time.Duration
 

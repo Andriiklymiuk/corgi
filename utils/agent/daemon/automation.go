@@ -119,12 +119,15 @@ func (d *Daemon) pullChanged(ctx context.Context, spec WatchSpec, ref, link stri
 			utils.Infof("agent: red checks on %s handed to %s\n", ref, label)
 		}
 	}
-	if autoMerge && link != "" && now.Ready() && now.Mine && d.MergePull != nil {
+	if autoMerge && link != "" && now.Ready() && now.Mine && d.MergePull != nil && d.mergeWorthTrying(link, time.Now()) {
 		if err := d.MergePull(ctx, spec.Workspace, link); err != nil {
 			utils.Infof("agent: auto-merge %s: %v\n", ref, err)
-			go d.notifyAttentionAt(notifyTitlePrefix+spec.Workspace, "could not merge "+link+": "+err.Error(), spec.Workspace, link)
+			if body, first := d.rememberMergeFailure(link, err, time.Now()); first {
+				go d.notifyAttentionAt(notifyTitlePrefix+spec.Workspace, body, spec.Workspace, link)
+			}
 			return
 		}
+		d.forgetMergeFailure(link)
 		_ = watch.LoadPullLog(d.Dir).Set(ref, watch.PullStatus{State: "merged", Checks: now.Checks, Review: now.Review, At: time.Now()})
 		if d.Events != nil {
 			d.Events.Append(spec.Workspace, events.Event{At: time.Now().UTC(), Kind: "merged", Reason: "merged " + ref + " - checks ✓, approved", URL: link})
@@ -135,6 +138,53 @@ func (d *Daemon) pullChanged(ctx context.Context, spec WatchSpec, ref, link stri
 	if now.State == "merged" && (!known || was.State != "merged") {
 		d.ticketAfterMerge(ctx, spec, link)
 	}
+}
+
+type mergeFailure struct {
+	at        time.Time
+	msg       string
+	permanent bool
+}
+
+// A merge that failed is tried again after a while, unless the forge said the
+// token cannot do it - that answer does not change by asking again.
+const mergeRetryAfter = 30 * time.Minute
+
+func (d *Daemon) mergeWorthTrying(link string, now time.Time) bool {
+	d.mergeMu.Lock()
+	defer d.mergeMu.Unlock()
+	f, ok := d.mergeFailed[link]
+	if !ok {
+		return true
+	}
+	if f.permanent {
+		return false
+	}
+	return now.Sub(f.at) >= mergeRetryAfter
+}
+
+// rememberMergeFailure keeps the refusal and says whether it is news: the same
+// error on the same pull request rings once, not every poll.
+func (d *Daemon) rememberMergeFailure(link string, err error, now time.Time) (body string, first bool) {
+	d.mergeMu.Lock()
+	defer d.mergeMu.Unlock()
+	if d.mergeFailed == nil {
+		d.mergeFailed = map[string]mergeFailure{}
+	}
+	prev, had := d.mergeFailed[link]
+	f := mergeFailure{at: now, msg: err.Error(), permanent: watch.Permanent(err)}
+	d.mergeFailed[link] = f
+	body = "could not merge " + link + ": " + f.msg
+	if fix := watch.WriteFix(err); fix != "" {
+		body = "could not merge " + link + " - " + fix + " (auto-merge is paused for it until the daemon restarts)"
+	}
+	return body, !had || prev.msg != f.msg
+}
+
+func (d *Daemon) forgetMergeFailure(link string) {
+	d.mergeMu.Lock()
+	defer d.mergeMu.Unlock()
+	delete(d.mergeFailed, link)
 }
 
 // Once the last pull request of a run is merged, its ticket moves to the
