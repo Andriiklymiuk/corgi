@@ -1257,7 +1257,9 @@ forge refuses is said once, with the fix when the token is the reason (GitLab
 wants the `api` scope, `read_api` merges nothing): that pull request is not
 tried again until the daemon restarts, since the answer would be the same.
 Any other refusal is tried again half an hour later, quietly unless the
-error changed.
+error changed. `corgi agent doctor` asks GitLab what the token may do before
+any of that: a workspace with `--auto-merge` on and a `read_api` token is a
+red check with the fix.
 
 **A mention can start a run**, and that is the one place a stranger could
 reach your machine, so it is gated on a list of people rather than on

@@ -232,3 +232,35 @@ func TestGitLabRefFromURL(t *testing.T) {
 		t.Errorf("ref = %q", got)
 	}
 }
+
+func TestGitLabScopesCanWrite(t *testing.T) {
+	cases := []struct {
+		scopes []string
+		want   bool
+	}{
+		{[]string{"api"}, true},
+		{[]string{"read_api", "read_user"}, false},
+		{nil, true},
+	}
+	for _, c := range cases {
+		if got := GitLabScopesCanWrite(c.scopes); got != c.want {
+			t.Errorf("GitLabScopesCanWrite(%v) = %v, want %v", c.scopes, got, c.want)
+		}
+	}
+}
+
+func TestTokenScopesReadsTheSelfEndpoint(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v4/personal_access_tokens/self" || r.Header.Get("PRIVATE-TOKEN") != "glpat-x" {
+			http.Error(w, "nope", 404)
+			return
+		}
+		_, _ = w.Write([]byte(`{"scopes":["read_api"]}`))
+	}))
+	defer srv.Close()
+	g := &GitLab{URL: srv.URL, Token: "glpat-x"}
+	scopes, err := g.TokenScopes(context.Background())
+	if err != nil || len(scopes) != 1 || scopes[0] != "read_api" {
+		t.Fatalf("scopes %v, err %v", scopes, err)
+	}
+}
