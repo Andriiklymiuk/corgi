@@ -1311,12 +1311,16 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 		d.watchState.Fixes.SetHandover(e.Key, runHandover(spec.Dir, e.Ref, started, string(out)), time.Now())
 		d.mirrorHandoff(spec, e.Ref, started)
 		d.tripBreaker(spec, e, runErr.Error())
-		d.routineReport(spec, e, string(out), runErr)
 		if e.Source == "slack" {
 			d.say(ctx, spec, e, chatOutcome(nil, "", runErr.Error()), "x")
 		}
+		retry := d.retryOnceLater(spec, e)
+		if e.Kind == watch.KindRoutine {
+			d.routineReport(spec, e, string(out), runErr, logPath)
+			return
+		}
 		body := fmt.Sprintf("fix for %s failed: %v - log: %s", e.Ref, runErr, logPath)
-		if d.retryOnceLater(spec, e) {
+		if retry {
 			body += fmt.Sprintf(" - one retry in %s", retryCrashAfter)
 		}
 		go d.notifyAttentionAt(notifyTitlePrefix+spec.Workspace, body, spec.Workspace, e.URL)
@@ -1333,7 +1337,7 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 	}
 	if len(links) > 0 {
 		body = watch.PullLines(body, links)
-	} else if last := lastLine(string(out)); last != "" {
+	} else if last := plainLine(lastLine(string(out))); last != "" {
 		note = clipText(last, 160)
 		body += " - " + note
 	}
@@ -1341,7 +1345,6 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 	d.watchState.Fixes.SetHandover(e.Key, runHandover(spec.Dir, e.Ref, started, string(out)), time.Now())
 	d.mirrorHandoff(spec, e.Ref, started)
 	d.blockIfRunSaidSo(spec, e, started)
-	d.routineReport(spec, e, string(out), nil)
 	if len(links) > 0 && d.Delivered != nil {
 		d.Delivered(spec.Workspace, e, links)
 	}
@@ -1359,6 +1362,12 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 	target := e.URL
 	if len(links) > 0 {
 		target = links[0]
+	}
+	if e.Kind == watch.KindRoutine {
+		// The report is the routine's one notification; a run that opened
+		// pull requests names them there rather than as "fixed routine/x".
+		d.routineReport(spec, e, string(out), nil, logPath, links...)
+		return
 	}
 	go d.notifyAttentionAt(notifyTitlePrefix+spec.Workspace, body, spec.Workspace, target)
 }
@@ -1448,6 +1457,20 @@ func lastLine(s string) string {
 		}
 	}
 	return ""
+}
+
+// plainLine strips the markdown a model puts on a line meant to be read raw:
+// a list marker, a heading, bold. What is left reads as a sentence in a push.
+func plainLine(s string) string {
+	s = strings.TrimSpace(s)
+	for {
+		trimmed := strings.TrimLeft(s, "-*#>• \t")
+		if trimmed == s {
+			break
+		}
+		s = trimmed
+	}
+	return strings.TrimSpace(strings.ReplaceAll(s, "**", ""))
 }
 
 func clipText(s string, n int) string {

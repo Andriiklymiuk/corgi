@@ -52,13 +52,13 @@ func TestRoutinesRunOnTheClockAndReportToTheInbox(t *testing.T) {
 	if !ok || !strings.Contains(e.Body, "morning digest") || e.Ref != "routine/digest" {
 		t.Fatalf("event from the catalog: %+v", e)
 	}
-	d.routineReport(spec, e, "3 PRs green, 1 red\n- details…", nil)
+	d.routineReport(spec, e, "**3 PRs green, 1 red**\n- details…", nil, "")
 	rows := watch.RecentEvents(d.Dir, 5)
 	if len(rows) != 2 || rows[0].Kind != watch.KindRoutine || !strings.Contains(rows[0].Title, "digest - 3 PRs green, 1 red") || rows[0].Body != "" {
 		t.Fatalf("inbox row: %+v", rows)
 	}
-	if !strings.Contains(rows[1].Title, "failed:") {
-		t.Fatalf("a failed run reports too: %+v", rows[1])
+	if !strings.Contains(rows[1].Title, "failed:") || !strings.Contains(rows[1].Title, "log: ") {
+		t.Fatalf("a failed run reports too, with the log to read: %+v", rows[1])
 	}
 	if _, ok := RoutineEvent("api", config.Routine{Name: "x"}, day); ok {
 		t.Fatal("no kind, no prompt, nothing to run")
@@ -95,7 +95,7 @@ func TestARoutineRunsAsTheBotItNames(t *testing.T) {
 	d.runRoutines(context.Background(), monday)
 	d.runs.Wait()
 	runs := d.watchState.Fixes.RecentFixes("api", 10)
-	if len(runs) != 1 || runs[0].Bot != "proactive" || runs[0].Ref != "routine/suggest" || !strings.HasPrefix(runs[0].Note, "- api/routes.go") {
+	if len(runs) != 1 || runs[0].Bot != "proactive" || runs[0].Ref != "routine/suggest" || !strings.HasPrefix(runs[0].Note, "api/routes.go") {
 		t.Fatalf("filed under the bot: %+v", runs)
 	}
 	rows := watch.RecentEvents(d.Dir, 5)

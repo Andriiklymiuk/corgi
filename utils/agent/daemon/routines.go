@@ -156,13 +156,19 @@ func routineFor(spec WatchSpec, e watch.Event) config.Routine {
 	return config.Routine{}
 }
 
-func (d *Daemon) routineReport(spec WatchSpec, e watch.Event, out string, failed error) {
+// routineReport is the one word a routine says when it is done: its first
+// line, or the failure with the log to read. Pull requests it opened are
+// listed under it.
+func (d *Daemon) routineReport(spec WatchSpec, e watch.Event, out string, failed error, logPath string, links ...string) {
 	if e.Kind != watch.KindRoutine {
 		return
 	}
-	headline := firstLine(strings.TrimSpace(out))
+	headline := plainLine(firstLine(strings.TrimSpace(out)))
 	if failed != nil {
 		headline = "failed: " + failed.Error()
+		if logPath != "" {
+			headline += " - log: " + logPath
+		}
 	}
 	if headline == "" {
 		headline = "finished with nothing to say"
@@ -171,9 +177,16 @@ func (d *Daemon) routineReport(spec WatchSpec, e watch.Event, out string, failed
 	report.Key = e.Key + ":report"
 	report.Title = e.Title + " - " + clipText(headline, 160)
 	report.Body = ""
+	if len(links) > 0 {
+		report.URL = links[0]
+	}
 	d.watchState.MarkSeen(report.Key)
 	d.appendWatchEvent(report)
-	go d.notifyAttention(notifyTitlePrefix+spec.Workspace, e.Title+": "+clipText(headline, 160), spec.Workspace)
+	body := e.Title + ": " + clipText(headline, 160)
+	if len(links) > 0 {
+		body = watch.PullLines(body, links)
+	}
+	go d.notifyAttentionAt(notifyTitlePrefix+spec.Workspace, body, spec.Workspace, report.URL)
 }
 
 func firstLine(s string) string {
