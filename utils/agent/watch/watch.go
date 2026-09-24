@@ -1044,6 +1044,14 @@ func (l *FixLog) Interrupted(reason string, at time.Time) []string {
 	return keys
 }
 
+// Records is every run on record, oldest first, copied under the lock so a
+// reader on another goroutine never walks a slice StartFor is growing.
+func (l *FixLog) Records() []FixRecord {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return append([]FixRecord(nil), l.Started...)
+}
+
 func (l *FixLog) RecentFixes(workspace string, limit int) []FixRecord {
 	l.mu.Lock()
 	defer l.mu.Unlock()
