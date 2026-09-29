@@ -76,7 +76,7 @@ func (d *Daemon) sessionOnPull(link string) (sessions.Session, bool) {
 
 func (d *Daemon) handOverEvent(ctx context.Context, spec WatchSpec, e watch.Event) bool {
 	on, _ := d.automation(spec)
-	if !on {
+	if !on || chatRunRefusal(spec, e) != "" {
 		return false
 	}
 	line := watch.HandoverLine(e)

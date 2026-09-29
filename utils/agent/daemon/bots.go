@@ -18,7 +18,7 @@ import (
 func botRunKey(bot, eventKey string) string { return "bot:" + bot + ":" + eventKey }
 
 func BotRunPrompt(b bots.Bot, e watch.Event) string {
-	base := fixPrompt(e)
+	base := withApprove(fixPrompt(e), false)
 	if base == "" {
 		base = fmt.Sprintf("%s on %s: %s", e.Kind, e.Ref, e.Title)
 		if strings.TrimSpace(e.Body) != "" {
@@ -40,7 +40,7 @@ func (d *Daemon) startBots(ctx context.Context, spec WatchSpec, e watch.Event) {
 		if b.Workspace != spec.Workspace || !b.RunsOn(string(e.Kind)) {
 			continue
 		}
-		if reason := fixDeferral(spec, d.watchState.Fixes, time.Now()); reason != "" {
+		if reason := firstNonEmpty(chatRunRefusal(spec, e), firstNonEmpty(d.stillWorthFixing(ctx, spec, e), fixDeferral(spec, d.watchState.Fixes, time.Now()))); reason != "" {
 			utils.Infof("agent: bot %s not run on %s: %s\n", b.Name, e.Ref, reason)
 			continue
 		}

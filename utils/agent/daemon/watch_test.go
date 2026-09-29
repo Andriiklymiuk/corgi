@@ -656,3 +656,23 @@ func TestAStoryRunGetsHoursAReviewGetsMinutes(t *testing.T) {
 		}
 	}
 }
+
+func TestUnattendedRunsNeverTouchSomeoneElsesWork(t *testing.T) {
+	spec := WatchSpec{Workspace: "api"}
+	ci := fixPrompt(watch.Event{Kind: watch.KindCIFailed, Source: "github", Ref: "acme/api", Title: "ci"})
+	if !strings.Contains(ci, "--user") || !strings.Contains(ci, "someone else's pull request, change nothing") {
+		t.Errorf("a red build is fixed only on my own pull request: %q", ci)
+	}
+	comment := fixPrompt(watch.Event{Kind: watch.KindIssueComment, Ref: "HUM-12", Body: "rename it"})
+	if !strings.Contains(comment, "only when its pull request is one I opened") {
+		t.Errorf("a ticket comment reuses only a branch of mine: %q", comment)
+	}
+	fix := unattendedSuffix(spec, watch.Event{Kind: watch.KindIssueNew, Ref: "HUM-12", Mine: true})
+	if !strings.Contains(fix, "Never push to a pull request someone else opened") || !strings.Contains(fix, "corgi watch · api") {
+		t.Errorf("every run is told not to push to others' pull requests, and its own keeps the trail: %q", fix)
+	}
+	chat := unattendedSuffix(spec, watch.Event{Kind: watch.KindChatMention, Ref: "slack-1", Mine: true})
+	if strings.Contains(chat, "end of the pull request body") {
+		t.Errorf("a chat run has no pull request of its own to write into: %q", chat)
+	}
+}

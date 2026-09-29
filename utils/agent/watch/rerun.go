@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -86,7 +87,11 @@ func NewestFailedRun(ctx context.Context, s Secrets, repo string, since time.Tim
 	if s.GitHub == "" {
 		return FailedRun{}, ErrNoToken
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, GitHubAPI+"/repos/"+repo+"/actions/runs?status=failure&per_page=10", nil)
+	me, err := githubLogin(ctx, s.GitHub)
+	if err != nil {
+		return FailedRun{}, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, GitHubAPI+"/repos/"+repo+"/actions/runs?status=failure&per_page=10&actor="+url.QueryEscape(me), nil)
 	if err != nil {
 		return FailedRun{}, err
 	}
@@ -197,4 +202,25 @@ func doWrite(req *http.Request, link string) error {
 		return fmt.Errorf("writing %s: %s", link, resp.Status)
 	}
 	return nil
+}
+
+func githubLogin(ctx context.Context, token string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, GitHubAPI+"/user", nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Accept", "application/vnd.github+json")
+	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
+	if err != nil {
+		return "", fmt.Errorf("reading who I am on GitHub: %w", err)
+	}
+	defer resp.Body.Close()
+	var user struct {
+		Login string `json:"login"`
+	}
+	if resp.StatusCode != http.StatusOK || json.NewDecoder(resp.Body).Decode(&user) != nil || user.Login == "" {
+		return "", fmt.Errorf("reading who I am on GitHub: %s", resp.Status)
+	}
+	return user.Login, nil
 }

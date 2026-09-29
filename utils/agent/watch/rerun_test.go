@@ -18,7 +18,12 @@ func TestRerunFindsTheNewestFailedRunAndRerunsItsJobs(t *testing.T) {
 			return
 		}
 		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/user":
+			io.WriteString(w, `{"login":"andrii"}`)
 		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/actions/runs"):
+			if r.URL.Query().Get("actor") != "andrii" {
+				t.Errorf("a rerun lists only my runs, got actor %q", r.URL.Query().Get("actor"))
+			}
 			io.WriteString(w, `{"workflow_runs":[
 			  {"id":11,"name":"release","html_url":"https://github.com/acme/api/actions/runs/11","updated_at":"2026-09-14T10:00:00Z"},
 			  {"id":12,"name":"ci","html_url":"https://github.com/acme/api/actions/runs/12","updated_at":"2026-09-14T11:30:00Z"},
