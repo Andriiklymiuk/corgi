@@ -1378,6 +1378,12 @@ you to review. A review request is never worked on unattended even with
 `--auto-for requests`-shaped settings unless you name it: corgi reads the diff
 and posts a review, and will not push to somebody else's branch.
 
+A review that lands the minute it is asked for reads as a bot. `--review-delay
+1h` holds each request an hour from when it was asked (off by default). When
+the hour is up, corgi checks the pull request again: merged, closed or already
+reviewed by you in the meantime drops it, and the run is told to read what is
+there now - the new commits, and the comments and reviews since the ask.
+
 ### Moving the ticket as the work moves
 
 ```bash

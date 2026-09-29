@@ -1238,6 +1238,23 @@ func (l *FixLog) Defer(e Event) {
 	_ = l.save()
 }
 
+// DeferUntil queues an event to start no sooner than at. An event already
+// queued keeps its time, so asking again does not push it further out.
+func (l *FixLog) DeferUntil(e Event, at time.Time) time.Time {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for _, d := range l.Deferred {
+		if d.Key == e.Key && !d.NotBefore.IsZero() {
+			return d.NotBefore
+		}
+	}
+	l.dropDeferred(e.Key)
+	e.NotBefore = at
+	l.Deferred = append(l.Deferred, e)
+	_ = l.save()
+	return at
+}
+
 func (l *FixLog) DeferredEvents() []Event {
 	l.mu.Lock()
 	defer l.mu.Unlock()
