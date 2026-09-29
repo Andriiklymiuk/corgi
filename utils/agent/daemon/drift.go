@@ -214,9 +214,25 @@ func (d *Daemon) recordDrift(s sessions.Session, m measure, overlap []sessions.O
 		go d.notifySession(notifyTitlePrefix+label(s), "crossing streams: "+sessions.OverlapLine(overlap), s)
 	}
 	loud, quiet := driftReasonsFrom(s, m.lines, m.files, m.ok)
-	if _, began := d.Sessions.SetDrift(s.ID, append(loud, quiet...)); began && len(loud) > 0 && !resting {
+	if _, began := d.Sessions.SetDrift(s.ID, append(loud, quiet...)); began && len(loud) > 0 && !resting && d.firstDriftRing(s.ID, now) {
 		go d.notifySession(notifyTitlePrefix+label(s), "drifting: "+loud[0], s)
 	}
+}
+
+const driftRingEvery = 30 * time.Minute
+
+// a drift list that empties for one tick and comes back is the same drift, not a new one to ring for
+func (d *Daemon) firstDriftRing(id string, now time.Time) bool {
+	d.attentionMu.Lock()
+	defer d.attentionMu.Unlock()
+	if d.driftRang == nil {
+		d.driftRang = map[string]time.Time{}
+	}
+	if last, ok := d.driftRang[id]; ok && now.Sub(last) < driftRingEvery {
+		return false
+	}
+	d.driftRang[id] = now
+	return true
 }
 
 func (d *Daemon) recordBehind(s sessions.Session, m measure, now time.Time) {

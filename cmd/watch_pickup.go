@@ -46,6 +46,10 @@ func markPickedUp(agentD string, events []watch.Event) {
 			utils.Infof("corgi: %s is %s - not moving it to %s\n", ref, over, status)
 			continue
 		}
+		if e.Kind == watch.KindIssueComment && pastPickup(agentD, workspaceID, current) {
+			utils.Infof("corgi: %s is already %s - a comment does not move it back to %s\n", ref, current, status)
+			continue
+		}
 		if err := w.Move(ctx, ref, status); err != nil {
 			utils.Infof("corgi: %s stayed where it was: %v\n", ref, err)
 			continue
@@ -78,7 +82,7 @@ func claimTicket(agentD, workspaceID string, e watch.Event) (bool, string, error
 }
 
 func markDelivered(agentD, workspaceID string, e watch.Event, prs []string) {
-	if len(prs) == 0 || strings.TrimSpace(e.Ref) == "" {
+	if len(prs) == 0 || strings.TrimSpace(e.Ref) == "" || e.Kind != watch.KindIssueNew {
 		return
 	}
 	resolved, err := resolveWorkspaceConfig(agentD, workspaceID)
@@ -86,7 +90,7 @@ func markDelivered(agentD, workspaceID string, e watch.Event, prs []string) {
 		return
 	}
 	status := strings.TrimSpace(resolved.Watch.ReviewStatus)
-	if status == "" || strings.EqualFold(status, e.State) {
+	if status == "" || strings.EqualFold(status, e.State) || pastPickup(agentD, workspaceID, e.State) {
 		return
 	}
 	w, _, err := watchWriter(agentD, workspaceID)
@@ -118,4 +122,23 @@ func writeWorkpad(agentD, workspaceID, ref, section, text string) {
 	if err := watch.UpsertWorkpad(ctx, w, ref, section, text); err != nil {
 		utils.Infof("corgi: workpad on %s: %v\n", ref, err)
 	}
+}
+
+// pastPickup says the ticket is already in review or beyond, where a run's work
+// never moves it back.
+func pastPickup(agentD, workspaceID, state string) bool {
+	state = strings.TrimSpace(state)
+	if state == "" {
+		return false
+	}
+	resolved, err := resolveWorkspaceConfig(agentD, workspaceID)
+	if err != nil || resolved.Watch == nil {
+		return false
+	}
+	for _, later := range []string{resolved.Watch.ReviewStatus, resolved.Watch.AfterMerge, resolved.Watch.AfterMergeSubtasks} {
+		if later = strings.TrimSpace(later); later != "" && strings.EqualFold(later, state) {
+			return true
+		}
+	}
+	return false
 }
