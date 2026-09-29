@@ -89,3 +89,29 @@ func TestFeedbackAlreadyAnsweredIsNotFixedAgain(t *testing.T) {
 		t.Errorf("unanswered feedback runs, got %q", why)
 	}
 }
+
+func TestAPullRequestALiveSessionIsOnIsNotFixedTwice(t *testing.T) {
+	d := testDaemon(t)
+	now := time.Now()
+	d.Sessions.Apply(sessions.Event{Name: "UserPromptSubmit", SessionID: "s1", Cwd: "/tmp/a", ClaudePID: 100, Branch: "feature/IMP-42/fix", At: now})
+	spec := ticketSpec(t)
+	spec.Rules.CI = true
+
+	ci := watch.Event{Kind: watch.KindCIFailed, Key: "gitlab:todo:1", Ref: "acme/web!755", URL: "https://gitlab.com/acme/web/-/merge_requests/755", Title: "Fix the login [IMP-42]", Mine: true}
+	if why := d.stillWorthFixing(context.Background(), spec, ci); !strings.Contains(why, "is on it now") {
+		t.Errorf("a red build on a story a session works belongs to that session, got %q", why)
+	}
+
+	other := ci
+	other.Title = "Something else [IMP-43]"
+	if why := d.stillWorthFixing(context.Background(), spec, other); why != "" {
+		t.Errorf("no session on IMP-43, got %q", why)
+	}
+
+	if !d.claimFix(spec.Workspace, ci.Ref) {
+		t.Fatal("claim")
+	}
+	if why := d.stillWorthFixing(context.Background(), spec, ci); why != "" {
+		t.Errorf("a run of ours already on the ref queues the follow-up instead, got %q", why)
+	}
+}

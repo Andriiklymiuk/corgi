@@ -76,6 +76,7 @@ type Daemon struct {
 	headlessMu  sync.Mutex
 	headless    map[string]bool
 	fixActive   map[string]bool
+	waitReasons map[string]string
 	pruned      map[string]bool
 	lastPrune   time.Time
 	liftRang    map[string]time.Time

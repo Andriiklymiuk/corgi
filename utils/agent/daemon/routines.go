@@ -98,12 +98,13 @@ func (d *Daemon) runRoutines(ctx context.Context, now time.Time) {
 				continue
 			}
 			if reason := fixDeferral(spec, d.watchState.Fixes, now); reason != "" {
-				utils.Infof("agent: routine %s waits: %s\n", e.Title, reason)
+				d.logRoutineWait(spec.Workspace+"/"+e.Title, e.Title, reason)
 				continue
 			}
 			if !d.claimFix(spec.Workspace, e.Ref) {
 				continue
 			}
+			d.logRoutineWait(spec.Workspace+"/"+e.Title, e.Title, "")
 			d.routines.set(key, now)
 			d.startRoutine(ctx, spec, r, e)
 			break
@@ -194,4 +195,18 @@ func firstLine(s string) string {
 		return s[:i]
 	}
 	return s
+}
+
+// logRoutineWait says why a routine waits once per reason, not on every tick.
+func (d *Daemon) logRoutineWait(key, title, reason string) {
+	d.attentionMu.Lock()
+	if d.waitReasons == nil {
+		d.waitReasons = map[string]string{}
+	}
+	same := d.waitReasons[key] == reason
+	d.waitReasons[key] = reason
+	d.attentionMu.Unlock()
+	if !same && reason != "" {
+		utils.Infof("agent: routine %s waits: %s\n", title, reason)
+	}
 }

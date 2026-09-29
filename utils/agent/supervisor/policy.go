@@ -16,7 +16,19 @@ const (
 	CauseStartupFailure  ExitCause = "startup-failure"
 	CauseCrash           ExitCause = "crash"
 	CauseUnsupportedFlag ExitCause = "unsupported-flag"
+	CauseOffline         ExitCause = "offline"
 )
+
+// OfflineRetry is how often a start that could not reach the network is retried
+const OfflineRetry = 30 * time.Second
+
+var offlineMarkers = []string{
+	"getaddrinfo enotfound",
+	"getaddrinfo eai_again",
+	"enetunreach",
+	"ehostunreach",
+	"network is unreachable",
+}
 
 const MinHealthyUptime = 60 * time.Second
 
@@ -81,6 +93,9 @@ func Classify(e Exit, consecutiveStartupFailures int) ExitCause {
 		if strings.Contains(lower, expiredTokenMarker) {
 			return CauseStartupFailure
 		}
+		if hasAnyMarker(lower, offlineMarkers) {
+			return CauseOffline
+		}
 		if hasAuthFailureMarker(e.Output) {
 			return CauseAuthFailure
 		}
@@ -93,8 +108,11 @@ func Classify(e Exit, consecutiveStartupFailures int) ExitCause {
 }
 
 func hasAuthFailureMarker(output string) bool {
-	lower := strings.ToLower(output)
-	for _, marker := range authFailureMarkers {
+	return hasAnyMarker(strings.ToLower(output), authFailureMarkers)
+}
+
+func hasAnyMarker(lower string, markers []string) bool {
+	for _, marker := range markers {
 		if strings.Contains(lower, marker) {
 			return true
 		}
@@ -107,6 +125,14 @@ func Decide(e Exit, attempt, consecutiveStartupFailures int) Decision {
 	switch cause {
 	case CauseRequested:
 		return Decision{Cause: cause, Reason: "stopped on request"}
+
+	case CauseOffline:
+		return Decision{
+			Cause:   cause,
+			Restart: true,
+			Delay:   OfflineRetry,
+			Reason:  "remote control could not reach the network, waiting for it",
+		}
 
 	case CauseAuthFailure:
 		return Decision{

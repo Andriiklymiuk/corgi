@@ -119,6 +119,9 @@ func (d *Daemon) pullChanged(ctx context.Context, spec WatchSpec, ref, link stri
 			utils.Infof("agent: red checks on %s handed to %s\n", ref, label)
 		}
 	}
+	if link != "" && known && now.Checks == "passing" && was.Checks != "" && was.Checks != "passing" {
+		d.creditGreen(spec, ref, link)
+	}
 	if autoMerge && link != "" && now.Ready() && now.Mine && d.MergePull != nil && d.mergeWorthTrying(link, time.Now()) {
 		if err := d.MergePull(ctx, spec.Workspace, link); err != nil {
 			utils.Infof("agent: auto-merge %s: %v\n", ref, err)
@@ -387,3 +390,14 @@ func (d *Daemon) compactIfFull(s sessions.Session) {
 }
 
 const compactCooldown = 10 * time.Minute
+
+func (d *Daemon) creditGreen(spec WatchSpec, ref, link string) {
+	r, ok := watch.LoadFixLog(d.Dir).MarkGreen(spec.Workspace, link, time.Now())
+	if !ok {
+		return
+	}
+	utils.Infof("agent: watch %s: %s is green after the %s run\n", spec.Workspace, ref, r.Kind)
+	if d.Events != nil {
+		d.Events.Append(spec.Workspace, events.Event{At: time.Now().UTC(), Kind: "green", Reason: "checks ✓ on " + ref + " after the " + r.Kind + " run", URL: link})
+	}
+}
