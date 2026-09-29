@@ -18,9 +18,12 @@ var gitlabTodos = `[
   {"id":9,"action_name":"review_requested","target_type":"MergeRequest","target_url":"https://gitlab.com/acme/api/-/merge_requests/12",
    "body":"please review","created_at":"2026-09-09T09:00:00Z","project":{"path_with_namespace":"acme/api"},
    "target":{"iid":12,"title":"Add retries"},"author":{"username":"bob"}},
+  {"id":8,"action_name":"directly_addressed","target_type":"MergeRequest","target_url":"https://gitlab.com/acme/api/-/merge_requests/40",
+   "body":"@me what do you think?","created_at":"2026-09-09T08:30:00Z","project":{"path_with_namespace":"acme/api"},
+   "target":{"iid":40,"title":"Coverage from the graph","author":{"username":"simon"}},"author":{"username":"ann"}},
   {"id":7,"action_name":"mentioned","target_type":"MergeRequest","target_url":"https://gitlab.com/acme/web/-/merge_requests/7",
    "body":"` + strings.Repeat("x", 250) + `","created_at":"2026-09-09T08:00:00Z","project":{"path_with_namespace":"acme/web"},
-   "target":{"iid":7,"title":"Fix login"},"author":{"username":"ann"}},
+   "target":{"iid":7,"title":"Fix login","author":{"username":"me"}},"author":{"username":"ann"}},
   {"id":6,"action_name":"mentioned","target_type":"MergeRequest","target_url":"https://gitlab.com/acme/web/-/merge_requests/7",
    "body":"Pipeline passed","created_at":"2026-09-09T07:30:00Z","project":{"path_with_namespace":"acme/web"},
    "target":{"iid":7,"title":"Fix login"},"author":{"username":"project_42_bot_9f","bot":true}},
@@ -75,16 +78,19 @@ func TestGitLabPoll(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(events) != 3 || !events[2].Bot || events[2].Author != "project_42_bot_9f" {
-		t.Fatalf("events = %d, want 3 with the bot's tagged: %+v", len(events), events)
+	if len(events) != 4 || !events[3].Bot || events[3].Author != "project_42_bot_9f" {
+		t.Fatalf("events = %d, want 4 with the bot's tagged: %+v", len(events), events)
 	}
-	review, comment := events[0], events[1]
+	review, elsewhere, comment := events[0], events[1], events[2]
+	if elsewhere.Ref != "acme/api!40" || elsewhere.Mine {
+		t.Errorf("a mention on someone else's merge request is theirs to fix, not mine: %+v", elsewhere)
+	}
 	if review.Key != "gitlab:todo:9" || review.Kind != KindReviewRequested || review.Ref != "acme/api!12" ||
 		review.Title != "Add retries" || review.Author != "bob" || review.Mine || review.Source != "gitlab" ||
 		review.URL != "https://gitlab.com/acme/api/-/merge_requests/12" || review.At.IsZero() {
 		t.Errorf("review event = %+v", review)
 	}
-	if comment.Key != "gitlab:todo:7" || comment.Kind != KindPRComment || comment.Ref != "acme/web!7" || len(comment.Body) != 200 {
+	if comment.Key != "gitlab:todo:7" || comment.Kind != KindPRComment || comment.Ref != "acme/web!7" || len(comment.Body) != 200 || !comment.Mine {
 		t.Errorf("comment event = %+v", comment)
 	}
 	if cursor["lastId"] != "10" {
@@ -103,7 +109,7 @@ func TestGitLabPoll(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(events) != 1 || events[0].Key != "gitlab:todo:9" {
+	if len(events) != 2 || events[0].Key != "gitlab:todo:9" || events[1].Key != "gitlab:todo:8" {
 		t.Errorf("events after id 7 = %+v", events)
 	}
 }
@@ -123,8 +129,8 @@ func TestGitLabLearnsWhoIAm(t *testing.T) {
 			t.Fatalf("my own todo came through: %+v", e)
 		}
 	}
-	if len(events) != 3 {
-		t.Fatalf("events = %d, want 3", len(events))
+	if len(events) != 4 {
+		t.Fatalf("events = %d, want 4", len(events))
 	}
 	before := f.requests.Load()
 	g2 := NewGitLab(Secrets{GitLab: "tok", GitLabURL: f.srv.URL})
@@ -172,7 +178,7 @@ func TestGitLabNotesOnMyMergeRequests(t *testing.T) {
 		case "/api/v4/todos":
 			_, _ = w.Write([]byte(`[{"id":3,"action_name":"build_failed","target_type":"MergeRequest",
 			  "target_url":"https://gitlab.com/acme/api/-/merge_requests/5","body":"pipeline","created_at":"2026-09-22T10:00:00Z",
-			  "project":{"path_with_namespace":"acme/api"},"target":{"iid":5,"title":"Retries"},"author":{"username":"me"}}]`))
+			  "project":{"path_with_namespace":"acme/api"},"target":{"iid":5,"title":"Retries","author":{"username":"me"}},"author":{"username":"me"}}]`))
 		case "/api/v4/merge_requests":
 			if r.URL.Query().Get("scope") != "created_by_me" || r.URL.Query().Get("state") != "opened" {
 				t.Errorf("merge requests query = %s", r.URL.RawQuery)

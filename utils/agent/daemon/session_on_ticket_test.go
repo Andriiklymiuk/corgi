@@ -115,3 +115,14 @@ func TestAPullRequestALiveSessionIsOnIsNotFixedTwice(t *testing.T) {
 		t.Errorf("a run of ours already on the ref queues the follow-up instead, got %q", why)
 	}
 }
+
+func TestAReviewOnSomeoneElsesPullRequestIsNotFixed(t *testing.T) {
+	d := testDaemon(t)
+	spec := WatchSpec{Workspace: "acme", Dir: t.TempDir(), Action: "fix"}
+	for _, kind := range []watch.Kind{watch.KindPRReview, watch.KindPRComment} {
+		e := watch.Event{Kind: kind, Key: "github:acme/api#40:r1", Ref: "acme/api#40", State: "open", Author: "maria", Body: "the toggle keys on the wrong field"}
+		if why := d.stillWorthFixing(context.Background(), spec, e); !strings.Contains(why, "not mine") {
+			t.Errorf("%s on a pull request I did not open: got %q, want a refusal", kind, why)
+		}
+	}
+}

@@ -575,6 +575,9 @@ func (d *Daemon) stillWorthFixing(ctx context.Context, spec WatchSpec, e watch.E
 			return why
 		}
 	}
+	if (e.Kind == watch.KindPRReview || e.Kind == watch.KindPRComment) && !e.Mine {
+		return "the pull request is not mine - its author fixes it"
+	}
 	if e.Ref == "" {
 		return ""
 	}

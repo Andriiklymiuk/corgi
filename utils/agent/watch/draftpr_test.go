@@ -85,7 +85,7 @@ func TestPullStateFoldsDraftIn(t *testing.T) {
 
 	g := &GitHub{Token: "t", URL: srv.URL}
 	for num, want := range map[string]string{"1": "draft", "2": "open", "3": "merged"} {
-		if got := g.pullState(context.Background(), map[string]string{}, "https://api.github.com/repos/acme/api/pulls/"+num); got != want {
+		if got := g.pull(context.Background(), map[string]githubPullInfo{}, "https://api.github.com/repos/acme/api/pulls/"+num).state; got != want {
 			t.Errorf("github pull %s = %q, want %q", num, got, want)
 		}
 	}

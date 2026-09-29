@@ -83,7 +83,13 @@ func newGitHubFake(t *testing.T) *githubFake {
   {"id":3003,"state":"COMMENTED","body":"Fixed in 5307e4b.","submitted_at":"2026-09-24T16:00:27Z","user":{"login":"andrii","type":"User"}}
 ]`))
 		case "/repos/acme/api/pulls/29":
-			_, _ = w.Write([]byte(`{"state":"open","head":{"sha":"abc123"}}`))
+			_, _ = w.Write([]byte(`{"state":"open","head":{"sha":"abc123"},"user":{"login":"andrii"}}`))
+		case "/repos/acme/web/pulls/7", "/repos/acme/app/pulls/254":
+			_, _ = w.Write([]byte(`{"state":"open","user":{"login":"andrii"}}`))
+		case "/repos/acme/api/pulls/40":
+			_, _ = w.Write([]byte(`{"state":"open","user":{"login":"simon"}}`))
+		case "/repos/acme/api/issues/comments/800":
+			_, _ = w.Write([]byte(`{"body":"the toggle keys on the wrong field","user":{"login":"maria","type":"User"}}`))
 		case "/repos/acme/api/commits/abc123":
 			_, _ = w.Write([]byte(`{"commit":{"committer":{"date":"2026-09-24T16:05:00Z"}}}`))
 		case "/repos/acme/api/pulls/29/comments":
@@ -305,5 +311,26 @@ func TestGitHubAnsweredSinceNeedsAReplyAndAPushAfterIt(t *testing.T) {
 	}
 	if why := g.AnsweredSince(context.Background(), "acme/api#29", time.Time{}); why != "" {
 		t.Errorf("no moment to compare against, got %q", why)
+	}
+}
+
+// A thread I joined by commenting on someone else's pull request is theirs to
+// fix: the review that lands there is not mine, so no run picks it up.
+func TestGitHubPollCommentOnSomeoneElsesPullIsNotMine(t *testing.T) {
+	f := newGitHubFake(t)
+	f.notifications = `[
+  {"id":"o1","reason":"comment","updated_at":"2026-09-29T12:31:00Z",
+   "subject":{"title":"Coverage from the graph","url":"https://api.github.com/repos/acme/api/pulls/40","type":"PullRequest",
+              "latest_comment_url":"https://api.github.com/repos/acme/api/issues/comments/800"},
+   "repository":{"full_name":"acme/api"}}
+]`
+	g := &GitHub{Token: "tok", URL: f.srv.URL}
+
+	events, _, err := g.Poll(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 1 || events[0].Mine || events[0].Author != "maria" {
+		t.Fatalf("events = %+v, want one comment that is not mine", events)
 	}
 }
