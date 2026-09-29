@@ -39,6 +39,14 @@ var authFailureMarkers = []string{
 
 const trustFailureMarker = "workspace not trusted"
 
+// claude counts down before exiting a failed registration, so uptime passes the healthy mark
+const registrationFailureMarker = "error: registration:"
+
+var exitCountdownLine = regexp.MustCompile(`(?i)^exiting in about \d+ seconds?\.?$`)
+
+// refreshed on the next start, so retried rather than disabled
+const expiredTokenMarker = "access token has expired"
+
 type Exit struct {
 	Code      int
 	Uptime    time.Duration
@@ -68,7 +76,11 @@ func Classify(e Exit, consecutiveStartupFailures int) ExitCause {
 	if e.Requested {
 		return CauseRequested
 	}
-	if e.Uptime < e.healthyThreshold() {
+	lower := strings.ToLower(e.Output)
+	if e.Uptime < e.healthyThreshold() || strings.Contains(lower, registrationFailureMarker) {
+		if strings.Contains(lower, expiredTokenMarker) {
+			return CauseStartupFailure
+		}
 		if hasAuthFailureMarker(e.Output) {
 			return CauseAuthFailure
 		}
@@ -200,7 +212,7 @@ func lastOutputLine(output string) string {
 	lines := strings.Split(CleanOutput(output), "\n")
 	for i := len(lines) - 1; i >= 0; i-- {
 		line := strings.TrimSpace(strings.ReplaceAll(lines[i], "\r", ""))
-		if line == "" || strings.Trim(line, "─│┌┐└┘├┤┬┴┼═║╔╗╚╝╠╣╦╩╬╭╮╯╰ ") == "" {
+		if line == "" || strings.Trim(line, "─│┌┐└┘├┤┬┴┼═║╔╗╚╝╠╣╦╩╬╭╮╯╰ ") == "" || exitCountdownLine.MatchString(line) {
 			continue
 		}
 		if len(line) > maxReasonLineLen {
