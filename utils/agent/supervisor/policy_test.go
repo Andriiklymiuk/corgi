@@ -241,3 +241,19 @@ func TestLastOutputLineSkipsExitCountdown(t *testing.T) {
 		t.Errorf("lastOutputLine() = %q, want the error, not the countdown", got)
 	}
 }
+
+func TestDecideOfflineStartRetriesWithoutCounting(t *testing.T) {
+	d := Decide(Exit{Code: 1, Uptime: 2 * time.Second, Output: "Error: getaddrinfo ENOTFOUND api.anthropic.com"}, 3, MaxStartupFailures-1)
+	if d.Cause != CauseOffline {
+		t.Fatalf("cause = %q, want offline", d.Cause)
+	}
+	if !d.Restart || d.Disable || d.Notify || d.Delay != OfflineRetry {
+		t.Errorf("decision = %+v, want a quiet retry that never disables", d)
+	}
+}
+
+func TestClassifyOfflineMarkerInLongRunIsNotOffline(t *testing.T) {
+	if got := Classify(Exit{Code: 1, Uptime: 2 * time.Hour, Output: "getaddrinfo ENOTFOUND x"}, 0); got != CauseCrash {
+		t.Errorf("cause = %q, want crash: a session that ran for hours did start", got)
+	}
+}

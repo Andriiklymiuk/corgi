@@ -236,7 +236,10 @@ func (r *Runner) Run(ctx context.Context) error {
 		}
 		decision := Decide(exit, s.attempt, s.startupFailures)
 		healthy := decision.Cause != CauseStartupFailure
-		s.observe(healthy)
+		offline := decision.Cause == CauseOffline
+		if !offline {
+			s.observe(healthy)
+		}
 
 		r.record(decision, exit.Output, decision.Disable)
 		r.announce(decision, r.captureSessionEnd(decision))
@@ -244,7 +247,9 @@ func (r *Runner) Run(ctx context.Context) error {
 		if !decision.Restart {
 			return stopReason(decision, startErr, ctx)
 		}
-		s.advance(healthy)
+		if !offline {
+			s.advance(healthy)
+		}
 		r.sleepUnlessStopped(ctx, decision.Delay)
 	}
 }

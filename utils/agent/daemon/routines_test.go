@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"andriiklymiuk/corgi/utils"
 	"context"
 	"os/exec"
 	"strings"
@@ -116,5 +117,18 @@ func TestARoutineRunsAsTheBotItNames(t *testing.T) {
 	}
 	if strings.Contains(ran[1], "--append-system-prompt") {
 		t.Fatalf("a bot from elsewhere does not lend its soul: %v", ran[1])
+	}
+}
+
+func TestRoutineWaitIsLoggedOncePerReason(t *testing.T) {
+	d := &Daemon{}
+	var buf strings.Builder
+	utils.SetConsoleOverride(&buf)
+	defer utils.ClearConsoleOverride()
+	d.logRoutineWait("ws/digest", "digest", "day off")
+	d.logRoutineWait("ws/digest", "digest", "day off")
+	d.logRoutineWait("ws/digest", "digest", "quiet hours")
+	if got := strings.Count(buf.String(), "waits"); got != 2 {
+		t.Errorf("logged %d times, want 2 (once per reason):\n%s", got, buf.String())
 	}
 }

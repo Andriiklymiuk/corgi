@@ -330,7 +330,7 @@ func (d *Daemon) handleWatchEvent(ctx context.Context, e watch.Event) {
 				continue
 			}
 			if reason := fixDeferral(spec, d.watchState.Fixes, time.Now()); reason != "" {
-				utils.Infof("agent: routine %s waits: %s\n", e.Title, reason)
+				d.logRoutineWait(spec.Workspace+"/"+e.Title, e.Title, reason)
 				return
 			}
 			if d.peerLeads(spec) != "" {
@@ -581,6 +581,11 @@ func (d *Daemon) stillWorthFixing(ctx context.Context, spec WatchSpec, e watch.E
 	if who := d.sessionOnTicket(e.Ref); who != "" {
 		return who + " is on it now"
 	}
+	if onOwnPullRequest(e) && !d.fixActiveFor(spec.Workspace, e.Ref) {
+		if who := d.sessionOnPullRequest(e); who != "" {
+			return who + " is on it now"
+		}
+	}
 	states := watch.LoadStateLog(d.Dir)
 	if known, ok := states.Get(e.Key); ok {
 		if over := watch.Settled(e, known.Status); over != "" {
@@ -644,6 +649,26 @@ func (d *Daemon) sessionOnTicket(ref string) string {
 				return p.Name + "'s " + firstNonEmpty(s.Display, s.Label)
 			}
 		}
+	}
+	return ""
+}
+
+func onOwnPullRequest(e watch.Event) bool {
+	switch e.Kind {
+	case watch.KindPRComment, watch.KindPRReview, watch.KindCIFailed:
+		return true
+	}
+	return false
+}
+
+// sessionOnPullRequest finds a live session that opened this pull request or
+// works its story, so a run does not start a second pair of hands on it.
+func (d *Daemon) sessionOnPullRequest(e watch.Event) string {
+	if s, ok := d.sessionOnPull(watch.PullLinkOf(e)); ok {
+		return firstNonEmpty(s.Display, s.Label)
+	}
+	if m := storyInTitle.FindStringSubmatch(e.Title); m != nil {
+		return d.sessionOnTicket(m[1])
 	}
 	return ""
 }
@@ -1059,7 +1084,7 @@ var fixPrompts = map[watch.Kind]func(e watch.Event) string{
 		}
 		return "A build went red in " + e.Ref + ": " + e.Title + ". " + find +
 			"read what actually failed, and fix the cause on the branch it failed on - not by weakening the test or skipping it. " +
-			"Push, then watch the run to green. If it is a flake or an outage rather than our bug, say so and change nothing. " +
+			"Push and stop there: corgi watches the new pipeline and comes back if it goes red again. If it is a flake or an outage rather than our bug, say so and change nothing. " +
 			"I approve all changes."
 	},
 }
@@ -1135,7 +1160,13 @@ func unattendedSuffix(spec WatchSpec, e watch.Event) string {
 		}
 		s += "Put this line at the end of the pull request body so whoever reviews it knows where it came from: " + trail + "\n"
 	}
+	if spec.Rules.CI {
+		s += "Do not wait for CI after you push - no polling, no background watcher: this run ends when you do. " +
+			"Run the tests your change touches before the push; corgi watches the pipeline and starts a run if it goes red.\n"
+	}
 	s += "Say plainly at the end what you changed and what your own review found.\n"
+	s += "Start your final message with one line, exactly one of: `Outcome: pushed` (commits went up), `Outcome: replied` (comments only), " +
+		"`Outcome: nothing` (nothing needed doing) or `Outcome: blocked` (stuck, the handoff says why).\n"
 	if ownPR {
 		s += "The pull request body carries a `## Evidence` section - changed files with a reason each; the commands you ran with their results; " +
 			"each test mapped to the acceptance criterion it protects; known limitations and residual risk - facts, one line each.\n"
@@ -1352,6 +1383,7 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 		body += " - " + note
 	}
 	d.watchState.Fixes.Finish(e.Key, links, note, "", time.Now())
+	d.watchState.Fixes.SetOutcome(e.Key, watch.RunOutcome(string(out)))
 	d.watchState.Fixes.SetHandover(e.Key, runHandover(spec.Dir, e.Ref, started, string(out)), time.Now())
 	d.mirrorHandoff(spec, e.Ref, started)
 	d.blockIfRunSaidSo(spec, e, started)

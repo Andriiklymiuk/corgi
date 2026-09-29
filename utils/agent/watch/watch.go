@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -566,6 +568,8 @@ type Watch struct {
 	wakeOnce  sync.Once
 	Round     func(now time.Time)
 	Asleep    func(now time.Time) bool
+
+	unreachable map[string]bool
 }
 
 func (w *Watch) Once(ctx context.Context, now time.Time) int {
@@ -575,8 +579,23 @@ func (w *Watch) Once(ctx context.Context, now time.Time) int {
 		events, cursor, err := src.Poll(ctx, before)
 		w.State.setCursor(w.Workspace, src.Name(), cursor, now, err)
 		if err != nil {
-			w.logf("watch %s/%s: %v", w.Workspace, src.Name(), err)
+			if !IsNetworkError(err) {
+				w.logf("watch %s/%s: %v", w.Workspace, src.Name(), err)
+				continue
+			}
+			if !w.unreachable[src.Name()] {
+				w.logf("watch %s/%s: cannot reach it, trying again quietly: %v", w.Workspace, src.Name(), err)
+			}
+			w.markUnreachable(src.Name(), true)
+			var dns *net.DNSError
+			if errors.As(err, &dns) {
+				break
+			}
 			continue
+		}
+		if w.unreachable[src.Name()] {
+			w.logf("watch %s/%s: reachable again", w.Workspace, src.Name())
+			w.markUnreachable(src.Name(), false)
 		}
 		if len(before) == 0 {
 			if len(events) > 0 {
@@ -591,6 +610,26 @@ func (w *Watch) Once(ctx context.Context, now time.Time) int {
 		}
 	}
 	return handed
+}
+
+func (w *Watch) markUnreachable(source string, down bool) {
+	if w.unreachable == nil {
+		w.unreachable = map[string]bool{}
+	}
+	w.unreachable[source] = down
+}
+
+// IsNetworkError is a failure to reach the host at all - no DNS, a dropped
+// connection, a timeout - rather than an answer the host gave.
+func IsNetworkError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, io.ErrUnexpectedEOF) {
+		return true
+	}
+	var netErr net.Error
+	return errors.As(err, &netErr)
 }
 
 func (w *Watch) Handle(ctx context.Context, e Event) bool {
@@ -849,9 +888,57 @@ type FixRecord struct {
 	// Harness is the agent that ran it (claude when empty), so a failure
 	// sidelines that agent and not the next one in the workspace's order.
 	Harness string `json:"harness,omitempty"`
+	// GreenAt is when the checks of the pull request it worked on passed after it
+	GreenAt time.Time `json:"greenAt,omitzero"`
+	// Said is the outcome the run reported: pushed, replied, nothing or blocked
+	Said string `json:"said,omitempty"`
 }
 
 func (r FixRecord) Done() bool { return !r.FinishedAt.IsZero() }
+
+// greenWindow is how long after a run its pull request going green still counts as its doing
+const greenWindow = 24 * time.Hour
+
+func (r FixRecord) worked(link string) bool {
+	link = strings.TrimRight(link, "/")
+	if link == "" {
+		return false
+	}
+	if strings.HasPrefix(strings.TrimRight(r.URL, "/"), link) {
+		return true
+	}
+	for _, pr := range r.PRs {
+		if strings.HasPrefix(strings.TrimRight(pr, "/"), link) {
+			return true
+		}
+	}
+	return false
+}
+
+// MarkGreen credits the latest finished run on a pull request with its checks
+// going green, once.
+func (l *FixLog) MarkGreen(workspace, link string, at time.Time) (FixRecord, bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for i := len(l.Started) - 1; i >= 0; i-- {
+		r := l.Started[i]
+		if r.Workspace != workspace || !r.Done() || at.Sub(r.FinishedAt) > greenWindow || !r.worked(link) {
+			continue
+		}
+		switch Kind(r.Kind) {
+		case KindCIFailed, KindPRComment, KindPRReview, KindIssueNew, KindIssueComment:
+		default:
+			continue
+		}
+		if !r.GreenAt.IsZero() || r.Error != "" {
+			return FixRecord{}, false
+		}
+		l.Started[i].GreenAt = at
+		_ = l.save()
+		return l.Started[i], true
+	}
+	return FixRecord{}, false
+}
 
 type FixLog struct {
 	mu       sync.Mutex
@@ -1432,6 +1519,31 @@ func (l *FixLog) SetRetry(key, model string) {
 	for i := len(l.Started) - 1; i >= 0; i-- {
 		if l.Started[i].Key == key {
 			l.Started[i].Retry = model
+			_ = l.save()
+			return
+		}
+	}
+}
+
+var outcomeLine = regexp.MustCompile(`(?mi)^\W*outcome:\W*(pushed|replied|nothing|blocked)\b`)
+
+// RunOutcome reads the "Outcome: …" line an unattended run is asked to write.
+func RunOutcome(output string) string {
+	if m := outcomeLine.FindStringSubmatch(output); m != nil {
+		return strings.ToLower(m[1])
+	}
+	return ""
+}
+
+func (l *FixLog) SetOutcome(key, outcome string) {
+	if key == "" || outcome == "" {
+		return
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for i := len(l.Started) - 1; i >= 0; i-- {
+		if l.Started[i].Key == key {
+			l.Started[i].Said = outcome
 			_ = l.save()
 			return
 		}

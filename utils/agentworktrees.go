@@ -153,7 +153,7 @@ func ensureWorkBranchWorktree(repo, branch, dest string) (dir string, created bo
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 		return "", false, err
 	}
-	if err := gitRun(repo, "worktree", "add", "-b", branch, dest); err != nil {
+	if err := gitRun(repo, "worktree", "add", "-q", "-b", branch, dest); err != nil {
 		return "", false, fmt.Errorf("git worktree add -b %s %s: %v", branch, dest, err)
 	}
 	return dest, true, nil

@@ -185,7 +185,7 @@ func worktreeForBranch(repo, branch string) string {
 }
 
 func addWorktree(repo, branch, dest string) error {
-	err := gitRun(repo, "worktree", "add", dest, branch)
+	err := gitRun(repo, "worktree", "add", "-q", dest, branch)
 	if err == nil {
 		return nil
 	}
@@ -196,7 +196,7 @@ func addWorktree(repo, branch, dest string) error {
 	if isCorgiWorktreePath(dest) {
 		_ = os.RemoveAll(dest)
 	}
-	if err := gitRun(repo, "worktree", "add", "-b", branch, dest, remoteRef); err != nil {
+	if err := gitRun(repo, "worktree", "add", "-q", "-b", branch, dest, remoteRef); err != nil {
 		return fmt.Errorf("git worktree add -b %s %s %s: %v", branch, dest, remoteRef, err)
 	}
 	return nil
