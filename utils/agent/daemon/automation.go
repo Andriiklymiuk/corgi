@@ -122,7 +122,7 @@ func (d *Daemon) pullChanged(ctx context.Context, spec WatchSpec, ref, link stri
 	if link != "" && known && now.Checks == "passing" && was.Checks != "" && was.Checks != "passing" {
 		d.creditGreen(spec, ref, link)
 	}
-	if autoMerge && link != "" && now.Ready() && now.Mine && d.MergePull != nil && d.mergeWorthTrying(link, time.Now()) {
+	if autoMerge && link != "" && now.Ready() && now.Checks == "passing" && now.Mine && d.MergePull != nil && d.mergeWorthTrying(link, time.Now()) {
 		if err := d.MergePull(ctx, spec.Workspace, link); err != nil {
 			utils.Infof("agent: auto-merge %s: %v\n", ref, err)
 			if body, first := d.rememberMergeFailure(link, err, time.Now()); first {

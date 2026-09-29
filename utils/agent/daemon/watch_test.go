@@ -319,7 +319,7 @@ func TestFixPromptPerKind(t *testing.T) {
 		{"a subtask carries its parent", watch.Event{Kind: watch.KindIssueNew, Ref: "ABC-8", Parent: "ABC-7", ParentTitle: "Old story"},
 			[]string{"/corgi:stories ABC-8", "subtask of ABC-7", "Old story", "scoped to ABC-8"}, nil},
 		{"issue comment answers or changes", watch.Event{Kind: watch.KindIssueComment, Ref: "ABC-2", Author: "Max", Body: "also X"},
-			[]string{"Max", `"also X"`, "answer it as a comment on ABC-2", "do NOT open a PR", "existing branch for ABC-2", "ticket key in the branch names", "/corgi:stories ABC-2"}, nil},
+			[]string{"Max", "<<<\nalso X\n>>>", "answer it as a comment on ABC-2", "do NOT open a PR", "existing branch for ABC-2", "ticket key in the branch names", "/corgi:stories ABC-2"}, nil},
 		{"pr comment addresses feedback", watch.Event{Kind: watch.KindPRComment, URL: "https://github.com/a/b/pull/1"},
 			[]string{"/corgi:review https://github.com/a/b/pull/1", "do not start a fresh review", "resolve the threads", "push the fixes"}, []string{"/corgi:stories"}},
 		{"pr review addresses feedback", watch.Event{Kind: watch.KindPRReview, URL: "https://gitlab.com/a/b/-/merge_requests/2"},
@@ -674,5 +674,36 @@ func TestUnattendedRunsNeverTouchSomeoneElsesWork(t *testing.T) {
 	chat := unattendedSuffix(spec, watch.Event{Kind: watch.KindChatMention, Ref: "slack-1", Mine: true})
 	if strings.Contains(chat, "end of the pull request body") {
 		t.Errorf("a chat run has no pull request of its own to write into: %q", chat)
+	}
+}
+
+func TestARedBuildOnAMergedRequestOrRedAllDayStartsNoRun(t *testing.T) {
+	d := testDaemon(t)
+	spec := WatchSpec{Workspace: "acme", Dir: t.TempDir(), Action: "fix"}
+	merged := watch.Event{Kind: watch.KindCIFailed, Key: "gitlab:todo:1", Ref: "acme/api!5", State: "merged"}
+	if why := d.stillWorthFixing(context.Background(), spec, merged); !strings.Contains(why, "merged") {
+		t.Errorf("red build on a merged request: got %q", why)
+	}
+	d.loadWatchFiles()
+	now := time.Now()
+	for i := 0; i < maxRedBuildRuns; i++ {
+		e := watch.Event{Kind: watch.KindCIFailed, Key: fmt.Sprintf("gitlab:todo:%d", 10+i), Workspace: "acme", Ref: "acme/api!6", State: "opened"}
+		d.watchState.Fixes.StartFor(e, now)
+		d.watchState.Fixes.Finish(e.Key, nil, "", "", now)
+	}
+	again := watch.Event{Kind: watch.KindCIFailed, Key: "gitlab:todo:99", Workspace: "acme", Ref: "acme/api!6", State: "opened"}
+	if why := d.stillWorthFixing(context.Background(), spec, again); !strings.Contains(why, "needs a person") {
+		t.Errorf("fourth run on the same red build in a day: got %q", why)
+	}
+}
+
+func TestADriftThatFlickersRingsOnce(t *testing.T) {
+	d := testDaemon(t)
+	now := time.Now()
+	if !d.firstDriftRing("s1", now) || d.firstDriftRing("s1", now.Add(time.Minute)) {
+		t.Fatal("the same session drifting again a minute later is the same drift")
+	}
+	if !d.firstDriftRing("s1", now.Add(driftRingEvery)) || !d.firstDriftRing("s2", now) {
+		t.Fatal("a later drift, or another session, rings")
 	}
 }

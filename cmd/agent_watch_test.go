@@ -309,7 +309,7 @@ func TestWatchTestWalksThePipeline(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
-	for _, want := range []string{"event      issue.comment ABC-1 - key test:issue.comment:ABC-1", "workspace  acme-stack", "rules      match", "seen       no", "fix        would start (0/3 this hour · 0/10 today)", `"is this still needed?"`, "/corgi:stories ABC-1", "--permission-mode acceptEdits"} {
+	for _, want := range []string{"event      issue.comment ABC-1 - key test:issue.comment:ABC-1", "workspace  acme-stack", "rules      match", "seen       no", "fix        would start (0/3 this hour · 0/10 today)", "<<<\nis this still needed?\n>>>", "/corgi:stories ABC-1", "--permission-mode acceptEdits"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in:\n%s", want, out)
 		}

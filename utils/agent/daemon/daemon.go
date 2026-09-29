@@ -83,6 +83,7 @@ type Daemon struct {
 	liftDue     map[string]*time.Timer
 	liftTold    map[string]bool
 	fixSettle   map[string]*time.Timer
+	driftRang   map[string]time.Time
 	fixSettled  map[string][]watch.Event
 	fixBatch    map[string][]watch.Event
 	fixBatchAt  map[string]*time.Timer
@@ -1082,7 +1083,7 @@ func (d *Daemon) sendDigestIfDue(now time.Time) {
 		return
 	}
 	last, _ := os.ReadFile(digestMarker(d.Dir))
-	if !DigestDue(now, d.DigestAt, strings.TrimSpace(string(last))) {
+	if !DigestDue(now, d.DigestAt, strings.TrimSpace(string(last))) || d.muted() {
 		return
 	}
 	_ = os.WriteFile(digestMarker(d.Dir), []byte(now.Format("2006-01-02")), 0o600)

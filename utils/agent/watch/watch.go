@@ -1040,7 +1040,7 @@ func (l *FixLog) FailedInARow(workspace, ref string) int {
 		if r.Workspace != workspace || r.Ref != ref || !r.Done() {
 			continue
 		}
-		if strings.HasPrefix(r.Error, "not started") {
+		if strings.HasPrefix(r.Error, "not started") || killedByTheDaemon(r.Error) {
 			continue
 		}
 		if r.Error == "" || r.Forgiven {
@@ -1131,6 +1131,37 @@ func (l *FixLog) Interrupted(reason string, at time.Time) []string {
 	return keys
 }
 
+// a run the daemon stopped (a restart, an upgrade) says nothing about the work
+func killedByTheDaemon(err string) bool {
+	return err == InterruptedReason || strings.Contains(err, "exit status 143")
+}
+
+// RunsOnSince counts the runs of one kind on a ref that started after since.
+func (l *FixLog) RunsOnSince(workspace, ref, kind string, since time.Time) int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	n := 0
+	for _, r := range l.Started {
+		if r.Workspace == workspace && r.Ref == ref && r.Kind == kind && !r.StartedAt.Before(since) && !strings.HasPrefix(r.Error, "not started") {
+			n++
+		}
+	}
+	return n
+}
+
+// TimesInterrupted is how often the daemon stopped a run of this event mid-way.
+func (l *FixLog) TimesInterrupted(key string) int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	n := 0
+	for _, r := range l.Started {
+		if r.Key == key && killedByTheDaemon(r.Error) {
+			n++
+		}
+	}
+	return n
+}
+
 // Records is every run on record, oldest first, copied under the lock so a
 // reader on another goroutine never walks a slice StartFor is growing.
 func (l *FixLog) Records() []FixRecord {
@@ -1160,6 +1191,9 @@ func (l *FixLog) RunThatOpened(workspace, link string) (FixRecord, bool) {
 	for i := len(l.Started) - 1; i >= 0; i-- {
 		r := l.Started[i]
 		if workspace != "" && r.Workspace != workspace {
+			continue
+		}
+		if r.Kind != string(KindIssueNew) && r.Kind != string(KindIssueComment) {
 			continue
 		}
 		for _, pr := range r.PRs {

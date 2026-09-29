@@ -92,6 +92,14 @@ func TestAReadyPullRequestIsMergedWhenTheWorkspaceSaysSo(t *testing.T) {
 	if len(merged) != 0 {
 		t.Fatalf("merged a colleague's pull request I only reviewed: %v", merged)
 	}
+	for _, checks := range []string{"none", ""} {
+		unknown := ready
+		unknown.Checks = checks
+		d.pullChanged(context.Background(), spec, "acme/api#9", "https://github.com/acme/api/pull/9", watch.PullStatus{}, unknown, false)
+	}
+	if len(merged) != 0 {
+		t.Fatalf("merged with no green checks to go on: %v", merged)
+	}
 	d.pullChanged(context.Background(), spec, "acme/api#7", link, watch.PullStatus{}, ready, false)
 	if len(merged) != 1 || merged[0] != "acme "+link {
 		t.Fatalf("merged: %v", merged)
