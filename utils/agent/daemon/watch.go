@@ -1057,8 +1057,9 @@ var fixPrompts = map[watch.Kind]func(e watch.Event) string{
 		return fmt.Sprintf("A new comment on %s from %s says: %q. Read it and decide. "+
 			"If it asks a question or for information, answer it as a comment on %s through the tracker "+
 			"(the Linear or Jira MCP tools, or the REST API with the saved token) and do NOT open a PR. "+
-			"If it asks for a change, apply it on the existing branch for %s - find it by the ticket key in the branch names - "+
-			"and when there is no such branch run /corgi:stories %s. I approve all changes; draft PRs only.",
+			"If it asks for a change, apply it on the existing branch for %s - find it by the ticket key in the branch names, "+
+			"and take it only when its pull request is one I opened (gh pr view --json author) - "+
+			"and when there is no such branch of mine run /corgi:stories %s. I approve all changes; draft PRs only.",
 			e.Ref, firstNonEmpty(e.Author, "someone"), e.Body, e.Ref, e.Ref, e.Ref)
 	},
 	watch.KindPRComment:   reviewFeedbackPrompt,
@@ -1081,12 +1082,13 @@ var fixPrompts = map[watch.Kind]func(e watch.Event) string{
 			"Do not push commits, do not resolve their threads" + approveClause + ". If it is good, say so and say why. /corgi:review " + strings.Join(links, " ")
 	},
 	watch.KindCIFailed: func(e watch.Event) string {
-		find := "Find the failing run (gh run list --repo " + e.Ref + " --status failure --limit 5, then gh run view --log-failed), "
+		find := "Find the failing run of mine (gh run list --repo " + e.Ref + " --status failure --user \"$(gh api user -q .login)\" --limit 5, then gh run view --log-failed), "
 		if e.Source == "gitlab" {
 			find = "Find the failing pipeline of " + e.URL + " (glab ci view / glab ci trace on its branch, or the GitLab API with the saved token), "
 		}
 		return "A build went red in " + e.Ref + ": " + e.Title + ". " + find +
 			"read what actually failed, and fix the cause on the branch it failed on - not by weakening the test or skipping it. " +
+			"Fix it only when that branch is a pull request I opened: on the default branch or on someone else's pull request, change nothing and say whose it is. " +
 			"Push and stop there: corgi watches the new pipeline and comes back if it goes red again. If it is a flake or an outage rather than our bug, say so and change nothing. " +
 			"I approve all changes."
 	},
@@ -1154,8 +1156,9 @@ func unattendedSuffix(spec WatchSpec, e watch.Event) string {
 		"pick the recommended option yourself, say which you picked and why, and go on. " +
 		"If you truly cannot proceed, leave a handoff with `--blocked <reason>` (the question goes in `--uncertain`) and stop.\n" +
 		"Before you finish: review your own diff the way you would review someone else's, " +
-		"and fix what you find - nobody has looked at this but you. "
-	ownPR := true
+		"and fix what you find - nobody has looked at this but you. " +
+		"Never push to a pull request someone else opened, never edit its description, and never push to the default branch.\n"
+	ownPR := e.Kind != watch.KindChatMention && e.Kind != watch.KindChatMessage
 	if ownPR {
 		trail := "corgi watch · " + spec.Workspace + " · " + string(e.Kind) + " " + e.Ref
 		if e.URL != "" {
