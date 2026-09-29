@@ -204,3 +204,40 @@ func TestLastOutputLineSkipsBoxDrawing(t *testing.T) {
 		t.Errorf("lastOutputLine() = %q, want the message, not the TUI frame", got)
 	}
 }
+
+const expiredRegistrationOutput = "Error: Registration: Authentication failed (401): OAuth access token has expired. Re-authenticate to continue.. Remote Control is only available with claude.ai subscriptions. Please use `/login` to sign in with your claude.ai account.\nExiting in about 72 seconds.\n"
+
+func TestDecideExpiredTokenAtRegistrationRetriesQuietly(t *testing.T) {
+	d := Decide(Exit{Code: 1, Uptime: 80 * time.Second, Output: expiredRegistrationOutput}, 0, 0)
+	if d.Cause != CauseStartupFailure {
+		t.Fatalf("cause = %q, want startup-failure: the session never registered", d.Cause)
+	}
+	if !d.Restart || d.Disable || d.Notify {
+		t.Errorf("decision = %+v, want a silent retry: claude refreshes the token on the next start", d)
+	}
+}
+
+func TestDecideExpiredTokenGivesUpAfterRepeats(t *testing.T) {
+	d := Decide(Exit{Code: 1, Uptime: 80 * time.Second, Output: expiredRegistrationOutput}, 4, MaxStartupFailures-1)
+	if !d.Disable || !d.Notify {
+		t.Errorf("decision = %+v, want disable + notify once retries stop helping", d)
+	}
+	if !strings.Contains(d.Reason, "OAuth access token has expired") {
+		t.Errorf("reason = %q, want the error line, not the countdown", d.Reason)
+	}
+}
+
+func TestDecideRegistrationAuthFailureAfterCountdownDisables(t *testing.T) {
+	out := "Error: Registration: Remote Control requires a claude.ai subscription\nExiting in about 72 seconds.\n"
+	d := Decide(Exit{Code: 1, Uptime: 80 * time.Second, Output: out}, 0, 0)
+	if d.Cause != CauseAuthFailure {
+		t.Errorf("cause = %q, want auth-failure even though the countdown pushed uptime past the healthy mark", d.Cause)
+	}
+}
+
+func TestLastOutputLineSkipsExitCountdown(t *testing.T) {
+	got := lastOutputLine("Error: Registration: boom\nExiting in about 72 seconds.\n")
+	if got != "Error: Registration: boom" {
+		t.Errorf("lastOutputLine() = %q, want the error, not the countdown", got)
+	}
+}
