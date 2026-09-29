@@ -47,9 +47,12 @@ type gitlabTodo struct {
 		PathWithNamespace string `json:"path_with_namespace"`
 	} `json:"project"`
 	Target struct {
-		IID   int64  `json:"iid"`
-		Title string `json:"title"`
-		State string `json:"state"`
+		IID    int64  `json:"iid"`
+		Title  string `json:"title"`
+		State  string `json:"state"`
+		Author struct {
+			Username string `json:"username"`
+		} `json:"author"`
 	} `json:"target"`
 	Author struct {
 		Username string `json:"username"`
@@ -142,7 +145,7 @@ func (g *GitLab) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 			Body:   gitlabTruncate(body, 200),
 			URL:    t.TargetURL,
 			Author: t.Author.Username,
-			Mine:   kind != KindReviewRequested,
+			Mine:   kind != KindReviewRequested && isMe(g.Me, t.Target.Author.Username),
 			Bot:    kind == KindPRComment && gitlabBot(t.Author.Username, t.Author.Bot),
 			State:  t.Target.State,
 			At:     at,

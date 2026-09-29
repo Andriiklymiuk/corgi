@@ -117,7 +117,7 @@ func (g *GitHub) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 	}
 
 	var events []Event
-	states := map[string]string{}
+	pulls := map[string]githubPullInfo{}
 	for _, t := range threads {
 		if !g.wantsRepo(t.Repository.FullName) {
 			continue
@@ -149,7 +149,7 @@ func (g *GitHub) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 		number := t.Subject.URL[strings.LastIndex(t.Subject.URL, "/")+1:]
 		ref := t.Repository.FullName + "#" + number
 		at, _ := time.Parse(time.RFC3339, t.UpdatedAt)
-		state := g.pullState(ctx, states, t.Subject.URL)
+		pull := g.pull(ctx, pulls, t.Subject.URL)
 		author, body, bot, hasComment := g.latestComment(ctx, t.Subject.LatestCommentURL, t.Subject.URL)
 		kind := r.kind
 		key := "github:" + ref + ":" + t.ID + ":" + t.UpdatedAt
@@ -179,9 +179,9 @@ func (g *GitHub) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 			Body:   body,
 			URL:    "https://github.com/" + t.Repository.FullName + "/pull/" + number,
 			Author: author,
-			Mine:   r.mine,
+			Mine:   r.mine && isMe(g.Me, pull.author),
 			Bot:    bot,
-			State:  state,
+			State:  pull.state,
 			At:     at,
 		})
 	}
@@ -267,30 +267,38 @@ func (g *GitHub) reviewBehind(ctx context.Context, repo, num string, at time.Tim
 	return best, best.id != ""
 }
 
-func (g *GitHub) pullState(ctx context.Context, cache map[string]string, apiURL string) string {
+type githubPullInfo struct {
+	state  string
+	author string
+}
+
+func (g *GitHub) pull(ctx context.Context, cache map[string]githubPullInfo, apiURL string) githubPullInfo {
 	if apiURL == "" {
-		return ""
+		return githubPullInfo{}
 	}
-	if state, ok := cache[apiURL]; ok {
-		return state
+	if p, ok := cache[apiURL]; ok {
+		return p
 	}
-	cache[apiURL] = ""
+	cache[apiURL] = githubPullInfo{}
 	path := strings.TrimPrefix(apiURL, "https://api.github.com")
 	if path == apiURL {
-		return ""
+		return githubPullInfo{}
 	}
 	resp, err := g.get(ctx, path, "")
 	if err != nil {
-		return ""
+		return githubPullInfo{}
 	}
 	defer resp.Body.Close()
 	var pr struct {
 		State  string `json:"state"`
 		Merged bool   `json:"merged"`
 		Draft  bool   `json:"draft"`
+		User   struct {
+			Login string `json:"login"`
+		} `json:"user"`
 	}
 	if json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&pr) != nil {
-		return ""
+		return githubPullInfo{}
 	}
 	state := pr.State
 	if pr.Merged {
@@ -298,8 +306,9 @@ func (g *GitHub) pullState(ctx context.Context, cache map[string]string, apiURL 
 	} else if pr.Draft && state == "open" {
 		state = "draft"
 	}
-	cache[apiURL] = state
-	return state
+	p := githubPullInfo{state: state, author: pr.User.Login}
+	cache[apiURL] = p
+	return p
 }
 
 func firstNonEmptyText(s, fallback string) string {
@@ -359,7 +368,7 @@ func (g *GitHub) RefState(ctx context.Context, ref string) string {
 	if !ok || g.Token == "" {
 		return ""
 	}
-	return g.pullState(ctx, map[string]string{}, "https://api.github.com/repos/"+repo+"/pulls/"+num)
+	return g.pull(ctx, map[string]githubPullInfo{}, "https://api.github.com/repos/"+repo+"/pulls/"+num).state
 }
 
 func (g *GitHub) PullStatus(ctx context.Context, ref string) (PullStatus, bool) {
