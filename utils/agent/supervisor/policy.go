@@ -34,6 +34,9 @@ const MinHealthyUptime = 60 * time.Second
 
 const MaxStartupFailures = 5
 
+// a session that ran this long was healthy, whatever ended it: its exit starts a new streak
+const LongRun = 10 * time.Minute
+
 var DefaultBackoff = []time.Duration{
 	5 * time.Second,
 	30 * time.Second,
@@ -58,6 +61,9 @@ var exitCountdownLine = regexp.MustCompile(`(?i)^exiting in about \d+ seconds?\.
 
 // refreshed on the next start, so retried rather than disabled
 const expiredTokenMarker = "access token has expired"
+
+// a 5xx from Anthropic is theirs and passes, so retried quietly like a failed start
+var serverErrorLine = regexp.MustCompile(`(?i)status code 5\d\d\b`)
 
 type Exit struct {
 	Code      int
@@ -89,7 +95,7 @@ func Classify(e Exit, consecutiveStartupFailures int) ExitCause {
 		return CauseRequested
 	}
 	lower := strings.ToLower(e.Output)
-	if e.Uptime < e.healthyThreshold() || strings.Contains(lower, registrationFailureMarker) {
+	if e.Uptime < e.healthyThreshold() || strings.Contains(lower, registrationFailureMarker) || serverErrorLine.MatchString(lastOutputLine(e.Output)) {
 		if strings.Contains(lower, expiredTokenMarker) {
 			return CauseStartupFailure
 		}

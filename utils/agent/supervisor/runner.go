@@ -234,6 +234,9 @@ func (r *Runner) Run(ctx context.Context) error {
 		if r.retryWithoutUnsupportedFlag(exit) {
 			continue
 		}
+		if exit.Uptime >= LongRun {
+			s = streak{}
+		}
 		decision := Decide(exit, s.attempt, s.startupFailures)
 		healthy := decision.Cause != CauseStartupFailure
 		offline := decision.Cause == CauseOffline

@@ -257,3 +257,24 @@ func TestClassifyOfflineMarkerInLongRunIsNotOffline(t *testing.T) {
 		t.Errorf("cause = %q, want crash: a session that ran for hours did start", got)
 	}
 }
+
+func TestDecideServerErrorRetriesQuietly(t *testing.T) {
+	out := "Error: Request failed with status code 500\n"
+	for _, up := range []time.Duration{5 * time.Second, 70 * time.Second, 3 * time.Hour} {
+		d := Decide(Exit{Code: 1, Uptime: up, Output: out}, 0, 0)
+		if d.Cause != CauseStartupFailure || !d.Restart || d.Notify || d.Disable {
+			t.Errorf("after %s: decision = %+v, want a silent retry: a 500 is the server's and passes", up, d)
+		}
+	}
+	d := Decide(Exit{Code: 1, Uptime: 70 * time.Second, Output: out}, 4, MaxStartupFailures-1)
+	if !d.Notify || !strings.Contains(d.Reason, "status code 500") {
+		t.Errorf("decision = %+v, want one push with the error once retries stop helping", d)
+	}
+}
+
+func TestDecideCrashWithAServerErrorEarlierInTheOutputStillNotifies(t *testing.T) {
+	out := "warning: request failed with status code 502, retried\npanic: nil map\n"
+	if d := Decide(Exit{Code: 1, Uptime: 2 * time.Hour, Output: out}, 0, 0); d.Cause != CauseCrash || !d.Notify {
+		t.Errorf("decision = %+v, want a crash: the last line is what killed it", d)
+	}
+}
