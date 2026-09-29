@@ -35,6 +35,7 @@ type WatchSpec struct {
 	Bin             string
 	Isolate         bool
 	PruneAfter      time.Duration
+	ReviewDelay     time.Duration
 	RerunCI         bool
 	Silent          bool
 	Slots           int
@@ -533,12 +534,15 @@ func (d *Daemon) releaseHeld(spec WatchSpec, now time.Time) {
 }
 
 func (d *Daemon) retryDeferred(ctx context.Context, spec WatchSpec, now time.Time) {
-	if spec.NoRetry || spec.Action != "fix" || d.watchState == nil || d.peerLeads(spec) != "" {
+	if spec.Action != "fix" || d.watchState == nil || d.peerLeads(spec) != "" {
 		return
 	}
 	var queue []watch.Event
 	for _, e := range d.watchState.Fixes.DeferredEvents() {
 		if e.Workspace != spec.Workspace || now.Before(e.NotBefore) {
+			continue
+		}
+		if spec.NoRetry && !(e.Kind == watch.KindReviewRequested && spec.ReviewDelay > 0) {
 			continue
 		}
 		if _, blocked := d.watchState.Fixes.Blocked(spec.Workspace, e.Ref); blocked {
@@ -587,6 +591,20 @@ func (d *Daemon) retryDeferred(ctx context.Context, spec WatchSpec, now time.Tim
 }
 
 const maxRedBuildRuns = 3
+
+// reviewHold says when a fresh review request may start under reviewDelay,
+// counted from when it was asked; a request already older than that starts now.
+func reviewHold(spec WatchSpec, e watch.Event, now time.Time) (time.Time, bool) {
+	if spec.ReviewDelay <= 0 || e.Kind != watch.KindReviewRequested || !e.NotBefore.IsZero() {
+		return time.Time{}, false
+	}
+	asked := e.At
+	if asked.IsZero() || asked.After(now) {
+		asked = now
+	}
+	at := asked.Add(spec.ReviewDelay)
+	return at, at.After(now)
+}
 
 func (d *Daemon) stillWorthFixing(ctx context.Context, spec WatchSpec, e watch.Event) string {
 	if spec.Rules.Enabled {
@@ -644,6 +662,11 @@ func (d *Daemon) stillWorthFixing(ctx context.Context, spec WatchSpec, e watch.E
 		}
 		break
 	}
+	if e.Kind == watch.KindReviewRequested && !e.At.IsZero() && !e.NotBefore.IsZero() {
+		if why := reviewedSince(ctx, spec, e); why != "" {
+			return why
+		}
+	}
 	if e.Kind == watch.KindPRComment || e.Kind == watch.KindPRReview {
 		for _, src := range spec.Sources {
 			if a, ok := src.(watch.Answerer); ok {
@@ -652,6 +675,30 @@ func (d *Daemon) stillWorthFixing(ctx context.Context, spec WatchSpec, e watch.E
 				}
 			}
 		}
+	}
+	return ""
+}
+
+// reviewedSince is a review of mine posted after the request, by hand or by
+// an earlier run, so a held request does not review the same diff twice.
+func reviewedSince(ctx context.Context, spec WatchSpec, e watch.Event) string {
+	ref := watch.PullRef(watch.PullLinkOf(e))
+	if ref == "" {
+		return ""
+	}
+	for _, src := range spec.Sources {
+		teller, ok := src.(watch.ReviewTeller)
+		if !ok {
+			continue
+		}
+		o, ok := teller.MyReviewSince(ctx, ref, e.At)
+		if !ok {
+			continue
+		}
+		if o.Approved || o.ChangesRequested || o.Comments > 0 {
+			return "already reviewed: " + o.Line()
+		}
+		return ""
 	}
 	return ""
 }
@@ -727,6 +774,11 @@ func (d *Daemon) startFix(ctx context.Context, spec WatchSpec, e watch.Event) st
 	if why := d.stillWorthFixing(ctx, spec, e); why != "" {
 		utils.Infof("agent: watch %s: not fixing %s: %s\n", spec.Workspace, e.Ref, why)
 		return "not started: " + why
+	}
+	if at, hold := reviewHold(spec, e, now); hold {
+		at = d.watchState.Fixes.DeferUntil(e, at)
+		utils.Infof("agent: watch %s: review of %s held until %s\n", spec.Workspace, e.Ref, at.Local().Format("15:04"))
+		return "review held until " + at.Local().Format("15:04")
 	}
 	if reason := fixDeferral(spec, d.watchState.Fixes, now); reason != "" {
 		d.watchState.Fixes.Defer(e)
@@ -1108,7 +1160,7 @@ var fixPrompts = map[watch.Kind]func(e watch.Event) string{
 		}
 		return "Review " + noun + ", which " + firstNonEmpty(e.Author, "a colleague") + asked + strings.Join(links, " ") +
 			". Not my branches - read each diff and post a review on it (a summary and inline comments). " +
-			"Do not push commits, do not resolve their threads" + approveClause + ". If it is good, say so and say why. /corgi:review " + strings.Join(links, " ")
+			"Do not push commits, do not resolve their threads" + approveClause + ". If it is good, say so and say why. " + heldReviewNote(e) + "/corgi:review " + strings.Join(links, " ")
 	},
 	watch.KindCIFailed: func(e watch.Event) string {
 		find := "Find the failing run of mine (gh run list --repo " + e.Ref + " --status failure --user \"$(gh api user -q .login)\" --limit 5, then gh run view --log-failed), "
@@ -1121,6 +1173,13 @@ var fixPrompts = map[watch.Kind]func(e watch.Event) string{
 			"Push and stop there: corgi watches the new pipeline and comes back if it goes red again. If it is a flake or an outage rather than our bug, say so and change nothing. " +
 			"I approve all changes."
 	},
+}
+
+func heldReviewNote(e watch.Event) string {
+	if e.NotBefore.IsZero() {
+		return ""
+	}
+	return "It was asked a while ago: review the pull request as it is now - the latest commits, the comments and reviews since, and skip what others already raised. "
 }
 
 func reviewFeedbackPrompt(e watch.Event) string {

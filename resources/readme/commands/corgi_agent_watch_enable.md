@@ -59,6 +59,7 @@ corgi agent watch enable [flags]
       --repos string                          GitHub repos to watch for PR feedback, comma-separated owner/repo (default: any)
       --rerun-ci                              Rerun the failed jobs of a red build once before it is worked on or handed over; a second red on the same run goes the usual way (GitHub)
       --review-channel strings                Slack channels where pull requests are posted for review: a post with links is one review, answered in its thread (repeatable)
+      --review-delay string                   Hold a review someone asked for this long before it runs, e.g. 1h; it is checked again then - merged, closed or already reviewed drops it (empty or 0 reviews at once)
       --review-status string                  Column a ticket moves to once a run opened a pull request for it, e.g. "In Review"
       --reviews                               Also pull requests someone asked me to review - theirs, not mine
       --silent                                Nothing about this workspace's watch rings - no toast, no phone push: fixes run, the inbox and the kanban fill, and you look when you like (--silent=false to ring again)

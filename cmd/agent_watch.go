@@ -31,6 +31,7 @@ import (
 
 const (
 	watchFlagPruneAfter         = "prune-after"
+	watchFlagReviewDelay        = "review-delay"
 	watchFlagMaxPerHour         = "max-per-hour"
 	watchFlagMaxPerDay          = "max-per-day"
 	watchFlagLimitCeiling       = "limit-ceiling"
@@ -162,6 +163,13 @@ var agentWatchEnableCmd = &cobra.Command{
 		}
 		if flags.Changed("isolate") {
 			wc.Isolate, _ = flags.GetBool("isolate")
+		}
+		if flags.Changed(watchFlagReviewDelay) {
+			v, _ := flags.GetString(watchFlagReviewDelay)
+			if _, err := watch.ParseAge(v); err != nil {
+				return fmt.Errorf("--%s: %w", watchFlagReviewDelay, err)
+			}
+			wc.ReviewDelay = strings.TrimSpace(v)
 		}
 		if flags.Changed(watchFlagPruneAfter) {
 			v, _ := flags.GetString(watchFlagPruneAfter)
@@ -1081,6 +1089,7 @@ func watchSpecOf(dir string, w workspace.Workspace, resolved config.Resolved) (d
 		spec.Action = "fix"
 	}
 	spec.PruneAfter, _ = watch.ParseAge(wc.PruneAfter)
+	spec.ReviewDelay, _ = watch.ParseAge(wc.ReviewDelay)
 	if days, err := daemon.ParseDaysOff(wc.DaysOff); err == nil {
 		spec.DaysOff = days
 	} else {
@@ -1210,6 +1219,9 @@ func fixBudgetLine(s daemon.WatchSpec, fixes *watch.FixLog, now time.Time) strin
 	}
 	if b.Deferred > 0 {
 		line += fmt.Sprintf(" · %d deferred", b.Deferred)
+	}
+	if s.ReviewDelay > 0 {
+		line += " · reviews wait " + s.ReviewDelay.String()
 	}
 	return line
 }
@@ -1462,6 +1474,7 @@ func init() {
 	f.String(watchFlagPruneAfter, "", "Remove an isolated run's worktrees this long after it finished, e.g. 7d; the branch stays, a dirty worktree stays (empty keeps them until `watch undo` or `watch prune`)")
 	f.Bool(watchFlagNoRetry, false, "Leave deferred fixes to a manual `watch run` instead of starting them when the budget returns")
 	f.Bool("reviews", false, "Also pull requests someone asked me to review - theirs, not mine")
+	f.String(watchFlagReviewDelay, "", "Hold a review someone asked for this long before it runs, e.g. 1h; it is checked again then - merged, closed or already reviewed drops it (empty or 0 reviews at once)")
 	f.Bool(watchFlagAutoMerge, false, "Merge a pull request of mine the moment its checks pass and it is approved (read from the forge once a round)")
 	f.Int("batch", 1, "Tickets that arrive within 90 s of each other share one run, up to this many (1 is off); one preflight and one context for the lot")
 	f.String(watchFlagAfterMerge, "", "Move the ticket to this column once every pull request of its run is merged - a name from `corgi agent watch board`; empty leaves it where it is")
