@@ -52,3 +52,5 @@ corgi-mobile-app/
 
 # showcase frames are intermediates; the gifs and stills are what ships
 docs/media/frames/
+
+*.ips
