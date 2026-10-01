@@ -2,15 +2,25 @@ package cmd
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
+
+	"andriiklymiuk/corgi/utils"
+	"andriiklymiuk/corgi/utils/agent/sendgate"
 )
+
+// notifyGate meters every webhook notification, shared with the Slack poster's
+// ledger so no loop upstream can flood the channel behind the URL.
+var notifyGate = func() *sendgate.Gate { return sendgate.For(agentDirOrEmpty()) }
 
 const publicURLName = "public.url"
 
@@ -119,7 +129,15 @@ func webhookLinkNotifier(rawURL string, client *http.Client) func(title, body, l
 	}
 	target := u.String()
 	shape := webhookShapeFor(u.Host)
+	gate := notifyGate()
+	// the URL is the secret for most webhooks, so the ledger keeps a hash of it
+	sum := sha256.Sum256([]byte(target))
+	family, dest := "webhook", shape+":"+hex.EncodeToString(sum[:6])
 	return func(title, body, link string) {
+		if err := gate.Allow(family, dest, title+"\n"+body+"\n"+link); err != nil {
+			utils.Infof("agent: notification not sent (%v): %s\n", err, title)
+			return
+		}
 		go func() {
 			req, err := buildNotifyRequest(shape, target, title, body, link)
 			if err != nil {
@@ -128,6 +146,10 @@ func webhookLinkNotifier(rawURL string, client *http.Client) func(title, body, l
 			resp, err := client.Do(req)
 			if err != nil {
 				return
+			}
+			if resp.StatusCode == http.StatusTooManyRequests {
+				secs, _ := strconv.Atoi(strings.TrimSpace(resp.Header.Get("Retry-After")))
+				gate.Pause(family, time.Duration(secs)*time.Second)
 			}
 			_ = resp.Body.Close()
 		}()

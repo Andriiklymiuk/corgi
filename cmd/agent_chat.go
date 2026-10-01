@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"andriiklymiuk/corgi/utils"
+	"andriiklymiuk/corgi/utils/agent/sendgate"
 	"andriiklymiuk/corgi/utils/agent/watch"
 )
 
@@ -80,6 +81,7 @@ func runChatPost(req chatRequest) error {
 	poster := watch.NewSlackPoster(watch.LoadSecretsFor(dir, req.Workspace))
 	state := watch.LoadState(dir)
 	poster.Team = state.SourceIdentity("slack", "team")
+	poster.Gate = sendgate.For(dir)
 
 	target, err := chatTarget(req, state, slackDefaultsFor(dir, req.Workspace))
 	if err != nil {

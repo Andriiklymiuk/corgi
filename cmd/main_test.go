@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"andriiklymiuk/corgi/utils"
+	"andriiklymiuk/corgi/utils/agent/sendgate"
 	"os"
 	"os/signal"
 	"syscall"
@@ -16,5 +17,6 @@ func TestMain(m *testing.M) {
 		}
 	}()
 	utils.SilenceNotificationsForTests()
+	notifyGate = func() *sendgate.Gate { return sendgate.InMemory() }
 	os.Exit(m.Run())
 }

@@ -3,10 +3,13 @@ package watch
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"andriiklymiuk/corgi/utils/agent/sendgate"
 )
 
 func TestSlackPosterPicksTheVoiceAndThreads(t *testing.T) {
@@ -71,5 +74,41 @@ func TestSlackPosterRefusesWithoutAToken(t *testing.T) {
 	only := NewSlackPoster(Secrets{SlackBot: "xoxb-app"})
 	if _, _, err := only.voice("me"); err == nil {
 		t.Fatal("asking for a voice with no token must fail, not quietly use the other one")
+	}
+}
+
+func TestSlackPosterStopsAtTheGateAndBacksOffOn429(t *testing.T) {
+	hits := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		w.Header().Set("Retry-After", "30")
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer srv.Close()
+
+	p := NewSlackPoster(Secrets{SlackBot: "xoxb-app"})
+	p.Bot.URL, p.Bot.Client = srv.URL, srv.Client()
+	p.Gate = sendgate.InMemory()
+
+	for i := 0; i < 1000; i++ {
+		_, _ = p.Post(context.Background(), SlackTarget{Channel: "C1", ThreadTS: fmt.Sprint(i)}, fmt.Sprintf("Could not do this (%d)", i))
+	}
+	if hits != 1 {
+		t.Fatalf("a 429 must pause every send until Slack is ready again; it was called %d times", hits)
+	}
+
+	quiet := NewSlackPoster(Secrets{SlackBot: "xoxb-app"})
+	quiet.Bot.URL, quiet.Bot.Client = srv.URL, srv.Client()
+	quiet.Gate = sendgate.InMemory()
+	hits = 0
+	srv.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		_, _ = w.Write([]byte(`{"ok":false,"error":"internal_error"}`))
+	})
+	for i := 0; i < 1000; i++ {
+		_, _ = quiet.Post(context.Background(), SlackTarget{Channel: fmt.Sprint("C", i%7)}, fmt.Sprint("retry ", i))
+	}
+	if hits != sendgate.Default.PerFamily {
+		t.Fatalf("failed sends must spend the budget; %d reached Slack, want %d", hits, sendgate.Default.PerFamily)
 	}
 }

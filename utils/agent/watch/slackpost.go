@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"andriiklymiuk/corgi/utils/agent/sendgate"
 )
 
 type SlackTarget struct {
@@ -24,6 +26,28 @@ type SlackPoster struct {
 	User *slackAPI
 	Bot  *slackAPI
 	Team string
+	Gate *sendgate.Gate
+}
+
+// Without a ledger on disk a poster still shares one budget per process.
+var processGate = sendgate.InMemory()
+
+func (p *SlackPoster) gate() *sendgate.Gate {
+	if p.Gate != nil {
+		return p.Gate
+	}
+	return processGate
+}
+
+func (p *SlackPoster) send(ctx context.Context, api *slackAPI, method, target, fingerprint string, body map[string]any, out any) error {
+	if err := p.gate().Allow("slack", target, fingerprint); err != nil {
+		return err
+	}
+	err := api.post(ctx, method, body, out)
+	if errors.Is(err, errSlackRateLimited) {
+		p.gate().Pause("slack", retryAfter(err))
+	}
+	return err
 }
 
 func NewSlackPoster(s Secrets) *SlackPoster {
@@ -74,7 +98,7 @@ func (p *SlackPoster) Post(ctx context.Context, target SlackTarget, text string)
 		Channel string `json:"channel"`
 		TS      string `json:"ts"`
 	}
-	if err := api.post(ctx, "chat.postMessage", body, &res); err != nil {
+	if err := p.send(ctx, api, "chat.postMessage", target.Channel+"/"+target.ThreadTS, text, body, &res); err != nil {
 		return SlackPosted{}, err
 	}
 	return SlackPosted{Channel: res.Channel, TS: res.TS, As: as,
@@ -89,8 +113,9 @@ func (p *SlackPoster) React(ctx context.Context, target SlackTarget, emoji strin
 	if target.ThreadTS == "" {
 		return errors.New("react: no message timestamp")
 	}
-	return api.post(ctx, "reactions.add", map[string]any{
-		"channel": target.Channel, "timestamp": target.ThreadTS, "name": strings.Trim(emoji, ":"),
+	name := strings.Trim(emoji, ":")
+	return p.send(ctx, api, "reactions.add", target.Channel+"/"+target.ThreadTS, "react:"+name, map[string]any{
+		"channel": target.Channel, "timestamp": target.ThreadTS, "name": name,
 	}, nil)
 }
 
