@@ -36,9 +36,10 @@ func post(handler http.HandlerFunc, path, body string) *httptest.ResponseRecorde
 
 func TestLaunchAnswerRefusesWhatShouldNotBeAnsweredBlind(t *testing.T) {
 	dir := phoneBoard(t, true,
-		sessions.Session{ID: "s1", Display: "api", Status: sessions.StatusNeedsInput, Pending: &sessions.Pending{Tool: "Bash", Subject: "go"}},
-		sessions.Session{ID: "s2", Display: "web", Status: sessions.StatusNeedsInput, Pending: &sessions.Pending{Tool: "Bash", Subject: "rm"}},
+		sessions.Session{ID: "s1", Display: "api", Status: sessions.StatusNeedsInput, Pending: &sessions.Pending{Tool: "Bash", Subject: "go"}, Host: sessions.Host{Kind: sessions.HostITerm}},
+		sessions.Session{ID: "s2", Display: "web", Status: sessions.StatusNeedsInput, Pending: &sessions.Pending{Tool: "Bash", Subject: "rm"}, Host: sessions.Host{Kind: sessions.HostTmux}},
 		sessions.Session{ID: "s3", Display: "idle", Status: sessions.StatusDone},
+		sessions.Session{ID: "s4", Display: "panel", Status: sessions.StatusNeedsInput, Pending: &sessions.Pending{Tool: "Bash", Subject: "go"}, Host: sessions.Host{Kind: sessions.HostVSCodePanel}},
 	)
 	cases := []struct {
 		body string
@@ -48,6 +49,9 @@ func TestLaunchAnswerRefusesWhatShouldNotBeAnsweredBlind(t *testing.T) {
 		{`{"session":"api","answer":"deny"}`, 200},
 		{`{"session":"s2","answer":"allow"}`, 403},
 		{`{"session":"s2","answer":"deny"}`, 200},
+		{`{"session":"s2","answer":"allow","confirmed":true}`, 200},
+		{`{"session":"s2","answer":"always","confirmed":true}`, 403},
+		{`{"session":"s4","answer":"deny"}`, 409},
 		{`{"session":"s3","answer":"allow"}`, 409},
 		{`{"session":"nope","answer":"allow"}`, 404},
 		{`{"session":"s1","answer":"maybe"}`, 400},
@@ -59,8 +63,8 @@ func TestLaunchAnswerRefusesWhatShouldNotBeAnsweredBlind(t *testing.T) {
 		}
 	}
 	entries, _ := os.ReadDir(filepath.Join(dir, "commands"))
-	if len(entries) != 3 {
-		t.Fatalf("three answers reached the spool, got %d", len(entries))
+	if len(entries) != 4 {
+		t.Fatalf("four answers reached the spool, got %d", len(entries))
 	}
 	rec := httptest.NewRecorder()
 	launchAnswerHandler(rec, httptest.NewRequest(http.MethodGet, "/launch/answer", nil))

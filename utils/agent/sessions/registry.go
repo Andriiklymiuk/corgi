@@ -1316,6 +1316,16 @@ func (r *Registry) Focus(ref string) (FocusTarget, error) {
 }
 
 func (r *Registry) PendingAnswer(ref, answer string) (string, error) {
+	return r.pendingAnswer(ref, answer, false)
+}
+
+// PendingAnswerConfirmed is Allow on a risky command the person read and
+// confirmed on another screen; Always stays a laptop decision for those.
+func (r *Registry) PendingAnswerConfirmed(ref, answer string) (string, error) {
+	return r.pendingAnswer(ref, answer, true)
+}
+
+func (r *Registry) pendingAnswer(ref, answer string, confirmed bool) (string, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	s, err := r.lookupLocked(ref)
@@ -1329,7 +1339,7 @@ func (r *Registry) PendingAnswer(ref, answer string) (string, error) {
 	case "deny":
 		return "\x1b", nil
 	case "allow", "always":
-		if s.Pending.Risky() {
+		if s.Pending.Risky() && (!confirmed || answer == "always") {
 			return "", fmt.Errorf("%s asks to run %q - look at it before allowing", r.displayLocked(s), s.Pending.Subject)
 		}
 		if answer == "always" {
@@ -1338,6 +1348,38 @@ func (r *Registry) PendingAnswer(ref, answer string) (string, error) {
 		return "\r", nil
 	}
 	return "", fmt.Errorf("answer is allow, always or deny, not %q", answer)
+}
+
+// Denied settles a prompt answered with Esc: Claude Code drops the tool and
+// ends the turn without a hook, so without this the row would ask forever.
+func (r *Registry) Denied(ref string, now time.Time) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	s, err := r.lookupLocked(ref)
+	if err != nil || s.Status != StatusNeedsInput || s.Pending == nil {
+		return false
+	}
+	s.Tool, s.Pending = "", nil
+	s.Detail = "denied"
+	r.setStatus(s, StatusDone, now)
+	r.touch()
+	return true
+}
+
+// Answerable says why a prompt there cannot be answered from afar, or "".
+func (h Host) Answerable() string {
+	switch h.Kind {
+	case HostVSCodePanel:
+		return "it runs in the Claude Code panel, which takes answers only from the keyboard - answer it on the laptop"
+	case HostVSCodeTerminal:
+		if h.WindowID == "" || !h.Connected {
+			return "its VS Code window is not connected to corgi - answer it on the laptop"
+		}
+	case HostITerm, HostTerminalApp, HostTmux:
+	default:
+		return "corgi does not know which window it runs in - answer it on the laptop"
+	}
+	return ""
 }
 
 func (r *Registry) InterruptKeys(ref string) (string, error) {
