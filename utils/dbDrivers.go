@@ -616,7 +616,14 @@ var DriverConfigs = map[string]DriverConfig{
 		EnvGenerator: func(serviceNameInEnv string, db DatabaseService) string {
 			host := fmt.Sprintf(envHost, serviceNameInEnv, db.Host)
 			port := fmt.Sprintf(envPort, serviceNameInEnv, db.Port)
-			return fmt.Sprintf("%s%s", host, port)
+			var password string
+			url := fmt.Sprintf(envURL, serviceNameInEnv, fmt.Sprintf("redis://%s:%d", db.Host, db.Port))
+			if db.Password != "" {
+				password = fmt.Sprintf(envPassword, serviceNameInEnv, db.Password)
+				url = fmt.Sprintf(envURL, serviceNameInEnv,
+					fmt.Sprintf("redis://:%s@%s:%d", db.Password, db.Host, db.Port))
+			}
+			return host + port + password + url
 		},
 		FilesToCreate: []FilenameForService{
 			{fileDockerCompose, templates.DockerComposeValkey},
