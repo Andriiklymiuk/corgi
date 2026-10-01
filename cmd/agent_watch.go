@@ -23,6 +23,7 @@ import (
 	"andriiklymiuk/corgi/utils/agent/command"
 	"andriiklymiuk/corgi/utils/agent/config"
 	"andriiklymiuk/corgi/utils/agent/daemon"
+	"andriiklymiuk/corgi/utils/agent/sendgate"
 	"andriiklymiuk/corgi/utils/agent/sessions"
 	"andriiklymiuk/corgi/utils/agent/supervisor"
 	"andriiklymiuk/corgi/utils/agent/watch"
@@ -1164,6 +1165,7 @@ func watchSources(rules watch.Rules, wc *config.WatchConfig, secrets watch.Secre
 			Channels:       wc.Chat.Slack.Channels,
 			ReviewChannels: wc.Chat.Slack.ReviewChannels,
 		}); sl.Token() != "" {
+			sl.LimitReads(sendgate.ReadsFor(agentDirOrEmpty()))
 			sources = append(sources, sl)
 		}
 	}

@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"andriiklymiuk/corgi/utils/agent/sendgate"
 )
 
 const (
@@ -53,6 +55,15 @@ func NewSlack(s Secrets, cfg SlackWatchConfig) *Slack {
 	return &Slack{api: &slackAPI{Token: strings.TrimSpace(s.SlackUser)}, cfg: cfg, names: map[string]string{}}
 }
 
+// LimitReads puts every call the watch makes on the shared read budget.
+func (s *Slack) LimitReads(g *sendgate.Gate) {
+	var n int
+	s.api.Allow = func(method string) error {
+		n++
+		return g.Allow("slack-read", "watch", fmt.Sprintf("%s %d %d", method, time.Now().UnixNano(), n))
+	}
+}
+
 func (s *Slack) Name() string { return "slack" }
 
 func (s *Slack) Token() string { return s.api.Token }
@@ -79,6 +90,11 @@ func (s *Slack) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, error
 		return nil, cursor, fmt.Errorf("slack: %w - waiting until %s", errSlackRateLimited, until.Format(time.Kitchen))
 	}
 	events, next, err := s.poll(ctx, cursor)
+	if errors.Is(err, sendgate.ErrThrottled) {
+		// out of reads: what was read stands, the rest waits for the budget,
+		// and every bookmark is where the last successful read left it
+		return events, next, nil
+	}
 	if errors.Is(err, errSlackRateLimited) {
 		wait := retryAfter(err)
 		if wait < time.Minute {
@@ -468,8 +484,13 @@ func (s *Slack) handle(ctx context.Context, id string) string {
 			RealName string `json:"real_name"`
 		} `json:"user"`
 	}
+	err := s.api.call(ctx, "users.info", url.Values{"user": {id}}, &res)
+	if errors.Is(err, sendgate.ErrThrottled) {
+		// asked again once there is budget, not stuck as an id
+		return "@" + id
+	}
 	name := id
-	if err := s.api.call(ctx, "users.info", url.Values{"user": {id}}, &res); err == nil && res.User.Name != "" {
+	if err == nil && res.User.Name != "" {
 		name = res.User.Name
 	}
 	s.names[id] = "@" + name

@@ -40,6 +40,17 @@ var Default = Limits{
 	MaxPause:        time.Hour,
 }
 
+// ReadLimits meter what corgi asks Slack, not what it says: 300 calls a day
+// in all, no more than 25 in any hour so a day's budget is not gone by
+// breakfast.
+var ReadLimits = Limits{
+	PerFamily: 25,
+	Window:    time.Hour,
+	PerDay:    300,
+	MinPause:  time.Minute,
+	MaxPause:  time.Hour,
+}
+
 type send struct {
 	At     time.Time `json:"at"`
 	Family string    `json:"family"`
@@ -73,6 +84,25 @@ var (
 	sharedMu sync.Mutex
 	shared   = map[string]*Gate{}
 )
+
+// ReadsFor is the read budget kept in the same ledger as the sends.
+func ReadsFor(agentDir string) *Gate {
+	if agentDir == "" {
+		g := InMemory()
+		g.Limits = ReadLimits
+		return g
+	}
+	path := PathIn(agentDir)
+	sharedMu.Lock()
+	defer sharedMu.Unlock()
+	if g, ok := shared[path+"#reads"]; ok {
+		return g
+	}
+	g := New(path)
+	g.Limits = ReadLimits
+	shared[path+"#reads"] = g
+	return g
+}
 
 // For hands out one gate per ledger path, so callers in one process also share
 // the in-process lock.
