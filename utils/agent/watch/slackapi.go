@@ -16,6 +16,26 @@ import (
 
 var errSlackRateLimited = errors.New("slack: rate limited")
 
+type slackRateLimit struct {
+	method string
+	after  time.Duration
+}
+
+func (e *slackRateLimit) Error() string {
+	return fmt.Sprintf("slack %s: %v (retry after %s)", e.method, errSlackRateLimited, e.after)
+}
+
+func (e *slackRateLimit) Unwrap() error { return errSlackRateLimited }
+
+// retryAfter is how long Slack asked to be left alone; zero when it did not say.
+func retryAfter(err error) time.Duration {
+	var rl *slackRateLimit
+	if errors.As(err, &rl) {
+		return rl.after
+	}
+	return 0
+}
+
 type slackAPI struct {
 	Token  string
 	Client *http.Client
@@ -69,7 +89,8 @@ func (a *slackAPI) do(req *http.Request, method string, out any) error {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusTooManyRequests {
-		return fmt.Errorf("slack %s: %w (retry after %s)", method, errSlackRateLimited, resp.Header.Get("Retry-After"))
+		secs, _ := strconv.Atoi(strings.TrimSpace(resp.Header.Get("Retry-After")))
+		return &slackRateLimit{method: method, after: time.Duration(secs) * time.Second}
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 200))

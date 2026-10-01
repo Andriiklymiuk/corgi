@@ -22,6 +22,7 @@ import (
 	"andriiklymiuk/corgi/utils/agent/daemon"
 	"andriiklymiuk/corgi/utils/agent/harness"
 	"andriiklymiuk/corgi/utils/agent/push"
+	"andriiklymiuk/corgi/utils/agent/sendgate"
 	"andriiklymiuk/corgi/utils/agent/sessions"
 	"andriiklymiuk/corgi/utils/agent/supervisor"
 	"andriiklymiuk/corgi/utils/agent/usage"
@@ -175,6 +176,7 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 	d.Chat = func(ctx context.Context, workspaceID string, target watch.SlackTarget, text, emoji string) error {
 		poster := watch.NewSlackPoster(watch.LoadSecretsFor(dir, workspaceID))
 		poster.Team = watch.LoadState(dir).SourceIdentity("slack", "team")
+		poster.Gate = sendgate.For(dir)
 		if strings.TrimSpace(text) != "" {
 			if _, err := poster.Post(ctx, target, text); err != nil {
 				return err
