@@ -278,3 +278,15 @@ func TestDecideCrashWithAServerErrorEarlierInTheOutputStillNotifies(t *testing.T
 		t.Errorf("decision = %+v, want a crash: the last line is what killed it", d)
 	}
 }
+
+func TestAnOverloadedAPIExitIsQuiet(t *testing.T) {
+	for _, line := range []string{
+		`API Error: 529 {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}`,
+		"API Error: 500 Internal server error",
+	} {
+		d := Decide(Exit{Code: 1, Uptime: 3 * time.Minute, Output: "working\n" + line}, 0, 0)
+		if d.Notify || d.Cause != CauseStartupFailure {
+			t.Errorf("%q: %+v - an outage on Anthropic's side must be retried quietly", line, d)
+		}
+	}
+}
