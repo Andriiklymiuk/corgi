@@ -40,6 +40,8 @@ type slackAPI struct {
 	Token  string
 	Client *http.Client
 	URL    string
+
+	calls int
 }
 
 func (a *slackAPI) base() string {
@@ -82,6 +84,7 @@ func (a *slackAPI) post(ctx context.Context, method string, body map[string]any,
 }
 
 func (a *slackAPI) do(req *http.Request, method string, out any) error {
+	a.calls++
 	req.Header.Set("Authorization", "Bearer "+a.Token)
 	resp, err := a.client().Do(req)
 	if err != nil {

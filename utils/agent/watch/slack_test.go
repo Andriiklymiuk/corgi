@@ -2,10 +2,12 @@ package watch
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 type slackFake struct {
@@ -293,5 +295,90 @@ func TestSlackKeepsPrivateChannelsWhenOnlyDMsAreOutOfScope(t *testing.T) {
 	}
 	if len(names) != 2 || names[0] != "general" || names[1] != "code-review" {
 		t.Fatalf("want the public and the private channel, got %v", names)
+	}
+}
+
+func TestSlackReadsAHundredQuietDMsInTurnsNotEveryRound(t *testing.T) {
+	f := newSlackFake(t)
+	var list strings.Builder
+	list.WriteString(`{"ok":true,"channels":[`)
+	for i := 0; i < 100; i++ {
+		if i > 0 {
+			list.WriteString(",")
+		}
+		fmt.Fprintf(&list, `{"id":"D%03d","is_im":true,"user":"U%03d"}`, i, i)
+	}
+	list.WriteString(`],"response_metadata":{"next_cursor":""}}`)
+	f.convList = list.String()
+	calls := map[string]int{}
+	read := map[string]bool{}
+	inner := f.srv.Config.Handler
+	f.srv.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls[r.URL.Path]++
+		if r.URL.Path == "/conversations.history" {
+			read[r.URL.Query().Get("channel")] = true
+		}
+		inner.ServeHTTP(w, r)
+	})
+	s := newTestSlack(f, SlackWatchConfig{Mentions: true})
+
+	cursor := Cursor{"me": "UME", "team": "acme", "search": "1.0"}
+	rounds := 10
+	for i := 0; i < rounds; i++ {
+		var err error
+		if _, cursor, err = s.Poll(context.Background(), cursor); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := calls["/conversations.list"]; got != 4 {
+		t.Errorf("the list is asked for once (4 types) per half hour, not every round: %d calls", got)
+	}
+	if got := calls["/conversations.history"]; got > rounds*slackColdPerRound {
+		t.Errorf("%d DM reads in %d rounds; quiet DMs take turns, %d a round", got, rounds, slackColdPerRound)
+	}
+	if len(read) != 100 {
+		t.Errorf("every DM still gets its turn: %d of 100 read", len(read))
+	}
+}
+
+func TestSlackANewDMIsNotLostWhileItWaitsItsTurn(t *testing.T) {
+	f := newSlackFake(t)
+	s := newTestSlack(f, SlackWatchConfig{Mentions: true})
+	s.now = func() time.Time { return time.Unix(1726000000, 0) }
+	cursor := Cursor{"me": "UME", "team": "acme", "search": "1.0", "dmfloor": "1726000000.000000"}
+	f.history["D0TM"] = `{"ok":true,"messages":[
+		{"type":"message","user":"UTM","text":"can you look at the login bug","ts":"1726000300.000100"}],"has_more":false}`
+	events, _, err := s.Poll(context.Background(), cursor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 1 || events[0].Kind != KindChatMention {
+		t.Fatalf("a DM read for the first time counts from when the watch began: %+v", events)
+	}
+}
+
+func TestSlackPollWaitsOutA429(t *testing.T) {
+	f := newSlackFake(t)
+	hits := 0
+	f.srv.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		w.Header().Set("Retry-After", "120")
+		w.WriteHeader(http.StatusTooManyRequests)
+	})
+	s := newTestSlack(f, SlackWatchConfig{Mentions: true})
+	now := time.Unix(1726000000, 0)
+	s.now = func() time.Time { return now }
+	for i := 0; i < 5; i++ {
+		if _, _, err := s.Poll(context.Background(), Cursor{"me": "UME", "team": "acme"}); err == nil {
+			t.Fatal("a 429 is an error")
+		}
+	}
+	if hits != 1 {
+		t.Fatalf("polls inside Retry-After must not call Slack: %d calls", hits)
+	}
+	now = now.Add(2 * time.Minute)
+	_, _, _ = s.Poll(context.Background(), Cursor{"me": "UME", "team": "acme"})
+	if hits != 2 {
+		t.Fatalf("after Retry-After the poll goes again: %d calls", hits)
 	}
 }
