@@ -40,6 +40,8 @@ type slackAPI struct {
 	Token  string
 	Client *http.Client
 	URL    string
+	// Allow, when set, is asked before every call and may refuse it
+	Allow func(method string) error
 
 	calls int
 }
@@ -84,6 +86,11 @@ func (a *slackAPI) post(ctx context.Context, method string, body map[string]any,
 }
 
 func (a *slackAPI) do(req *http.Request, method string, out any) error {
+	if a.Allow != nil {
+		if err := a.Allow(method); err != nil {
+			return fmt.Errorf("slack %s: %w", method, err)
+		}
+	}
 	a.calls++
 	req.Header.Set("Authorization", "Bearer "+a.Token)
 	resp, err := a.client().Do(req)

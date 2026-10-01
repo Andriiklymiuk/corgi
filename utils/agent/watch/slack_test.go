@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"andriiklymiuk/corgi/utils/agent/sendgate"
 )
 
 type slackFake struct {
@@ -380,5 +382,31 @@ func TestSlackPollWaitsOutA429(t *testing.T) {
 	_, _, _ = s.Poll(context.Background(), Cursor{"me": "UME", "team": "acme"})
 	if hits != 2 {
 		t.Fatalf("after Retry-After the poll goes again: %d calls", hits)
+	}
+}
+
+func TestSlackWatchStaysInsideTheDailyReadBudget(t *testing.T) {
+	f := newSlackFake(t)
+	calls := 0
+	inner := f.srv.Config.Handler
+	f.srv.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		inner.ServeHTTP(w, r)
+	})
+	s := newTestSlack(f, SlackWatchConfig{Mentions: true, Channels: []string{"#incidents"}})
+	g := sendgate.InMemory()
+	g.Limits = sendgate.ReadLimits
+	g.Limits.PerFamily = 0
+	s.LimitReads(g)
+
+	cursor := Cursor{"me": "UME", "team": "acme", "search": "1.0"}
+	for i := 0; i < 480; i++ {
+		var err error
+		if _, cursor, err = s.Poll(context.Background(), cursor); err != nil {
+			t.Fatalf("an empty budget is a quiet round, not an error: %v", err)
+		}
+	}
+	if calls != sendgate.ReadLimits.PerDay {
+		t.Fatalf("a day of 3-minute polls made %d Slack calls; the budget is %d", calls, sendgate.ReadLimits.PerDay)
 	}
 }
