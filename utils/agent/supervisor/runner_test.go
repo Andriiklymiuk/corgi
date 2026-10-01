@@ -292,6 +292,7 @@ func TestBackoffResetsAfterAHealthyRun(t *testing.T) {
 		&fakeProcess{pid: 4, code: 1, exitNow: true},
 	)
 	r := testRunner(t, start)
+	r.LongRunAfter = 10 * time.Millisecond
 
 	var delays []time.Duration
 	var mu sync.Mutex
@@ -319,6 +320,38 @@ func TestBackoffResetsAfterAHealthyRun(t *testing.T) {
 	}
 	if delays[3] != first {
 		t.Errorf("delay after a healthy run = %v, want the backoff reset to %v", delays[3], first)
+	}
+}
+
+// Through an outage remote control stays up a minute or two retrying, then
+// exits: each of those is past the healthy mark, and none may earn the 5s
+// restart back, or it rings every minute for as long as the outage lasts.
+func TestCrashesPastTheHealthyMarkStillBackOff(t *testing.T) {
+	var procs []*fakeProcess
+	for i := 0; i < 6; i++ {
+		procs = append(procs, &fakeProcess{pid: i + 1, code: 1, uptime: 5 * time.Millisecond})
+	}
+	start, _ := scriptedStarter(procs...)
+	r := testRunner(t, start)
+
+	var delays []time.Duration
+	var mu sync.Mutex
+	r.Sleep = func(_ context.Context, d time.Duration) {
+		mu.Lock()
+		delays = append(delays, d)
+		mu.Unlock()
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { defer close(done); _ = r.Run(ctx) }()
+	waitFor(t, func() bool { mu.Lock(); defer mu.Unlock(); return len(delays) >= 5 })
+	cancel()
+	<-done
+
+	mu.Lock()
+	defer mu.Unlock()
+	if last := DefaultBackoff[len(DefaultBackoff)-1]; delays[4] != last {
+		t.Fatalf("delays %v: crash after crash must climb to %v", delays, last)
 	}
 }
 

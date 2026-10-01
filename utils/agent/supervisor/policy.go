@@ -63,7 +63,7 @@ var exitCountdownLine = regexp.MustCompile(`(?i)^exiting in about \d+ seconds?\.
 const expiredTokenMarker = "access token has expired"
 
 // a 5xx from Anthropic is theirs and passes, so retried quietly like a failed start
-var serverErrorLine = regexp.MustCompile(`(?i)status code 5\d\d\b`)
+var serverErrorLine = regexp.MustCompile(`(?i)status code 5\d\d\b|api error:? 5\d\d\b|overloaded_error|internal server error`)
 
 type Exit struct {
 	Code      int

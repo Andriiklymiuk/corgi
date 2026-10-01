@@ -55,6 +55,7 @@ type Runner struct {
 	OnSessionEnd func(Decision) string
 	Sleep        func(ctx context.Context, d time.Duration)
 	HealthyAfter time.Duration
+	LongRunAfter time.Duration
 	OnChange     func()
 	OnEvent      func(RunEvent)
 	IdleAfter    time.Duration
@@ -234,7 +235,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		if r.retryWithoutUnsupportedFlag(exit) {
 			continue
 		}
-		if exit.Uptime >= LongRun {
+		if exit.Uptime >= r.longRun() {
 			s = streak{}
 		}
 		decision := Decide(exit, s.attempt, s.startupFailures)
@@ -250,8 +251,10 @@ func (r *Runner) Run(ctx context.Context) error {
 		if !decision.Restart {
 			return stopReason(decision, startErr, ctx)
 		}
+		// Only a long run earns the short delay back: a crash a minute in,
+		// over and over through an outage, backs off like any other failure.
 		if !offline {
-			s.advance(healthy)
+			s.advance(healthy && exit.Uptime >= r.longRun())
 		}
 		r.sleepUnlessStopped(ctx, decision.Delay)
 	}
@@ -459,6 +462,13 @@ func (r *Runner) healthyAfter() time.Duration {
 		return r.HealthyAfter
 	}
 	return MinHealthyUptime
+}
+
+func (r *Runner) longRun() time.Duration {
+	if r.LongRunAfter > 0 {
+		return r.LongRunAfter
+	}
+	return LongRun
 }
 
 func (c SpawnConfig) WakeLockMode() WakeLockMode {
