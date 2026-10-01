@@ -2,12 +2,27 @@ package watch
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
+)
+
+const (
+	// the conversation list barely changes; asking for it every round was
+	// four or more calls a poll for nothing
+	slackListEvery = 30 * time.Minute
+	// a DM with a message in the last day is read every round, the rest
+	// take turns, this many a round, so a hundred quiet DMs are not a
+	// hundred reads every few minutes
+	slackHotDM        = 24 * time.Hour
+	slackColdPerRound = 10
+	// every Slack call one poll may make, whatever the workspace looks like
+	slackReadsPerPoll = 40
 )
 
 type SlackWatchConfig struct {
@@ -20,6 +35,18 @@ type Slack struct {
 	api   *slackAPI
 	cfg   SlackWatchConfig
 	names map[string]string
+
+	listed      []slackConversation
+	listedAt    time.Time
+	pausedUntil time.Time
+	now         func() time.Time
+}
+
+func (s *Slack) clock() time.Time {
+	if s.now != nil {
+		return s.now()
+	}
+	return time.Now()
 }
 
 func NewSlack(s Secrets, cfg SlackWatchConfig) *Slack {
@@ -48,6 +75,22 @@ type slackConversation struct {
 }
 
 func (s *Slack) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, error) {
+	if until := s.pausedUntil; s.clock().Before(until) {
+		return nil, cursor, fmt.Errorf("slack: %w - waiting until %s", errSlackRateLimited, until.Format(time.Kitchen))
+	}
+	events, next, err := s.poll(ctx, cursor)
+	if errors.Is(err, errSlackRateLimited) {
+		wait := retryAfter(err)
+		if wait < time.Minute {
+			wait = time.Minute
+		}
+		s.pausedUntil = s.clock().Add(wait)
+	}
+	return events, next, err
+}
+
+func (s *Slack) poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, error) {
+	budget := s.api.calls + slackReadsPerPoll
 	next := Cursor{}
 	for k, v := range cursor {
 		next[k] = v
@@ -64,7 +107,7 @@ func (s *Slack) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, error
 	}
 	me, team := next["me"], next["team"]
 
-	convs, err := s.conversations(ctx)
+	convs, err := s.listedConversations(ctx)
 	if err != nil {
 		// A token with search:read alone still finds mentions; the list is
 		// only needed for listened channels and direct messages.
@@ -86,7 +129,13 @@ func (s *Slack) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, error
 		events = append(events, found...)
 	}
 
-	for _, c := range s.channels(convs) {
+	if next["dmfloor"] == "" {
+		next["dmfloor"] = strconv.FormatInt(s.clock().Unix(), 10) + ".000000"
+	}
+	for _, c := range s.roundOf(s.channels(convs), next) {
+		if s.api.calls >= budget {
+			break
+		}
 		if c.IsIM {
 			next["chan:@"+c.User] = c.ID
 		} else {
@@ -117,6 +166,50 @@ func (s *Slack) channels(convs []slackConversation) []slackConversation {
 		}
 	}
 	return out
+}
+
+func (s *Slack) listedConversations(ctx context.Context) ([]slackConversation, error) {
+	if s.listed != nil && s.clock().Sub(s.listedAt) < slackListEvery {
+		return s.listed, nil
+	}
+	convs, err := s.conversations(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if convs == nil {
+		convs = []slackConversation{}
+	}
+	s.listed, s.listedAt = convs, s.clock()
+	return convs, nil
+}
+
+// roundOf is what this poll reads: every listened channel and every DM that
+// spoke in the last day, then the next few quiet DMs in turn.
+func (s *Slack) roundOf(convs []slackConversation, cursor Cursor) []slackConversation {
+	var round, cold []slackConversation
+	hot := s.clock().Add(-slackHotDM)
+	for _, c := range convs {
+		if !c.IsIM {
+			round = append(round, c)
+			continue
+		}
+		// the floor is when the watch began, not a message
+		if mark := cursor["hist:"+c.ID]; mark != cursor["dmfloor"] && slackTSTime(mark).After(hot) {
+			round = append(round, c)
+			continue
+		}
+		cold = append(cold, c)
+	}
+	if len(cold) == 0 {
+		return round
+	}
+	turn, _ := strconv.Atoi(cursor["dmturn"])
+	take := min(slackColdPerRound, len(cold))
+	for i := 0; i < take; i++ {
+		round = append(round, cold[(turn+i)%len(cold)])
+	}
+	cursor["dmturn"] = strconv.Itoa((turn + take) % len(cold))
+	return round
 }
 
 // Slack refuses the whole list when any asked-for type lacks its scope, so a
@@ -250,6 +343,11 @@ func (s *Slack) mentions(ctx context.Context, cursor Cursor, me, team string) ([
 func (s *Slack) history(ctx context.Context, cursor Cursor, c slackConversation, me, team string) ([]Event, error) {
 	key := "hist:" + c.ID
 	bookmark := cursor[key]
+	if bookmark == "" && c.IsIM {
+		// a DM read for the first time since the watch began counts from then,
+		// so a quiet one's turn coming late loses nothing
+		bookmark = cursor["dmfloor"]
+	}
 	params := url.Values{"channel": {c.ID}, "limit": {"200"}}
 	if bookmark != "" {
 		params.Set("oldest", bookmark)
