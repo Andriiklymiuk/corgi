@@ -3343,8 +3343,9 @@ func launchAnswerHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Session string `json:"session"`
-		Answer  string `json:"answer"`
+		Session   string `json:"session"`
+		Answer    string `json:"answer"`
+		Confirmed bool   `json:"confirmed"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&req); err != nil {
 		writeLaunchError(w, http.StatusBadRequest, "could not read the answer")
@@ -3364,11 +3365,17 @@ func launchAnswerHandler(w http.ResponseWriter, r *http.Request) {
 		writeLaunchError(w, http.StatusConflict, "nothing is waiting for an answer there")
 		return
 	}
-	if session.Pending.Risky() && answer != "deny" {
-		writeLaunchError(w, http.StatusForbidden, "that command is one to look at first: answer it on the laptop")
+	if why := session.Host.Answerable(); why != "" {
+		writeLaunchError(w, http.StatusConflict, "cannot answer "+firstNonEmptyString(session.Display, session.Label)+" from here: "+why)
 		return
 	}
-	launchBoardCommand(w, command.Command{Action: command.ActionAnswer, SessionID: session.ID, Answer: answer, Source: "phone"})
+	// A risky command is allowed from the phone only once its sheet showed
+	// the whole command and the person confirmed it; never "always".
+	if session.Pending.Risky() && (answer == "always" || (answer == "allow" && !req.Confirmed)) {
+		writeLaunchError(w, http.StatusForbidden, "that command is one to read first: open the session and use Allow anyway")
+		return
+	}
+	launchBoardCommand(w, command.Command{Action: command.ActionAnswer, SessionID: session.ID, Answer: answer, Confirmed: req.Confirmed && answer == "allow", Source: "phone"})
 }
 
 func launchInterruptHandler(w http.ResponseWriter, r *http.Request) {

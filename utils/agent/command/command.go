@@ -67,21 +67,23 @@ type Command struct {
 	Source      string    `json:"source,omitempty"`
 	RequestedAt time.Time `json:"requestedAt"`
 
-	Event      *sessions.Event `json:"event,omitempty"`
-	SessionID  string          `json:"sessionId,omitempty"`
-	Index      int             `json:"index,omitempty"`
-	Pinned     bool            `json:"pinned,omitempty"`
-	Direction  int             `json:"direction,omitempty"`
-	Size       int             `json:"size,omitempty"`
-	WindowID   string          `json:"windowId,omitempty"`
-	Text       string          `json:"text,omitempty"`
-	Enter      bool            `json:"enter,omitempty"`
-	Note       string          `json:"note,omitempty"`
-	Answer     string          `json:"answer,omitempty"`
-	Tokens     int64           `json:"tokens,omitempty"`
-	WatchEvent *watch.Event    `json:"watchEvent,omitempty"`
-	Retry      bool            `json:"retry,omitempty"`
-	Command    string          `json:"command,omitempty"`
+	Event     *sessions.Event `json:"event,omitempty"`
+	SessionID string          `json:"sessionId,omitempty"`
+	Index     int             `json:"index,omitempty"`
+	Pinned    bool            `json:"pinned,omitempty"`
+	Direction int             `json:"direction,omitempty"`
+	Size      int             `json:"size,omitempty"`
+	WindowID  string          `json:"windowId,omitempty"`
+	Text      string          `json:"text,omitempty"`
+	Enter     bool            `json:"enter,omitempty"`
+	Note      string          `json:"note,omitempty"`
+	Answer    string          `json:"answer,omitempty"`
+	// Confirmed: a risky command's Allow the person read and confirmed
+	Confirmed  bool         `json:"confirmed,omitempty"`
+	Tokens     int64        `json:"tokens,omitempty"`
+	WatchEvent *watch.Event `json:"watchEvent,omitempty"`
+	Retry      bool         `json:"retry,omitempty"`
+	Command    string       `json:"command,omitempty"`
 }
 
 func Dir(agentDir string) string { return filepath.Join(agentDir, "commands") }

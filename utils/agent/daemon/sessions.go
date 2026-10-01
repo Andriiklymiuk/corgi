@@ -90,13 +90,22 @@ func (d *Daemon) handleSessionCommand(ctx context.Context, c command.Command) bo
 	case command.ActionPlan:
 		d.advancePlans(ctx)
 	case command.ActionAnswer:
-		keys, err := d.Sessions.PendingAnswer(c.SessionID, c.Answer)
+		answerKeys := d.Sessions.PendingAnswer
+		if c.Confirmed {
+			answerKeys = d.Sessions.PendingAnswerConfirmed
+		}
+		keys, err := answerKeys(c.SessionID, c.Answer)
 		if err != nil {
 			utils.Infof("agent: answer %s: %v\n", c.SessionID, err)
 			d.Sessions.SetNotice(err)
 			return true
 		}
-		d.sendToSession(ctx, c.SessionID, keys, false)
+		var settled func()
+		if c.Answer == "deny" {
+			id := c.SessionID
+			settled = func() { d.Sessions.Denied(id, time.Now()) }
+		}
+		d.sendKeys(ctx, c.SessionID, keys, false, settled)
 	case command.ActionRead:
 		_ = d.Sessions.ReadBy(c.SessionID, time.Now())
 	case command.ActionContinue:
