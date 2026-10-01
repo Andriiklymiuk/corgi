@@ -30,7 +30,7 @@ No hardcoded host-port default per driver - host port is whatever you set in `po
 | `keydb` | 6379 | `KEYDB_` | `eqalpha/keydb:latest` | Redis-compatible |
 | `dragonfly` | 6379 | `DRAGONFLY_` | `docker.dragonflydb.io/dragonflydb/dragonfly:latest` | Redis-compatible |
 | `redict` | 6380 | `REDICT_` | `registry.redict.io/redict:latest` | Redis fork |
-| `valkey` | 8080 | `VALKEY_` | `valkey/valkey:unstable` | Redis fork |
+| `valkey` | 6379 | `VALKEY_` | `valkey/valkey:alpine` | Redis fork (the engine AWS ElastiCache now defaults to) |
 | `rabbitmq` | 5672 | `RABBITMQ_` | `rabbitmq:<version>-management` | Supports `additional.definitionPath` for JSON definitions |
 | `kafka` | 9092 | `KAFKA_` | `confluentinc/cp-kafka:latest` | |
 | `surrealdb` | 8000 | `SURREALDB_` | `surrealdb/surrealdb:latest` | |
@@ -196,7 +196,7 @@ db_services:
 ## Port collisions to watch for
 
 - 5432: `postgres`, `pgvector`, `postgis`, `timescaledb` - only one can bind per project.
-- 6379: `redis`, `keydb`, `dragonfly` - same. (`redict` exposes 6380, `valkey` exposes 8080 - not 6379.)
+- 6379: `redis`, `keydb`, `dragonfly`, `valkey` - same. (`redict` exposes 6380 - not 6379.)
 - 3306: `mysql`, `mariadb`.
 - 9042: `cassandra`, `scylla`.
 - 8000: `surrealdb`.

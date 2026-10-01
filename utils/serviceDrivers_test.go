@@ -289,3 +289,22 @@ func TestImageDriverNoPortEmitsBlank(t *testing.T) {
 		t.Errorf("expected no PORT when port is 0, got %q", got)
 	}
 }
+
+func TestValkeyDriverEnv(t *testing.T) {
+	cfg := DriverConfigs["valkey"]
+	got := cfg.EnvGenerator(cfg.Prefix, DatabaseService{Host: "localhost", Port: 6379})
+	for _, want := range []string{"VALKEY_HOST=localhost", "VALKEY_PORT=6379", "VALKEY_URL=redis://localhost:6379"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in %q", want, got)
+		}
+	}
+	if strings.Contains(got, "PASSWORD") {
+		t.Errorf("no password expected in %q", got)
+	}
+	withPassword := cfg.EnvGenerator(cfg.Prefix, DatabaseService{Host: "localhost", Port: 6379, Password: "pw"})
+	for _, want := range []string{"VALKEY_PASSWORD=pw", "VALKEY_URL=redis://:pw@localhost:6379"} {
+		if !strings.Contains(withPassword, want) {
+			t.Errorf("missing %q in %q", want, withPassword)
+		}
+	}
+}
