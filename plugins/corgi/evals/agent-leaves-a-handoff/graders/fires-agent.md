@@ -1,6 +1,6 @@
 ---
 type: tool_used
 tool: Skill
-argument_contains: agent
+input_match: agent
 ---
 Handoffs are the agent skill's job.
