@@ -72,6 +72,16 @@ your own accounts:
 
 Nothing is sent anywhere else.
 
+## Privacy
+
+The plugin does not collect, store or share personal data, and its author receives
+nothing from it: there is no server, analytics or telemetry. While it works, Claude reads
+what your own tools return - code, commit authors, pull request threads, ticket text -
+and that stays between your machine, Claude and the services listed above, under your own
+accounts. Files the skills write (specs, handoffs under `.corgi/`, workspace memory) stay
+in your repositories. Questions: open an issue at
+https://github.com/Andriiklymiuk/corgi/issues.
+
 ## Evals
 
 `evals/` holds the cases `claude plugin eval` runs with and without the plugin; see
