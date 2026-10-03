@@ -1,0 +1,27 @@
+schema_version: "1.0"
+name: review-reads-surface-first
+description: A review reads the changed surface first and answers every breaking line - who still calls it.
+tags: [read-only]
+context:
+  scaffold_script: scaffold.sh
+execution:
+  max_turns: 50
+  timeout_seconds: 900
+  allowed_tools: [Skill, Read, Glob, Grep]
+  prompt: |
+    Review this PR: https://github.com/acme/api/pull/42
+
+    GitHub is not reachable from this machine. The PR is saved in this repo: `.pr/42/pr.json` is what `gh pr view` returned, `.pr/42/diff.patch` is the diff against `main`, and `.pr/42/head/` is the PR's tree. There is no shell here either. Print the review; I will post it myself.
+graders:
+  - name: fires-review
+    type: tool_used
+    tool: Skill
+    input_match: '"(corgi:)?(corgi-)?review"'
+  - name: says-what-the-surface-was
+    type: llm
+    criteria: |
+      Score 1 if the review states the changed surface by name, in or above its summary: that `fetch_user` or `order_view` changed signature, and that this is a breaking change. Score 0 if it describes only the behaviour, or points at "the changes listed in the PR body" without naming a symbol.
+  - name: finds-the-stale-caller
+    type: llm
+    criteria: |
+      Score 1 if the review reports, as a blocking finding, that `api/app/notify.py` (`owner_email`) still calls `fetch_user` with one argument and will raise at runtime, and notes the tests miss it because they mock `fetch_user`. Score 0 if `notify.py` is not mentioned or is called fine.

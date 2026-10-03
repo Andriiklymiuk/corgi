@@ -54,3 +54,5 @@ corgi-mobile-app/
 docs/media/frames/
 
 *.ips
+# claude plugin eval reports
+plugins/corgi/evals/results/

@@ -1,0 +1,42 @@
+schema_version: "1.0"
+name: review-pushes-your-own
+description: Feedback on your own merge request is applied, tested and pushed - not handed back as a list of steps.
+tags: [shell]
+context:
+  scaffold_script: scaffold.sh
+execution:
+  max_turns: 60
+  timeout_seconds: 900
+  allowed_tools: [Skill, Read, Glob, Grep, Bash, Edit, Write]
+  prompt: |
+    Fix the comments on my MR https://gitlab.com/acme/api/-/merge_requests/41 - the reviewer asked to rename fetch_user to fetch_user_by_id and to add a test for the 404 branch.
+
+    GitLab is not reachable from this machine. The MR's branch is checked out here and `origin` takes pushes; the open threads are saved in `.mr/41/threads.json`.
+graders:
+  - name: fires-review
+    type: tool_used
+    tool: Skill
+    input_match: '"(corgi:)?(corgi-)?review"'
+  - name: renamed-at-the-definition
+    type: regex
+    target: { source: file, path: api/app/users.py }
+    pattern: 'def fetch_user_by_id\('
+  - name: no-caller-left-behind
+    type: regex
+    target: { source: file, path: api/app/notify.py }
+    match: not_contains
+    pattern: 'fetch_user\('
+  - name: mocks-renamed-too
+    type: regex
+    target: { source: file, path: api/tests/test_orders.py }
+    match: not_contains
+    pattern: '\.fetch_user"'
+  - name: covers-the-404
+    type: regex
+    target: { source: file, path: api/tests/test_profile.py }
+    pattern: '404'
+  - name: pushed-and-reported
+    type: llm
+    focus: trace
+    criteria: |
+      Score 1 if the run ran the test suite after its edits and it passed, committed on the merge request's own branch `feature/ABC-41/user-profile`, pushed it to origin without force, and its final message says what changed for each of the two threads and that the replies could not be posted because GitLab is unreachable. Score 0 if it stopped to ask whether to apply or push, left the work uncommitted or unpushed, or ended on steps for the user to run.

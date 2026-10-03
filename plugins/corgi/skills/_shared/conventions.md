@@ -50,6 +50,20 @@ stop is a real blocker (a missing credential, a tool that is not there, a questi
 a person can settle): then `corgi agent handoff --ref <ref> --blocked "<why>"` with the
 question under `--uncertain`, and end. Never end a run on a question.
 
+## Stopping with work left
+
+A run that stops part-way - a usage limit, a blocker, the end of the day - leaves a
+handoff, written with the command, one flag per item, never as prose in a comment or a
+file:
+
+```
+corgi agent handoff --ref <key> --done "<finished>" --remaining "<left>" --next "<first step>"
+```
+
+`--done` and `--remaining` repeat, one item each; `--decision` and `--uncertain` carry
+what was settled and what to ask; `--blocked "<why>"` is only for something a person has
+to clear. No shell → print that exact command for the user to run.
+
 ## manualRun is reference-only
 
 A service or db_service with `manualRun: true` is described in `corgi-compose.yml` so the

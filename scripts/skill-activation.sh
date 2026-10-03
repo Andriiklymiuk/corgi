@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 # Does the right corgi skill fire on its own? Each line: expected skill (or
 # "none") and a prompt. Runs one turn with only the Skill tool allowed and
-# reads what was invoked. Needs a logged-in Claude Code; ~1 cent a line.
+# reads the Skill call from the event stream (the json result has no tool
+# calls). Needs a logged-in Claude Code.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 plugin="$(pwd)/plugins/corgi"
 pass=0; fail=0
 while IFS='|' read -r want prompt; do
   [[ -z "$want" || "$want" == \#* ]] && continue
-  out=$(claude -p "$prompt" --max-turns 1 --allowedTools Skill --output-format json --plugin-dir "$plugin" 2>/dev/null || true)
+  out=$(claude -p "$prompt" --max-turns 1 --allowedTools Skill --output-format stream-json --verbose --plugin-dir "$plugin" 2>/dev/null || true)
   got=$(printf '%s' "$out" | grep -oE '"skill"\s*:\s*"[^"]+"' | head -1 | sed -E 's/.*"([^"]+)"$/\1/' || true)
   got=${got:-none}
   if [[ "$got" == *"$want"* ]] || { [[ "$want" == none ]] && [[ "$got" == none ]]; }; then

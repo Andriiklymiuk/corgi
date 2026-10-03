@@ -56,3 +56,6 @@ One verdict line: which window binds, when it lifts, whether the current pace is
 - No other account → say how long until the reset and suggest queueing the work
   (`/corgi-queue` later) rather than starting a long build now.
 - Never carry, stop, or dismiss a session yourself; print the command.
+- Work is in flight when the limit hits and nobody carries it → leave a handoff
+  (`../_shared/conventions.md`, *Stopping with work left*): `--done` what is finished,
+  `--remaining` what is not, `--next` the first step.

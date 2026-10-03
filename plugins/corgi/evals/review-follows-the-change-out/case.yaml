@@ -1,0 +1,31 @@
+schema_version: "1.0"
+name: review-follows-the-change-out
+description: A review leaves the diff for evidence - config delivery, twin handlers, what the test asserts.
+tags: [read-only]
+context:
+  scaffold_script: scaffold.sh
+execution:
+  max_turns: 50
+  timeout_seconds: 900
+  allowed_tools: [Skill, Read, Glob, Grep]
+  prompt: |
+    Review this PR: https://github.com/acme/api/pull/57
+
+    GitHub is not reachable from this machine. The PR is saved in this repo: `.pr/57/pr.json` is what `gh pr view` returned, `.pr/57/diff.patch` is the diff against `main`, and `.pr/57/head/` is the PR's tree. There is no shell here either. Print the review; I will post it myself.
+graders:
+  - name: fires-review
+    type: tool_used
+    tool: Skill
+    input_match: '"(corgi:)?(corgi-)?review"'
+  - name: config-delivery
+    type: llm
+    criteria: |
+      Score 1 if the review reports that RATE_LIMIT_PER_MINUTE is set nowhere a deployed environment reads it (the task definition or the deploy workflow) and says what then ships: the fallback of 0, which means no limit in production. Score 0 if it accepts `.env.example` as delivery, or mentions the variable without saying it is missing from the deploy config.
+  - name: twin-handlers
+    type: llm
+    criteria: |
+      Score 1 if the review reports that `signup` or `reset_password`, the other handlers of the same shape in `api/app/auth.py`, did not get `check_rate_limit`. Score 0 if it only discusses the login handler.
+  - name: test-asserts-a-literal
+    type: llm
+    criteria: |
+      Score 1 if the review reports that the new test only asserts the `rate_limited` attribute the decorator sets and would stay green with the `check_rate_limit` call removed, so the limit itself is untested. Score 0 if it accepts the PR body's claim that the limit is covered.

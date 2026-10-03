@@ -56,7 +56,7 @@ jobs:
       - if: steps.login.outputs.has == 'true'
         run: |
           set +e
-          out=$(claude plugin eval plugins/corgi --threshold 0.8 --max-cost-usd 5 --no-publish 2>&1)
+          out=$(claude plugin eval plugins/corgi --scaffold --tag read-only --judge-model sonnet --threshold 0.8 --max-cost-usd 10 --no-publish 2>&1)
           code=$?
           echo "$out"
           if echo "$out" | grep -qi "early access"; then echo "plugin eval not available on this account yet"; exit 0; fi

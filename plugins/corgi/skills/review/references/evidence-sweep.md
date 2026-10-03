@@ -31,6 +31,13 @@ Read every hit that *builds the same thing* the diff changed - a context object,
   consent screen *does* re-validate. A host removed from the allowlist keeps
   authorizing forever - no revocation path. `blocking`.
 
+- **A guard on one sibling.** A rate limit lands on `login`; `signup` and
+  `reset-password`, in the same file with the same first lines, do not get it. A grep
+  for the new symbol finds only the one call - it cannot find the handlers that should
+  call it. Read the file the guard landed in and the route table, list the handlers of
+  the same shape, and name the ones left open. `blocking` when the guard is a security
+  control, else a question.
+
 ## 2. Config delivery
 
 ```bash
