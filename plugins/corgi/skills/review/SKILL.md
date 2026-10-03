@@ -1,6 +1,6 @@
 ---
 name: review
-description: "Use when the user wants a code review of EXISTING pull/merge requests: \"review this PR/MR\", \"code review <link>\", \"check the api + web MRs for ABC-123\", a bare link with \"thoughts?\". Also to address feedback on your OWN PR: \"fix the comments on this MR\", \"address the feedback for ABC-123\". NOT for creating PRs (stories) or the local diff (/code-review)."
+description: "Use when the user wants a code review of EXISTING pull/merge requests: \"review this PR/MR\", \"code review <link>\", \"check the api + web MRs for ABC-123\", a bare link with \"thoughts?\". Also to address feedback on your OWN PR: \"fix the comments on this MR\", \"address the feedback for ABC-123\". A PR/MR link is still this skill when the forge is unreachable and the PR is saved on disk. NOT for creating PRs (stories) or the local diff (/code-review)."
 ---
 
 # Corgi review
@@ -52,6 +52,18 @@ or confirm the inferred repo per number.
 auth against *that host* (`glab auth status --hostname <host>`) - a healthy
 gitlab.com token doesn't mean the internal instance is configured. Missing → stop
 with a host-specific install/auth hint; don't guess.
+
+**Forge unreachable, change on disk.** A missing, unauthed or offline CLI is a stop
+only when the change is nowhere local. When the user says the forge is down and
+points at the PR on disk - its head as a local branch or a saved tree, `pr view` output, a
+patch - review that: base and author from the saved metadata (else `origin/HEAD`),
+the diff from `git diff <base>...<head>`, the head read with `git show <head>:<path>`
+or a detached worktree, and P2-P3.6 as written - they need the tree, not the forge.
+Print the review in the P4 shape under a first line `not posted: <forge>
+unreachable`, and post nothing. Mode B the same way: the asks come from the saved
+threads or the user's own words, the fixes go on the PR's own branch, gate, commit,
+push when `origin` takes it, and the report gives each reply left unposted with its
+text.
 
 A set may **span forges** (e.g. api MR on GitLab, web PR on GitHub) - resolve each
 ref independently. Both forges are first-class.
@@ -261,9 +273,10 @@ symbols, routes, contracts, migrations and config that changed, removals and
 signature changes marked breaking. Every breaking line is a question the
 review must answer - who calls it, is the caller in this PR or another, does
 the ticket ask for it - before the diff is opened. A change whose surface is
-"nothing public changed" is reviewed for behaviour and tests only. Say in the
-summary comment what the surface was; a reviewer who reads only that line
-should know whether to look closer.
+"nothing public changed" is reviewed for behaviour and tests only. The summary
+names the surface - each changed symbol, route or key by name, `breaking` where
+it is - never "the changes listed in the body"; a reviewer who reads only that
+line should know whether to look closer.
 
 **Hunt for:**
 - Correctness bugs.
@@ -320,6 +333,10 @@ recite back.
    gained a field, a context or a filter while its write / enforce / validate twin did
    not (or the reverse) is `blocking`; so is a policy applied where a row is written
    but never where it is used, when a second path into the same gate re-checks it.
+   **A new guard has no callers to grep - its twins are the siblings of the code that
+   got it.** A limit, a check or a permission added to one handler: list the handlers
+   built the same way (same file, same first lines, same route group) and say which
+   did not get it. Left out with no reason in the PR body is a finding.
 2. **Config delivery.** A new env var, secret or flag: name where each deployed
    environment gets it - deploy workflow, task definition, chart, secrets list - with
    an anchored grep (`(^|[^A-Z_])KEY`; a substring match hides absence). Declared only
@@ -538,6 +555,7 @@ Print to terminal, per PR in the set:
 
 ```
 [<repo>#<n>] <PR title>
+surface: <changed symbols / routes / keys by name, "breaking" where it is - or "nothing public changed">
 <2-4 sentence summary>
 
   <file>:<line> · blocking · <problem> · <fix>

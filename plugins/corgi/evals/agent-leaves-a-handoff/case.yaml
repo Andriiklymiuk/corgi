@@ -1,0 +1,24 @@
+schema_version: "1.0"
+name: agent-leaves-a-handoff
+description: A run that stops part-way leaves the handoff as the command, one flag per item, not as prose.
+tags: [read-only]
+context:
+  scaffold_script: scaffold.sh
+execution:
+  max_turns: 15
+  timeout_seconds: 300
+  allowed_tools: [Skill, Read, Glob, Grep]
+  prompt: |
+    I hit my usage limit on ABC-7 half-way through; the api side is done, the web banner is not. Leave a handoff for whoever picks it up next. There is no shell in this session, so give me the exact command to run.
+graders:
+  - name: fires-agent
+    type: tool_used
+    tool: Skill
+    input_match: '"(corgi:)?agent"'
+  - name: uses-the-command
+    type: regex
+    pattern: 'corgi agent handoff --ref ABC-7'
+  - name: one-flag-per-item
+    type: llm
+    criteria: |
+      Score 1 if the answer gives one `corgi agent handoff --ref ABC-7` command that carries the finished api work under `--done`, the web banner under `--remaining`, and a `--next` step, each as its own flag. Score 0 if the handoff is written as prose or a comment for the user to paste somewhere, if the banner is marked done, or if the command has no `--remaining`.

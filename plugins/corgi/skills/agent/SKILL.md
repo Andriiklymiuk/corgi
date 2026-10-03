@@ -1,6 +1,6 @@
 ---
 name: agent
-description: "Use when working on a corgi stack from a phone or another device through Claude Code Remote Control, or setting that up: cross-repo branches and diffs, tunnels, restarts, notifications, account profiles, session tracking (\"which sessions are waiting on me\", \"answer that permission from my phone\"). Also for the daemon's tracker and PR watch: being told about ticket or review activity (\"watch the jira issues here\", \"tell me when someone comments on my MRs\"), what is or should be tracked, stopping a watch, or why it did or did not fire. NOT for compose authoring (corgi), starting (run), or debugging (debug)."
+description: "Use when working on a corgi stack from a phone or another device through Claude Code Remote Control, or setting that up: cross-repo branches and diffs, tunnels, restarts, notifications, account profiles, session tracking (\"which sessions are waiting on me\", \"answer that permission from my phone\"). Also for the daemon's tracker and PR watch: being told about ticket or review activity (\"watch the jira issues here\", \"tell me when someone comments on my MRs\"), what is or should be tracked, stopping a watch, or why it did or did not fire. Also for a handoff when a run stops part-way (\"leave a handoff for ABC-7\", \"what did the last run leave\"). NOT for compose authoring (corgi), starting (run), or debugging (debug)."
 ---
 
 # Corgi agent mode

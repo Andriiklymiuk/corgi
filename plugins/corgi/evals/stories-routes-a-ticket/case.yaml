@@ -1,0 +1,34 @@
+schema_version: "1.0"
+name: stories-routes-a-ticket
+description: A ticket labelled bug takes the bug lane - the log line, a red test, the smallest fix; no plan, no fan-out.
+tags: [shell]
+context:
+  scaffold_script: scaffold.sh
+execution:
+  max_turns: 80
+  timeout_seconds: 1200
+  allowed_tools: [Skill, Read, Glob, Grep, Bash, Edit, Write]
+  prompt: |
+    Do this story: ABC-123 - "Order export returns 500 when a product name has a comma". It is labelled bug.
+
+    The tracker and GitHub are not reachable from this machine: the line above is the whole ticket, `origin` is a local remote that takes pushes, and no PR can be opened from here. The api writes its log to `api/logs/api.log`.
+graders:
+  - name: fires-stories
+    type: tool_used
+    tool: Skill
+    input_match: '"(corgi:)?stories"'
+  - name: no-plan-file
+    type: regex
+    target: files
+    match: not_contains
+    pattern: '(^|\n)docs/'
+  - name: bug-lane
+    type: llm
+    focus: trace
+    criteria: |
+      Score 1 if all three hold: (a) before changing any file under `api/app` the run reproduced the 500 (ran the export and saw the error) or quoted the failing log line; (b) it added a regression test and ran it failing before the fix and passing after; (c) it wrote no plan or spec file and started no subagent. Score 0 if it edited the fix first, planned it like a feature, or never ran the test red.
+  - name: export-is-fixed
+    type: llm
+    focus: { source: file, path: api/app/export.py }
+    criteria: |
+      Score 1 if `export_orders` now produces valid CSV for a product name that contains a comma, by quoting the field (for example with the csv module), and no longer raises. Score 0 if the comma is stripped or replaced, or the row check was removed with the rows left unquoted.
