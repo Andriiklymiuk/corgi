@@ -103,12 +103,17 @@ corgi suggest-history record --slug <slug> --status proposed --title "<title>" -
 
 ## Phase 4 - Report
 
-The first line of the report is the headline the inbox row shows: `<title> -
-<why, in ten words>`. Nothing goes above it - not the mode line, not what failed.
+The first line of the report is the headline the inbox row shows, in exactly
+this shape: `<task title> - <why, in ten words>` - the same title the task gets,
+a dash, the reason. Not a sentence about the bug, not a bold heading of your own.
+Nothing goes above it - not the mode line, not what failed.
 Then the task ref, the evidence, and what the dedupe skipped and why, in a line.
-The ideas that ranked lower are not listed: no shortlist, no essay. A step that
-could not run (no shell, no tracker) is one line after the evidence, with the
-command that finishes it.
+No other idea is named anywhere - not as a runner-up, not to explain the ranking,
+not as next week's pick: the inbox row and the board hold one idea, and so does the
+report. The shortlist stays in the session. A step that could not run (no shell, no
+tracker) is one line after the evidence, with the command that finishes it. No setup
+tips (adding the bot, the routine, a schedule): the run already happened, and the
+*Scenarios* below are for a person who asks.
 
 ## Scenarios
 

@@ -35,4 +35,4 @@ graders:
   - name: one-idea
     type: llm
     criteria: |
-      Score 1 if the answer proposes exactly one idea to build. Score 0 if it also lists runner-up, lower-ranked or alternative ideas, or offers a choice.
+      Score 1 if the answer proposes exactly one thing to build. Score 0 if it names or describes a second thing to build: a runner-up, an alternative, a lower-ranked candidate, next week's pick. Not a second idea: a sentence saying others ranked lower without naming them, the proposed idea's own sub-steps, and fallback commands such as recording a skip.
