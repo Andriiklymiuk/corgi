@@ -8,7 +8,7 @@ Run the **improve-skill** flow for `$ARGUMENTS`.
 - Evidence = this conversation: the step that went wrong / slow / got worked around, or
   the user's explicit "next time do Y."
 
-Branch on path (per `plugins/corgi/skills/improve-skill/SKILL.md`):
+Branch on path (per the `improve-skill` skill (load it with the Skill tool: `corgi:improve-skill`)):
 
 - **No path → summary mode, NO edit.** Return a digest: **Gaps** (each `[skill?] symptom
   → root cause`), **Fix** (one-line skill change per gap), **Which skill** (best-guess

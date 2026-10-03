@@ -15,4 +15,4 @@ Run the corgi **budget** flow for `$ARGUMENTS`.
   no other account → say when the limit lifts and suggest queueing the work.
 - Read-only: never carry, stop, or dismiss a session yourself.
 
-Follow `skills/budget/SKILL.md`.
+Follow the `budget` skill (load it with the Skill tool: `corgi:budget`).

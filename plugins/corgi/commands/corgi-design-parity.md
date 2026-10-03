@@ -7,7 +7,7 @@ Run the **design-parity** pass for `$ARGUMENTS`.
 - `$ARGUMENTS` = the design link / ticket and the screens in scope. Nothing = the design
   linked on the current ticket, for the change just made.
 
-Per `plugins/corgi/skills/design-parity/SKILL.md`:
+Per the `design-parity` skill (load it with the Skill tool: `corgi:design-parity`):
 
 1. **Pull the design** - file + node id from the URL, parse metadata for frame names/ids
    only (never read the whole dump), export the frames in scope into

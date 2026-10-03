@@ -11,4 +11,4 @@ Run the corgi **align** flow for `$ARGUMENTS`.
   answers or "go"; unanswered forks take the pick. Then start, no echo.
 - Mid-flight fork → one line, two options, pick, continue.
 
-Follow `skills/align/SKILL.md`.
+Follow the `align` skill (load it with the Skill tool: `corgi:align`).

@@ -7,7 +7,7 @@ Run the **mobile** verify flow for `$ARGUMENTS`.
 - `$ARGUMENTS` = what to verify (a screen / route / change) and/or `ship` for a local
   build + store submit. Nothing = verify the change just made, on the running device.
 
-Per `plugins/corgi/skills/mobile/SKILL.md`:
+Per the `mobile` skill (load it with the Skill tool: `corgi:mobile`):
 
 1. **Pick surface.** JS / Skia / RN change → **Android emulator** (Metro hot-reload, no
    rebuild). Native (Swift / Kotlin / SceneKit / new dep / config plugin) → **rebuild**

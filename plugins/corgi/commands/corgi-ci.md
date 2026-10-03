@@ -15,7 +15,7 @@ permissions). Show the files before committing.
 - Must run **inside the stack folder** (the one with `corgi-compose.yml`). Not
   there → tell the user to open it first.
 
-Follow the `ci` skill (`plugins/corgi/skills/ci/SKILL.md`) end to end: probe the
+Follow the `ci` skill (load it with the Skill tool: `corgi:ci`) end to end: probe the
 installed corgi for the flags you intend to emit, read `corgi-compose.yml` for the
 real service and `required:` lists, settle **where CI gets its env files** before
 writing any YAML, then generate the workspace-repo implementation plus the thin

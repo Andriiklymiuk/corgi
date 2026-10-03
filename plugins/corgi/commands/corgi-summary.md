@@ -7,7 +7,7 @@ Run the corgi **summary** flow for `$ARGUMENTS`.
 - `$ARGUMENTS` = optionally a tracker key, a repo, or a list of PR/MR links to scope the
   report. Empty → every PR/MR and ticket this session touched.
 
-Follow the `summary` skill (`plugins/corgi/skills/summary/SKILL.md`): re-fetch the live
+Follow the `summary` skill (load it with the Skill tool: `corgi:summary`): re-fetch the live
 state of every PR/MR (state, head pipeline, reviewers, auto-merge, unresolved threads)
 and every ticket, then group **by ticket, not by repo** - one block per ticket, a table
 row per repo, the MR/PR as a markdown link.

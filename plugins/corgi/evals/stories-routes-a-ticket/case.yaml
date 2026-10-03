@@ -1,17 +1,17 @@
 schema_version: "1.0"
 name: stories-routes-a-ticket
-description: A ticket labelled bug takes the bug lane - the log line, a red test, the smallest fix; no plan, no fan-out.
-tags: [shell]
+description: A ticket labelled bug takes the bug lane - the log line, a regression test, the smallest fix; no plan, no sign-off round.
+tags: [edit]
 context:
   scaffold_script: scaffold.sh
 execution:
-  max_turns: 80
-  timeout_seconds: 1200
-  allowed_tools: [Skill, Read, Glob, Grep, Bash, Edit, Write]
+  max_turns: 60
+  timeout_seconds: 900
+  allowed_tools: [Skill, Read, Glob, Grep, Edit, Write]
   prompt: |
     Do this story: ABC-123 - "Order export returns 500 when a product name has a comma". It is labelled bug.
 
-    The tracker and GitHub are not reachable from this machine: the line above is the whole ticket, `origin` is a local remote that takes pushes, and no PR can be opened from here. The api writes its log to `api/logs/api.log`.
+    The tracker and GitHub are not reachable from this machine and this session has no shell: the line above is the whole ticket, and the api writes its log to `api/logs/api.log`.
 graders:
   - name: fires-stories
     type: tool_used
@@ -22,13 +22,20 @@ graders:
     target: files
     match: not_contains
     pattern: '(^|\n)docs/'
-  - name: bug-lane
+  - name: quotes-the-log-line
+    type: regex
+    pattern: 'malformed row'
+  - name: regression-test-written
     type: llm
-    focus: trace
+    focus: { source: file, path: api/tests/test_export.py }
     criteria: |
-      Score 1 if all three hold: (a) before changing any file under `api/app` the run reproduced the 500 (ran the export and saw the error) or quoted the failing log line; (b) it added a regression test and ran it failing before the fix and passing after; (c) it wrote no plan or spec file and started no subagent. Score 0 if it edited the fix first, planned it like a feature, or never ran the test red.
+      Score 1 if the file has a test that exports an order whose product name contains a comma and asserts the export succeeds with that row intact. Score 0 if no test uses a product name with a comma.
   - name: export-is-fixed
     type: llm
     focus: { source: file, path: api/app/export.py }
     criteria: |
       Score 1 if `export_orders` now produces valid CSV for a product name that contains a comma, by quoting the field (for example with the csv module), and no longer raises. Score 0 if the comma is stripped or replaced, or the row check was removed with the rows left unquoted.
+  - name: bug-lane-report
+    type: llm
+    criteria: |
+      Score 1 if the final message treats the ticket as a bug: it names the root cause in `export.py` from the failing log line, says the regression test and the fix are written, and states plainly that the tests were not run and nothing was pushed. Score 0 if it claims the tests pass, waits for a sign-off before making the change, or wrote a plan instead of the fix.

@@ -1,34 +1,38 @@
 schema_version: "1.0"
 name: proactive-puts-it-on-the-board
-description: The unattended weekly idea lands on the board as one task with evidence, never as a file or a question.
-tags: [shell]
+description: The unattended weekly idea is one task with evidence, headed for the board - never a file, a list or a question.
+tags: [read-only]
 context:
   scaffold_script: scaffold.sh
 execution:
-  max_turns: 45
-  timeout_seconds: 720
-  allowed_tools: [Skill, Read, Glob, Grep, Bash]
+  max_turns: 40
+  timeout_seconds: 600
+  allowed_tools: [Skill, Read, Glob, Grep]
   prompt: |
-    Run /corgi-suggest-proactive in this workspace. Nobody is at the desk.
+    Run /corgi-suggest-proactive in this workspace. Nobody is at the desk and this session has no shell: end with the exact commands that put the idea on the board and record it.
 graders:
   - name: fires-proactive
     type: tool_used
     tool: Skill
     input_match: '"(corgi:)?(corgi-)?suggest-proactive"'
-  - name: task-on-the-board
+  - name: task-for-the-board
     type: regex
-    target: trace
     pattern: 'corgi agent task add'
   - name: recorded-in-the-history
     type: regex
-    target: trace
     pattern: 'corgi suggest-history record'
-  - name: nothing-under-docs
+  - name: evidence-you-can-open
     type: regex
-    target: files
+    pattern: '\.py:\d+|README\.md'
+  - name: ends-without-a-question
+    type: regex
     match: not_contains
-    pattern: '(^|\n)docs/'
-  - name: one-idea-with-evidence
+    pattern: '\?\s*$'
+  - name: headline-first
     type: llm
     criteria: |
-      Score 1 if the answer opens with a one-line headline naming exactly one idea, cites evidence a reader can open (a file and line, a README promise, a missing test), says the task is on the board, and ends without a question. Score 0 if it offers several ideas to choose from, asks the user anything, changed code, or reports that nothing was put on the board.
+      Score 1 if the very first line of the answer is a short headline naming the proposed idea. Score 0 if the first line is a mode or status line, an apology, or a description of what could not be done.
+  - name: one-idea
+    type: llm
+    criteria: |
+      Score 1 if the answer proposes exactly one idea to build. Score 0 if it also lists runner-up, lower-ranked or alternative ideas, or offers a choice.
