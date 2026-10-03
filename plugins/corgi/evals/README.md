@@ -13,25 +13,29 @@ Two checks keep the plugin honest after every edit to a skill:
 ## Run them
 
 ```
-claude plugin eval plugins/corgi --scaffold --tag read-only --judge-model sonnet
+claude plugin eval plugins/corgi --scaffold --allow-tools Edit Write --judge-model sonnet -j 3 --no-publish
 ```
 
 `--scaffold` is not optional: every case builds its workspace with its
 `scaffold.sh` (one small Python api, a `corgi-compose.yml`, a local bare
 remote - `_fixtures/common.sh`). Without it the case runs in an empty folder
-and both arms score 0. Add `--runs 1 --no-publish` while editing a case and
+and both arms score 0. Add `--runs 1` while editing a case and
 `--case <name> --ablation none --keep-temp` to read one run's `trace.jsonl`.
 
 | tag | cases | needs |
 |---|---|---|
-| `read-only` | handoff, the two reviews | nothing: read and search tools only |
-| `shell` | proactive, push-your-own, stories | `--allow-tools Bash Edit Write`, and `corgi` on `PATH` |
+| `read-only` | handoff, proactive, the two reviews | nothing: read and search tools only |
+| `edit` | push-your-own, stories (bug lane), one-liner | `--allow-tools Edit Write` |
 
-The `shell` cases run commands, so the harness sandboxes the shell and refuses
-to start on a machine it cannot fence in (a symlink inside `~/.docker` is the
-usual reason; the message names it). They are written and their fixtures are
-checked, but they have not been run end to end: pilot them with `--runs 1`
-before trusting a score, and keep them out of the CI gate until then.
+No case takes a shell. The harness sandboxes a granted shell and refuses to
+start where it cannot fence one in (a symlink inside `~/.docker` is the usual
+reason), so a case that needs `Bash` would not run on every machine. Each
+prompt says there is no shell; the skill then gives the exact command instead
+of running it, and that is what the graders read.
+
+A case where both arms score 1 is a guard: the plain model already gets it
+right, and the case fails only when a skill edit makes the answer worse. The
+cases with a gap between the arms are where the plugin earns its place.
 
 ## What a case is
 

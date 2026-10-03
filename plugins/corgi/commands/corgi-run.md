@@ -10,7 +10,7 @@ Run the corgi **run** flow for the request in `$ARGUMENTS`.
 - Must run **inside the stack folder** (the one with `corgi-compose.yml`). Not
   there → tell the user to open it first.
 
-Follow the `run` skill (`plugins/corgi/skills/run/SKILL.md`) end to end: locate the
+Follow the `run` skill (load it with the Skill tool: `corgi:run`) end to end: locate the
 stack (Phase 0), resolve the request to corgi flags from `corgi-compose.yml` +
 `Makefile` + `README` (Phase 1), launch **detached** with `--json` (Phase 2), gate
 on `corgi status --ready --json --timeout` and quick-triage anything stuck

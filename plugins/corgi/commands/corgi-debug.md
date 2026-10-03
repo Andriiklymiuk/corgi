@@ -9,7 +9,7 @@ Run the corgi **debug** flow for the request in `$ARGUMENTS`.
   snapshot the whole stack and triage.
 - Run **inside the stack folder** (the one with `corgi-compose.yml`).
 
-Follow the `debug` skill (`plugins/corgi/skills/debug/SKILL.md`) end to end - pick
+Follow the `debug` skill (load it with the Skill tool: `corgi:debug`) end to end - pick
 the entry mode (broken stack → Steps 0-3 local; bug needing data → often jump to
 Step 4), and stop as soon as the cause is explained. The skill owns the
 classification, the retry recipes, and the provider list.

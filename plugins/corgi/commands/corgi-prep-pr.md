@@ -15,4 +15,4 @@ Run the corgi **prep-pr** flow for `$ARGUMENTS`.
 - Offer, don't do: watch CI, move the ticket to review, post the spec comment.
 - Never commit a dirty tree, never flip to ready, never merge.
 
-Follow `skills/prep-pr/SKILL.md`.
+Follow the `prep-pr` skill (load it with the Skill tool: `corgi:prep-pr`).

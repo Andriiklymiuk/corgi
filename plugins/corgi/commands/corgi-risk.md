@@ -12,7 +12,7 @@ Run the corgi **risk** flow for `$ARGUMENTS`.
 - A story key or free text with no code yet → a forecast marked `confidence: low`,
   with the decisions a human must make before an agent builds it.
 
-Follow the `risk` skill (`plugins/corgi/skills/risk/SKILL.md`): resolve the target
+Follow the `risk` skill (load it with the Skill tool: `corgi:risk`): resolve the target
 without a checkout, gather the evidence table, score with `references/rubric.md`
 (highest dimension first, floors never lowered), pick the Check lines from
 `references/checklists.md`, and end with the one-line

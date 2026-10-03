@@ -12,4 +12,4 @@ Run the corgi **standup** flow for `$ARGUMENTS`.
 - Cross-check the tracker only for ticket keys that appear in the commits.
 - Ask once before posting anywhere; no attribution, no inflating the facts.
 
-Follow `skills/standup/SKILL.md`.
+Follow the `standup` skill (load it with the Skill tool: `corgi:standup`).

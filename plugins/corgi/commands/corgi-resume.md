@@ -14,4 +14,4 @@ Run the corgi **resume** flow for `$ARGUMENTS`.
   next) and one suggested command with a half-sentence reason.
 - Never start, stop, or check anything out while orienting.
 
-Follow `skills/resume/SKILL.md`.
+Follow the `resume` skill (load it with the Skill tool: `corgi:resume`).

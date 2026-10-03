@@ -13,4 +13,4 @@ Run the corgi **tracker** flow for the request in `$ARGUMENTS`.
 - Read-only until a single confirm gate guards any tracker write. Hands tickets to
   `stories` to build.
 
-Follow `skills/tracker/SKILL.md`.
+Follow the `tracker` skill (load it with the Skill tool: `corgi:tracker`).

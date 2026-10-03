@@ -10,7 +10,7 @@ Run the corgi **before-after** flow for `$ARGUMENTS`.
 - The base to compare against is the PR/MR's target branch, or the service's base
   branch when run on a bare branch.
 
-Follow the `before-after` skill (`plugins/corgi/skills/before-after/SKILL.md`): record
+Follow the `before-after` skill (load it with the Skill tool: `corgi:before-after`): record
 the route to the screen once, build the target the app actually ships (scheme and
 configuration are different axes - confirm with `-showBuildSettings` before installing),
 capture the branch, then check out the base, rebuild, replay the **same** route, and

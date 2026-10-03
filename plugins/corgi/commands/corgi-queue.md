@@ -21,4 +21,4 @@ Run the corgi **tracker** pickup flow (Job 4) for `$ARGUMENTS`.
 - Read-only in this command - it dispatches; `stories` does the writing.
 - Loop it to drain continuously: `/loop 1h /corgi-queue`.
 
-Follow `skills/tracker/SKILL.md` (Job 4 - Pickup).
+Follow the `tracker` skill (load it with the Skill tool: `corgi:tracker`) (Job 4 - Pickup).

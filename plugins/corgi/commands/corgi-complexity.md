@@ -10,7 +10,7 @@ Run the **complexity** skill for `$ARGUMENTS`.
 - Run **inside the repo or the stack folder**; a compose service resolves through
   `corgi exec <svc> -- <tool>` so the right toolchain measures it.
 
-Per `plugins/corgi/skills/complexity/SKILL.md`:
+Per the `complexity` skill (load it with the Skill tool: `corgi:complexity`):
 
 1. **Find the bar** - the repo's own threshold from its linter config; else 10.
 2. **Measure the diff** - touched functions, before (base version) and after, with the

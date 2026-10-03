@@ -8,7 +8,7 @@ Run the corgi **proactive suggest** flow for `$ARGUMENTS`.
 - Runs unattended from a daemon routine (`corgi agent routine add suggest --bot
   proactive`) or by hand; unattended never asks.
 
-Follow the `suggest-proactive` skill (`plugins/corgi/skills/suggest-proactive/SKILL.md`)
+Follow the `suggest-proactive` skill (load it with the Skill tool: `corgi:suggest-proactive`)
 end to end: resolve the workspace, the mode and the state and print the mode line
 (Phase 0), rank with `suggest` in one pass, magic first (Phase 1), dedupe the cards top
 down against the history, the board, open pull requests and memory (Phase 2), put the

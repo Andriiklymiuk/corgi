@@ -43,7 +43,8 @@ Two ways it runs:
   one to answer) takes the recommended choice, records `proposed`, and ends on
   the headline.
 - **Idempotent.** Same slug → skip, never a duplicate.
-- **Say the mode first:** `proactive · <workspace> · mode=propose · cap=1/week`.
+- **Say the mode as the run starts** (Phase 0): `proactive · <workspace> · mode=propose ·
+  cap=1/week`. It is a progress line, not part of the report.
 - Read `../_shared/conventions.md` first.
 
 ## Phase 0 - Workspace, mode, state
@@ -102,9 +103,12 @@ corgi suggest-history record --slug <slug> --status proposed --title "<title>" -
 
 ## Phase 4 - Report
 
-The first line is the headline the inbox row shows: `<title> - <why, in ten
-words>`. Then the task ref, the evidence, and what was skipped and why. No
-shortlist, no essay.
+The first line of the report is the headline the inbox row shows: `<title> -
+<why, in ten words>`. Nothing goes above it - not the mode line, not what failed.
+Then the task ref, the evidence, and what the dedupe skipped and why, in a line.
+The ideas that ranked lower are not listed: no shortlist, no essay. A step that
+could not run (no shell, no tracker) is one line after the evidence, with the
+command that finishes it.
 
 ## Scenarios
 

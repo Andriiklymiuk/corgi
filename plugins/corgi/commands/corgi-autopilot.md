@@ -19,4 +19,4 @@ Run the corgi **autopilot** skill for `$ARGUMENTS` (one supervised iteration).
     (unattended iterations stop at the spec gate and wait).
 - Kill switch / status: `corgi autopilot stop` · `pause` · `resume` · `status --json`.
 
-Follow `skills/autopilot/SKILL.md`.
+Follow the `autopilot` skill (load it with the Skill tool: `corgi:autopilot`).

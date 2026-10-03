@@ -8,7 +8,7 @@ Run the **ship** flow for `$ARGUMENTS`.
   in-progress build), or nothing (both platforms). The version + binary changes are real
   and outward-facing - confirm intent before submitting.
 
-Per `plugins/corgi/skills/ship/SKILL.md`:
+Per the `ship` skill (load it with the Skill tool: `corgi:ship`):
 
 1. **Gate first.** Verify the change on a device + read a screenshot (the `mobile` skill) -
    native-invisible changes ship magenta/blank. Tests + lint green. `df -h` for disk.

@@ -10,7 +10,7 @@ Run the agent-mode remote setup for the request in `$ARGUMENTS`.
 - Works in a corgi stack **or any git repository**. Neither → tell the user to
   open the project they want phone-startable.
 
-Follow the `agent` skill (`plugins/corgi/skills/agent/SKILL.md`) - the
+Follow the `agent` skill (load it with the Skill tool: `corgi:agent`) - the
 "Setting it up from a session on the laptop" section is the core flow:
 
 1. `corgi agent up` (detached; `--json` for structured output). Print the QR /

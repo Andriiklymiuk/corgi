@@ -8,7 +8,7 @@ Run the corgi **suggest** flow for the focus in `$ARGUMENTS`.
   "security"), a service name, or a goal ("retention"). Empty → the whole stack.
 - Run **inside the workspace folder** (the one with `corgi-compose.yml`).
 
-Follow the `suggest` skill (`plugins/corgi/skills/suggest/SKILL.md`) end to end: read the
+Follow the `suggest` skill (load it with the Skill tool: `corgi:suggest`) end to end: read the
 stack, the promise, the memory and what is already taken once (Phase 0), walk the three
 lenses in one pass (Phase 1), write cards and cut what is not real (Phase 2), present a
 ranked shortlist, magic first (Phase 3), spec the chosen one in the stories shape (Phase

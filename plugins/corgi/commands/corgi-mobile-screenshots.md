@@ -7,7 +7,7 @@ Run the **mobile-screenshots** store pipeline for `$ARGUMENTS`.
 - `$ARGUMENTS` = which screens / locales / device classes to (re)shoot, and/or a stage
   (`capture` | `frame` | `export` | `upload`). Nothing = the full matrix, all four stages.
 
-Per `plugins/corgi/skills/mobile-screenshots/SKILL.md` - four separate stages, verify each
+Per the `mobile-screenshots` skill (load it with the Skill tool: `corgi:mobile-screenshots`) - four separate stages, verify each
 before the next:
 
 1. **Capture** the matrix - N screens × iPhone / iPad / Android-phone+tablet × every locale,

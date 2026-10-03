@@ -8,7 +8,7 @@ Run the **purchases** flow for `$ARGUMENTS`.
   ASC update), `push --apply` (PATCH live), or a plain-words ask ("add a premium pack",
   "sync product ids"). Pushing mutates live store config - dry-run + confirm first.
 
-Per `plugins/corgi/skills/purchases/SKILL.md`:
+Per the `purchases` skill (load it with the Skill tool: `corgi:purchases`):
 
 1. **Source of truth.** Product ids live in ONE app catalog module (`<category>_<id>`);
    App Store Connect, Play, and RevenueCat mirror them exactly. Derive metadata FROM it.
