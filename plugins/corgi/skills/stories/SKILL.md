@@ -73,7 +73,9 @@ the list with `riskPaths:` under its entry in the user agent config.
 against the running stack (`corgi run`, `corgi logs <svc> --errors-only`,
 `corgi_wait_for_log`), quote the failing line or request, then write the
 regression test that fails on `<base>`, then the smallest fix. No plan file, no
-subagent fan-out: a bug is a straight line from the log to the test.
+subagent fan-out: a bug is a straight line from the log to the test. The quoted
+line travels with the fix - the spec comment, the PR body and the report each
+carry it verbatim, not a pointer to where it lives.
 
 **Express lane - small-surface adjustment.** Only a proven adjustment (above) in a
 single service with no cross-service contract, whose surface you can name up front
@@ -361,8 +363,10 @@ is made knowing it; the real score comes from the diff at Phase 5.
 
 ### Write the spec - every story
 
-`docs/stories/<issue-key>-<slug>.md`, actionable or not (micro adjustment → skip the
-file; the `## Spec` comment is the spec - _Express lane_):
+`docs/stories/<issue-key>-<slug>.md`, actionable or not - except a single-service
+bug (_Bug lane_) or an express adjustment (_Express lane_): no file, the `## Spec`
+comment is the spec. Tracker unreachable → that spec goes into the report and the
+PR body, never into a file in the repo to stand in for the comment:
 
 - Problem (quote issue) + **which services** (drives branch/PR count).
 - **Tier** - adjustment/bug/feature.
