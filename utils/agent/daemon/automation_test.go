@@ -120,9 +120,9 @@ func TestAReadIsAllowedByTheWorkspacePolicy(t *testing.T) {
 	d.Sessions.Load()
 	d.Sessions.OnTransition = d.onSessionTransition
 	t.Cleanup(d.swaps.Wait)
-	prev := autoAllowDelay
-	autoAllowDelay = time.Millisecond
-	t.Cleanup(func() { autoAllowDelay = prev })
+	prev, prevSettle := autoAllowDelay, permissionSettle
+	autoAllowDelay, permissionSettle = time.Millisecond, 20*time.Millisecond
+	t.Cleanup(func() { autoAllowDelay, permissionSettle = prev, prevSettle })
 	var mu sync.Mutex
 	var typed, pushed []string
 	d.TypeText = func(_ context.Context, target sessions.FocusTarget, text string, _ bool) error {
@@ -163,11 +163,15 @@ func TestAReadIsAllowedByTheWorkspacePolicy(t *testing.T) {
 	d.Sessions.Apply(sessions.Event{Name: "PermissionRequest", SessionID: "s2", Tool: "Read", Subject: "a.go", Risk: "reads", At: now})
 	d.Sessions.Apply(sessions.Event{Name: "UserPromptSubmit", SessionID: "s3", Cwd: "/tmp/acme", ClaudePID: 3, TermProgram: "vscode", At: now})
 	d.Sessions.Apply(sessions.Event{Name: "PermissionRequest", SessionID: "s3", Tool: "Read", Subject: "b.go", Risk: "reads", At: now})
-	waitFor(t, func() bool { mu.Lock(); defer mu.Unlock(); return len(pushed) == 4 })
+	waitFor(t, func() bool { mu.Lock(); defer mu.Unlock(); return len(pushed) == 3 })
+	time.Sleep(5 * permissionSettle)
 	mu.Lock()
 	defer mu.Unlock()
 	if len(typed) != 1 {
 		t.Fatalf("only the one read was answered: %v", typed)
+	}
+	if len(pushed) != 3 || strings.Contains(strings.Join(pushed, "|"), "Edit") {
+		t.Fatalf("the edit answered at once rings nobody: %v", pushed)
 	}
 }
 

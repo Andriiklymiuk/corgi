@@ -192,6 +192,26 @@ func (d *Daemon) backfillLedger(ctx context.Context) {
 	}()
 }
 
+var permissionSettle = 10 * time.Second
+
+func (d *Daemon) pushWhenStillWaiting(s sessions.Session, m push.Message) {
+	since, subject := s.StatusSince, s.Pending.Subject
+	time.AfterFunc(permissionSettle, func() {
+		if MutedUntil(d.Dir).IsZero() && d.stillWaiting(s.ID, since, subject) {
+			d.Push(m)
+		}
+	})
+}
+
+func (d *Daemon) stillWaiting(id string, since time.Time, subject string) bool {
+	for _, c := range d.Sessions.Sessions() {
+		if c.ID == id {
+			return c.Status == sessions.StatusNeedsInput && c.StatusSince.Equal(since) && c.Pending != nil && c.Pending.Subject == subject
+		}
+	}
+	return false
+}
+
 func (d *Daemon) onSessionTransition(s sessions.Session, from, to sessions.Status, now time.Time) {
 	label := s.Display
 	if label == "" {
@@ -220,7 +240,7 @@ func (d *Daemon) onSessionTransition(s sessions.Session, from, to sessions.Statu
 		go d.autoAllow(s)
 		return
 	}
-	if to == sessions.StatusNeedsInput && s.Pending != nil && d.Push != nil && MutedUntil(d.Dir).IsZero() {
+	if to == sessions.StatusNeedsInput && s.Pending != nil && d.Push != nil {
 		body := "permission: " + s.Pending.Tool
 		if s.Pending.Subject != "" {
 			body += " " + s.Pending.Subject
@@ -232,7 +252,7 @@ func (d *Daemon) onSessionTransition(s sessions.Session, from, to sessions.Statu
 		if s.Pending.Risk != "" {
 			data["risk"] = s.Pending.Risk
 		}
-		go d.Push(push.Message{Title: notifyTitlePrefix + label, Body: body, Category: "permission", Data: data, Thread: s.ID})
+		d.pushWhenStillWaiting(s, push.Message{Title: notifyTitlePrefix + label, Body: body, Category: "permission", Data: data, Thread: s.ID})
 	}
 	d.attentionMu.Lock()
 	if d.limitWatch == nil {
