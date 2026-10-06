@@ -57,4 +57,13 @@ func TestTheSecretsHookRefusesARealKey(t *testing.T) {
 	if got := run("password = \"Tr0ub4dor&3-really-long-password\"\n"); !strings.Contains(got, "deny") {
 		t.Fatalf("a password literal is refused: %s", got)
 	}
+	code := "const accessToken = getWindowStorage({\nconst secret = resolveMcpJwtSecret(config);\nconst opts = { secret: config.jwtSecret, apiKey: settings?.providerApiKey }\npassword = userPasswordField;\n"
+	if got := run(code); got != "" {
+		t.Fatalf("code that reads a secret is not a secret: %s", got)
+	}
+	for _, real := range []string{"API_KEY=a8f3k2m9q7w1x5z0\n", "TOKEN=ABCDEFGHIJKLMNOPQRS\n", "secret: 'abcdefghijklmnop'\n", "password=correcthorsebattery\n"} {
+		if got := run(real); !strings.Contains(got, "deny") {
+			t.Fatalf("a written-down value is still refused: %q %s", real, got)
+		}
+	}
 }

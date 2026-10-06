@@ -306,3 +306,34 @@ func TestGitLabAnsweredSinceNeedsANoteAndAPushAfterIt(t *testing.T) {
 		t.Errorf("not knowing who I am, nothing can be mine, got %q", why)
 	}
 }
+
+func TestGitLabTellsAReviewOfMineSinceTheAsk(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/api/v4/user"):
+			_, _ = w.Write([]byte(`{"id":7,"username":"me"}`))
+		case strings.HasSuffix(r.URL.Path, "/merge_requests/9/notes"):
+			_, _ = w.Write([]byte(`[
+			  {"id":4,"body":"approved this merge request","system":true,"created_at":"2026-10-05T14:06:00.120Z","author":{"username":"me"}},
+			  {"id":3,"body":"nit: name the flag","system":false,"created_at":"2026-10-05T14:05:00Z","author":{"username":"me"}},
+			  {"id":2,"body":"looks good","system":false,"created_at":"2026-10-05T14:04:00Z","author":{"username":"ann"}},
+			  {"id":1,"body":"an older note of mine","system":false,"created_at":"2026-10-04T09:00:00Z","author":{"username":"me"}}]`))
+		default:
+			t.Errorf("unexpected request %s", r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	g := &GitLab{URL: srv.URL, Token: "tok"}
+
+	asked := time.Date(2026, 10, 5, 13, 53, 0, 0, time.UTC)
+	o, ok := g.MyReviewSince(context.Background(), "acme/core!9", asked)
+	if !ok || !o.Approved || o.Comments != 1 || o.ChangesRequested {
+		t.Fatalf("an approval and one note of mine after the ask, ann's and yesterday's not counted: %+v %v", o, ok)
+	}
+	if o, _ := g.MyReviewSince(context.Background(), "acme/core!9", asked.Add(time.Hour)); o.Approved || o.Comments != 0 {
+		t.Fatalf("nothing after the next ask: %+v", o)
+	}
+	var teller ReviewTeller = g
+	_ = teller
+}

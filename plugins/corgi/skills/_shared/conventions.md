@@ -82,6 +82,17 @@ stop is a real blocker (a missing credential, a tool that is not there, a questi
 a person can settle): then `corgi agent handoff --ref <ref> --blocked "<why>"` with the
 question under `--uncertain`, and end. Never end a run on a question.
 
+## Commands that get refused
+
+Two shapes are refused before they run, unattended or not, and each refusal costs a turn:
+
+- `rm -rf <dir>` - a hardened workspace denies it and auto mode blocks it. A leftover
+  worktree or clone dir is never deleted: take a fresh path (`[ -e "$W" ] && W="$W-$(date +%s)"`),
+  `git worktree remove` (no `--force`) what you made, and leave `/tmp` to the OS.
+- A leading `sleep N; <cmd>` - the harness refuses it. Wait inside the command
+  (`until <check>; do sleep 10; done; <cmd>`) and run it in the background; the
+  notification says when it is done.
+
 ## Stopping with work left
 
 A run that stops part-way - a usage limit, a blocker, the end of the day - leaves a
