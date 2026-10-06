@@ -348,6 +348,48 @@ func (g *GitLab) AnsweredSince(ctx context.Context, ref string, at time.Time) st
 	return "you replied and pushed after it"
 }
 
+// MyReviewSince is the ReviewTeller for a merge request. GitLab keeps no
+// review object: an approval is a system note, a review is my notes.
+func (g *GitLab) MyReviewSince(ctx context.Context, ref string, since time.Time) (ReviewOutcome, bool) {
+	project, num, ok := strings.Cut(ref, "!")
+	if !ok || g.Token == "" {
+		return ReviewOutcome{}, false
+	}
+	base := strings.TrimRight(firstOr(g.URL, "https://gitlab.com"), "/")
+	if g.Me == "" {
+		var user struct {
+			Username string `json:"username"`
+		}
+		if err := g.getInto(ctx, base+"/api/v4/user", &user); err != nil || user.Username == "" {
+			return ReviewOutcome{}, false
+		}
+		g.Me = user.Username
+	}
+	var notes []gitlabNote
+	if err := g.getInto(ctx, base+"/api/v4/projects/"+url.PathEscape(project)+"/merge_requests/"+num+"/notes?sort=desc&order_by=created_at&per_page=100", &notes); err != nil {
+		return ReviewOutcome{}, false
+	}
+	var out ReviewOutcome
+	for _, n := range notes {
+		if !isMe(g.Me, n.Author.Username) {
+			continue
+		}
+		if t, err := time.Parse(time.RFC3339, n.CreatedAt); err != nil || t.Before(since) {
+			continue
+		}
+		body := strings.ToLower(strings.TrimSpace(n.Body))
+		switch {
+		case n.System && strings.HasPrefix(body, "approved this merge request"):
+			out.Approved = true
+		case n.System && strings.HasPrefix(body, "requested changes"):
+			out.ChangesRequested = true
+		case !n.System:
+			out.Comments++
+		}
+	}
+	return out, true
+}
+
 func (g *GitLab) getInto(ctx context.Context, endpoint string, out any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {

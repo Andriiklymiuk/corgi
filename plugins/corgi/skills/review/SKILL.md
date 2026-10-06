@@ -144,12 +144,15 @@ the PR just changed, and a version bump is often the thing under review. Can't i
 say so in the report and let CI carry the test signal; a probe on the wrong deps is worse
 than no probe:
 ```bash
+W=/tmp/corgi-review/<repo>-<n>; [ -e "$W" ] && W="$W-$(date +%s)"   # leftover: new path, never rm -rf
 git -C <dir> fetch origin pull/<n>/head            # GitLab: merge-requests/<iid>/head
-git -C <dir> worktree add --detach /tmp/corgi-review/<repo>-<n> FETCH_HEAD
+git -C <dir> worktree add --detach "$W" FETCH_HEAD
+# no local clone of the repo (not a service in the compose file):
+git init -q "$W" && git -C "$W" fetch -q --depth 50 <clone-url> merge-requests/<iid>/head && git -C "$W" checkout -q --detach FETCH_HEAD
 ```
 Grep callers, open a dependency's source, run the coverage gate or a probe there;
-`git worktree remove` it in P6. Remote-only repo → a shallow clone of the head into the
-same path, same rule. Without it the review stays inside the hunk and misses what the
+`git worktree remove` it in P6 (no `--force`, no `rm -rf` - both are refused; a clone
+in `/tmp` is left for the OS). Remote-only repo → the `git init` + fetch line above. Without it the review stays inside the hunk and misses what the
 human reviewer next to you finds (P3, evidence sweep).
 
 **Noise filter.** Drop generated/vendored/binary paths from the review surface:

@@ -131,7 +131,9 @@ func hardenSettings(path, bin string, dry bool) ([]string, error) {
 }
 
 var (
-	secretValue      = regexp.MustCompile(`(?i)(api[_-]?key|secret|token|password|passwd|private[_-]?key)\s*[:=]\s*['"]?[^\s'"$<{]{12,}`)
+	secretValue      = regexp.MustCompile(`(?i)(api[_-]?key|secret|token|password|passwd|private[_-]?key)\s*[:=]\s*(['"]?)([^\s'"$<{]{12,})`)
+	codeCall         = regexp.MustCompile(`^[A-Za-z_$][\w$]*(\??\.[A-Za-z_$][\w$]*)*\(`)
+	codeName         = regexp.MustCompile(`^[A-Za-z_$][A-Za-z_$]*(\??\.[A-Za-z_$][A-Za-z_$]*)*[;,)]*$`)
 	knownSecret      = regexp.MustCompile(`sk-ant-[A-Za-z0-9_-]{8,}|sk-[A-Za-z0-9]{32,}|ghp_[A-Za-z0-9]{20,}|gho_[A-Za-z0-9]{20,}|glpat-[A-Za-z0-9_-]{16,}|AKIA[0-9A-Z]{16}|xox[baprs]-[A-Za-z0-9-]{10,}|-----BEGIN [A-Z ]*PRIVATE KEY|lin_api_[A-Za-z0-9]{20,}`)
 	placeholderValue = regexp.MustCompile(`(?i)(example|placeholder|changeme|your[_-]?|xxx+|\$\{|\bprocess\.env\b|os\.Getenv|<[^>]+>)`)
 )
@@ -167,7 +169,7 @@ func runSecretsHook(stdin io.Reader, stdout io.Writer) {
 			if placeholderValue.MatchString(line) {
 				continue
 			}
-			if knownSecret.MatchString(line) || secretValue.MatchString(line) {
+			if knownSecret.MatchString(line) || assignsSecretValue(line) {
 				_ = json.NewEncoder(stdout).Encode(map[string]any{
 					"hookSpecificOutput": map[string]any{
 						"hookEventName":            "PreToolUse",
@@ -179,6 +181,20 @@ func runSecretsHook(stdin io.Reader, stdout io.Writer) {
 			}
 		}
 	}
+}
+
+// assignsSecretValue is a secret-named key given a value; an unquoted call
+// or name (`const token = readToken(cfg)`, `secret: config.jwtSecret`) is
+// code that reads a secret, not one written down.
+func assignsSecretValue(line string) bool {
+	for _, m := range secretValue.FindAllStringSubmatch(line, -1) {
+		quoted, value := m[2] != "", m[3]
+		if !quoted && (codeCall.MatchString(value) || (codeName.MatchString(value) && strings.ContainsAny(value, ".ABCDEFGHIJKLMNOPQRSTUVWXYZ") && strings.ToUpper(value) != value)) {
+			continue
+		}
+		return true
+	}
+	return false
 }
 
 func checkSecurity() []agentCheck {

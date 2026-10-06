@@ -520,12 +520,16 @@ must be _running_ for a consumer to verify (Phase 4) can live in a worktree:
   ```bash
   git -C <dir> fetch origin
   git -C <dir> worktree prune                                # drop stale entries
-  rm -rf /tmp/corgi-wt/<wt-id>-<service>                     # clear a leftover dir (re-run/crash)
-  git -C <dir> worktree add -b <branch> /tmp/corgi-wt/<wt-id>-<service> origin/<base>
+  W=/tmp/corgi-wt/<wt-id>-<service>
+  [ -e "$W" ] && W="$W-$(date +%s)"                          # a leftover (re-run/crash): new path, never rm -rf
+  git -C <dir> worktree add -b <branch> "$W" origin/<base>
   # deps dir (node_modules / vendor / target / .venv) gitignored → symlink main
   # checkout's for SEQUENTIAL runs; real install for CONCURRENT runs.
-  ln -s "$PWD/<dir>/node_modules" /tmp/corgi-wt/<wt-id>-<service>/node_modules
+  ln -s "$PWD/<dir>/node_modules" "$W/node_modules"
   ```
+  `rm -rf` is denied in a hardened workspace and by auto mode, so a leftover dir is
+  never deleted - the next path is taken, and `/tmp` is the OS's to clean. Use the
+  path you got (`$W`) for every later step of this repo.
   The worktree dir is now this repo's **working dir** - implement, gate, review,
   commit, push, open the PR/MR from it (Phases 3.5-5).
   - **Run a worktree'd service with `--service-dir` (only services in
