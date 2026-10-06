@@ -1240,6 +1240,13 @@ func unattendedSuffix(spec WatchSpec, e watch.Event) string {
 			"If you truly cannot proceed, leave a handoff with `corgi agent handoff --ref " + e.Ref + " --blocked <reason>` and stop. " +
 			"End with one line per pull request saying what you posted on it: approved, comments (how many), or nothing."
 	}
+	if watch.ReadOnlyRoutine(e) {
+		return "\n\nNobody is reading this run as it happens. Never ask a question, never offer options or wait for a choice: " +
+			"pick the recommended option yourself and go on. This run reads: no branch, no commit, no pull request, no handoff. " +
+			"A source you cannot reach (a tracker that wants a sign-in) gets one line inside the answer; go on with the rest.\n" +
+			"Start your final message with the line `Outcome: nothing`, then the answer exactly as asked, and nothing after it: " +
+			"no list of what you ran, no review of your own answer, no notes on earlier runs."
+	}
 	s := "\n\nNobody is reading this run as it happens. Never ask a question, never offer options or wait for a choice: " +
 		"pick the recommended option yourself, say which you picked and why, and go on. " +
 		"If you truly cannot proceed, leave a handoff with `--blocked <reason>` (the question goes in `--uncertain`) and stop.\n" +
@@ -1414,7 +1421,11 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 			return
 		}
 		d.watchState.Fixes.SetBranch(e.Key, branch)
-		print.Prompt += IsolationNote(branch, trees)
+		if onExistingPull(e) {
+			print.Prompt += PullIsolationNote(trees)
+		} else {
+			print.Prompt += IsolationNote(branch, trees)
+		}
 		fmt.Fprintf(logFile, "=== worktrees on %s: %s\n", branch, strings.Join(trees, ", "))
 	}
 	h := d.pickHarnessFor(spec)
@@ -1434,6 +1445,9 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 	}
 	if runErr != nil && daemonCtx.Err() != nil {
 		fmt.Fprintf(logFile, "\n=== interrupted: the daemon stopped mid-run; offered again at the next start\n")
+		if e.Kind == watch.KindRoutine {
+			d.routineAgain(spec, e)
+		}
 		return
 	}
 	if runErr != nil {
@@ -1830,6 +1844,25 @@ func IsolationNote(branch string, trees []string) string {
 	return "\n\nThis run is isolated: every repository already has a worktree on branch `" + branch +
 		"`, created off its current HEAD. Work only in these directories and open the pull requests from this branch; " +
 		"do not create another branch and do not edit the main checkouts:\n- " + strings.Join(trees, "\n- ")
+}
+
+func onExistingPull(e watch.Event) bool {
+	switch e.Kind {
+	case watch.KindPRComment, watch.KindPRReview, watch.KindCIFailed:
+		return true
+	}
+	return false
+}
+
+// PullIsolationNote is for a run on a pull request that already exists: the
+// fix goes on that pull request's branch, so the scratch branch the
+// worktrees start on is only a place to stand.
+func PullIsolationNote(trees []string) string {
+	return "\n\nThis run is isolated: every repository already has a worktree, on a scratch branch off its current HEAD. " +
+		"The pull request already exists, so its own branch is where the fix goes: in the repository it belongs to, " +
+		"`git -C <worktree> fetch origin <pr-branch> && git -C <worktree> checkout --detach origin/<pr-branch>`, commit there, " +
+		"and push with `git -C <worktree> push origin HEAD:<pr-branch>`. Never open a new pull request and do not edit the main checkouts:\n- " +
+		strings.Join(trees, "\n- ")
 }
 
 const retryCrashAfter = 30 * time.Minute

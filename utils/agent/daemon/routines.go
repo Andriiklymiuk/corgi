@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -148,6 +149,16 @@ func (d *Daemon) routineBot(spec WatchSpec, r config.Routine) (bots.Bot, bool) {
 	return b, true
 }
 
+// routineAgain forgets the start of a run the daemon cut off, so the
+// routine is due at the next start and not at tomorrow's slot.
+func (d *Daemon) routineAgain(spec WatchSpec, e watch.Event) {
+	if d.routines == nil {
+		return
+	}
+	r := routineFor(spec, e)
+	d.routines.set(spec.Workspace+"/"+firstNonEmpty(firstNonEmpty(r.Name, r.Kind), e.Title), time.Time{})
+}
+
 func routineFor(spec WatchSpec, e watch.Event) config.Routine {
 	for _, r := range spec.Routines {
 		if strings.EqualFold(firstNonEmpty(r.Name, r.Kind), e.Title) {
@@ -164,7 +175,7 @@ func (d *Daemon) routineReport(spec WatchSpec, e watch.Event, out string, failed
 	if e.Kind != watch.KindRoutine {
 		return
 	}
-	headline := plainLine(firstLine(strings.TrimSpace(out)))
+	headline := routineHeadline(out)
 	if failed != nil {
 		headline = "failed: " + failed.Error()
 		if logPath != "" {
@@ -188,6 +199,21 @@ func (d *Daemon) routineReport(spec WatchSpec, e watch.Event, out string, failed
 		body = watch.PullLines(body, links)
 	}
 	go d.notifyAttentionAt(notifyTitlePrefix+spec.Workspace, body, spec.Workspace, report.URL)
+}
+
+var headlineLabel = regexp.MustCompile(`(?i)^(headline|digest[^:]{0,40}):\s*`)
+
+// routineHeadline is the first line that says something: the "Outcome: …"
+// line every unattended run opens with is for corgi, not for the push.
+func routineHeadline(out string) string {
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		line = plainLine(line)
+		if line == "" || watch.RunOutcome(line) != "" {
+			continue
+		}
+		return headlineLabel.ReplaceAllString(line, "")
+	}
+	return ""
 }
 
 func firstLine(s string) string {

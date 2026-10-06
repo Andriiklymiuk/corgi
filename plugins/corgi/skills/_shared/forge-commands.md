@@ -259,6 +259,13 @@ commands here too - to prune findings a human already raised, the author already
 answered, or that sit on a resolved thread - but never the reply/resolve ones.) Push fixes with `git push` (no
 force) from the PR's branch - never merge, never undraft.
 
+**Read first with corgi** - one call for every PR/MR of the story, GitHub or GitLab:
+`corgi agent watch pr threads <url> <url>...` prints the open threads (file:line, thread
+id, the root comment id a reply goes to, every note) and each reviewer's latest review
+summary; `--all` adds resolved ones, `--json` for a script. No corgi token for that
+forge → the raw reads below. Do not loop over `"repo 123"` pairs with `set -- $pair`:
+zsh does not split it, and the number reaches GraphQL empty.
+
 **GitHub** (review-thread resolution state lives only in GraphQL):
 ```bash
 # inline review comments - id, path, line, author, reply chain, body
@@ -328,6 +335,14 @@ glab ci status --branch <branch>   # or glab ci view; poll glab mr view <iid> un
 glab mr view <iid> -F json -q '.state'                                     # merged? in flight?
 glab mr update <iid> --ready       # only when a human says so
 glab mr merge <iid>                # only when a human says so
+```
+
+Right after a push the checks are not registered yet, and a bare `gh pr checks --watch`
+exits 1 with "no checks reported". Wait for them in the same command, as a background
+command (`run_in_background`), never behind a leading `sleep N` - the harness refuses that:
+
+```bash
+until [ "$(gh pr checks <n> --json name -q length 2>/dev/null)" -gt 0 ] 2>/dev/null; do sleep 10; done; gh pr checks <n> --watch --fail-fast
 ```
 
 Failing job log: `gh run view <run-id> --log-failed` / `glab ci trace --branch <branch>`

@@ -88,7 +88,7 @@ func runChatPost(req chatRequest) error {
 		return err
 	}
 	ctx := context.Background()
-	channel, err := poster.Resolve(ctx, target.Channel)
+	channel, err := poster.Resolve(ctx, target.Channel, target.As)
 	if err != nil {
 		return err
 	}

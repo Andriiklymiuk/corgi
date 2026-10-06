@@ -119,7 +119,16 @@ func (p *SlackPoster) React(ctx context.Context, target SlackTarget, emoji strin
 	}, nil)
 }
 
-func (p *SlackPoster) Resolve(ctx context.Context, to string) (string, error) {
+// SlackTokenWorks asks Slack whether a stored token still speaks: a revoked
+// one otherwise shows up only when a post is refused.
+func SlackTokenWorks(ctx context.Context, token string) error {
+	var who struct{}
+	return (&slackAPI{Token: token}).call(ctx, "auth.test", nil, &who)
+}
+
+// Resolve looks the name up with the token that will post first, so a
+// revoked user token does not stop the bot from speaking.
+func (p *SlackPoster) Resolve(ctx context.Context, to, as string) (string, error) {
 	to = strings.TrimSpace(to)
 	if to == "" {
 		return "", errors.New("no target: --to '#channel' or postTo in the workspace's chat config")
@@ -127,18 +136,30 @@ func (p *SlackPoster) Resolve(ctx context.Context, to string) (string, error) {
 	if !strings.HasPrefix(to, "#") && !strings.HasPrefix(to, "@") {
 		return to, nil
 	}
-	api := p.User
-	if api == nil {
-		api = p.Bot
+	var apis []*slackAPI
+	if voice, _, err := p.voice(as); err == nil {
+		apis = append(apis, voice)
 	}
-	if api == nil {
+	for _, api := range []*slackAPI{p.User, p.Bot} {
+		if api != nil && (len(apis) == 0 || api != apis[0]) {
+			apis = append(apis, api)
+		}
+	}
+	if len(apis) == 0 {
 		return "", ErrNoSlackToken
 	}
-	s := &Slack{api: api, names: map[string]string{}}
-	convs, err := s.conversations(ctx)
+	var s *Slack
+	var convs []slackConversation
+	var err error
+	for _, api := range apis {
+		s = &Slack{api: api, names: map[string]string{}}
+		if convs, err = s.conversations(ctx); err == nil {
+			break
+		}
+	}
 	if err != nil {
 		// chat.postMessage takes a channel name; only a DM needs the list.
-		if strings.HasPrefix(to, "#") && strings.Contains(err.Error(), "missing_scope") {
+		if strings.HasPrefix(to, "#") {
 			return to, nil
 		}
 		return "", err

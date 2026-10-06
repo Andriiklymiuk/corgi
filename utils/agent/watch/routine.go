@@ -19,7 +19,7 @@ type RoutineKind struct {
 
 var Catalog = []RoutineKind{
 	{Name: "digest", Reads: true, What: "what happened here since yesterday, in five bullets", Default: "daily 08:30",
-		Prompt: "Write the morning digest for this workspace: pull requests opened, merged or gone red since yesterday, tickets that moved, anything stalled more than two days. Use gh/glab and the tracker MCP tools; read, do not change. At most five bullets, each one line, the most important first. Summarise, do not itemise. Start your answer with a one-line headline."},
+		Prompt: "Write the morning digest for this workspace: pull requests opened, merged or gone red since yesterday, tickets that moved, anything stalled more than two days. Use gh/glab for pull requests and `corgi agent watch moved --since 24h` for tickets that moved (it reads with corgi's own tracker token); read, do not change. At most five bullets, each one line, the most important first. Summarise, do not itemise. Start your answer with a one-line headline."},
 	{Name: "babysit-pr", What: "keep my open pull requests moving: CI, reviews, at most three rounds", Default: "every 2h",
 		Prompt: "For every open pull request of mine in this stack: check CI and the review comments. Fix what is real on the branch and push (at most three rounds per PR), reply to and dismiss what is not with one sentence saying why, and list what needs a person. Never merge, never force-push, never flip a draft to ready. Start your answer with a one-line headline: how many PRs are green, red, waiting."},
 	{Name: "deps", What: "triage dependency-bump pull requests: safe, dead, verify", Default: "weekly Mon 09:00",

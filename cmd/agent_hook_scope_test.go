@@ -36,6 +36,9 @@ func TestTheScopeHookRefusesAWriteOutsideThePaths(t *testing.T) {
 	if got := run(filepath.Join(root, "web", "Banner.tsx")); got != "" {
 		t.Fatalf("widened: %s", got)
 	}
+	if got := run(filepath.Join(t.TempDir(), "scratchpad", "pr-body.md")); got != "" {
+		t.Fatalf("a scratch file outside every repo is not part of the change: %s", got)
+	}
 	other := t.TempDir()
 	gitRepoOnBranch(t, other, "main")
 	in, _ := json.Marshal(map[string]any{"cwd": other, "tool_name": "Edit", "tool_input": map[string]any{"file_path": filepath.Join(other, "x.go")}})

@@ -830,6 +830,51 @@ func checkUnattended(dir string) []agentCheck {
 		checks = append(checks, codexNotifyCheck())
 	}
 	checks = append(checks, autoMergeTokenChecks(dir, registry, user)...)
+	checks = append(checks, slackTokenChecks(dir, registry, user, watch.SlackTokenWorks)...)
+	return checks
+}
+
+// slackTokenChecks: a dead Slack token fails only at the first post, after
+// the work it was meant to announce is done.
+func slackTokenChecks(dir string, registry *workspace.Registry, user *config.UserConfig, works func(context.Context, string) error) []agentCheck {
+	if user == nil || registry == nil {
+		return nil
+	}
+	var checks []agentCheck
+	seen := map[string]bool{}
+	machine := watch.LoadSecrets(dir)
+	for _, ws := range registry.Sorted() {
+		wc, ok := user.Workspaces[ws.ID]
+		if !ok || wc.Watch == nil || !wc.Watch.Enabled {
+			continue
+		}
+		secrets := watch.LoadSecretsFor(dir, ws.ID)
+		for _, t := range []struct{ voice, token, machine, flag string }{
+			{"user", secrets.SlackUser, machine.SlackUser, "--token"},
+			{"bot", secrets.SlackBot, machine.SlackBot, "--bot"},
+		} {
+			if t.token == "" || seen[t.token] {
+				continue
+			}
+			seen[t.token] = true
+			name, where := "slack "+t.voice+" token · "+ws.ID, " --workspace "+ws.ID
+			if t.token == t.machine {
+				name, where = "slack "+t.voice+" token", ""
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			err := works(ctx, t.token)
+			cancel()
+			switch {
+			case err == nil:
+				checks = append(checks, agentCheck{Name: name, OK: true, Detail: "Slack accepts it"})
+			case strings.Contains(err.Error(), "token_revoked"), strings.Contains(err.Error(), "invalid_auth"), strings.Contains(err.Error(), "account_inactive"):
+				checks = append(checks, agentCheck{Name: name, Detail: "Slack refuses it (" + err.Error() + ") - announces and replies fail",
+					Fix: "corgi agent watch auth slack " + t.flag + " <new token>" + where})
+			default:
+				checks = append(checks, agentCheck{Name: name, OK: true, Detail: "could not ask Slack (" + err.Error() + ")"})
+			}
+		}
+	}
 	return checks
 }
 

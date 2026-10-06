@@ -1,39 +1,29 @@
-# corgi agent watch pr
+# corgi agent watch moved
 
-## corgi agent watch pr
+## corgi agent watch moved
 
-Mark a pull request of yours ready for review, merge or close it; approve, ask for changes on, comment on, or read the threads of any
+Tickets that changed column, read with corgi's own tracker token
 
 ### Synopsis
 
-Acts on a pull request of yours: the one corgi's run opened for a ticket, the
-one a session on the ticket opened, or the one an inbox row is about. A link
-works too.
+Every column change on the workspace's tracker since a moment, newest first:
+the ticket, from, to, and who moved it. It reads with the token corgi already
+holds, so a digest has ticket moves even when the tracker's MCP wants a sign-in.
 
-  corgi agent watch pr ready ABC-123        the draft is ready for review
-  corgi agent watch pr merge ABC-123
-  corgi agent watch pr close acme/api#42
-  corgi agent watch pr ready https://github.com/acme/api/pull/42
-  corgi agent watch pr approve acme/api#42 "nice"
-  corgi agent watch pr request acme/api#42 cap the retries
-  corgi agent watch pr comment https://github.com/acme/api/pull/42 "one question…"
-  corgi agent watch pr threads `<url>` `<url>`...   open review threads, with the ids a reply needs
-  corgi agent watch pr threads ABC-123 --all    resolved ones too
-
-Never automatic: this is a person's call. ready, merge and close are refused
-on a pull request that is not yours; approve, request and comment go on any
-the inbox knows - the one somebody asked you to review first of all.
+  corgi agent watch moved                    # the last 24 hours
+  corgi agent watch moved --since 72h        # a long weekend
+  corgi agent watch moved --workspace api --json
 
 ```
-corgi agent watch pr <ready|merge|close|approve|request|comment|threads> <REF|key|url> [words] [flags]
+corgi agent watch moved [flags]
 ```
 
 ### Options
 
 ```
-      --all                threads: resolved ones too
-  -h, --help               help for pr
-      --workspace string   the workspace whose token to use, when a ref exists in two
+  -h, --help               help for moved
+      --since string       How far back to look (default "24h")
+      --workspace string   Workspace id; omitted means the one you are in
 ```
 
 ### Options inherited from parent commands

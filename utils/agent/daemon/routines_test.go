@@ -132,3 +132,60 @@ func TestRoutineWaitIsLoggedOncePerReason(t *testing.T) {
 		t.Errorf("logged %d times, want 2 (once per reason):\n%s", got, buf.String())
 	}
 }
+
+func TestARoutinePushLeadsWithTheHeadlineNotTheOutcomeLine(t *testing.T) {
+	cases := map[string]string{
+		"Outcome: nothing\n\n**Headline: Quiet day, 7 merged, nothing red.**\n- one": "Quiet day, 7 merged, nothing red.",
+		"Outcome: nothing\n\n# Digest, 2026-10-02: quiet day, 1 merge":               "quiet day, 1 merge",
+		"**3 PRs green, 1 red**\n- details…":                                         "3 PRs green, 1 red",
+		"Outcome: nothing":                                                           "",
+	}
+	for out, want := range cases {
+		if got := routineHeadline(out); got != want {
+			t.Errorf("routineHeadline(%q) = %q, want %q", out, got, want)
+		}
+	}
+}
+
+func TestARoutineTheDaemonCutOffIsDueAgain(t *testing.T) {
+	d := dynDaemon(t)
+	d.loadWatchFiles()
+	d.fixBusy = map[string]chan struct{}{"api": make(chan struct{}, 1)}
+	d.Watches = []WatchSpec{{Workspace: "api", Dir: t.TempDir(), Action: "notify",
+		Routines: []config.Routine{{Name: "digest", Kind: "digest", Schedule: "daily 08:30"}}}}
+	started := make(chan struct{})
+	prev := claudeCommand
+	claudeCommand = func(ctx context.Context, dir string, env []string, args ...string) *exec.Cmd {
+		close(started)
+		return exec.CommandContext(ctx, "sleep", "10")
+	}
+	t.Cleanup(func() { claudeCommand = prev })
+	ctx, cancel := context.WithCancel(context.Background())
+
+	nine := time.Date(2026, 9, 14, 9, 0, 0, 0, time.Local)
+	d.runRoutines(ctx, nine)
+	<-started
+	cancel()
+	d.runs.Wait()
+	if last := loadRoutineState(d.Dir).get("api/digest"); !last.IsZero() {
+		t.Fatalf("a run the daemon stopped has to run again, not wait for tomorrow: %v", last)
+	}
+}
+
+func TestAReadOnlyRoutineIsNotToldAboutPullRequests(t *testing.T) {
+	spec := WatchSpec{Workspace: "api", Dir: t.TempDir(), Rules: watch.Rules{CI: true}}
+	e, _ := RoutineEvent("api", config.Routine{Kind: "digest"}, time.Now())
+	prompt := fixArgsWith(spec, e, "")[1]
+	for _, never := range []string{"pull request body", "## Evidence", "review your own diff", "Do not wait for CI", "corgi agent handoff"} {
+		if strings.Contains(prompt, never) {
+			t.Errorf("a digest pushes nothing, so %q is noise: %s", never, prompt)
+		}
+	}
+	if !strings.Contains(prompt, "`Outcome: nothing`") || !strings.Contains(prompt, "nothing after it") {
+		t.Fatalf("it still opens with the outcome line and ends with the answer: %s", prompt)
+	}
+	custom, _ := RoutineEvent("api", config.Routine{Name: "tidy", Prompt: "Fix the lint warnings and open a PR."}, time.Now())
+	if !strings.Contains(fixArgsWith(spec, custom, "")[1], "## Evidence") {
+		t.Fatal("a routine that writes code keeps the pull request rules")
+	}
+}
