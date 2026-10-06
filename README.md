@@ -188,7 +188,7 @@ agent reads the whole workspace
 /plugin install corgi@corgi
 ```
 
-Two optional mods ride along - live pieces of the Claude Code screen, not skills:
+Two optional mods ride along - live pieces of the Claude Code screen, not skills ([what they do](#inside-claude-code-the-mods)):
 
 ```
 /plugin install corgi-band@corgi     # band: sessions waiting on you + what this turn posted, /corgi board pane
@@ -369,11 +369,39 @@ does right now. Three clients show it:
 | **Corgi Agents for Mac** (menu bar + window; on the Mac App Store soon) | a desktop chat app over the board: sessions by workspace with Allow/Deny, a composer that dictates (Apple speech, no permissions games), takes photos and files, and sends to a session, a bot, a new chat in any workspace or the chief; workspace pages, the inbox, the kanban, accounts with a forecast |
 | [VS Code extension](https://marketplace.visualstudio.com/items?itemName=Corgi.corgi) | Agent sessions view, status bar item, a toast with Go when a session in another window waits |
 | [Corgi Agent Deck](https://github.com/Andriiklymiuk/corgi-agent-deck), Stream Deck | one key per session, Talk, Prompt and Budget keys |
+| [corgi-band](plugins/corgi-band) mod, inside Claude Code | a band above the prompt with the sessions waiting on you and what this turn posted; `/corgi` opens the board in a pane |
 
 <p align="center"><img src="docs/media/bar-showcase.gif" width="760" alt="Corgi Agents for Mac: home, dictation, a workspace, the board, the inbox, the accounts"></p>
 <p align="center"><img src="https://raw.githubusercontent.com/Andriiklymiuk/corgi_vscode_extension/main/docs/media/sessions.png" width="380" alt="The Agent sessions view in VS Code"></p>
 
 <p align="center"><img src="https://raw.githubusercontent.com/Andriiklymiuk/corgi-agent-deck/main/docs/media/deck-mk2.png" width="760" alt="Corgi Agent Deck on a Stream Deck"></p>
+
+### Inside Claude Code: the mods
+
+Two small mods put corgi on the Claude Code screen itself. A mod is not a skill: the model does not read it, it runs beside the session.
+
+**corgi-band** shows what needs you, without leaving the chat:
+
+```
+◐ ABC-8 stories waits on you: Bash git push            [Focus]
+this turn: ✓ moved ABC-1 → Code review · ✗ Slack post (token_revoked)
+```
+
+- **Line one:** another session stopped on a question or a permission. **Focus** jumps to it.
+- **Line two:** what this turn sent to people - Slack posts, ticket moves, comments, pull request actions, pushes. A tick when it worked, a cross and the reason when it did not. A failure pops up too.
+- **Status line** `corgi · 2 waiting on you · 5h 91%`, only when something waits or the 5-hour budget is past 80%.
+- **`/corgi`** opens the board in a pane: every live session, the tickets that want a person (**Work on it** opens a session on one), the stack of this folder, the budget.
+
+**corgi-guard** stops shell commands that waste an agent's turns, and tells it the corgi way instead:
+
+- `set -- $pair` in zsh, which leaves the second word empty.
+- `rm -rf` on corgi's worktrees, which a hardened workspace refuses anyway.
+- After a known error - an empty GraphQL variable, "no checks reported" right after a push, a dead Slack token - it adds the fix to what the agent reads.
+
+```
+/plugin install corgi-band@corgi
+/plugin install corgi-guard@corgi
+```
 
 They all run the same commands:
 

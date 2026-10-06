@@ -1,6 +1,6 @@
 {
   "name": "corgi-band",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A band above the prompt: corgi sessions waiting on you elsewhere (with Focus), and what this turn posted, moved or pushed - each with a tick or the error",
   "types": "./types/index.d.ts",
   "author": {

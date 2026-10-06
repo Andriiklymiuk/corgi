@@ -26,8 +26,6 @@ async function runJSON($: EngineInterface, argv: string[]): Promise<string | und
   }
 }
 
-// The pane's picture: sessions from the board, tickets from the kanban,
-// services from corgi status of this folder.
 async function refreshPane($: EngineInterface): Promise<void> {
   const [boardOut, kanbanOut, stackOut] = await Promise.all([
     runJSON($, ['corgi', '--json', 'agent', 'sessions']),
@@ -69,7 +67,6 @@ export const register: Register = on => {
     me.configDir = (await $.env.get('CLAUDE_CONFIG_DIR')) ?? ''
     if (!e.isInteractive) return next(e)
     await $.command.register({ name: 'corgi', description: 'corgi board: sessions waiting on you, tickets, the stack, the budget' })
-    // No corgi on this machine: stay quiet for the whole session.
     void refresh($).then(found => {
       if (found) $.clock.every(POLL_MS, () => void refresh($))
     })
