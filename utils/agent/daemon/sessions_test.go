@@ -514,6 +514,9 @@ func TestNewSessionCommandQuotesEveryArgument(t *testing.T) {
 }
 
 func TestAPermissionPromptIsPushedWithItsSessionID(t *testing.T) {
+	prev := permissionSettle
+	permissionSettle = 50 * time.Millisecond
+	t.Cleanup(func() { permissionSettle = prev })
 	d := trackingDaemon(t)
 	d.Sessions.Load()
 	d.Sessions.OnTransition = d.onSessionTransition
@@ -529,19 +532,24 @@ func TestAPermissionPromptIsPushedWithItsSessionID(t *testing.T) {
 	d.Sessions.Apply(sessions.Event{Name: "PermissionRequest", SessionID: "s1", Tool: "Bash", Subject: "go test", At: now})
 	d.Sessions.Apply(sessions.Event{Name: "PostToolUse", SessionID: "s1", Tool: "Bash", At: now})
 	d.Sessions.Apply(sessions.Event{Name: "PermissionRequest", SessionID: "s1", Tool: "Bash", Subject: "rm -rf", At: now})
+	waitFor(t, func() bool { mu.Lock(); defer mu.Unlock(); return len(got) == 1 })
+	time.Sleep(3 * permissionSettle)
+	mu.Lock()
+	if len(got) != 1 || got[0].Body != "permission: Bash rm -rf" {
+		t.Fatalf("the request answered at once (an auto mode) rings nobody; the one still open does: %+v", got)
+	}
+	if risky := got[0]; risky.Category != "permission" || risky.Data["risky"] != "1" || risky.Data["session"] != "s1" {
+		t.Fatalf("rm -rf is marked risky: %+v", risky)
+	}
+	mu.Unlock()
+
+	d.Sessions.Apply(sessions.Event{Name: "PostToolUse", SessionID: "s1", Tool: "Bash", At: now})
+	d.Sessions.Apply(sessions.Event{Name: "PermissionRequest", SessionID: "s1", Tool: "Bash", Subject: "go test ./...", At: now.Add(time.Second)})
 	waitFor(t, func() bool { mu.Lock(); defer mu.Unlock(); return len(got) == 2 })
 	mu.Lock()
 	defer mu.Unlock()
-	byBody := map[string]push.Message{}
-	for _, m := range got {
-		byBody[m.Body] = m
-	}
-	safe, risky := byBody["permission: Bash go test"], byBody["permission: Bash rm -rf"]
-	if safe.Category != "permission" || safe.Data["session"] != "s1" || safe.Data["risky"] != "" {
+	if safe := got[1]; safe.Body != "permission: Bash go test ./..." || safe.Data["risky"] != "" || safe.Data["session"] != "s1" {
 		t.Fatalf("safe: %+v", safe)
-	}
-	if risky.Data["risky"] != "1" || risky.Data["session"] != "s1" {
-		t.Fatalf("rm -rf is marked risky: %+v", risky)
 	}
 }
 
