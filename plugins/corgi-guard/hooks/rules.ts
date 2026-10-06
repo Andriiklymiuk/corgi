@@ -1,9 +1,15 @@
-// Each rule comes from a run that lost turns to it.
-
 const unsplitSet = /\bset\s+--\s+"?\$(?!\{=)[A-Za-z_]\w*/
 const rmCorgiTree = /\brm\s+-(?:[a-zA-Z]*r[a-zA-Z]*f|[a-zA-Z]*f[a-zA-Z]*r)[a-zA-Z]*\s+[^;&|]*\/tmp\/corgi-(?:wt|review)\b/
 
-export function refusal(command: string): string | undefined {
+const heredocBody = /<<-?\s*(['"]?)(\w+)\1([^\n]*)\n[\s\S]*?\n\s*\2[ \t]*(?=\n|$)/g
+const singleQuoted = /'[^']*'/g
+
+export function shellOnly(command: string): string {
+  return command.replace(heredocBody, '<<$2$3').replace(singleQuoted, "''")
+}
+
+export function refusal(raw: string): string | undefined {
+  const command = shellOnly(raw)
   if (unsplitSet.test(command)) {
     return 'zsh does not split `$var` in `set -- $var`, so the second word arrives empty. ' +
       'Use `read -r repo n <<< "$pair"` (bash and zsh), or loop over `repo:n` and take `${p%%:*}` / `${p##*:}`.'

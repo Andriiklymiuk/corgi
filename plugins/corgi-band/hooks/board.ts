@@ -24,7 +24,6 @@ export function readBoard(stdout: string): Board | undefined {
   }
 }
 
-// Sessions elsewhere that stopped on a question or a permission.
 export function waitingOf(board: Board, me: string): Waiting[] {
   return (board.sessions ?? [])
     .filter(s => s.status === 'needs_input' && s.id !== me)
@@ -38,7 +37,6 @@ export function waitingOf(board: Board, me: string): Waiting[] {
     })
 }
 
-// The 5h window of this session's account, only while it is the current one.
 export function fiveHourOf(board: Board, configDir: string, now: number): number | undefined {
   const account = (board.accounts ?? []).find(a => (a.configDir ?? '') === configDir)
   const w = account?.limits?.fiveHour
@@ -68,7 +66,6 @@ const patterns: [RegExp, (m: RegExpExecArray) => string][] = [
   [/\bgit(?:\s+-C\s+\S+)?\s+push\b(?![^;&|]*--dry-run)/g, () => 'git push'],
 ]
 
-// The things a command says to other people: posts, ticket moves, pushes.
 export function actionsIn(command: string): string[] {
   const found: string[] = []
   for (const [re, label] of patterns) {
@@ -80,7 +77,6 @@ export function actionsIn(command: string): string[] {
   return found
 }
 
-// A pipe into head hides the exit code, so the words count too.
 export function failureOf(isError: boolean, text: string): string | undefined {
   const line = text.split('\n').map(l => l.trim()).find(l => /^(error|fatal|refused|rejected|denied)\b|token_revoked|invalid_auth|! \[rejected\]/i.test(l))
   if (line !== undefined) return clip(line.replace(/^Exit code \d+\s*/, ''), 80)
@@ -112,7 +108,6 @@ function clip(s: string, n: number): string {
 
 const statusOrder: Record<string, number> = { needs_input: 0, limited: 1, working: 2, done: 3, unknown: 4 }
 
-// Every live session, the ones waiting on you first.
 export function sessionsOf(board: Board): PaneSession[] {
   return (board.sessions ?? [])
     .filter(s => s.status !== 'gone' && s.status !== 'stale')
@@ -128,7 +123,6 @@ export function sessionsOf(board: Board): PaneSession[] {
 
 const columnOrder: Record<string, number> = { Blocked: 0, Review: 1, Inbox: 2, Ready: 3, Running: 4 }
 
-// The cards that want a person: blocked, in review, new; Done is history.
 export function cardsOf(stdout: string): PaneCard[] {
   let parsed: { cards?: { ref?: string; title?: string; column?: string; workspace?: string; why?: string }[] }
   try {

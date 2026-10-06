@@ -35,6 +35,15 @@ describe('corgi-guard', () => {
     expect((checks.context ?? []).join(' ')).toContain('until [')
   })
 
+  test('words in a heredoc or single quotes are data, not shell', async ($, on) => {
+    on('tool.call', { tool: 'Bash' }, () => ({ result: { stdout: 'ok', stderr: '', interrupted: false }, text: 'ok' }))
+    const doc = "python3 - <<'EOF'\nreadme = '''- `set -- $pair` in zsh leaves the word empty'''\nEOF\ngrep -n mods README.md"
+    expect((await $.tool.call({ tool: 'Bash', command: doc })).deny).toBe(undefined)
+    expect((await $.tool.call({ tool: 'Bash', command: "echo 'never rm -rf /tmp/corgi-wt/x'" })).deny).toBe(undefined)
+    const real = "cat <<EOF > notes\nhi\nEOF\nfor r in a b; do set -- $r; done"
+    expect(String((await $.tool.call({ tool: 'Bash', command: real })).deny)).toContain('read -r')
+  })
+
   test('a plain successful command passes untouched', async ($, on) => {
     on('tool.call', { tool: 'Bash' }, () => ({ result: { stdout: 'main', stderr: '', interrupted: false }, text: 'main' }))
     const got = await $.tool.call({ tool: 'Bash', command: 'git branch --show-current' })
