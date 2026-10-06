@@ -30,7 +30,7 @@ project instead; there's no burn line.
 | Untriaged | JQL `project = <P> AND statusCategory = "To Do" AND labels is EMPTY` (or the team's triage filter) |
 | Agent queue (pickup) | JQL `project = <P> AND labels = agent AND statusCategory = "To Do"` |
 | One issue (+ git links) | `getJiraIssue`; PR links via `getJiraIssueRemoteIssueLinks` / the dev-panel if exposed |
-| **write** | `createJiraIssue`, `editJiraIssue`, `transitionJiraIssue`, `addCommentToJiraIssue` |
+| **write** | `createJiraIssue`, `editJiraIssue`, `transitionJiraIssue`, `addCommentToJiraIssue`; a comment with a picture → `corgi agent watch comment <KEY> "<text>" --image <file>` |
 
 Key = `key` (`PROJ-123`). `openSprints()` only works on Scrum boards → use the
 Kanban row for everything else.

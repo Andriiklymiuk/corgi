@@ -18,6 +18,7 @@ Common calls (tool names without their namespace prefix):
 | comment                | `save_comment({ issueId, body })`; pass `id` to update | `addCommentToJiraIssue`                                |
 | statuses / transitions | `list_issue_statuses`                                  | `getTransitionsForJiraIssue`                           |
 | assign to me           | `assignee: "me"` (also id, name, email)                | `editJiraIssue`; current user from `atlassianUserInfo` |
-| attachments            | read: image URLs in the body; write: `prepare_attachment_upload` → PUT bytes → `![](assetUrl)` (`forge-commands.md` §6a) | `fetch` returns ARIs and metadata, never bytes; write via the issue attachments endpoint |
+| attachments            | read: image URLs in the body; write: `prepare_attachment_upload` → PUT bytes → `![](assetUrl)` (`forge-commands.md` §6a) | read: `fetch` returns ARIs and metadata, never bytes; write: `corgi agent watch comment <KEY> "<text>" --image <file>` - `addCommentToJiraIssue` cannot show a picture |
 
+A comment reads like a teammate wrote it (`conventions.md` § Comments people read).
 Writes stay behind the calling skill's confirm gate.

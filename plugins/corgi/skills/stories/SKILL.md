@@ -385,6 +385,8 @@ PR body, never into a file in the repo to stand in for the comment:
   marker (trackers render `<!-- … -->` as visible text), no footer badge. Linear
   `mcp__linear-server__save_comment({ issueId, body })` (omit `id` to create, pass `id`
   to update); Jira `mcp__atlassian__addCommentToJiraIssue`. Literal newlines/markdown.
+  A picture goes in through `corgi agent watch comment <KEY> "<text>" --image <file>`
+  (`../_shared/conventions.md` § Comments people read).
   The `## Spec` heading is how a later run (new session, no comment id) finds it: list
   comments, match the one whose first heading is `## Spec`, and **update** it
   (`save_comment({ id, body })`) instead of duplicating. Skip the QA section for

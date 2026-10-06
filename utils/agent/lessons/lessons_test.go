@@ -44,3 +44,20 @@ func TestLessonsAreOneLineEachAndNeverTwice(t *testing.T) {
 		t.Fatal("no file, no lessons")
 	}
 }
+
+func TestALessonSkipsHiddenMarkersAndKeepsWhatFollowsAColon(t *testing.T) {
+	dir := t.TempDir()
+	if err := Add(dir, "w", Lesson{Source: "pr.comment", Text: "<!-- corgi-review:a.go:3 -->\n\nThis leaks the file handle."}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Add(dir, "w", Lesson{Source: "pr.comment", Text: "One point:\n\nthe cache key ignores the locale\nmore"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Add(dir, "w", Lesson{Source: "pr.comment", Text: "<!-- corgi-review -->"}); err == nil {
+		t.Fatal("a comment that is only a marker teaches nothing")
+	}
+	got := List(dir, "w")
+	if len(got) != 2 || got[0].Text != "This leaks the file handle." || got[1].Text != "One point: the cache key ignores the locale" {
+		t.Fatalf("%+v", got)
+	}
+}
