@@ -1,0 +1,32 @@
+name: Mods
+
+# The Claude Code mods (function-hook plugins) beside the corgi plugin: their
+# manifests, their hooks modules and their tests. No login needed.
+
+on:
+  pull_request:
+    paths:
+      - "plugins/corgi-band/**"
+      - "plugins/corgi-guard/**"
+      - ".claude-plugin/marketplace.json"
+  push:
+    branches: [main]
+    paths:
+      - "plugins/corgi-band/**"
+      - "plugins/corgi-guard/**"
+      - ".claude-plugin/marketplace.json"
+  workflow_dispatch:
+
+jobs:
+  mods:
+    name: Validate and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - run: npm install -g @anthropic-ai/claude-code
+      - run: claude plugin validate .
+      - run: |
+          for m in plugins/corgi-band plugins/corgi-guard; do
+            claude plugin validate "$m"
+            claude plugin test "$m"
+          done

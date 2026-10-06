@@ -1,0 +1,11 @@
+{
+  "name": "corgi-band",
+  "version": "0.1.0",
+  "description": "A band above the prompt: corgi sessions waiting on you elsewhere (with Focus), and what this turn posted, moved or pushed - each with a tick or the error",
+  "types": "./types/index.d.ts",
+  "author": {
+    "name": "Andrii Klymiuk",
+    "url": "https://github.com/Andriiklymiuk"
+  },
+  "homepage": "https://github.com/Andriiklymiuk/corgi"
+}

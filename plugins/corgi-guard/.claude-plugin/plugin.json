@@ -1,0 +1,10 @@
+{
+  "name": "corgi-guard",
+  "version": "0.1.0",
+  "description": "Stops the Bash shapes that fail in corgi runs (zsh set -- $pair, rm -rf on corgi worktrees) and adds the corgi fix to errors it knows",
+  "author": {
+    "name": "Andrii Klymiuk",
+    "url": "https://github.com/Andriiklymiuk"
+  },
+  "homepage": "https://github.com/Andriiklymiuk/corgi"
+}
