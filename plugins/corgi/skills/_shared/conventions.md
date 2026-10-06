@@ -13,6 +13,38 @@ idempotent updates (for example `<!-- corgi-review -->`); it does not render, so
 attribution. Match the repo's own commit style; let pre-commit hooks format and re-stage if
 they rewrite.
 
+## Comments people read
+
+A reply on a ticket or PR goes to a teammate, so it reads like one wrote it in chat.
+
+- **Answer first, in one line.** "Works on build 412 - your phone has an older one."
+  Then at most two or three short lines: what you checked, the one thing you need.
+- **Talk, do not file a report.** No "Hi <name>, I checked your…", no restating the
+  ticket, no "as specified", no "please do not hesitate". Contractions are fine.
+- **No document formatting in a reply.** No headings, bold, bullet lists or `code`
+  spans; a spec or workpad note is the exception, not a reply to a person.
+- **Match the thread.** Their language, roughly their length; one line in, about one
+  line out.
+- **A picture you mention is in the comment.** Never "see the screenshot I attached:
+  `grid.jpg`" - the reader sees a file name. Jira and Linear:
+  `corgi agent watch comment <KEY> "<text>" --image <file>` (repeat `--image`) uploads
+  each picture and shows it inside the comment. The Atlassian MCP comment tool and
+  markdown `![](file)` cannot show a Jira attachment, and an upload alone hides it in
+  the ticket's attachments panel. No way to post the picture → say what you saw in
+  words and do not mention a file.
+
+Before, the way it reads like a bot:
+
+> Hi Sam, I checked both cases on build 412 against staging. Both places behave as
+> specified. See the two screenshots I attached: `grid.jpg` and `hero.jpg`. Could you
+> check the build number and update to 412 or newer?
+
+After:
+
+> Looks right on 412. Your screenshots look like an older build - can you update and
+> check again?
+> (both pictures inline)
+
 ## Finish what you start
 
 A run ends when the skill's deliverable exists, not when a plan for it does: the branch is

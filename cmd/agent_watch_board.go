@@ -170,14 +170,34 @@ var agentWatchAssignCmd = &cobra.Command{
 
 var agentWatchCommentCmd = &cobra.Command{
 	Use:   "comment <REF> <text>",
-	Short: "Post a comment on a ticket",
-	Args:  cobra.ExactArgs(2),
+	Short: "Post a comment on a ticket, pictures included",
+	Long: `Posts one comment on a ticket, as you.
+
+  corgi agent watch comment ABC-123 "Fixed on staging, try build 412"
+  corgi agent watch comment ABC-123 "Here is what I see on 412" --image grid.jpg --image hero.jpg
+
+--image uploads each picture to the ticket and shows it inside the comment.
+On Jira this is the only way a picture shows: a comment that just names a
+file, or markdown like ![](file.jpg), leaves the reader with a file name.
+The text is plain text.`,
+	Args: cobra.ExactArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
+		images, _ := cmd.Flags().GetStringArray("image")
 		runTrackerWrite(cmd, "agent_watch_comment", args[0], func(ctx context.Context, w watch.Writer, ref string) (string, error) {
-			if err := w.Comment(ctx, ref, args[1]); err != nil {
+			if len(images) == 0 {
+				if err := w.Comment(ctx, ref, args[1]); err != nil {
+					return "", err
+				}
+				return "commented on " + ref, nil
+			}
+			pictures, ok := w.(watch.ImageCommenter)
+			if !ok {
+				return "", fmt.Errorf("%s comments cannot carry pictures yet", w.Name())
+			}
+			if err := pictures.CommentWithImages(ctx, ref, args[1], images); err != nil {
 				return "", err
 			}
-			return "commented on " + ref, nil
+			return fmt.Sprintf("commented on %s with %d picture(s)", ref, len(images)), nil
 		})
 	},
 }
@@ -192,7 +212,7 @@ func runTrackerWrite(cmd *cobra.Command, label, ref string, do func(context.Cont
 	if err != nil {
 		exitWithError(label, err, 2)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	said, err := do(ctx, w, strings.TrimSpace(ref))
 	if err != nil {
@@ -210,6 +230,7 @@ func init() {
 		c.Flags().String("workspace", "", "Workspace id; omitted means the one you are in")
 	}
 	agentWatchBoardCmd.Flags().Bool("refresh", false, "Read the columns from the tracker again")
+	agentWatchCommentCmd.Flags().StringArray("image", nil, "Picture to upload and show inside the comment (repeatable)")
 	agentWatchCmd.AddCommand(agentWatchBoardCmd, agentWatchMoveCmd, agentWatchAssignCmd, agentWatchCommentCmd)
 }
 

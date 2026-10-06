@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -86,13 +87,22 @@ func parse(line string) Lesson {
 	return l
 }
 
+// A review comment often opens with a hidden marker or a "here is what I found:" line.
 func firstLine(s string) string {
-	s = strings.TrimSpace(s)
-	if i := strings.IndexByte(s, '\n'); i >= 0 {
-		s = strings.TrimSpace(s[:i])
+	var kept []string
+	for _, line := range strings.Split(htmlComment.ReplaceAllString(s, ""), "\n") {
+		if line = strings.TrimSpace(line); line == "" {
+			continue
+		}
+		kept = append(kept, line)
+		if !strings.HasSuffix(line, ":") || len(kept) == 2 {
+			break
+		}
 	}
-	return s
+	return strings.Join(kept, " ")
 }
+
+var htmlComment = regexp.MustCompile(`(?s)<!--.*?-->`)
 
 func safe(s string) string {
 	var b strings.Builder
