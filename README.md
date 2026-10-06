@@ -188,6 +188,13 @@ agent reads the whole workspace
 /plugin install corgi@corgi
 ```
 
+Two optional mods ride along - live pieces of the Claude Code screen, not skills:
+
+```
+/plugin install corgi-band@corgi     # band: sessions waiting on you + what this turn posted, /corgi board pane
+/plugin install corgi-guard@corgi    # stops the Bash shapes corgi runs lose turns to, adds the corgi fix
+```
+
 Slash-commands and plain English both work:
 
 ```

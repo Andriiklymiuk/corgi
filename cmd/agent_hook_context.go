@@ -218,18 +218,38 @@ func budgetLine(st sessions.State, configDir string, now time.Time) string {
 		if a.ConfigDir != configDir || a.Limits == nil {
 			continue
 		}
-		l := a.Limits
-		line := fmt.Sprintf("budget: 5h %d%%", l.FiveHour.Percent)
-		if !l.FiveHour.ResetsAt.IsZero() {
-			line += " (resets " + clock(l.FiveHour.ResetsAt) + ")"
+		l := *a.Limits
+		// A window that reset since the last read says nothing about now.
+		fiveOver := !l.FiveHour.ResetsAt.IsZero() && l.FiveHour.ResetsAt.Before(now)
+		weekOver := !l.SevenDay.ResetsAt.IsZero() && l.SevenDay.ResetsAt.Before(now)
+		if fiveOver && weekOver {
+			return ""
 		}
-		line += fmt.Sprintf(" · week %d%%", l.SevenDay.Percent)
-		if !l.SevenDay.ResetsAt.IsZero() {
-			line += " (resets " + weekday(l.SevenDay.ResetsAt) + ")"
+		var windows []string
+		if !fiveOver {
+			w := fmt.Sprintf("5h %d%%", l.FiveHour.Percent)
+			if !l.FiveHour.ResetsAt.IsZero() {
+				w += " (resets " + clock(l.FiveHour.ResetsAt) + ")"
+			}
+			windows = append(windows, w)
+		}
+		if !weekOver {
+			w := fmt.Sprintf("week %d%%", l.SevenDay.Percent)
+			if !l.SevenDay.ResetsAt.IsZero() {
+				w += " (resets " + weekday(l.SevenDay.ResetsAt) + ")"
+			}
+			windows = append(windows, w)
+		}
+		line := "budget: " + strings.Join(windows, " · ")
+		if fiveOver {
+			l.FiveHour.Percent = 0
+		}
+		if weekOver {
+			l.SevenDay.Percent = 0
 		}
 		if l.FiveHour.Percent >= 100 || l.SevenDay.Percent >= 100 {
 			line += " - limit reached, keep this turn short or `corgi agent carry`"
-		} else if a.Forecast != nil && a.Forecast.FiveHour != nil && !a.Forecast.FiveHour.Safe && !a.Forecast.FiveHour.ExhaustAt.IsZero() {
+		} else if !fiveOver && a.Forecast != nil && a.Forecast.FiveHour != nil && !a.Forecast.FiveHour.Safe && !a.Forecast.FiveHour.ExhaustAt.IsZero() {
 			line += " - at this pace the 5h window runs out at " + clock(a.Forecast.FiveHour.ExhaustAt)
 		} else if l.FiveHour.Percent >= 85 {
 			line += " - nearly out, prefer small turns"
