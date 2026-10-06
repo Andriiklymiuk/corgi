@@ -60,7 +60,8 @@ corgi agent watch [flags]
 * [corgi agent watch hooks](corgi_agent_watch_hooks)	 - Webhooks for instant events: the plan per workspace, and --install for GitHub and GitLab
 * [corgi agent watch ignore](corgi_agent_watch_ignore)	 - Take a ticket out of the inbox for good
 * [corgi agent watch move](corgi_agent_watch_move)	 - Move a ticket to another column
-* [corgi agent watch pr](corgi_agent_watch_pr)	 - Mark a pull request of yours ready for review, merge or close it; approve, ask for changes on, or comment on any
+* [corgi agent watch moved](corgi_agent_watch_moved)	 - Tickets that changed column, read with corgi's own tracker token
+* [corgi agent watch pr](corgi_agent_watch_pr)	 - Mark a pull request of yours ready for review, merge or close it; approve, ask for changes on, comment on, or read the threads of any
 * [corgi agent watch prune](corgi_agent_watch_prune)	 - Remove the worktrees of finished isolated runs
 * [corgi agent watch replay](corgi_agent_watch_replay)	 - The week unattended mode would have had
 * [corgi agent watch retry](corgi_agent_watch_retry)	 - Run the unattended fix for an inbox row again, now

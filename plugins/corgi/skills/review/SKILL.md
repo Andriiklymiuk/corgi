@@ -784,9 +784,13 @@ Run steps 1-5 **per PR in the set** - cluster threads by repo, one checkout per 
 (producer field + consumer read) → fix **producer first, consumer after** (`stories`
 P4 order) and cross-link the two replies. Then one combined report (6).
 
-1. **Read threads** (§5) - keep the **unresolved, human** ones; skip your own
-   `<!-- corgi-review -->` bots + resolved. Group by file; read each thread's full
-   back-and-forth (a later reply can change the ask).
+1. **Read threads** (§5, `corgi agent watch pr threads <url>...` for the whole set) -
+   keep the **unresolved, human** ones; skip your own `<!-- corgi-review -->` bots +
+   resolved. Group by file; read each thread's full back-and-forth (a later reply can
+   change the ask). **Someone else on it?** `git fetch` the PR head first: commits on
+   it newer than the comments, that this run did not make, mean another session is
+   answering the same threads - read what it pushed and do only what it left, never
+   redo it (a second set of the same fixes ends in a rejected push).
 2. **Judge - apply or push back.** `superpowers:receiving-code-review` if installed,
    else inline. **Never blind-apply.** Fix in the same shape as the surrounding
    code: no comment explaining the change, no new abstraction to hold it, and

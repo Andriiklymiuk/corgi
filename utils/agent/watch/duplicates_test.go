@@ -148,6 +148,23 @@ func TestARunLeavesSomethingForTheNextOne(t *testing.T) {
 		t.Fatal("it has to survive the daemon that wrote it")
 	}
 
+	done := Event{Key: "routine:api:digest:2", Workspace: "api", Ref: "routine/digest"}
+	log.StartFor(done, now.Add(-time.Hour))
+	log.Finish(done.Key, nil, "", "", now.Add(-50*time.Minute))
+	log.SetOutcome(done.Key, "nothing")
+	log.SetHandover(done.Key, "- 7 PRs merged, nothing red", now.Add(-50*time.Minute))
+	if got := log.LastHandover("api", "routine/digest"); got != "" {
+		t.Fatalf("a run that finished is a report, not notes for the next one: %q", got)
+	}
+	stuck := Event{Key: "jira:ABC-1:2", Workspace: "api", Ref: "ABC-1"}
+	log.StartFor(stuck, now.Add(-20*time.Minute))
+	log.Finish(stuck.Key, nil, "", "", now.Add(-10*time.Minute))
+	log.SetOutcome(stuck.Key, "blocked")
+	log.SetHandover(stuck.Key, "Needs the staging key.", now)
+	if got := log.LastHandover("api", "ABC-1"); got != "Needs the staging key." {
+		t.Fatalf("a blocked run hands over: %q", got)
+	}
+
 	if got := TailLines("start\n\nmiddle\n\n  last  \n\n", 2); got != "middle\nlast" {
 		t.Fatalf("tail = %q", got)
 	}

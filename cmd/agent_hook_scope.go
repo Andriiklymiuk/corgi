@@ -70,10 +70,16 @@ func runScopeHook(stdin io.Reader, stdout io.Writer) {
 		abs = filepath.Join(in.Cwd, abs)
 	}
 	rel, err := filepath.Rel(root, abs)
-	if err != nil || strings.HasPrefix(rel, "..") {
+	outside := err != nil || strings.HasPrefix(rel, "..")
+	if outside {
 		rel = abs
 	}
-	if repoRoot := sessions.RepoRoot(filepath.Dir(abs)); repoRoot != "" {
+	repoRoot := sessions.RepoRoot(filepath.Dir(abs))
+	if outside && repoRoot == "" {
+		// A scratch file, a PR body draft: no repo holds it, so it is not part of the change.
+		return
+	}
+	if repoRoot != "" {
 		if named := scope.InRepo(root, repoRoot, abs); named != "" {
 			rel = named
 		}

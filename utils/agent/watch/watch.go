@@ -1534,11 +1534,23 @@ func (l *FixLog) LastHandover(workspace, ref string) string {
 	defer l.mu.Unlock()
 	for i := len(l.Started) - 1; i >= 0; i-- {
 		r := l.Started[i]
-		if r.Workspace == workspace && r.Ref == ref && r.Done() && r.Handover != "" {
+		if r.Workspace != workspace || r.Ref != ref || !r.Done() {
+			continue
+		}
+		if r.finishedCleanly() {
+			return ""
+		}
+		if r.Handover != "" {
 			return r.Handover
 		}
 	}
 	return ""
+}
+
+// finishedCleanly is a run that said how it ended and did not end stuck:
+// its tail is a finished report, not notes for whoever picks it up.
+func (r FixRecord) finishedCleanly() bool {
+	return r.Error == "" && r.Said != "" && r.Said != "blocked"
 }
 
 func TailLines(out string, n int) string {

@@ -112,3 +112,29 @@ func TestSlackPosterStopsAtTheGateAndBacksOffOn429(t *testing.T) {
 		t.Fatalf("failed sends must spend the budget; %d reached Slack, want %d", hits, sendgate.Default.PerFamily)
 	}
 }
+
+func TestARevokedUserTokenDoesNotSilenceTheBot(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") == "Bearer xoxp-dead" {
+			_, _ = w.Write([]byte(`{"ok":false,"error":"token_revoked"}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"ok":true,"channels":[{"id":"C0DE","name":"code-review"}]}`))
+	}))
+	defer srv.Close()
+	p := NewSlackPoster(Secrets{SlackUser: "xoxp-dead", SlackBot: "xoxb-app"})
+	p.User.URL, p.Bot.URL = srv.URL, srv.URL
+	p.User.Client, p.Bot.Client = srv.Client(), srv.Client()
+
+	for _, as := range []string{"bot", "", "me"} {
+		got, err := p.Resolve(context.Background(), "#code-review", as)
+		if err != nil || got != "C0DE" {
+			t.Fatalf("as %q: the other token finds the channel: %q %v", as, got, err)
+		}
+	}
+	dead := NewSlackPoster(Secrets{SlackUser: "xoxp-dead"})
+	dead.User.URL, dead.User.Client = srv.URL, srv.Client()
+	if got, err := dead.Resolve(context.Background(), "#code-review", "me"); err != nil || got != "#code-review" {
+		t.Fatalf("no list at all: the name goes to chat.postMessage, which says what is wrong: %q %v", got, err)
+	}
+}

@@ -58,6 +58,15 @@ func TestAnIsolatedRunIsToldWhereToWork(t *testing.T) {
 			t.Fatalf("note lacks %q: %s", want, note)
 		}
 	}
+	if !onExistingPull(watch.Event{Kind: watch.KindPRComment}) || onExistingPull(watch.Event{Kind: watch.KindIssueNew}) {
+		t.Fatal("a comment on a pull request is work on that pull request; a new ticket is not")
+	}
+	pull := PullIsolationNote([]string{"/w/api"})
+	for _, want := range []string{"/w/api", "push origin HEAD:<pr-branch>", "Never open a new pull request"} {
+		if !strings.Contains(pull, want) {
+			t.Fatalf("pull note lacks %q: %s", want, pull)
+		}
+	}
 	dir := t.TempDir()
 	l := watch.LoadFixLog(dir)
 	l.StartFor(watch.Event{Key: "k1", Ref: "ABC-7"}, time.Now())
