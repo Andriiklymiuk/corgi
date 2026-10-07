@@ -49,6 +49,10 @@ func (d *Daemon) pulse(ctx context.Context) {
 		req.Header.Set("User-Agent", "corgi-agent/"+d.Version)
 		st := PulseState{At: time.Now().UTC()}
 		resp, err := client.Do(req)
+		// Cut short by the daemon stopping: not a word about the service.
+		if err != nil && ctx.Err() != nil {
+			return
+		}
 		if err == nil {
 			resp.Body.Close()
 			if resp.StatusCode >= 400 {
