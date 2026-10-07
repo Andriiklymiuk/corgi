@@ -761,7 +761,7 @@ func sameWindows(a, b map[string]Window) bool {
 				return false
 			}
 		}
-		if !o.FocusedAt.Equal(w.FocusedAt) || o.ActiveShellPID != w.ActiveShellPID || o.PanelActive != w.PanelActive {
+		if !o.FocusedAt.Equal(w.FocusedAt) || o.ActiveShellPID != w.ActiveShellPID || o.PanelActive != w.PanelActive || o.ActiveClaudeTab != w.ActiveClaudeTab {
 			return false
 		}
 		if (o.ClaudeTabs == nil) != (w.ClaudeTabs == nil) || (o.ClaudeTabs != nil && *o.ClaudeTabs != *w.ClaudeTabs) {
@@ -1684,7 +1684,7 @@ func (r *Registry) frontSessionLocked(w Window) *Session {
 			return s
 		}
 	}
-	var tab, panel, latest *Session
+	var tab, panel, named, latest *Session
 	for _, s := range r.sortedLocked() {
 		if s.Host.WindowID != w.ID || s.Status == StatusGone {
 			continue
@@ -1692,14 +1692,21 @@ func (r *Registry) frontSessionLocked(w Window) *Session {
 		if w.ActiveShellPID != 0 && s.Host.ShellPID == w.ActiveShellPID {
 			tab = s
 		}
-		if s.Host.Kind == HostVSCodePanel && (panel == nil || s.LastActivity.After(panel.LastActivity)) {
-			panel = s
+		if s.Host.Kind == HostVSCodePanel {
+			if panel == nil || s.LastActivity.After(panel.LastActivity) {
+				panel = s
+			}
+			if w.ActiveClaudeTab != "" && titleMatchesTab(s.Title, w.ActiveClaudeTab) && (named == nil || s.LastActivity.After(named.LastActivity)) {
+				named = s
+			}
 		}
 		if latest == nil || s.LastActivity.After(latest.LastActivity) {
 			latest = s
 		}
 	}
 	switch {
+	case w.PanelActive && named != nil:
+		return named
 	case w.PanelActive && panel != nil:
 		return panel
 	case tab != nil:
@@ -1708,6 +1715,16 @@ func (r *Registry) frontSessionLocked(w Window) *Session {
 		return panel
 	}
 	return latest
+}
+
+// titleMatchesTab says a session's title is the chat tab the window shows:
+// the same words, or one a prefix of the other (the tab shortens long titles).
+func titleMatchesTab(title, tab string) bool {
+	title, tab = strings.TrimSpace(title), strings.TrimSpace(tab)
+	if title == "" || tab == "" {
+		return false
+	}
+	return strings.EqualFold(title, tab) || strings.HasPrefix(strings.ToLower(title), strings.ToLower(tab)) || strings.HasPrefix(strings.ToLower(tab), strings.ToLower(title))
 }
 
 func (r *Registry) displayLocked(s *Session) string {

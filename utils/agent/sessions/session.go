@@ -301,9 +301,11 @@ const StuckAfter = 12 * time.Minute
 type Account struct {
 	Profile   string          `json:"profile"`
 	ConfigDir string          `json:"configDir,omitempty"`
+	Agent     string          `json:"agent,omitempty"`
 	Limits    *usage.Limits   `json:"limits,omitempty"`
 	Forecast  *usage.Forecast `json:"forecast,omitempty"`
 	Sessions  int             `json:"sessions"`
+	Note      string          `json:"note,omitempty"`
 }
 
 type Terminal struct {
@@ -321,7 +323,9 @@ type Window struct {
 	ActiveShellPID int        `json:"activeShellPid,omitempty"`
 	PanelActive    bool       `json:"panelActive,omitempty"`
 	ClaudeTabs     *int       `json:"claudeTabs,omitempty"`
-	UpdatedAt      time.Time  `json:"updatedAt"`
+	// The label of the Claude Code chat tab in front, when one is.
+	ActiveClaudeTab string    `json:"activeClaudeTab,omitempty"`
+	UpdatedAt       time.Time `json:"updatedAt"`
 }
 
 func EditorFromChain(names []string) string {
