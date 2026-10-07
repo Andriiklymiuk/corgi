@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"andriiklymiuk/corgi/utils/agent/harness"
+	"andriiklymiuk/corgi/utils/agent/usage"
 	"andriiklymiuk/corgi/utils/agent/watch"
 )
 
@@ -155,5 +156,29 @@ func TestAWebhookNobodyListsIsDropped(t *testing.T) {
 	ticket := watch.Event{Source: "linear", Kind: watch.KindIssueComment, Ref: "ABC-1"}
 	if (WatchSpec{Project: "HUM", Sources: []watch.Source{namedSource{name: "linear"}}}).mayTake(ticket) {
 		t.Fatal("a ticket of another project stays out")
+	}
+}
+
+func TestCodexAccountBesideTheClaudeOnes(t *testing.T) {
+	defer func(installed func(harness.Harness) bool, read func() (usage.CodexWindow, bool)) {
+		harnessInstalled, readCodexWindow = installed, read
+	}(harnessInstalled, readCodexWindow)
+	now := time.Date(2026, 10, 7, 12, 0, 0, 0, time.UTC)
+	harnessInstalled = func(h harness.Harness) bool { return false }
+	if _, ok := codexAccount(now); ok {
+		t.Fatal("codex not installed: no account")
+	}
+	harnessInstalled = func(h harness.Harness) bool { return true }
+	readCodexWindow = func() (usage.CodexWindow, bool) { return usage.CodexWindow{}, false }
+	a, ok := codexAccount(now)
+	if !ok || a.Profile != "codex" || a.Agent != "codex" || a.Limits != nil || a.Note == "" {
+		t.Fatalf("installed, never ran: a note, no bars: %+v", a)
+	}
+	readCodexWindow = func() (usage.CodexWindow, bool) {
+		return usage.CodexWindow{Percent: 61, ResetsAt: now.Add(2 * time.Hour), At: now}, true
+	}
+	a, _ = codexAccount(now)
+	if a.Limits == nil || a.Limits.FiveHour.Percent != 61 || a.Note != "" {
+		t.Fatalf("its window as the bar: %+v", a)
 	}
 }

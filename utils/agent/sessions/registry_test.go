@@ -1104,3 +1104,35 @@ func TestTmuxPaneBindsATmuxHost(t *testing.T) {
 		t.Fatalf("focus carries the pane: %+v %v", target, err)
 	}
 }
+
+func TestFrontSessionIsTheNamedChatTab(t *testing.T) {
+	r := newTestRegistry(t)
+	first := ev("Stop", "first", 0)
+	first.ClaudePID, first.Ancestors, first.Title = 201, []int{201, 7}, "ABC-12 form builder"
+	r.Apply(first)
+	second := ev("Stop", "second", time.Second)
+	second.ClaudePID, second.Ancestors, second.Title = 202, []int{202, 7}, "Group chat technical design"
+	r.Apply(second)
+	w := Window{ID: "w1", App: "Visual Studio Code", ExtHostPID: 7, Folders: []string{"/f"}, FocusedAt: t0.Add(time.Hour), PanelActive: true, UpdatedAt: t0}
+	r.SetWindows([]Window{w})
+	if st := r.Snapshot(t0); st.FrontSession != "second" {
+		t.Fatalf("no tab named: the busiest panel is in front: %+v", st)
+	}
+	w.ActiveClaudeTab = "ABC-12 form builder"
+	if !r.SetWindows([]Window{w}) {
+		t.Fatal("the tab in front changing is a window change")
+	}
+	if st := r.Snapshot(t0); st.FrontSession != "first" {
+		t.Fatalf("the chat tab in front names its session: %+v", st)
+	}
+	w.ActiveClaudeTab = "Group chat technical…"
+	r.SetWindows([]Window{w})
+	if st := r.Snapshot(t0); st.FrontSession != "second" {
+		t.Fatalf("a shortened tab label still names its session: %+v", st)
+	}
+	w.ActiveClaudeTab = "Claude Code"
+	r.SetWindows([]Window{w})
+	if st := r.Snapshot(t0); st.FrontSession != "second" {
+		t.Fatalf("a label naming no session falls back to the busiest panel: %+v", st)
+	}
+}

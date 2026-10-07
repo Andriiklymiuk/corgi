@@ -333,16 +333,45 @@ func (d *Daemon) sampleAccounts(now time.Time) {
 				a.Profile = p
 			}
 		}
+		a.Agent = harness.Claude
 		if l, ok := usage.ReadLimits(dir); ok {
 			a.Limits = &l
 			if _, err := usage.RecordSample(d.Dir, a.Profile, l, now); err != nil {
 				utils.Infof("agent: usage sample %s: %v\n", a.Profile, err)
 			}
 			a.Forecast = usage.ForecastFrom(usage.LoadSamples(usage.SamplesPath(d.Dir, a.Profile), now.Add(-24*time.Hour)), l, now)
+		} else {
+			a.Note = "usage not read yet - open Claude Code with this account once"
 		}
 		accounts = append(accounts, a)
 	}
+	if a, ok := codexAccount(now); ok {
+		accounts = append(accounts, a)
+	}
 	d.Sessions.SetAccounts(accounts)
+}
+
+// readCodexWindow is a seam for tests: codex's own rate-limit reading.
+var readCodexWindow = func() (usage.CodexWindow, bool) { return usage.ReadCodexWindow(usage.CodexHome()) }
+
+// codexAccount is codex on the board beside the Claude accounts: codex logs
+// one window, the fullest of its five-hour and weekly ones, so that is what
+// shows. Absent when codex is not installed or never ran here.
+func codexAccount(now time.Time) (sessions.Account, bool) {
+	if !harnessInstalled(harness.For(harness.Codex, "")) {
+		return sessions.Account{}, false
+	}
+	a := sessions.Account{Profile: harness.Codex, Agent: harness.Codex}
+	w, ok := readCodexWindow()
+	if !ok {
+		a.Note = "usage not read yet - run codex once"
+		return a, true
+	}
+	a.Limits = &usage.Limits{FetchedAt: w.At, FiveHour: usage.Window{Percent: w.Percent, ResetsAt: w.ResetsAt}}
+	if w.Spent(now) {
+		a.Note = "window spent"
+	}
+	return a, true
 }
 
 func (d *Daemon) sendToSession(ctx context.Context, ref, text string, enter bool) {
@@ -578,11 +607,21 @@ func (d *Daemon) dispatchFocus(ctx context.Context, t sessions.FocusTarget) {
 	if raise == nil {
 		raise = raiseWindow
 	}
-	err := raise(ctx, t)
-	if err == nil && t.WindowID != "" && t.Connected {
+	// A connected editor window reveals the tab itself, so its request goes
+	// first: raising the app can take seconds (and time out) and the click
+	// must not wait on it. The raise still brings the app forward.
+	revealed := false
+	var err error
+	if t.WindowID != "" && t.Connected {
 		err = sessions.WriteReveal(d.Dir, sessions.Reveal{
 			WindowID: t.WindowID, SessionID: t.SessionID, ShellPID: t.ShellPID, Panel: t.Panel, Title: t.Title,
 		})
+		revealed = err == nil
+	}
+	if raiseErr := raise(ctx, t); raiseErr != nil && !revealed {
+		err = raiseErr
+	} else if raiseErr != nil {
+		utils.Infof("agent: focus %s: window revealed, raise: %v\n", t.SessionID, raiseErr)
 	}
 	if err != nil {
 		utils.Infof("agent: focus %s: %v\n", t.SessionID, err)
