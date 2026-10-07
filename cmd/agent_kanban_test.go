@@ -177,3 +177,40 @@ func TestAMergedPullRequestSettlesTheCardWhateverHeldIt(t *testing.T) {
 		t.Fatalf("an open pull request stays where it was: %+v", c)
 	}
 }
+
+func TestADeferredRunAndASlackPostSettleWithTheirPullRequests(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Now()
+	fixes := watch.LoadFixLog(dir)
+	deferred := watch.Event{Key: "k-def", Ref: "a/b!9", Workspace: "api", Kind: watch.KindReviewRequested, URL: "https://gitlab.com/a/b/-/merge_requests/9", At: now}
+	fixes.Defer(deferred)
+	post := watch.Event{Key: "slack:1", Ref: "slack-1", Workspace: "api", Kind: watch.KindReviewRequested, URL: "https://x.slack.com/p1", At: now,
+		Links: []string{"https://github.com/a/c/pull/1", "https://github.com/a/c/pull/2"}}
+	pulls := watch.LoadPullLog(dir)
+	_ = pulls.Set("a/b!9", watch.PullStatus{State: "merged", At: now.Add(-time.Hour)})
+	_ = pulls.Set("a/c#1", watch.PullStatus{State: "merged", At: now.Add(-time.Hour)})
+	_ = pulls.Set("a/c#2", watch.PullStatus{State: "open", At: now})
+	cards := buildKanban(kanbanInputs{events: []watch.Event{post}, moved: watch.LoadStateLog(dir), fixes: fixes, pulls: pulls, now: now})
+	got := map[string]KanbanCard{}
+	for _, c := range cards {
+		got[c.Ref] = c
+	}
+	if c := got["a/b!9"]; c.Column != ColDone || c.Why != "merged" {
+		t.Fatalf("a deferred run on a merged request is done: %+v", c)
+	}
+	if c := got["slack-1"]; c.Column != ColInbox || c.Why != "1 of 2 pull requests merged" {
+		t.Fatalf("a post with one of two merged says so: %+v", c)
+	}
+	_ = pulls.Set("a/c#2", watch.PullStatus{State: "merged", At: now.Add(-time.Hour)})
+	cards = buildKanban(kanbanInputs{events: []watch.Event{post}, moved: watch.LoadStateLog(dir), fixes: fixes, pulls: pulls, now: now})
+	if c := cards[0]; c.Ref == "slack-1" && c.Column != ColDone {
+		t.Fatalf("every named request merged: done: %+v", c)
+	}
+	_ = pulls.Set("a/c#1", watch.PullStatus{State: "merged", At: now.Add(-3 * 24 * time.Hour)})
+	_ = pulls.Set("a/c#2", watch.PullStatus{State: "merged", At: now.Add(-2 * 24 * time.Hour)})
+	for _, c := range buildKanban(kanbanInputs{events: []watch.Event{post}, moved: watch.LoadStateLog(dir), fixes: fixes, pulls: pulls, now: now}) {
+		if c.Ref == "slack-1" {
+			t.Fatalf("all merged over a day ago: off the board: %+v", c)
+		}
+	}
+}

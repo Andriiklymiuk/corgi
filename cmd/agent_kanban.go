@@ -102,12 +102,14 @@ type kanbanBoard struct {
 	in    kanbanInputs
 	byRef map[string]*KanbanCard
 	order []string
+	// The pull requests a post names (a Slack review request lists several).
+	links map[string][]string
 }
 
 const kanbanSessionWord = "session "
 
 func buildKanban(in kanbanInputs) []KanbanCard {
-	b := &kanbanBoard{in: in, byRef: map[string]*KanbanCard{}}
+	b := &kanbanBoard{in: in, byRef: map[string]*KanbanCard{}, links: map[string][]string{}}
 	b.placeEvents()
 	b.placeRuns()
 	b.placeSessions()
@@ -149,6 +151,9 @@ func (b *kanbanBoard) placeEvents() {
 		c := b.card(e.Workspace, e.Ref)
 		if c.Key == "" {
 			c.Key, c.Title, c.URL, c.Kind, c.State, c.UpdatedAt = e.Key, firstLineOf(e.Title), e.URL, string(e.Kind), current, e.At
+		}
+		if len(e.Links) > 0 {
+			b.links[e.Workspace+"/"+e.Ref] = e.Links
 		}
 		if e.Kind == watch.KindTask {
 			b.placeTask(c, e, current)
@@ -204,6 +209,9 @@ func (b *kanbanBoard) placeRuns() {
 			continue
 		}
 		c := b.card(e.Workspace, e.Ref)
+		if c.Key == "" {
+			c.Key, c.Title, c.URL, c.Kind, c.UpdatedAt = e.Key, firstLineOf(e.Title), e.URL, string(e.Kind), e.At
+		}
 		if c.Column == ColInbox {
 			c.Column, c.Why = ColReady, "deferred: waits for budget or a manual run"
 		}
@@ -376,9 +384,10 @@ func (b *kanbanBoard) placePulls() {
 	if b.in.pulls == nil {
 		return
 	}
-	for _, c := range b.byRef {
+	for id, c := range b.byRef {
 		st, ok := b.in.pulls.Get(cardPullLink(c))
 		if !ok {
+			b.placeLinkedPulls(c, b.links[id])
 			continue
 		}
 		p := st
@@ -396,6 +405,47 @@ func (b *kanbanBoard) placePulls() {
 			c.Column, c.Why, c.Blocked, c.BlockedBy = ColDone, over, "", ""
 		}
 	}
+}
+
+// A post naming several pull requests (a Slack review request) is over
+// when every one it names is merged or closed; until then it says how many.
+func (b *kanbanBoard) placeLinkedPulls(c *KanbanCard, links []string) {
+	if len(links) == 0 || c.Column == ColDone {
+		return
+	}
+	known, over := 0, 0
+	var latest time.Time
+	for _, link := range links {
+		ref := watch.PullRef(link)
+		if ref == "" {
+			continue
+		}
+		st, ok := b.in.pulls.Get(ref)
+		if !ok {
+			continue
+		}
+		known++
+		if pullOver(st.State) != "" {
+			over++
+			if st.At.After(latest) {
+				latest = st.At
+			}
+		}
+	}
+	if known == 0 {
+		return
+	}
+	if over < known {
+		if cardOpen(c) {
+			c.Why = fmt.Sprintf("%d of %d pull requests merged", over, known)
+		}
+		return
+	}
+	if !latest.IsZero() && b.in.now.Sub(latest) > 24*time.Hour {
+		b.drop(c.Workspace, c.Ref)
+		return
+	}
+	c.Column, c.Why, c.Blocked, c.BlockedBy = ColDone, "every pull request it names is merged", "", ""
 }
 
 func pullOver(state string) string {
