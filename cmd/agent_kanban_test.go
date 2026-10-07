@@ -142,3 +142,38 @@ func TestOneCardPerRefWhenAnOlderEventOnItSettled(t *testing.T) {
 		t.Fatalf("IMP-1 is on the board %d times, want once", n)
 	}
 }
+
+func TestAMergedPullRequestSettlesTheCardWhateverHeldIt(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Now()
+	fixes := watch.LoadFixLog(dir)
+	events := []watch.Event{
+		{Key: "k-fresh", Ref: "a/b#1", Workspace: "api", Kind: watch.KindPRComment, URL: "https://github.com/a/b/pull/1", At: now},
+		{Key: "k-old", Ref: "a/b#2", Workspace: "api", Kind: watch.KindPRReview, URL: "https://github.com/a/b/pull/2", At: now.Add(-3 * 24 * time.Hour)},
+		{Key: "k-wall", Ref: "a/b#3", Workspace: "api", Kind: watch.KindPRComment, URL: "https://github.com/a/b/pull/3", At: now},
+		{Key: "k-open", Ref: "a/b#4", Workspace: "api", Kind: watch.KindPRComment, URL: "https://github.com/a/b/pull/4", At: now},
+	}
+	fixes.Block("api", "a/b#3", "Andrii is on it in his own session", watch.BlockedByPerson, now)
+	pulls := watch.LoadPullLog(dir)
+	_ = pulls.Set("a/b#1", watch.PullStatus{State: "merged", At: now.Add(-time.Hour)})
+	_ = pulls.Set("a/b#2", watch.PullStatus{State: "merged", At: now.Add(-2 * 24 * time.Hour)})
+	_ = pulls.Set("a/b#3", watch.PullStatus{State: "merged", At: now.Add(-time.Hour)})
+	_ = pulls.Set("a/b#4", watch.PullStatus{State: "open", At: now})
+	cards := buildKanban(kanbanInputs{events: events, moved: watch.LoadStateLog(dir), fixes: fixes, pulls: pulls, now: now})
+	got := map[string]KanbanCard{}
+	for _, c := range cards {
+		got[c.Ref] = c
+	}
+	if c := got["a/b#1"]; c.Column != ColDone || c.Why != "merged" {
+		t.Fatalf("merged an hour ago: Done, merged: %+v", c)
+	}
+	if _, ok := got["a/b#2"]; ok {
+		t.Fatal("merged two days ago: off the board")
+	}
+	if c := got["a/b#3"]; c.Column != ColDone || c.Blocked != "" {
+		t.Fatalf("a wall falls with the merge: %+v", c)
+	}
+	if c := got["a/b#4"]; c.Column != ColInbox {
+		t.Fatalf("an open pull request stays where it was: %+v", c)
+	}
+}

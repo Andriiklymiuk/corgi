@@ -181,4 +181,11 @@ func TestCodexAccountBesideTheClaudeOnes(t *testing.T) {
 	if a.Limits == nil || a.Limits.FiveHour.Percent != 61 || a.Note != "" {
 		t.Fatalf("its window as the bar: %+v", a)
 	}
+	readCodexWindow = func() (usage.CodexWindow, bool) {
+		return usage.CodexWindow{Percent: 53, ResetsAt: now.Add(-9 * 24 * time.Hour), At: now.Add(-14 * 24 * time.Hour)}, true
+	}
+	a, _ = codexAccount(now)
+	if a.Limits != nil || a.Note != "window reset since codex last ran (read 14 days ago)" {
+		t.Fatalf("a reading whose window reset is a note, not a bar: %+v", a)
+	}
 }

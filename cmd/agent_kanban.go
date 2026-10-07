@@ -386,7 +386,26 @@ func (b *kanbanBoard) placePulls() {
 		if c.Column == ColReview && st.Line() != "" {
 			c.Why = st.Line()
 		}
+		// A merged or closed pull request settles the card whatever held it:
+		// the inbox, a deferred run, a wall. A day on Done, then gone.
+		if over := pullOver(st.State); over != "" && c.Column != ColDone {
+			if !st.At.IsZero() && b.in.now.Sub(st.At) > 24*time.Hour {
+				b.drop(c.Workspace, c.Ref)
+				continue
+			}
+			c.Column, c.Why, c.Blocked, c.BlockedBy = ColDone, over, "", ""
+		}
 	}
+}
+
+func pullOver(state string) string {
+	switch strings.ToLower(strings.TrimSpace(state)) {
+	case "merged":
+		return "merged"
+	case "closed", "declined":
+		return "closed without merging"
+	}
+	return ""
 }
 
 func (b *kanbanBoard) cards() []KanbanCard {

@@ -164,6 +164,20 @@ func (d *Daemon) configDirs() []string {
 			add(dir)
 		}
 	}
+	// A workspace on its own account is an account to show whether or not
+	// one of its sessions is alive right now.
+	for _, spec := range d.Watches {
+		if spec.ConfigDir != "" {
+			add(spec.ConfigDir)
+		}
+	}
+	d.mu.Lock()
+	for _, cfg := range d.autostart {
+		if cfg.ConfigDir != "" {
+			add(cfg.ConfigDir)
+		}
+	}
+	d.mu.Unlock()
 	if d.Sessions != nil {
 		for _, s := range d.Sessions.Sessions() {
 			add(s.ConfigDir)
@@ -367,11 +381,30 @@ func codexAccount(now time.Time) (sessions.Account, bool) {
 		a.Note = "usage not read yet - run codex once"
 		return a, true
 	}
+	// A reading whose window has since reset says nothing about now.
+	if !w.ResetsAt.IsZero() && !now.Before(w.ResetsAt) {
+		a.Note = "window reset since codex last ran" + lastRead(w.At, now)
+		return a, true
+	}
 	a.Limits = &usage.Limits{FetchedAt: w.At, FiveHour: usage.Window{Percent: w.Percent, ResetsAt: w.ResetsAt}}
 	if w.Spent(now) {
 		a.Note = "window spent"
 	}
 	return a, true
+}
+
+func lastRead(at, now time.Time) string {
+	if at.IsZero() {
+		return ""
+	}
+	days := int(now.Sub(at).Hours() / 24)
+	switch {
+	case days <= 0:
+		return " (read today)"
+	case days == 1:
+		return " (read yesterday)"
+	}
+	return fmt.Sprintf(" (read %d days ago)", days)
 }
 
 func (d *Daemon) sendToSession(ctx context.Context, ref, text string, enter bool) {
