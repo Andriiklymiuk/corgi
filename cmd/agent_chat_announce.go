@@ -31,7 +31,9 @@ var agentChatAnnounceCmd = &cobra.Command{
 	Use:   "announce <title> <pr url>...",
 	Short: "Post the pull requests of a piece of work in the workspace's review channel",
 	Long: `The post a person writes by hand when work is up for review: the title, then
-one line per pull request named by its repository. It goes to the first
+the link alone for one pull request, or one line per pull request named by its
+repository for several. Pass the bare URLs; a "repo: " typed in front of one is
+dropped. It goes to the first
 --review-channel of the workspace (or postTo), in the voice replyAs names.
 No channel configured: nothing is posted, and it says so - a workspace
 without a review channel is not an error.
