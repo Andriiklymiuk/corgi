@@ -5,7 +5,7 @@ description: "Use when the user wants a code review of EXISTING pull/merge reque
 
 # Corgi review
 
-**Done when:** someone else's PR/MR → the review is posted (summary + inline) and its link is in your reply; your own → the valid comments are applied, tests pass, the branch is pushed, and every thread has a reply (resolved where the forge allows).
+**Done when:** someone else's PR/MR → the review is posted (summary + inline), approved when nothing blocks it (Approve rule in Guardrails), and its link is in your reply; your own → the valid comments are applied, tests pass, the branch is pushed, and every thread has a reply (resolved where the forge allows).
 
 Review one or more existing remote PR/MR(s) on GitHub or GitLab against each repo's own standards (CLAUDE.md/AGENTS.md, lint and format config) plus the intent from any linked Linear or Jira tracker ticket, then post a human-readable summary comment and inline line-level suggestions back onto each PR/MR. Someone else's PR is posted to without asking; your own is fixed and pushed instead. Services, dirs, and forges resolve from `corgi-compose.yml`.
 
@@ -607,7 +607,8 @@ never waiting on an answer.
 
 Exact commands live in `../_shared/forge-commands.md` §2-4; use the forge from P0.
 
-**GitHub** - one review call (`event=COMMENT`): `body` = the PR's human summary
+**GitHub** - one review call (`event=APPROVE` when the Approve rule passes, else
+`event=COMMENT`): `body` = the PR's human summary
 (tagged `<!-- corgi-review -->`), `comments[]` = all inline findings, each
 suggestion a ` ```suggestion ` block for one-click apply. Summary + all inline
 in **one** call.
@@ -621,6 +622,9 @@ missing or erroring, post via the raw `discussions` + `position` API in §3b.) O
 §3b path the position **must** be one `--input` JSON object - never `-F 'position[…]'`
 bracket fields, which post unanchored with a misleading 201 - then **verify each
 inline note anchored** (`position != null`) and delete+repost any that didn't (§3b/§4).
+Approval is its own call after the notes: `glab mr approve <n> -R <owner>/<repo>`.
+Verify it took: `glab api projects/<id>/merge_requests/<n>/approvals` lists you in
+`approved_by`.
 
 **Human voice.** The posted summary and every inline comment read as a human reviewer:
 plain, kind, first-person where natural, matching the repo's comment density. Attribution
@@ -666,13 +670,13 @@ LLM-generated title:**
 
 1. **Clean PR (no findings)** - post one short "Reviewed - no blocking issues"
    summary (+ a line of what was checked / any praise). No inline. Don't go
-   silent; don't spam. If the user authorized approving (Mode A guardrail
-   exception), the approval **is** the clean signal: empty or one-line body,
+   silent; don't spam. When the Approve rule passes (the usual case here), the
+   approval **is** the clean signal: empty or one-line body,
    no "what I verified" essay - a wall of green text reads as noise, and it's
    the correction you'll be asked to unwind via the review-edit API.
 2. **Nits only, no blockers** - inline the nits; summary headline "No blockers,
-   N nits" so it doesn't read as alarming. If approving was authorized, the
-   approval goes **with** them - a nit never holds it back.
+   N nits" so it doesn't read as alarming. The approval goes **with** them - a
+   nit never holds it back.
 3. **Head moved during the gate** - re-fetch metadata (head SHA) right before
    posting. If it changed: warn, re-fetch the new diff, and **relocate each
    finding by its anchored source-line text + surrounding hunk context** → take
@@ -742,7 +746,7 @@ List anything that couldn't be inlined explicitly (file, line, reason) - no
 silent drops. Then remove the evidence worktree(s):
 `git -C <dir> worktree remove /tmp/corgi-review/<repo>-<n>`.
 
-**No ceremony footer.** Don't append "review only - does not approve/merge" to every
+**No ceremony footer.** Don't append "review only - does not merge" to every
 report; it reads like a bot covering itself, and the user knows what a review is. The
 *behaviour* stays hard-enforced (Guardrails) - just don't narrate it each time. Say
 it in plain words **only** if it's actually in question (e.g. someone asks "so did
@@ -752,12 +756,12 @@ Example:
 
 ```
 [ABC-200] Add address field to user
-api: https://github.com/<org>/api/pull/42 - no blockers, 2 nits
+api: https://github.com/<org>/api/pull/42 - no blockers, 2 nits, approved
 web: https://github.com/<org>/web/pull/37 - 1 blocking: missing null-check on user.address
 risk 7/10 high · auto-approve: no - cross-service contract
 
 [api] Fix pagination cursor on empty page
-https://github.com/<org>/api/pull/45 - no blockers
+https://github.com/<org>/api/pull/45 - no blockers, approved
 risk 2/10 trivial · auto-approve: yes
 
 Contract
@@ -851,14 +855,20 @@ the ones that do not earn their place, not to plant more - if a line needs
 explaining, the fix in the suggestion is a clearer name or a smaller function.
 
 **Mode A (give review):**
-- **Comments only.** Never set a formal approve / request-changes state, never merge,
-  never push, never modify the branch. **Sole exception - the user explicitly says to
-  approve** ("approve if good", "approve these", or the unattended prompt from a
-  workspace with `--approve` on). Then: clean PR → plain approval,
-  empty or one-line body; PR with findings → post the findings (summary + inline),
-  approving alongside only when none are blocking **and** the risk card's last line is
-  `auto-approve: yes`. A `no` there means findings only, never an approval, whatever the
-  prompt said.
+- **Approve rule - a review the user asked for ends in an approval when it is good.**
+  Someone else's PR, the user at the desk asked for the review → approve when **all**
+  hold: no `blocking` finding filed, not a draft, CI not red, no merge conflict. Clean
+  PR → plain approval, empty or one-line body; nits → post them and approve alongside.
+  One fails → findings only, and the report says which one held it back. The risk
+  card's `auto-approve` line does not gate this approval - it says whether a human may
+  skip reading, and the user did read it through you; a real merge-order or contract
+  problem is a `blocking` finding on its own. Never request changes (a blocker is the
+  comment, not a red stamp), never merge, never push, never modify the branch.
+- **When not to approve.** The user said "don't approve", "comments only", "no
+  approval", or "review only". An **unattended** run (the prompt carries the
+  `corgi watch` trail) follows its prompt: "approve it on my behalf only when … the
+  risk card says auto-approve: yes" keeps that stricter gate; "do not approve it on my
+  behalf" means no approval, whatever the review found.
 - **Only a `blocking` finding you actually filed holds back the approval.** Absent
   author evidence is not a finding and not a blocker: no screenshot, no before/after,
   no test asserting a copy or layout change, no detail in the description - none of

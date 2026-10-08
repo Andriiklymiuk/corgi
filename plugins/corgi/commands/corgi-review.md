@@ -14,7 +14,9 @@ modes - route from the verb:
   assert (P3),
   cross-service contract pass (P3.5), preview then act by authorship (P4 - posts on other people's PRs without asking; `--yes` skips printing it), post
   summary + inline suggestions (P5), grouped report (P6).
-  Guardrails: **comments only, never merge/approve/push, read-only on the repo**,
+  Approves when nothing blocks (no blocking finding, not a draft, CI not red, no
+  conflict) unless the user said "don't approve" or an unattended prompt says not to.
+  Guardrails: **never merge, push or request changes, read-only on the repo**,
   never echo secret values.
 - **Address review** (*fix / address / answer* the comments on **your** PR) →
   `$ARGUMENTS` = a PR/MR link, a bare number, or a **tracker story-id**. Follow the
