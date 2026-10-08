@@ -175,11 +175,13 @@ var agentWatchCommentCmd = &cobra.Command{
 
   corgi agent watch comment ABC-123 "Fixed on staging, try build 412"
   corgi agent watch comment ABC-123 "Here is what I see on 412" --image grid.jpg --image hero.jpg
+  corgi agent watch comment ABC-123 "Back to 3.1.8 in [!9168](https://gitlab.com/g/p/-/merge_requests/9168)"
 
 --image uploads each picture to the ticket and shows it inside the comment.
 On Jira this is the only way a picture shows: a comment that just names a
 file, or markdown like ![](file.jpg), leaves the reader with a file name.
-The text is plain text.`,
+The text is plain text. A URL or a markdown link [label](url) is clickable;
+a bare !9168 or #42 is not, the tracker does not know which repo it means.`,
 	Args: cobra.ExactArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 		images, _ := cmd.Flags().GetStringArray("image")

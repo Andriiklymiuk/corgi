@@ -243,3 +243,30 @@ func TestAGitLabLinkIsOnlyAnAPIAddressOnTheConfiguredHost(t *testing.T) {
 		t.Fatal("nor gitlab.com when the workspace is self-hosted")
 	}
 }
+
+func TestJiraCommentLinksAreClickable(t *testing.T) {
+	line := "Back in [!9168](https://gitlab.com/g/p/-/merge_requests/9168), see https://x.io/a(b). Done."
+	got := splitLinks(line)
+	want := []linkPiece{
+		{text: "Back in "},
+		{text: "!9168", href: "https://gitlab.com/g/p/-/merge_requests/9168"},
+		{text: ", see "},
+		{text: "https://x.io/a(b)", href: "https://x.io/a(b)"},
+		{text: ". Done."},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("pieces: %+v", got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("piece %d: got %+v want %+v", i, got[i], want[i])
+		}
+	}
+	if tail := splitLinks("in (https://x.io/mr/1)."); tail[1].href != "https://x.io/mr/1" || tail[2].text != ")." {
+		t.Fatalf("closing punctuation stays outside the link: %+v", tail)
+	}
+	raw, _ := json.Marshal(adf(line))
+	if !strings.Contains(string(raw), `"marks":[{"attrs":{"href":"https://gitlab.com/g/p/-/merge_requests/9168"},"type":"link"}]`) {
+		t.Fatalf("a link carries a link mark: %s", raw)
+	}
+}

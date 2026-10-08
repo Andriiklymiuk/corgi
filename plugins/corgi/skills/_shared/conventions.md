@@ -25,6 +25,13 @@ A reply on a ticket or PR goes to a teammate, so it reads like one wrote it in c
   spans; a spec or workpad note is the exception, not a reply to a person.
 - **Match the thread.** Their language, roughly their length; one line in, about one
   line out.
+- **A PR, MR or ticket you name is a link.** `!9154`, `#42` and `ABC-12` only link
+  inside their own repo or tracker; on a ticket, in Slack or in another repo they are
+  dead text. Write a markdown link with the short name as its label:
+  `[!9154](https://gitlab.com/<group>/<repo>/-/merge_requests/9154)`. A full URL works
+  too. No spaces before punctuation to keep a URL clean (`… /9168 :`) - the comma or
+  period right after a URL stays out of the link. `corgi agent watch comment` makes
+  both clickable on Jira and Linear; the Atlassian MCP comment takes markdown.
 - **A picture you mention is in the comment.** Never "see the screenshot I attached:
   `grid.jpg`" - the reader sees a file name. Jira and Linear:
   `corgi agent watch comment <KEY> "<text>" --image <file>` (repeat `--image`) uploads
@@ -44,6 +51,15 @@ After:
 > Looks right on 412. Your screenshots look like an older build - can you update and
 > check again?
 > (both pictures inline)
+
+A dead reference, then a live one:
+
+> Right, rack was the one !9154 missed. It's back to 3.1.8 in
+> https://gitlab.com/acme/core/-/merge_requests/9168 , nothing else moves.
+
+> Right, rack was the one [!9154](https://gitlab.com/acme/core/-/merge_requests/9154)
+> missed. It's back to 3.1.8 in [!9168](https://gitlab.com/acme/core/-/merge_requests/9168),
+> nothing else moves.
 
 ## Finish what you start
 
