@@ -1007,7 +1007,8 @@ CLI or the phone's repo sheet, no restart:
 - `--approve`: an unattended review of a pull request someone asked
   the user to review may end in an approval - only when nothing blocks and
   the risk card says `auto-approve: yes`; otherwise findings, no stamp.
-  Off by default: an approval carries the user's name. `--auto-for all`
+  Off by default: an approval carries the user's name. A review the user
+  starts at the desk approves a good PR without this flag. `--auto-for all`
   (or `requests`) is what makes review requests run at all; without it
   they only notify, and with `--silent` not even that.
 - `--bots`: comments from bot accounts count. Off, a bot is not a
