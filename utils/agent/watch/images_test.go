@@ -139,3 +139,10 @@ func TestLinearCommentEmbedsTheUploadedAsset(t *testing.T) {
 		t.Fatalf("the comment must embed the asset: %s", comment)
 	}
 }
+
+func TestJiraWikiTurnsMarkdownLinksIntoWikiLinks(t *testing.T) {
+	got := jiraWikiWithImages("fixed in [!9168](https://gitlab.com/g/p/-/merge_requests/9168) [x]", nil)
+	if got != `fixed in [\!9168|https://gitlab.com/g/p/-/merge_requests/9168] \[x\]` {
+		t.Fatalf("markdown link becomes a wiki link: %q", got)
+	}
+}

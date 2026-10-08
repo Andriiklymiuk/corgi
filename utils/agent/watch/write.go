@@ -138,12 +138,62 @@ func adf(text string) map[string]any {
 	var paragraphs []any
 	for _, line := range strings.Split(strings.TrimRight(text, "\n"), "\n") {
 		para := map[string]any{"type": "paragraph"}
-		if line != "" {
-			para["content"] = []any{map[string]any{"type": "text", "text": line}}
+		var nodes []any
+		for _, p := range splitLinks(line) {
+			node := map[string]any{"type": "text", "text": p.text}
+			if p.href != "" {
+				node["marks"] = []any{map[string]any{"type": "link", "attrs": map[string]string{"href": p.href}}}
+			}
+			nodes = append(nodes, node)
+		}
+		if len(nodes) > 0 {
+			para["content"] = nodes
 		}
 		paragraphs = append(paragraphs, para)
 	}
 	return map[string]any{"type": "doc", "version": 1, "content": paragraphs}
+}
+
+var linkPattern = regexp.MustCompile(`\[([^\[\]\n]+)\]\((https?://[^\s()]+)\)|https?://[^\s<>"]+`)
+
+type linkPiece struct{ text, href string }
+
+func splitLinks(line string) []linkPiece {
+	var pieces []linkPiece
+	rest := 0
+	for _, m := range linkPattern.FindAllStringSubmatchIndex(line, -1) {
+		start, end := m[0], m[1]
+		text, href := "", ""
+		if m[2] >= 0 {
+			text, href = line[m[2]:m[3]], line[m[4]:m[5]]
+		} else {
+			href = trimURLTail(line[start:end])
+			end = start + len(href)
+			text = href
+		}
+		if start > rest {
+			pieces = append(pieces, linkPiece{text: line[rest:start]})
+		}
+		pieces = append(pieces, linkPiece{text: text, href: href})
+		rest = end
+	}
+	if rest < len(line) {
+		pieces = append(pieces, linkPiece{text: line[rest:]})
+	}
+	return pieces
+}
+
+func trimURLTail(link string) string {
+	for {
+		trimmed := strings.TrimRight(link, ".,;:!?'")
+		if strings.HasSuffix(trimmed, ")") && strings.Count(trimmed, "(") < strings.Count(trimmed, ")") {
+			trimmed = trimmed[:len(trimmed)-1]
+		}
+		if trimmed == link {
+			return link
+		}
+		link = trimmed
+	}
 }
 
 func (j *Jira) send(ctx context.Context, method, path string, body any) error {

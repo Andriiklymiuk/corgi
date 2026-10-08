@@ -652,7 +652,7 @@ corgi agent dashboard                                # open the dashboard on thi
 corgi agent watch enable --pickup "In Progress"      # picking a story up moves it on the board
 corgi agent watch board [--refresh]                  # the tracker columns corgi knows
 corgi agent watch move ABC-123 "Ready for staging"  # move, assign, comment: writes as you
-corgi agent watch comment ABC-123 "text" --image a.png  # pictures show inside the comment (Jira needs this)
+corgi agent watch comment ABC-123 "text" --image a.png  # pictures show inside the comment (Jira needs this); [!12](url) and URLs are links
 corgi agent today [--write]                          # today since midnight, the watch's own runs included
 corgi agent today --json                             # + waits{count, medianS} and days[14] from the daemon's own ledger - the phone's share card numbers
 corgi agent standup [--since 48h] [--write]          # a rolling window of the same

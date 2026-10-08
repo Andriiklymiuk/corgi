@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -127,13 +128,15 @@ func (j *Jira) attach(ctx context.Context, ref string, p picture) error {
 func jiraWikiWithImages(body string, names []string) string {
 	var lines []string
 	for _, line := range strings.Split(strings.TrimRight(body, "\n"), "\n") {
-		words := strings.Split(line, " ")
-		for i, word := range words {
-			if !strings.Contains(word, "://") {
-				words[i] = wikiEscaper.Replace(word)
-			}
+		var out strings.Builder
+		rest := 0
+		for _, m := range markdownLinkPattern.FindAllStringSubmatchIndex(line, -1) {
+			out.WriteString(wikiEscapeWords(line[rest:m[0]]))
+			out.WriteString("[" + wikiEscaper.Replace(strings.ReplaceAll(line[m[2]:m[3]], "|", "/")) + "|" + line[m[4]:m[5]] + "]")
+			rest = m[1]
 		}
-		lines = append(lines, strings.Join(words, " "))
+		out.WriteString(wikiEscapeWords(line[rest:]))
+		lines = append(lines, out.String())
 	}
 	text := strings.Join(lines, "\n")
 	for _, name := range names {
@@ -141,6 +144,18 @@ func jiraWikiWithImages(body string, names []string) string {
 	}
 	return strings.TrimLeft(text, "\n")
 }
+
+func wikiEscapeWords(text string) string {
+	words := strings.Split(text, " ")
+	for i, word := range words {
+		if !strings.Contains(word, "://") {
+			words[i] = wikiEscaper.Replace(word)
+		}
+	}
+	return strings.Join(words, " ")
+}
+
+var markdownLinkPattern = regexp.MustCompile(`\[([^\[\]\n]+)\]\((https?://[^\s()]+)\)`)
 
 var wikiEscaper = strings.NewReplacer("!", `\!`, "{", `\{`, "}", `\}`, "[", `\[`, "]", `\]`)
 
