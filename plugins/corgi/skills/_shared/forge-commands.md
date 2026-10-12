@@ -387,11 +387,15 @@ Verify before posting: `corgi assets push` already checked origin has the head; 
 
 **Tracker comment (Linear / Jira)** - a forge link needs a forge session the tracker
 does not have, so an image posted to the ticket goes through the tracker's own upload:
-`corgi agent watch comment <KEY> "<text>" --image <file>` uploads each picture and
-shows it inside the comment, on Jira and Linear. Jira needs it: only its v2 wiki
-markup (`!name|thumbnail!`) turns an attachment into a picture, so the Atlassian MCP
-comment and markdown `![](file)` leave a bare file name, and an upload to the
-attachments endpoint alone hides the picture in a side panel. Without a corgi tracker
+`corgi agent watch comment <KEY> "<text>" --file <file>` uploads each file and
+puts it inside the comment, on Jira and Linear: a picture inline, a video (a screen
+recording, mp4/mov/webm) as a player on Jira and a link on Linear, any other file
+(pdf, log, csv, zip...) as a file card on Jira and a link on Linear. `--image` is the
+same flag. Jira needs it: only its v2 wiki markup (`!name|thumbnail!`, `[^name]`)
+turns an attachment into a picture, player or card, so the Atlassian MCP comment and
+markdown `![](file)` leave a bare file name, and an upload to the attachments
+endpoint alone hides the file in a side panel. A missing or oversized file posts
+nothing (Jira's per-file limit is the site's own, 1 GB by default). Without a corgi tracker
 token, Linear still works by hand: `prepare_attachment_upload` → `PUT` the bytes with
 the returned headers → `![<what>](<assetUrl>)`. The forge link stays for the PR; the
 tracker gets its own copy.
