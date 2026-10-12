@@ -32,13 +32,15 @@ A reply on a ticket or PR goes to a teammate, so it reads like one wrote it in c
   too. No spaces before punctuation to keep a URL clean (`… /9168 :`) - the comma or
   period right after a URL stays out of the link. `corgi agent watch comment` makes
   both clickable on Jira and Linear; the Atlassian MCP comment takes markdown.
-- **A picture you mention is in the comment.** Never "see the screenshot I attached:
-  `grid.jpg`" - the reader sees a file name. Jira and Linear:
-  `corgi agent watch comment <KEY> "<text>" --image <file>` (repeat `--image`) uploads
-  each picture and shows it inside the comment. The Atlassian MCP comment tool and
-  markdown `![](file)` cannot show a Jira attachment, and an upload alone hides it in
-  the ticket's attachments panel. No way to post the picture → say what you saw in
-  words and do not mention a file.
+- **A picture, video or file you mention is in the comment.** Never "see the
+  screenshot I attached: `grid.jpg`" - the reader sees a file name. Jira and Linear:
+  `corgi agent watch comment <KEY> "<text>" --file <file>` (repeat `--file`; `--image`
+  is the same flag) uploads each one and puts it inside the comment - a picture inline,
+  a video (mp4, mov, webm, m4v) playing inline on Jira and a link on Linear, a pdf,
+  csv, log, json, zip or docx as a file card on Jira and a link on Linear. The
+  Atlassian MCP comment tool and markdown `![](file)` cannot show a Jira attachment,
+  and an upload alone hides it in the ticket's attachments panel. No way to post the
+  file → say what you saw in words and do not mention a file.
 
 Before, the way it reads like a bot:
 

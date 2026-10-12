@@ -289,6 +289,10 @@ func (l *Linear) Comment(ctx context.Context, ref, body string) error {
 	if err != nil {
 		return err
 	}
+	return l.commentOn(ctx, id, ref, body)
+}
+
+func (l *Linear) commentOn(ctx context.Context, id, ref, body string) error {
 	document := fmt.Sprintf("mutation { commentCreate(input: {issueId: %s, body: %s}) { success } }",
 		jsonString(id), jsonString(body))
 	var out struct {

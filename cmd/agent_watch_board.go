@@ -170,41 +170,58 @@ var agentWatchAssignCmd = &cobra.Command{
 
 var agentWatchCommentCmd = &cobra.Command{
 	Use:   "comment <REF> <text>",
-	Short: "Post a comment on a ticket, pictures included",
+	Short: "Post a comment on a ticket, pictures, videos and documents included",
 	Long: `Posts one comment on a ticket, as you.
 
   corgi agent watch comment ABC-123 "Fixed on staging, try build 412"
-  corgi agent watch comment ABC-123 "Here is what I see on 412" --image grid.jpg --image hero.jpg
+  corgi agent watch comment ABC-123 "Here is what I see on 412" --file grid.jpg --file hero.jpg
+  corgi agent watch comment ABC-123 "Repro on 412" --file repro.mp4 --file console.log
+  corgi agent watch comment ABC-123 "Numbers from staging" --file report.pdf --file orders.csv
   corgi agent watch comment ABC-123 "Back to 3.1.8 in [!9168](https://gitlab.com/g/p/-/merge_requests/9168)"
 
---image uploads each picture to the ticket and shows it inside the comment.
-On Jira this is the only way a picture shows: a comment that just names a
+--file uploads each file to the ticket and puts it inside the comment: a
+picture shows inline, a video (mp4, mov, webm, m4v) plays inline on Jira and
+is a link on Linear, anything else (pdf, csv, log, json, zip, docx, xlsx...)
+is a file card on Jira and a link on Linear. --image is the same flag.
+On Jira this is the only way a file shows: a comment that just names a
 file, or markdown like ![](file.jpg), leaves the reader with a file name.
+Every file is checked before anything is sent: a missing, unreadable, empty
+or too large one posts nothing. Jira's limit is the site's own (1 GB by
+default); nothing over 2 GB goes to either tracker.
 The text is plain text. A URL or a markdown link [label](url) is clickable;
 a bare !9168 or #42 is not, the tracker does not know which repo it means.`,
 	Args: cobra.ExactArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
+		paths, _ := cmd.Flags().GetStringArray("file")
 		images, _ := cmd.Flags().GetStringArray("image")
-		runTrackerWrite(cmd, "agent_watch_comment", args[0], func(ctx context.Context, w watch.Writer, ref string) (string, error) {
-			if len(images) == 0 {
+		files, err := watch.ReadAttachments(append(paths, images...))
+		if err != nil {
+			exitWithError("agent_watch_comment", err, 2)
+		}
+		runTrackerWriteWithin(cmd, "agent_watch_comment", args[0], watch.UploadTimeout(files), func(ctx context.Context, w watch.Writer, ref string) (string, error) {
+			if len(files) == 0 {
 				if err := w.Comment(ctx, ref, args[1]); err != nil {
 					return "", err
 				}
 				return "commented on " + ref, nil
 			}
-			pictures, ok := w.(watch.ImageCommenter)
+			attacher, ok := w.(watch.FileCommenter)
 			if !ok {
-				return "", fmt.Errorf("%s comments cannot carry pictures yet", w.Name())
+				return "", fmt.Errorf("%s comments cannot carry files yet", w.Name())
 			}
-			if err := pictures.CommentWithImages(ctx, ref, args[1], images); err != nil {
+			if err := attacher.CommentWithFiles(ctx, ref, args[1], files); err != nil {
 				return "", err
 			}
-			return fmt.Sprintf("commented on %s with %d picture(s)", ref, len(images)), nil
+			return fmt.Sprintf("commented on %s with %s", ref, watch.DescribeAttachments(files)), nil
 		})
 	},
 }
 
 func runTrackerWrite(cmd *cobra.Command, label, ref string, do func(context.Context, watch.Writer, string) (string, error)) {
+	runTrackerWriteWithin(cmd, label, ref, 2*time.Minute, do)
+}
+
+func runTrackerWriteWithin(cmd *cobra.Command, label, ref string, timeout time.Duration, do func(context.Context, watch.Writer, string) (string, error)) {
 	dir := mustAgentDir()
 	id, err := watchTargetWorkspace(dir, cmd.Flags())
 	if err != nil {
@@ -214,7 +231,7 @@ func runTrackerWrite(cmd *cobra.Command, label, ref string, do func(context.Cont
 	if err != nil {
 		exitWithError(label, err, 2)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	said, err := do(ctx, w, strings.TrimSpace(ref))
 	if err != nil {
@@ -232,7 +249,8 @@ func init() {
 		c.Flags().String("workspace", "", "Workspace id; omitted means the one you are in")
 	}
 	agentWatchBoardCmd.Flags().Bool("refresh", false, "Read the columns from the tracker again")
-	agentWatchCommentCmd.Flags().StringArray("image", nil, "Picture to upload and show inside the comment (repeatable)")
+	agentWatchCommentCmd.Flags().StringArray("file", nil, "File to upload and show inside the comment: picture, video or document (repeatable)")
+	agentWatchCommentCmd.Flags().StringArray("image", nil, "Same as --file, kept for older callers (repeatable)")
 	agentWatchCmd.AddCommand(agentWatchBoardCmd, agentWatchMoveCmd, agentWatchAssignCmd, agentWatchCommentCmd)
 }
 
