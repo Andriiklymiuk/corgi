@@ -188,6 +188,9 @@ func RearmAfterSleep(dir string) error {
 }
 
 var readPmsetG = func() string {
+	if runtime.GOOS != "darwin" {
+		return ""
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	out, _ := exec.CommandContext(ctx, pmsetBin, "-g").Output()
@@ -195,9 +198,6 @@ var readPmsetG = func() string {
 }
 
 func SleepDisabled() bool {
-	if runtime.GOOS != "darwin" {
-		return false
-	}
 	for _, line := range strings.Split(readPmsetG(), "\n") {
 		f := strings.Fields(line)
 		if len(f) == 2 && f[0] == "SleepDisabled" {

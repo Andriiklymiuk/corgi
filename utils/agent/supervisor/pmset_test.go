@@ -22,9 +22,6 @@ func fakePmset(t *testing.T, disabled bool) *[]string {
 }
 
 func TestDisableSleepUndoesOnlyWhatItSet(t *testing.T) {
-	if os.Getenv("GOOS") == "windows" {
-		t.Skip()
-	}
 	dir := t.TempDir()
 	calls := fakePmset(t, true)
 	if err := DisableSleep(dir, true); err != nil || len(*calls) != 0 {
