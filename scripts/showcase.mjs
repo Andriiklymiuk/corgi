@@ -50,15 +50,16 @@ const strip = (caption) => `<div class="cap"><img src="${brand.logo}" width="28"
 const css = `
   *{box-sizing:border-box}
   html,body{margin:0;background:${brand.ground};font-family:-apple-system,"SF Pro Text",Inter,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;color:#e6edf3}
-  .cap{position:absolute;left:28px;top:18px;display:flex;align-items:center;gap:10px;font:600 15px/1 -apple-system,"SF Pro Text",Inter,system-ui,sans-serif;color:${brand.text};white-space:nowrap}
-  .cap img{display:block;border-radius:7px}
-  .stage{position:absolute;left:0;top:56px;padding:28px;display:flex;gap:28px;align-items:flex-start}
+  .frame{position:absolute;left:0;top:0}
+  .cap{display:flex;align-items:center;gap:10px;margin:18px 28px 0;font:600 15px/1.3 -apple-system,"SF Pro Text",Inter,system-ui,sans-serif;color:${brand.text}}
+  .cap img{display:block;border-radius:7px;flex:none}
+  .stage{padding:28px;display:flex;gap:28px;align-items:flex-start}
   .l.hi{background:rgba(255,161,51,.14);box-shadow:inset 3px 0 ${brand.accent};margin:0 -18px;padding:0 18px}
   .term{width:900px;background:#161b22;border:1px solid #30363d;border-radius:12px;box-shadow:0 24px 70px rgba(0,0,0,.6);overflow:hidden}
   .bar{height:38px;display:flex;align-items:center;padding:0 14px;background:#21262d;border-bottom:1px solid #30363d;font-size:12px;color:#8b949e;position:relative}
   .bar i{width:12px;height:12px;border-radius:50%;background:#ff5f57;margin-right:8px}.bar i+i{background:#febc2e}.bar i+i+i{background:#28c840}
   .bar span{position:absolute;left:0;right:0;text-align:center;pointer-events:none}
-  .body{padding:14px 18px;font:13.5px/1.55 "SF Mono",ui-monospace,Menlo,Consolas,monospace;white-space:pre;color:#e6edf3}
+  .body{padding:14px 18px;font:13.5px/1.55 "SF Mono",ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-word;color:#e6edf3}
   .l{min-height:21px}
   .cur{display:inline-block;width:8px;height:16px;background:#e6edf3;vertical-align:-3px;margin-left:2px}
   .body b{font-weight:600;color:#fff}
@@ -120,7 +121,7 @@ const scenes = {};
 const scene = (name, frames) => {
 	const caption = captions[name] ?? "";
 	scenes[name] = { frames: frames.length, caption };
-	frames.forEach((html, i) => writeFileSync(`${out}/${name}-${i}.html`, html.replace('<div class="stage"', `${strip(caption)}<div class="stage"`)));
+	frames.forEach((html, i) => writeFileSync(`${out}/${name}-${i}.html`, html.replace('<div class="stage"', `<div class="frame">${strip(caption)}<div class="stage"`).replace(/<\/div>\s*$/, "</div></div>")));
 };
 
 // ---- corgi run ------------------------------------------------------------------
