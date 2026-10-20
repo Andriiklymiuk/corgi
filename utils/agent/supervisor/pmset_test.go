@@ -71,3 +71,25 @@ func TestSudoersRuleNamesTheFourLines(t *testing.T) {
 		t.Fatal(SudoersInstall())
 	}
 }
+
+func TestSleepNowClearsSleepDisabledAndRearms(t *testing.T) {
+	dir := t.TempDir()
+	calls := fakePmset(t, true)
+	oldCheck := checkSudo
+	t.Cleanup(func() { checkSudo = oldCheck; ResetPmsetAllowed() })
+	checkSudo = func() bool { return true }
+	ResetPmsetAllowed()
+	_ = SleepNow(dir)
+	if got := strings.Join(*calls, ";"); got != "-a disablesleep 0" {
+		t.Fatalf("the bit is cleared first: %q", got)
+	}
+	if !readPower(dir).RearmSleep {
+		t.Fatal("written down for the wake")
+	}
+	if err := RearmAfterSleep(dir); err != nil || !strings.HasSuffix(strings.Join(*calls, ";"), "-a disablesleep 1") {
+		t.Fatalf("put back at the wake: %v %v", err, *calls)
+	}
+	if err := RearmAfterSleep(dir); err != nil || len(*calls) != 2 {
+		t.Fatalf("once: %v", *calls)
+	}
+}

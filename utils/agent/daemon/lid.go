@@ -11,6 +11,7 @@ import (
 
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/agent/push"
+	"andriiklymiuk/corgi/utils/agent/supervisor"
 )
 
 // The lid guard: a laptop closed and left in a room should say when it is
@@ -57,6 +58,7 @@ func (d *Daemon) watchLid(ctx context.Context) {
 	if closed, known := readClamshell(); known {
 		g.closed = closed
 		d.lidClosed.Store(closed)
+		lidClosedNow.Store(closed)
 		d.setLid(closed)
 	}
 	t := time.NewTicker(guardTick)
@@ -68,11 +70,16 @@ func (d *Daemon) watchLid(ctx context.Context) {
 		case now := <-t.C:
 			closed, known := readClamshell()
 			was := g.closed
+			slept := now.Sub(g.last) >= guardSleptAfter
 			if body := g.observe(now, closed, known); body != "" {
 				d.ringLid(body)
 			}
+			if slept {
+				d.rearmAfterSleep()
+			}
 			if known && closed != was {
 				d.lidClosed.Store(closed)
+				lidClosedNow.Store(closed)
 				d.setLid(closed)
 				d.lidChanged(now, closed, g.window)
 			}
@@ -81,6 +88,15 @@ func (d *Daemon) watchLid(ctx context.Context) {
 }
 
 func (d *Daemon) lidIsClosed() bool { return d.lidClosed.Load() }
+
+func (d *Daemon) rearmAfterSleep() {
+	if !supervisor.PmsetAllowed() {
+		return
+	}
+	if err := supervisor.RearmAfterSleep(d.Dir); err != nil {
+		utils.Infof("agent: sleep: %v\n", err)
+	}
+}
 
 func (d *Daemon) setLid(closed bool) {
 	state := "open"
@@ -243,7 +259,7 @@ var runGuardCommand = func(name string, args ...string) error {
 // which locks; shutdown asks the system the way the Apple menu does, so
 // open apps close properly. Neither needs root, neither is stopped by a
 // caffeinate running in a terminal.
-func LidAct(action string) (string, error) {
+func LidAct(dir, action string) (string, error) {
 	switch action {
 	case "lock":
 		if runtime.GOOS != "darwin" {
@@ -257,6 +273,14 @@ func LidAct(action string) (string, error) {
 		}
 		go func() { _ = runGuardCommand("pmset", "displaysleepnow") }()
 		return "the laptop is locked - the password is asked to get back in", nil
+	case "sleep":
+		if runtime.GOOS != "darwin" {
+			return "", fmt.Errorf("sleeping from here is macOS only for now")
+		}
+		if err := supervisor.SleepNow(dir); err != nil {
+			return "", err
+		}
+		return "the laptop is going to sleep - it stays closable again when it wakes", nil
 	case "shutdown":
 		if runtime.GOOS != "darwin" {
 			return "", fmt.Errorf("shutting down from the phone is macOS only for now")
@@ -264,5 +288,5 @@ func LidAct(action string) (string, error) {
 		go func() { _ = runGuardCommand("osascript", "-e", `tell application "System Events" to shut down`) }()
 		return "the laptop is shutting down", nil
 	}
-	return "", fmt.Errorf("guard action is lock or shutdown, not %q", action)
+	return "", fmt.Errorf("guard action is lock, sleep or shutdown, not %q", action)
 }

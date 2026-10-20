@@ -18,7 +18,7 @@ import (
 const defaultLidHours = "08:00-23:00"
 
 var agentLidCmd = &cobra.Command{
-	Use:   "lid [on|off|lock|shutdown]",
+	Use:   "lid [on|off|lock|sleep|shutdown]",
 	Short: "Ring the phone when this laptop wakes or its lid opens by day; lock or shut it down from there",
 	Long: `A laptop closed and left in a room says when someone opens it. The daemon
 notices the wake (or the lid) and rings the phone - by day only, inside
@@ -31,7 +31,12 @@ any caffeinate) and Shut down (as the Apple menu does). Neither needs root.
   corgi agent lid on --hours 09:00-22:00
   corgi agent lid off
   corgi agent lid                        what is set now
-  corgi agent lid lock | shutdown        do it from here
+  corgi agent lid lock | sleep | shutdown   do it from here
+
+sleep works where the Apple menu's Sleep does not: with SleepDisabled set
+(sudo pmset -a disablesleep 1, so the lid may close) macOS ignores the menu.
+With the sudoers rule from corgi agent away, corgi clears the bit, sleeps the
+machine, and sets it again at the wake.
 
 One ring per opening, never twice in ten minutes. Off by default; the
 daemon reads the setting at start (corgi agent restart).`,
@@ -74,14 +79,14 @@ func runAgentLid(cmd *cobra.Command, args []string) {
 			exitWithError("agent_lid", err, 1)
 		}
 		utils.Infof("✓ lid off in %s; corgi agent restart\n", path)
-	case "lock", "shutdown":
-		said, err := daemon.LidAct(args[0])
+	case "lock", "sleep", "shutdown":
+		said, err := daemon.LidAct(dir, args[0])
 		if err != nil {
 			exitWithError("agent_lid", err, 1)
 		}
 		utils.Info(said)
 	default:
-		exitWithError(utils.ErrUsage, fmt.Errorf("lid takes on, off, lock or shutdown, not %q", args[0]), 2)
+		exitWithError(utils.ErrUsage, fmt.Errorf("lid takes on, off, lock, sleep or shutdown, not %q", args[0]), 2)
 	}
 }
 
@@ -108,7 +113,7 @@ func launchLidHandler(w http.ResponseWriter, r *http.Request) {
 			writeLaunchError(w, http.StatusBadRequest, "could not read the request")
 			return
 		}
-		said, err := daemon.LidAct(strings.TrimSpace(req.Action))
+		said, err := daemon.LidAct(dir, strings.TrimSpace(req.Action))
 		if err != nil {
 			writeLaunchError(w, http.StatusBadRequest, err.Error())
 			return

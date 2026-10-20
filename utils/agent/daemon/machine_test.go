@@ -88,6 +88,8 @@ func TestTheMachineWatchPausesOnHotAndResumesOnCool(t *testing.T) {
 }
 
 func TestTheMachineWatchSaysLowBatteryOnce(t *testing.T) {
+	lidClosedNow.Store(true)
+	defer lidClosedNow.Store(false)
 	var w machineWatch
 	now := time.Now()
 	steps := w.observe(now, Machine{TempC: 30, SpeedLimit: 100, Battery: 18}, "", false)

@@ -103,7 +103,10 @@ func checkLid(dir string) agentCheck {
 		return couldNotCheck(name)
 	}
 	if lidSleepDisabled(out) {
-		return agentCheck{Name: name, OK: true, Detail: "closing the lid does not sleep the machine (SleepDisabled 1)"}
+		if supervisor.PmsetAllowed() {
+			return agentCheck{Name: name, OK: true, Detail: "closing the lid does not sleep the machine (SleepDisabled 1); the Sleep menu is ignored too - corgi agent lid sleep does it"}
+		}
+		return agentCheck{Name: name, OK: true, Detail: "closing the lid does not sleep the machine (SleepDisabled 1); the Sleep menu is ignored too - the pmset row's sudoers rule gives corgi agent lid sleep"}
 	}
 	if supervisor.PmsetAllowed() && stayAwakeEnabled(dir) {
 		return agentCheck{Name: name, OK: true, Detail: "the daemon sets SleepDisabled while it runs (stayAwake + sudoers rule)"}

@@ -43,14 +43,18 @@ func TestFixDeferralTooHot(t *testing.T) {
 	}
 }
 
-func TestFixDeferralLowBattery(t *testing.T) {
+func TestFixDeferralLowBatteryOnlyWithTheLidClosed(t *testing.T) {
 	old := readBattery
-	defer func() { readBattery = old; resetHeat() }()
+	defer func() { readBattery = old; resetHeat(); lidClosedNow.Store(false) }()
 	readBattery = func() (int, bool, float64, bool) { return 15, false, 30, true }
 	resetHeat()
 	log := watch.LoadFixLog(t.TempDir())
+	if got := fixDeferral(WatchSpec{Workspace: "w"}, log, time.Now()); got != "" {
+		t.Fatalf("15%% at the desk is the person's to see, got %q", got)
+	}
+	lidClosedNow.Store(true)
 	if got := fixDeferral(WatchSpec{Workspace: "w"}, log, time.Now()); got != "low battery" {
-		t.Fatalf("15%% on battery holds new runs, got %q", got)
+		t.Fatalf("15%% on battery with the lid closed holds new runs, got %q", got)
 	}
 	readBattery = func() (int, bool, float64, bool) { return 15, true, 30, true }
 	resetHeat()

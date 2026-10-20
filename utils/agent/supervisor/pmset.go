@@ -85,6 +85,7 @@ func ResetPmsetAllowed() {
 type powerRecord struct {
 	DisableSleep bool `json:"disableSleep,omitempty"`
 	LowPower     bool `json:"lowPower,omitempty"`
+	RearmSleep   bool `json:"rearmSleep,omitempty"`
 }
 
 func powerPath(dir string) string { return filepath.Join(dir, "power.json") }
@@ -98,7 +99,7 @@ func readPower(dir string) powerRecord {
 }
 
 func writePower(dir string, r powerRecord) {
-	if !r.DisableSleep && !r.LowPower {
+	if !r.DisableSleep && !r.LowPower && !r.RearmSleep {
 		_ = os.Remove(powerPath(dir))
 		return
 	}
@@ -151,12 +152,39 @@ func LowPowerMode(dir string, on bool) error {
 	return nil
 }
 
-// SleepNow needs no root: the machine sleeps, SleepDisabled or not, since
-// 'pmset sleepnow' is what the Apple menu's Sleep does.
-func SleepNow() error {
+// SleepNow puts the machine to sleep the way the Apple menu does. With
+// SleepDisabled set, the menu and 'pmset sleepnow' are both ignored, so the
+// bit is cleared first (the sudoers rule), and written down as corgi's to
+// put back when the machine wakes.
+func SleepNow(dir string) error {
+	if SleepDisabled() {
+		if !PmsetAllowed() {
+			return fmt.Errorf("SleepDisabled is set, which the Sleep menu and pmset sleepnow obey - sudo pmset -a disablesleep 0 first, or the sudoers rule from corgi agent away")
+		}
+		if err := runSudo("-a", "disablesleep", "0"); err != nil {
+			return err
+		}
+		r := readPower(dir)
+		r.RearmSleep = true
+		writePower(dir, r)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	return exec.CommandContext(ctx, pmsetBin, "sleepnow").Run()
+}
+
+// RearmAfterSleep puts SleepDisabled back if SleepNow took it down.
+func RearmAfterSleep(dir string) error {
+	r := readPower(dir)
+	if !r.RearmSleep {
+		return nil
+	}
+	if err := runSudo("-a", "disablesleep", "1"); err != nil {
+		return err
+	}
+	r.RearmSleep = false
+	writePower(dir, r)
+	return nil
 }
 
 var readPmsetG = func() string {

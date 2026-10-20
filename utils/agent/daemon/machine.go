@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"andriiklymiuk/corgi/utils"
@@ -167,7 +168,13 @@ func tooHot(now time.Time) bool {
 	return heat != ""
 }
 
+// A lid someone sits at is theirs to watch; the holds are for a closed one.
+var lidClosedNow atomic.Bool
+
 func lowBattery(now time.Time) bool {
+	if !lidClosedNow.Load() {
+		return false
+	}
 	m, _ := currentMachine(now)
 	return m.Known && m.Battery >= 0 && !m.Charging && m.Battery < lowBatteryPct
 }
@@ -247,7 +254,7 @@ func (w *machineWatch) observe(now time.Time, m Machine, heat string, mayPause b
 	if heat != "hot" {
 		w.criticalAt = time.Time{}
 	}
-	onBattery := m.Battery >= 0 && !m.Charging
+	onBattery := m.Battery >= 0 && !m.Charging && lidClosedNow.Load()
 	switch {
 	case !onBattery:
 		w.lowTold, w.flatTold = false, false
@@ -289,7 +296,9 @@ func (d *Daemon) actOnMachine(ctx context.Context, step string, m Machine) {
 			utils.Infof("agent: heat: %.0f°C - sleeping the machine\n", m.TempC)
 			go func() {
 				time.Sleep(5 * time.Second)
-				_ = supervisor.SleepNow()
+				if err := supervisor.SleepNow(d.Dir); err != nil {
+					utils.Infof("agent: heat: could not sleep the machine: %v\n", err)
+				}
 			}()
 		}
 	case "ring low":
