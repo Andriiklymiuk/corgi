@@ -50,8 +50,10 @@ corgi-mobile-app/
 # Agent worktrees: local scratch checkouts, never part of the repo
 .claude/worktrees/
 
-# showcase frames are intermediates; the gifs and stills are what ships
+# showcase frames are intermediates; the gifs and stills are what ships, the mp4s are for posting
 docs/media/frames/
+docs/media/*.mp4
+!docs/media/story.mp4
 
 *.ips
 # claude plugin eval reports

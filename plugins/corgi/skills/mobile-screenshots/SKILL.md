@@ -124,7 +124,10 @@ and a one-click bundle export at every store size.
 Drop the raw captures into its `public/screenshots/<platform>/<device>/{locale}/NN.png`,
 seed `app-store-screenshots.json` (app name, theme, per-slide localized `label`+`headline`,
 `locales`), `bun install && bun dev`. Headlines: one idea per slide, 3-5 words, one
-emphasis word, headline in the top ~30-40%. (Installing a third-party skill executes its
+emphasis word, headline in the top ~30-40%, in the reader's words ("Your tickets, in
+your pocket"), never a feature name. The theme and background come from the app itself -
+its colour tokens, its icon's palette, its font - so the slides look like the app and
+not like the editor's default; one accent colour for the emphasis word on every slide. (Installing a third-party skill executes its
 code - confirm the source with the user first.)
 
 ## 3 · Export - exact store sizes

@@ -39,8 +39,9 @@ gate, continue.
 ## 2. Draft the PR/MR
 
 Follow `stories` Phase 5: push the branch, create the draft with `forge-commands.md`
-§6, title `<subject> [<key>]`, body with what / how / tests / issue link, then stamp the
-risk card. Add `## Assumptions` - the `align` picks nobody overruled, ≤5 bullets; omit
+§6, title `<subject> [<key>]`, body with what / how / tests / issue link - what a
+reviewer needs and nothing more (`../_shared/conventions.md` › Describing a change) -
+then stamp the risk card. Add `## Assumptions` - the `align` picks nobody overruled, ≤5 bullets; omit
 the section when there are none. Draft only; a human flips it to ready. Multi-repo → one
 PR per repo, sibling links in each body, contract lines on every side.
 

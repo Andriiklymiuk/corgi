@@ -19,12 +19,41 @@ const mark = (s) => {
 		return k === "B" ? "<b>" : `<span style="color:${c[k]}">`;
 	}) + open.reverse().join("");
 };
-const line = (s) => s.startsWith("{Q}") ? `<div class="qr">${esc(s.slice(3))}</div>` : `<div class="l">${s === "" ? "&nbsp;" : mark(s)}</div>`;
+const line = (s) => s.startsWith("{Q}") ? `<div class="qr">${esc(s.slice(3))}</div>` : s.startsWith("{H}") ? `<div class="l hi">${mark(s.slice(3))}</div>` : `<div class="l">${s === "" ? "&nbsp;" : mark(s)}</div>`;
+
+// The project's look: the logo's navy as the ground, its orange as the accent, its cream for the caption.
+const brand = { ground: "#0a0e2a", accent: "#FFA133", text: "#FDF6F2", logo: "../../../resources/corgi.svg" };
+const captions = {
+	run: "One command brings the stack up: it clones what is missing, seeds the database and writes the env",
+	feature: "One branch across every repo, then the stack running on it",
+	status: "Every service and database, live, with its port and branch",
+	doctor: "What is wrong with the setup, and --fix fixes what it can",
+	db: "Snapshot, restore and a shell into any database, by name",
+	ci: "The whole stack on the PR branches and one e2e run, in CI",
+	stories: "An agent takes the ticket across three repos and opens three draft PRs",
+	phone: "A QR pairs the phone; from then on every session, ticket and permission is in your pocket",
+	dashboard: "The launcher: every session on the machine, a card per repo, started from anywhere",
+	telegram: "The same board and the same answers from a Telegram chat",
+	tunnel: "A public URL for any service, from one flag",
+	logs: "The logs of every service in one stream",
+	watch: "The tracker and your pull requests, handled while you are away",
+	autofix: "Every event that arrives, and every reason one is skipped",
+	story: "What a teammate sees: the ticket moves, the PR appears, the comment is answered",
+	replay: "Leaving it on is a decision you can reverse: two commands",
+	handoff: "One session stops; the next picks the work up where it left off",
+	kanban: "One card per ticket, its column worked out from runs, sessions and checks",
+	peers: "Two laptops on one tracker: one leads, the other stays quiet and takes over",
+	codex: "Claude first, Codex when it cannot: the same board, another agent",
+};
+const strip = (caption) => `<div class="cap"><img src="${brand.logo}" width="28" height="28">${esc(caption)}</div>`;
 
 const css = `
   *{box-sizing:border-box}
-  html,body{margin:0;background:#0d1117;font-family:-apple-system,"SF Pro Text",Inter,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;color:#e6edf3}
-  .stage{position:absolute;left:0;top:0;padding:28px;display:flex;gap:28px;align-items:flex-start}
+  html,body{margin:0;background:${brand.ground};font-family:-apple-system,"SF Pro Text",Inter,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;color:#e6edf3}
+  .cap{position:absolute;left:28px;top:18px;display:flex;align-items:center;gap:10px;font:600 15px/1 -apple-system,"SF Pro Text",Inter,system-ui,sans-serif;color:${brand.text};white-space:nowrap}
+  .cap img{display:block;border-radius:7px}
+  .stage{position:absolute;left:0;top:56px;padding:28px;display:flex;gap:28px;align-items:flex-start}
+  .l.hi{background:rgba(255,161,51,.14);box-shadow:inset 3px 0 ${brand.accent};margin:0 -18px;padding:0 18px}
   .term{width:900px;background:#161b22;border:1px solid #30363d;border-radius:12px;box-shadow:0 24px 70px rgba(0,0,0,.6);overflow:hidden}
   .bar{height:38px;display:flex;align-items:center;padding:0 14px;background:#21262d;border-bottom:1px solid #30363d;font-size:12px;color:#8b949e;position:relative}
   .bar i{width:12px;height:12px;border-radius:50%;background:#ff5f57;margin-right:8px}.bar i+i{background:#febc2e}.bar i+i+i{background:#28c840}
@@ -88,7 +117,11 @@ const out = "docs/media/frames";
 rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
 const scenes = {};
-const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((html, i) => writeFileSync(`${out}/${name}-${i}.html`, html)); };
+const scene = (name, frames) => {
+	const caption = captions[name] ?? "";
+	scenes[name] = { frames: frames.length, caption };
+	frames.forEach((html, i) => writeFileSync(`${out}/${name}-${i}.html`, html.replace('<div class="stage"', `${strip(caption)}<div class="stage"`)));
+};
 
 // ---- corgi run ------------------------------------------------------------------
 {
@@ -117,7 +150,7 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 		"🚀 🤖 Executing command for web:  {g}yarn dev{/}",
 		"{c}[api]{/} listening on :7012",
 		"{c}[web]{/} ➜  Local: http://localhost:5173/",
-		"😉 corgi is running - Ctrl+C to stop",
+		"{H}😉 corgi is running - Ctrl+C to stop",
 	];
 	const cuts = [1, 2, 5, 7, 9, 12, 13, 16, 19, 22, 24, 25];
 	scene("run", grow(s, cuts).map((l, i) => page(term("corgi run - stack", l, { rows: s.length, cursor: i < cuts.length - 1 }))));
@@ -183,7 +216,7 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 	const fix = [
 		"{g}${/} {B}corgi doctor --fix{/}",
 		"Fix port:7012? {g}y{/}",
-		"✅ fixed: port:7012",
+		"{H}✅ fixed: port:7012",
 	];
 	scene("doctor", [
 		term("corgi doctor", doc(0), { rows: 12 }),
@@ -237,7 +270,7 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 		"  Running 24 tests using 4 workers",
 		"  24 passed (1.4m)",
 		"📦 collected 2 e2e artifact path(s) into /home/runner/work/stack/corgi_artifacts/e2e",
-		"✅ e2e passed",
+		"{H}✅ e2e passed",
 	];
 	scene("ci", grow(s, [1, 4, 7, 8, 9, 11, 12, 15, 17]).map((l, i) => page(term("GitHub Actions · e2e · PR #812", l, { rows: s.length, cursor: i < 8 }))));
 }
@@ -265,7 +298,7 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 		"  ⎿  https://github.com/acme/api/pull/412",
 		"  ⎿  https://github.com/acme/web/pull/98",
 		"  ⎿  https://github.com/acme/mobile/pull/231",
-		"{g}●{/} Three draft PRs. The stack ran with all three branches and the e2e suite passed. Nothing is merged.",
+		"{H}{g}●{/} Three draft PRs. The stack ran with all three branches and the e2e suite passed. Nothing is merged.",
 	];
 	scene("stories", grow(s, [1, 4, 6, 8, 10, 12, 14, 16, 20, 21]).map((l, i) => page(term("Claude Code - stack", l, { rows: s.length, cursor: i < 9 }))));
 }
@@ -758,7 +791,7 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 		"{d}# 13:44 - CI goes red; the one kind that brings its own test for done{/}",
 		"{y}🔔 corgi agent · acme-stack{/}  red build in acme/api - e2e / checkout failed",
 		"{d}# 13:52 - a colleague wants YOUR review: reported, never worked on{/}",
-		"{y}🔔 corgi agent · acme-stack{/}  sam wants your review on acme/web!41 - Retry the upload on a 502",
+		"{H}{y}🔔 corgi agent · acme-stack{/}  sam wants your review on acme/web!41 - Retry the upload on a 502",
 	];
 	scene("watch", grow(s, [1, 3, 5, 15, 18, 20, 22, 24, 26, 28]).map((l, i) => page(term("corgi agent watch", l, { rows: s.length, cursor: i < 9 }))));
 }
@@ -933,7 +966,7 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 		"{c}scope for ABC-7: api/limits/**, web/src/limits/** · ≤ 400 lines · ≤ 2 new test files - a write outside is refused{/}",
 		"",
 		"{g}${/} {B}corgi agent handoff verify ABC-7{/}",
-		"{g}✓{/} ABC-7: `corgi test --changed` passes at e77d10c - the packet can be trusted as written",
+		"{H}{g}✓{/} ABC-7: `corgi test --changed` passes at e77d10c - the packet can be trusted as written",
 	];
 	scene("handoff", grow(s, [1, 5, 7, 9, 11, 16, 18, 19]).map((l, i) => page(term("corgi agent handoff - the next session starts where this one stopped", l, { rows: s.length, cursor: i < 7 }))));
 }
@@ -1037,4 +1070,4 @@ const scene = (name, frames) => { scenes[name] = frames.length; frames.forEach((
 
 
 writeFileSync(`${out}/scenes.json`, JSON.stringify(scenes));
-console.log("wrote", Object.entries(scenes).map(([k, v]) => `${k}:${v}`).join(" "));
+console.log("wrote", Object.entries(scenes).map(([k, v]) => `${k}:${v.frames}`).join(" "));

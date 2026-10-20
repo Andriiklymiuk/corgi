@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"andriiklymiuk/corgi/utils/agent/daemon"
 	"testing"
 	"time"
 
@@ -128,5 +130,19 @@ func TestStayAwakeEnabledFollowsTheConfig(t *testing.T) {
 	}
 	if !stayAwakeEnabled(dir) {
 		t.Fatal("reported off after being turned on")
+	}
+}
+
+func TestTheLaptopLineSaysOnlyWhatIsKnown(t *testing.T) {
+	if got := laptopLine(nil); got != "" {
+		t.Fatalf("no reading, no line: %q", got)
+	}
+	l := &daemon.Laptop{Lid: "closed", Network: "hotspot", Hotspot: "iPhone", Paused: 2}
+	l.Known, l.Battery, l.TempC, l.SpeedLimit = true, 62, 46, 100
+	got := laptopLine(l)
+	for _, want := range []string{"hot, 46°C", "battery 62% (on battery)", "lid closed", "on the hotspot iPhone", "2 session(s) paused"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("%q lacks %q", got, want)
+		}
 	}
 }

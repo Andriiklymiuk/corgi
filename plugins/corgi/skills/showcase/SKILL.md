@@ -1,13 +1,13 @@
 ---
 name: showcase
-description: "Use when the user wants README pictures, store screenshots, or animated demos of a CLI, app, or extension: \"make screenshots for the README\", \"showcase gif\", \"animated demo of the feature\", \"marketplace media\", \"hero image\". Draws the UI as HTML from the product's own strings, so pictures match the code. NOT for phone store screenshots (mobile-screenshots) or a running app (mobile)."
+description: "Use when the user wants README pictures, animated demos or a short video of a CLI, app, or extension: \"make screenshots for the README\", \"showcase gif\", \"demo video\", \"marketplace media\", \"hero image\". Draws the UI as HTML from the product's own strings, in the project's own colours, with a caption that says what you are watching. NOT for phone store screenshots (mobile-screenshots) or a running app (mobile)."
 ---
 
-# Showcase: README pictures and GIFs from HTML
+# Showcase: README pictures, GIFs and short videos from HTML
 
 Read `../_shared/conventions.md` first (finish what you start, attribution, unattended runs).
 
-**Done when:** the pictures are rendered from the script, you looked at each one, and the README (or listing) points at them.
+**Done when:** the pictures are rendered from the script in the project's look, every gif carries its caption, you looked at each one, and the README (or listing) points at them with a line that says what happens.
 
 Pictures drawn from the product's own output, not from a design tool. A
 terminal session, a menu bar dropdown, a VS Code window, a phone page - each
@@ -22,6 +22,47 @@ a UI change and the README is current again.
 - The product is a CLI, a desktop app, an editor extension, a phone web page,
   or a hardware surface (a Stream Deck) whose look can be reproduced in HTML.
 - The user wants it to look professional and to stay in step with the code.
+
+## The project's look
+
+A gif in GitHub's default dark is anybody's gif. Before drawing, find what
+makes this project's:
+
+- **The logo.** `resources/`, `assets/`, `docs/`, the app icon, the extension
+  icon, `favicon`. It goes in the caption strip of every frame, small (28 px),
+  so the loop is branded without a title card that the reader waits through.
+- **The palette.** Pull it from the logo (`grep -o 'fill="#[0-9a-fA-F]*"'
+  logo.svg | sort | uniq -c | sort -rn`) and from the product's own theme (the
+  launcher page CSS, the app's colour tokens, the ANSI palette the CLI maps
+  to). Pick one ground colour tinted from the brand's dark (corgi: navy
+  `#000072` → ground `#0a0e2a`), one accent for the caption and the
+  highlighted result line (corgi: orange `#FFA133`), one text colour
+  (corgi: cream `#FDF6F2`). Everything inside a terminal or an app window
+  keeps the product's own colours - those are verbatim too.
+- **One strip, every frame.** `<logo> <caption>` above the scene, in the
+  brand text colour, the same on every frame of every scene, so twenty gifs
+  read as one product.
+
+## Making it understandable
+
+The reader does not know the product. Each scene answers three questions
+without a word of prose around it:
+
+1. **What was typed?** The first frame shows the command alone, cursor
+   blinking, nothing else - a beat before the output.
+2. **What is happening?** The frames fill in at a reading pace; a `{d}#
+   comment{/}` line in the terminal says what the next lines mean when the
+   output alone would not ("# 16:02 - claude's window is spent").
+3. **What came of it?** The last frame lingers, and the line that matters is
+   highlighted - `{H}…{/}` draws it on the accent colour with a left bar - so
+   the eye lands on the PR URL, the green check, the push, not on the
+   scrollback.
+
+The caption strip is one plain sentence in the reader's words, not the
+command's: "An agent takes the ticket across three repos and opens three
+draft PRs", not "corgi stories ABC-123". Under the gif in the README, the
+same sentence in `<sub>`, and `alt` text that says what happens for those
+who cannot see it.
 
 ## The rules that make it good
 
@@ -61,10 +102,11 @@ a UI change and the README is current again.
 ## Layout of the work
 
 ```
-scripts/showcase.mjs        node: writes docs/media/frames/<scene>-<n>.html
-scripts/capture-showcase.sh Chrome → png (2x) → magick trim/extent → gif + still
+scripts/showcase.mjs        node: writes docs/media/frames/<scene>-<n>.html + scenes.json {name: {frames, caption}}
+scripts/capture-showcase.sh Chrome → png (2x) → magick trim/extent → gif + still + mp4
 docs/media/<scene>.gif      what the README embeds
 docs/media/<scene>.png      the last frame, for docs that cannot animate
+docs/media/<scene>.mp4      the same frames as a video for a store page, a post, a slide - gitignored, redrawn on demand
 ```
 
 Chrome: `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`
@@ -94,9 +136,16 @@ const css = `
   .body b{font-weight:600;color:#fff}`;
 const term = (title, lines, { rows = lines.length, cursor = false } = {}) =>
 	`<div class="term"><div class="bar"><i></i><i></i><i></i><span>${esc(title)}</span></div><div class="body">${lines.map(line).join("")}${cursor ? `<div class="l"><span class="cur"></span></div>` : ""}${`<div class="l">&nbsp;</div>`.repeat(Math.max(0, rows - lines.length - (cursor ? 1 : 0)))}</div></div>`;
-const page = (inner) => `<!doctype html><meta charset="utf-8"><style>${css}</style><div style="position:absolute;left:0;top:0;padding:28px">${inner}</div>`;
+const brand = { ground: "#0a0e2a", accent: "#FFA133", text: "#FDF6F2", logo: "../../../resources/logo.svg" };
+const strip = (caption) => `<div class="cap"><img src="${brand.logo}" width="28" height="28">${esc(caption)}</div>`;
+const page = (inner, caption) => `<!doctype html><meta charset="utf-8"><style>${css}</style>${strip(caption)}<div class="stage">${inner}</div>`;
 const grow = (lines, cuts) => cuts.map((n) => lines.slice(0, n));   // frames that fill in
 ```
+
+With `.cap{position:absolute;left:28px;top:18px;display:flex;align-items:center;gap:10px;font:600 15px/1 system-ui;color:${brand.text}}`,
+`.stage{position:absolute;left:0;top:56px;padding:28px}`, `html,body{background:${brand.ground}}`
+and `.l.hi{background:rgba(255,161,51,.14);box-shadow:inset 3px 0 ${brand.accent}}` for the
+`{H}` line. The strip's height is part of every frame, so a gif never jumps.
 
 Half-block QR codes (`█▀▄`) need `line-height:1` and Menlo, or the rows
 show gaps.
@@ -177,31 +226,47 @@ for scene in $(node -e 'console.log(Object.keys(require("./docs/media/frames/sce
   last=$F/$scene-$((n-1)).png
   magick -delay 120 -loop 0 $files -delay 300 $last -layers Optimize $M/$scene.gif
   cp $last $M/$scene.png
+  if command -v ffmpeg >/dev/null; then
+    list=$F/$scene.txt; : > $list
+    for f in $files; do printf "file '%s'\nduration 1.2\n" "$PWD/$f" >> $list; done
+    printf "file '%s'\nduration 3\nfile '%s'\n" "$PWD/$last" "$PWD/$last" >> $list
+    ffmpeg -y -loglevel error -f concat -safe 0 -i $list -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2,format=yuv420p" -r 30 $M/$scene.mp4
+  fi
 done
 rm -rf $F
 ```
 
+The mp4 is the gif's frames at the gif's pace (1.2 s a frame, 3 s on the last),
+even dimensions for H.264, playable in a store listing, a post, or a slide.
+A 30-second product video is the scenes joined in README order with
+`ffmpeg -f concat` on the per-scene mp4s, no narration, no music.
+
 ## Procedure
 
-1. **Read the output code.** For each command or screen in the story, find
+1. **Find the look.** The logo file and the palette, as above; write the
+   `brand` block first so every scene is drawn in it.
+2. **Read the output code.** For each command or screen in the story, find
    the print statements and copy the format strings, glyphs and colours into
    a scratch list. For a page or an app, copy its palette and the row layout.
-2. **Pick the scenes.** The hero (the one command that shows why the product
+3. **Pick the scenes.** The hero (the one command that shows why the product
    exists), then one per feature the README names. Skip anything the README
    does not talk about.
-3. **Write `scripts/showcase.mjs`** with the templates above: a scene is an
-   array of lines and a list of cuts (`grow`), or a list of states for a UI.
-4. **Write `scripts/capture-showcase.sh`**, add `make showcase` (or an npm
+4. **Write `scripts/showcase.mjs`** with the templates above: a scene is a
+   caption, an array of lines and a list of cuts (`grow`), or a list of
+   states for a UI. The first cut is the command alone; the last frame
+   carries one `{H}` line.
+5. **Write `scripts/capture-showcase.sh`**, add `make showcase` (or an npm
    script), and note it in the README's development section.
-5. **Render, then look.** Open two or three frames as images. Check: cut-off
+6. **Render, then look.** Open the first and the last frame of two scenes as
+   images. Check: the strip and logo on both, the highlighted line, cut-off
    lines, wrapped words, wrong glyphs, a QR with gaps, a frame that changes
    size. Fix and re-render only that scene.
-6. **Place in the README**: the hero right under the tagline, full width,
+7. **Place in the README**: the hero right under the tagline, full width,
    stacked one under another (side-by-side halves are too small to read).
-   Each other gif inside the section it illustrates. `alt` text says what
-   happens in the gif.
-7. **Commit media with the script.** The frames directory stays out of git.
-8. **Exclude from analysis.** Add `scripts/**` to SonarCloud exclusions and
+   Each other gif inside the section it illustrates, with its caption as a
+   `<sub>` line under it and `alt` text that says what happens.
+8. **Commit media with the script.** The frames directory stays out of git.
+9. **Exclude from analysis.** Add `scripts/**` to SonarCloud exclusions and
    the media to the package's ignore file (`.vscodeignore`, `.npmignore`)
    so a store package does not carry gifs; marketplaces rewrite relative
    README image links to the repo's raw URLs.
@@ -219,6 +284,9 @@ rm -rf $F
 
 ## Done when
 
+- Every frame carries the logo and the caption strip, on the brand ground.
+- The first frame of a scene is the command alone; the last has one
+  highlighted line and lingers.
 - Every line in every frame is something the code prints, or a real UI state.
 - One command redraws everything; the README says which.
 - The hero gif is the first thing under the tagline; nothing side by side.

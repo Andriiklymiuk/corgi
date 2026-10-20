@@ -150,9 +150,8 @@ per-story review, draft PR, grouped report.
 - **No destructive git without explicit OK** - checkout off a dirty tree, branch
   deletes, force-push, pushing shared branches.
 - **Don't push the workspace meta repo** unless asked - only service branches.
-- **Minimal code comments.** Don't narrate the change in code comments - it reads from
-  the diff and the PR/commit. Add one only for a genuinely non-obvious invariant that
-  would otherwise be lost, and only where the file already comments. No "// added X" notes.
+- **Code as `../_shared/conventions.md` › Code you write says.** No comments, names
+  that carry the meaning, the smallest change that does the job, nothing speculative.
 - **Read the repo's own agent docs before running anything in it.** A service's
   CLAUDE.md/AGENTS.md may forbid specific commands (a dev server that breaks the build,
   a script that mutates state). A triage produced by a forbidden command is noise -

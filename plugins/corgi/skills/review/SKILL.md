@@ -405,7 +405,12 @@ Two questions on every non-trivial diff, before any style point:
    unbounded scan, a missing timeout, or a leaked goroutine there is
    `blocking`; the same in a one-shot command is a `nit`.
 
-Both are only findings when they are real. Do not invent an abstraction
+3. **Does it read without help?** A comment that narrates the code, a name that
+   needs the body to be understood, a copy of a helper that exists two files
+   away, an option with one caller - each is a `nit` with the smaller version
+   named (`../_shared/conventions.md` › Code you write is the bar).
+
+All three are only findings when they are real. Do not invent an abstraction
 objection to have something to say, and do not call a hot path slow without
 naming what runs and how often.
 

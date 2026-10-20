@@ -1,19 +1,19 @@
 #!/bin/sh
 # Screenshots the frames scripts/showcase.mjs wrote, at 2x, and joins each
-# scene into docs/media/<scene>.gif plus a still of its last frame.
+# scene into docs/media/<scene>.gif, a still of its last frame, and an mp4.
 set -e
 CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 cd "$(dirname "$0")/.."
 node scripts/showcase.mjs
 M=docs/media
 F=$M/frames
-GROUND="#0d1117"
+GROUND="#0a0e2a"
 shot() { "$CHROME" --headless=new --hide-scrollbars --disable-gpu --force-device-scale-factor=2 --window-size="$3" --screenshot="$PWD/$2" "file://$PWD/$1" >/dev/null 2>&1; }
 trim() { magick "$1" -fuzz 1% -trim +repage -bordercolor "$GROUND" -border 28 "$1"; }
 
 scenes=${*:-$(node -e 'const s=require("./docs/media/frames/scenes.json");console.log(Object.keys(s).join(" "))')}
 for scene in $scenes; do
-  n=$(node -e "console.log(require('./docs/media/frames/scenes.json')['$scene'])")
+  n=$(node -e "console.log(require('./docs/media/frames/scenes.json')['$scene'].frames)")
   size=960,1000; case "$scene" in phone|dashboard) size=1300,1000;; telegram) size=420,700;; esac
   i=0; files=""
   while [ $i -lt $n ]; do
@@ -32,6 +32,12 @@ for scene in $scenes; do
   last=$F/$scene-$((n-1)).png
   magick -delay 110 -loop 0 $files -delay 300 $last -layers Optimize $M/$scene.gif
   cp $last $M/$scene.png
+  if command -v ffmpeg >/dev/null; then
+    list=$F/$scene.txt; : > $list
+    for f in $files; do printf "file '%s'\nduration 1.2\n" "$PWD/$f" >> $list; done
+    printf "file '%s'\nduration 3\nfile '%s'\n" "$PWD/$last" "$PWD/$last" >> $list
+    ffmpeg -y -loglevel error -f concat -safe 0 -i $list -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2,format=yuv420p" -r 30 $M/$scene.mp4
+  fi
   echo "$scene: $n frames"
 done
 [ $# -eq 0 ] && rm -rf $F

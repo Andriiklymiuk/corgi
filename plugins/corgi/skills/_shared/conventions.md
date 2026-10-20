@@ -63,6 +63,39 @@ A dead reference, then a live one:
 > missed. It's back to 3.1.8 in [!9168](https://gitlab.com/acme/core/-/merge_requests/9168),
 > nothing else moves.
 
+## Code you write
+
+Better engineered, not more engineered. The diff is the explanation.
+
+- **No comments.** Names and structure carry the meaning. The one exception is a
+  single line for a why that cannot be read from the code - a hidden constraint, a
+  workaround for a named bug - and only where the file already comments. Never a
+  comment that restates the function, lists the arguments, narrates the next five
+  lines, or marks what was added (`// added X`). No doc comments on private things.
+- **Names say what, not how.** `convertCRLFToLF`, not `stripCR`; `retryAfter`, not
+  `ra`. A reader should not need the body to know what a function returns.
+- **The smallest change that does the job.** No abstraction for one caller, no
+  option nobody asked for, no interface with one implementation, no "while I'm here"
+  refactor. Reuse a field, hook or helper that exists before adding one that looks
+  like it. A second copy of something is fine until there is a third.
+- **One job per function.** Split when a function needs a section comment to be
+  read; join when two functions always run together.
+- **Errors say what to do.** `"cannot read %s: run chmod 600 %s"`, not `"read failed"`.
+- **Tests name the behaviour**, not the function: `TestAClosedLidLetsTheScreenSleep`,
+  not `TestLidChanged2`. One behaviour per test; fakes over mocks; no sleeps.
+- **Nothing speculative.** No TODOs, no commented-out code, no feature flags for a
+  future nobody has asked for.
+
+## Describing a change
+
+- **A commit is its subject line.** One line, what changed and why it matters, no
+  body, no trailer.
+- **A PR body is what a reviewer needs and nothing more**: what changed (two or
+  three lines), how to try it, what was left out and why. No restating the diff
+  file by file, no "this PR introduces", no headings for one line.
+- **A skill or command description is one sentence** that says when to use it and
+  one that says when not to; the examples are the rest.
+
 ## Finish what you start
 
 A run ends when the skill's deliverable exists, not when a plan for it does: the branch is
