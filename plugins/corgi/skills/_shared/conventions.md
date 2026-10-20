@@ -15,7 +15,8 @@ they rewrite.
 
 ## Comments people read
 
-A reply on a ticket or PR goes to a teammate, so it reads like one wrote it in chat.
+A reply on a ticket or PR, or a line you hand the user to paste into their chat, goes to
+a teammate, so it reads like one wrote it in chat.
 
 - **Answer first, in one line.** "Works on build 412 - your phone has an older one."
   Then at most two or three short lines: what you checked, the one thing you need.
@@ -25,11 +26,17 @@ A reply on a ticket or PR goes to a teammate, so it reads like one wrote it in c
   spans; a spec or workpad note is the exception, not a reply to a person.
 - **Match the thread.** Their language, roughly their length; one line in, about one
   line out.
+- **Text you hand over to paste is theirs, not yours.** Write it the way they type: two
+  or three short lines, their casing, no greeting, no "thanks for the great point", no
+  "happy to pair", no table, no recap of what you did - the links carry that. When they
+  show you a draft, keep their words and fix only the slips (a wrong link, a typo)
+  without pointing them out. If they ask for it again, the first version was a report.
 - **A PR, MR or ticket you name is a link.** `!9154`, `#42` and `ABC-12` only link
   inside their own repo or tracker; on a ticket, in Slack or in another repo they are
   dead text. Write a markdown link with the short name as its label:
   `[!9154](https://gitlab.com/<group>/<repo>/-/merge_requests/9154)`. A full URL works
-  too. No spaces before punctuation to keep a URL clean (`… /9168 :`) - the comma or
+  too, and in Slack it is the only form that renders - paste the full URL there. No
+  spaces before punctuation to keep a URL clean (`… /9168 :`) - the comma or
   period right after a URL stays out of the link. `corgi agent watch comment` makes
   both clickable on Jira and Linear; the Atlassian MCP comment takes markdown.
 - **A picture, video or file you mention is in the comment.** Never "see the
