@@ -8,7 +8,8 @@ node scripts/showcase.mjs
 M=docs/media
 F=$M/frames
 GROUND="#0a0e2a"
-shot() { "$CHROME" --headless=new --hide-scrollbars --disable-gpu --force-device-scale-factor=2 --window-size="$3" --screenshot="$PWD/$2" "file://$PWD/$1" >/dev/null 2>&1; }
+shot() { perl -e 'alarm 90; exec @ARGV' "$CHROME" --headless=new --hide-scrollbars --disable-gpu --force-device-scale-factor=2 --window-size="$3" --screenshot="$PWD/$2" "file://$PWD/$1" >/dev/null 2>&1 || shot_retry "$@"; }
+shot_retry() { pkill -f "Google Chrome --headless" 2>/dev/null; sleep 1; "$CHROME" --headless=new --hide-scrollbars --disable-gpu --force-device-scale-factor=2 --window-size="$3" --screenshot="$PWD/$2" "file://$PWD/$1" >/dev/null 2>&1; }
 trim() { magick "$1" -fuzz 1% -trim +repage -bordercolor "$GROUND" -border 28 "$1"; }
 
 scenes=${*:-$(node -e 'const s=require("./docs/media/frames/scenes.json");console.log(Object.keys(s).join(" "))')}
