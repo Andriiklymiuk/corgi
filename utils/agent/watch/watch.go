@@ -568,6 +568,8 @@ type Watch struct {
 	wakeOnce  sync.Once
 	Round     func(now time.Time)
 	Asleep    func(now time.Time) bool
+	// Metered says the link costs (a phone's hotspot): polls go three times slower.
+	Metered func() bool
 
 	unreachable map[string]bool
 }
@@ -665,6 +667,9 @@ func (w *Watch) Run(ctx context.Context) {
 			wait = min(wait*2, interval*10)
 		} else {
 			wait = interval
+		}
+		if w.Metered != nil && w.Metered() {
+			wait = max(wait, interval*3)
 		}
 		select {
 		case <-ctx.Done():

@@ -526,3 +526,15 @@ func TestRulesLeaveAParentToItsSubtasks(t *testing.T) {
 		t.Fatalf("no subtasks, the parent is the work: %q", why)
 	}
 }
+
+func TestAMeteredLinkPollsThreeTimesSlower(t *testing.T) {
+	w := &Watch{Workspace: "w", Interval: 20 * time.Millisecond, State: &State{Errors: map[string]string{}}, Metered: func() bool { return true }}
+	ctx, cancel := context.WithTimeout(context.Background(), 130*time.Millisecond)
+	defer cancel()
+	rounds := 0
+	w.Round = func(time.Time) { rounds++ }
+	w.Run(ctx)
+	if rounds > 4 {
+		t.Fatalf("20 ms metered is 60 ms a round: %d rounds in 130 ms", rounds)
+	}
+}

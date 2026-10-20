@@ -9,10 +9,11 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"sync"
+	"sync/atomic"
 	"time"
 
 	"andriiklymiuk/corgi/utils"
+	"andriiklymiuk/corgi/utils/agent/push"
 )
 
 // The hotspot hop: hotel Wi-Fi drops, the laptop in the bag goes quiet, and
@@ -35,6 +36,7 @@ type hopStep struct {
 	Join bool
 	Say  string
 	Hold bool
+	Back bool
 }
 
 type hopper struct {
@@ -72,6 +74,7 @@ func (h *hopper) tick(now time.Time, online bool, current string, bytes uint64) 
 		if !h.offlineSince.IsZero() {
 			gap := now.Sub(h.offlineSince)
 			h.offlineSince, h.attempts, h.nextTry = time.Time{}, 0, time.Time{}
+			step.Back = true
 			if h.onHotspot {
 				step.Say = "offline for " + roughSpan(gap) + " - hopped onto the hotspot " + strings.TrimSpace(current)
 			} else {
@@ -139,22 +142,21 @@ func ParseSize(s string) (uint64, error) {
 	return uint64(n * float64(mult)), nil
 }
 
-var hotspotHold struct {
-	mu   sync.Mutex
-	hold bool
+// What the rest of the daemon reads about the link: offline holds new runs,
+// over budget holds them too, on the hotspot the trackers are polled slower.
+var link struct {
+	offline    atomic.Bool
+	onHotspot  atomic.Bool
+	overBudget atomic.Bool
 }
 
-func setHotspotHold(hold bool) {
-	hotspotHold.mu.Lock()
-	hotspotHold.hold = hold
-	hotspotHold.mu.Unlock()
-}
+func setHotspotHold(hold bool) { link.overBudget.Store(hold) }
 
-func hotspotOverBudget(time.Time) bool {
-	hotspotHold.mu.Lock()
-	defer hotspotHold.mu.Unlock()
-	return hotspotHold.hold
-}
+func hotspotOverBudget(time.Time) bool { return link.overBudget.Load() }
+
+func offline(time.Time) bool { return link.offline.Load() }
+
+func onMeteredLink() bool { return link.onHotspot.Load() }
 
 var readOnline = func() bool {
 	client := &http.Client{Timeout: 5 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
@@ -278,9 +280,14 @@ func (d *Daemon) watchNetwork(ctx context.Context) {
 		ssid := readSSID(iface)
 		step := h.tick(now, online, ssid, readBytes(iface))
 		setHotspotHold(step.Hold)
+		link.offline.Store(!online)
+		link.onHotspot.Store(h.onHotspot)
 		d.setNetwork(online, ssid, h.onHotspot)
 		if step.Say != "" {
 			d.ringMachine("network", step.Say)
+		}
+		if step.Back {
+			d.flushHeldPushes()
 		}
 		if step.Join {
 			utils.Infof("agent: hotspot: offline for %s - joining %s (try %d)\n", roughSpan(now.Sub(h.offlineSince)), h.ssid, h.attempts)
@@ -294,6 +301,52 @@ func (d *Daemon) watchNetwork(ctx context.Context) {
 		case <-t.C:
 		}
 	}
+}
+
+// A push that could not leave while offline waits here; three or fewer go
+// out as they were when the link is back, more become one summary.
+const heldPushCap = 20
+
+func (d *Daemon) HoldPush(m push.Message) {
+	d.heldPushMu.Lock()
+	defer d.heldPushMu.Unlock()
+	if len(d.heldPushes) >= heldPushCap {
+		d.heldPushes = d.heldPushes[1:]
+	}
+	d.heldPushes = append(d.heldPushes, m)
+}
+
+func (d *Daemon) flushHeldPushes() {
+	d.heldPushMu.Lock()
+	held := d.heldPushes
+	d.heldPushes = nil
+	d.heldPushMu.Unlock()
+	if len(held) == 0 || d.Push == nil {
+		return
+	}
+	if len(held) <= 3 {
+		for _, m := range held {
+			go d.Push(m)
+		}
+		return
+	}
+	go d.Push(summarizeHeld(held))
+}
+
+func summarizeHeld(held []push.Message) push.Message {
+	body := fmt.Sprintf("%d while offline:", len(held))
+	for i, m := range held {
+		if i == 6 {
+			body += fmt.Sprintf("\n  and %d more", len(held)-i)
+			break
+		}
+		line := strings.TrimSpace(m.Body)
+		if nl := strings.IndexByte(line, '\n'); nl > 0 {
+			line = line[:nl]
+		}
+		body += "\n  " + line
+	}
+	return push.Message{Title: "corgi agent · while offline", Body: body, Category: "inbox", Thread: "offline", Data: map[string]string{"offline": "1"}}
 }
 
 func (d *Daemon) setNetwork(online bool, ssid string, onHotspot bool) {

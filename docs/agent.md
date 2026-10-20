@@ -1716,6 +1716,14 @@ While you are away:
   phone's plan. An iPhone on your Apple ID needs no password (System Settings
   › Wi-Fi › Ask to join hotspots: Automatically; Bluetooth on); another
   network's goes in the login keychain with `--password`.
+- **A bad link.** Offline, no new fix starts (a run that cannot reach the
+  API only fails) and the trackers are polled slower, as before; a push that
+  could not leave waits and goes out when the link is back - three or fewer
+  as they were, more as one "N while offline" push. On the hotspot the
+  trackers are polled at a third of the pace. Every `/launch` JSON goes out
+  gzipped with an `ETag`, so a phone on cellular reading the board every few
+  seconds pulls a tenth of the bytes, and nothing when nothing changed
+  (2.31.34).
 - **The lid.** A closing lid lets the screen sleep and mutes the Mac until it
   opens; `corgi agent status` and the status file's `laptop` say the degrees,
   the battery, the lid, the network and how many sessions are paused.

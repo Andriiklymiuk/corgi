@@ -222,9 +222,16 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 	}
 	pushStore := push.Load(dir)
 	d.Push = func(m push.Message) {
-		if err := pushStore.Send(context.Background(), m); err != nil {
-			utils.Infof("agent: push: %v\n", err)
+		err := pushStore.Send(context.Background(), m)
+		if err == nil {
+			return
 		}
+		if watch.IsNetworkError(err) {
+			d.HoldPush(m)
+			utils.Infof("agent: push held until the link is back: %s\n", m.Title)
+			return
+		}
+		utils.Infof("agent: push: %v\n", err)
 	}
 	d.Workpad = func(workspaceID, ref, section, text string) {
 		writeWorkpad(d.Dir, workspaceID, ref, section, text)

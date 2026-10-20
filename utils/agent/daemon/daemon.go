@@ -150,6 +150,8 @@ type Daemon struct {
 	laptop         Laptop
 	lidClosed      atomic.Bool
 	lidMuted       atomic.Bool
+	heldPushMu     sync.Mutex
+	heldPushes     []push.Message
 	spent          map[string]spendMark
 	DigestAt       string
 	Digest         func(now time.Time) string

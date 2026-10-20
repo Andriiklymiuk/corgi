@@ -298,7 +298,8 @@ func (d *Daemon) startWatches(ctx context.Context) {
 				d.advancePlans(ctx)
 				go d.refreshInboxStates(ctx, spec)
 			},
-			Asleep: func(now time.Time) bool { return dayOff(spec, now) }}
+			Asleep:  func(now time.Time) bool { return dayOff(spec, now) },
+			Metered: onMeteredLink}
 		d.watchers[spec.Workspace] = w
 		d.fixBusy[spec.Workspace] = make(chan struct{}, slotsOf(spec))
 		if len(live) > 0 && spec.Interval > 0 {
@@ -963,6 +964,9 @@ func fixDeferral(spec WatchSpec, log *watch.FixLog, now time.Time) string {
 	}
 	if q, err := ParseQuiet(spec.Quiet); err == nil && q.Contains(now) && !spec.NightShift {
 		return "quiet hours"
+	}
+	if offline(now) {
+		return "offline"
 	}
 	if tooHot(now) {
 		return "too hot"

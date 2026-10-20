@@ -420,7 +420,7 @@ func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 		go watchPairRequests(filepath.Dir(deviceStore), window)
 	}
 
-	srv := &http.Server{Addr: addr, Handler: mux}
+	srv := &http.Server{Addr: addr, Handler: launchCompression(mux)}
 
 	announceMCPAuth(token, deviceStore)
 	fmt.Fprintf(os.Stderr, "corgi mcp serving Streamable HTTP on %s/mcp\n", addr)

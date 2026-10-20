@@ -1,9 +1,14 @@
 package daemon
 
 import (
+	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
+
+	"andriiklymiuk/corgi/utils/agent/push"
+	"andriiklymiuk/corgi/utils/agent/watch"
 )
 
 func TestTheHopperJoinsAfterAMinuteAndAHalfOffline(t *testing.T) {
@@ -107,5 +112,40 @@ func TestMacOSNetworkParsers(t *testing.T) {
 	}
 	if sizeOf(1536<<20) != "1.5 GB" || sizeOf(20<<20) != "20 MB" {
 		t.Fatal(sizeOf(1536<<20), sizeOf(20<<20))
+	}
+}
+
+func TestHeldPushesGoOutAsTheyWereOrAsOneSummary(t *testing.T) {
+	d := testDaemon(t)
+	var sent []push.Message
+	var mu sync.Mutex
+	d.Push = func(m push.Message) { mu.Lock(); sent = append(sent, m); mu.Unlock() }
+	d.flushHeldPushes()
+	for i := 0; i < 3; i++ {
+		d.HoldPush(push.Message{Title: "t", Body: fmt.Sprintf("fixed ABC-%d", i)})
+	}
+	d.flushHeldPushes()
+	waitFor(t, func() bool { mu.Lock(); defer mu.Unlock(); return len(sent) == 3 })
+	sent = nil
+	for i := 0; i < 8; i++ {
+		d.HoldPush(push.Message{Title: "t", Body: fmt.Sprintf("fixed ABC-%d\nmore lines", i)})
+	}
+	d.flushHeldPushes()
+	waitFor(t, func() bool { mu.Lock(); defer mu.Unlock(); return len(sent) == 1 })
+	body := sent[0].Body
+	if !strings.HasPrefix(body, "8 while offline:") || !strings.Contains(body, "\n  fixed ABC-0\n") || !strings.Contains(body, "and 2 more") || strings.Contains(body, "more lines") {
+		t.Fatalf("summary: %q", body)
+	}
+	if d.HoldPush(push.Message{}); len(d.heldPushes) != 1 {
+		t.Fatal("the queue is empty after a flush")
+	}
+}
+
+func TestOfflineHoldsNewRuns(t *testing.T) {
+	link.offline.Store(true)
+	defer link.offline.Store(false)
+	log := watch.LoadFixLog(t.TempDir())
+	if got := fixDeferral(WatchSpec{Workspace: "w"}, log, time.Now()); got != "offline" {
+		t.Fatalf("got %q", got)
 	}
 }
