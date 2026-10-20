@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 
 	"andriiklymiuk/corgi/utils"
@@ -17,6 +18,8 @@ import (
 	"andriiklymiuk/corgi/utils/agent/daemon"
 	"andriiklymiuk/corgi/utils/agent/push"
 	"andriiklymiuk/corgi/utils/agent/supervisor"
+
+	"golang.org/x/term"
 )
 
 const (
@@ -93,7 +96,23 @@ func checkSudoers() agentCheck {
 	if supervisor.PmsetAllowed() {
 		return agentCheck{Name: name, OK: true, Detail: "corgi may let the lid close, turn Low Power Mode on when warm, and sleep the laptop when too hot (sudoers rule)"}
 	}
-	return agentCheck{Name: name, Detail: "corgi cannot touch sleep or Low Power Mode itself - four pmset lines, nothing else", Fix: supervisor.SudoersInstall()}
+	return agentCheck{Name: name, Detail: "corgi cannot touch sleep or Low Power Mode itself - four pmset lines, nothing else", Fix: "corgi agent away (asks your password once), or " + supervisor.SudoersInstall()}
+}
+
+// installSudoers writes the rule through sudo in the person's own terminal:
+// one password prompt, once. Not from a daemon, not without a terminal.
+func installSudoers() error {
+	if !term.IsTerminal(int(syscall.Stdin)) {
+		return fmt.Errorf("no terminal to ask the password in")
+	}
+	script := fmt.Sprintf("printf '%%s\\n' %s > /etc/sudoers.d/corgi && chmod 440 /etc/sudoers.d/corgi && visudo -cf /etc/sudoers.d/corgi >/dev/null", shellQuote(supervisor.SudoersRule()))
+	c := exec.Command("sudo", "-p", "password for the pmset rule (/etc/sudoers.d/corgi): ", "sh", "-c", script)
+	c.Stdin, c.Stdout, c.Stderr = os.Stdin, os.Stdout, os.Stderr
+	if err := c.Run(); err != nil {
+		return err
+	}
+	supervisor.ResetPmsetAllowed()
+	return nil
 }
 
 func checkLid(dir string) agentCheck {
@@ -127,7 +146,7 @@ func checkHotspot(dir string) agentCheck {
 	const name = "hotspot"
 	user, err := config.LoadUser(agentUserConfigPath(dir))
 	if err != nil || user == nil || strings.TrimSpace(user.Hotspot) == "" {
-		return agentCheck{Name: name, Detail: "when the Wi-Fi drops the laptop stays offline", Fix: "corgi agent hotspot \"<your iPhone>\" - joins it after 90 s offline, 2 GB budget"}
+		return agentCheck{Name: name, OK: true, Detail: "not learned yet - join your phone's hotspot once from this Mac and the daemon remembers it (or corgi agent hotspot \"<name>\")"}
 	}
 	return agentCheck{Name: name, OK: true, Detail: user.Hotspot + " joins after 90 s offline, " + budgetWords(user.HotspotBudget)}
 }

@@ -140,6 +140,9 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 		d.Lid = strings.TrimSpace(user.Lid)
 		d.HeatPause = user.Heat
 		d.Hotspot = strings.TrimSpace(user.Hotspot)
+		d.LearnHotspot = func(ssid string) {
+			_ = writeUserConfigLine(agentUserConfigPath(dir), hotspotLine, "hotspot: "+strconv.Quote(ssid))
+		}
 		d.HotspotBudget = hotspotBudgetOf(user.HotspotBudget)
 		d.Sessions.AutoContinue = user.AutoContinue
 		supervisor.KeepDisplay = user.KeepDisplay

@@ -2,9 +2,11 @@ package cmd
 
 import (
 	"fmt"
+	"runtime"
 	"strings"
 
 	"andriiklymiuk/corgi/utils/agent/config"
+	"andriiklymiuk/corgi/utils/agent/supervisor"
 	"andriiklymiuk/corgi/utils/agent/watch"
 
 	"github.com/spf13/cobra"
@@ -105,6 +107,13 @@ caps are yours: it changes none of them.
 		if !dry && (len(steps) > 0 || pulse != "") {
 			if err := writeUserConfig(path, user); err != nil {
 				return err
+			}
+		}
+		if !dry && runtime.GOOS == "darwin" && !supervisor.PmsetAllowed() {
+			if err := installSudoers(); err != nil {
+				fmt.Printf("  pmset rule not installed (%v) - the line is below\n", err)
+			} else {
+				fmt.Println("✓ pmset rule: corgi may let the lid close, turn Low Power Mode on, sleep it when too hot")
 			}
 		}
 		planned := map[string]bool{}

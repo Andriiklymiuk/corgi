@@ -149,3 +149,16 @@ func TestOfflineHoldsNewRuns(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+func TestAPhoneHotspotIsRecognisedByItsName(t *testing.T) {
+	for _, yes := range []string{"Andrii's iPhone", "iPad (2)", "Pixel_7", "Galaxy S24", "My Hotspot"} {
+		if !looksLikePhoneHotspot(yes) {
+			t.Fatalf("%q is a phone", yes)
+		}
+	}
+	for _, no := range []string{"Hotel Lobby", "home-5G", ""} {
+		if looksLikePhoneHotspot(no) {
+			t.Fatalf("%q is not a phone", no)
+		}
+	}
+}

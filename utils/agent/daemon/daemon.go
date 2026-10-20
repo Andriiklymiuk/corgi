@@ -142,6 +142,7 @@ type Daemon struct {
 	// while; HotspotBudget the bytes it may use before new runs hold (0: no cap).
 	Hotspot       string
 	HotspotBudget uint64
+	LearnHotspot  func(ssid string)
 	// Awake is the daemon-wide wake lock; AwakePolicy says, each tick,
 	// whether to hold it and whether to keep the screen lit.
 	Awake          *supervisor.WakeLock

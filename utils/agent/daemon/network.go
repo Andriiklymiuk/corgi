@@ -53,6 +53,18 @@ type hopper struct {
 	lastSSID     string
 }
 
+// A phone's hotspot carries the phone's name; the first time this Mac is on
+// one, that is the hotspot to hop to from then on.
+func looksLikePhoneHotspot(ssid string) bool {
+	l := strings.ToLower(ssid)
+	for _, word := range []string{"iphone", "ipad", "pixel", "galaxy", "android", "hotspot"} {
+		if strings.Contains(l, word) {
+			return true
+		}
+	}
+	return false
+}
+
 func onHotspotName(current, hotspot string) bool {
 	c, h := strings.ToLower(strings.TrimSpace(current)), strings.ToLower(strings.TrimSpace(hotspot))
 	return c != "" && h != "" && (c == h || strings.Contains(c, h))
@@ -278,6 +290,13 @@ func (d *Daemon) watchNetwork(ctx context.Context) {
 		now := time.Now()
 		online := readOnline()
 		ssid := readSSID(iface)
+		if h.ssid == "" && online && looksLikePhoneHotspot(ssid) {
+			h.ssid = strings.TrimSpace(ssid)
+			utils.Infof("agent: hotspot: this is a phone's hotspot - %s is the one to hop to from now on\n", h.ssid)
+			if d.LearnHotspot != nil {
+				d.LearnHotspot(h.ssid)
+			}
+		}
 		step := h.tick(now, online, ssid, readBytes(iface))
 		setHotspotHold(step.Hold)
 		link.offline.Store(!online)

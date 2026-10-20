@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 	"syscall"
 
@@ -28,7 +29,10 @@ phone's plan: past it, no new fix starts until Wi-Fi is back.
   corgi agent hotspot "Travel router" --password    # asks for it, keeps it in the login keychain
   corgi agent hotspot "Andrii's iPhone" --budget 5GB
   corgi agent hotspot                               # what is set
-  corgi agent hotspot off
+  corgi agent hotspot off                           # forget it (it is learned again)
+
+Nothing to set for an iPhone of yours: the first time this Mac is on its
+hotspot, the daemon remembers the name and hops to it from then on.
 
 An iPhone signed into the same Apple ID joins without a password when
 System Settings › Wi-Fi › Ask to join hotspots is on; keep Bluetooth on.
@@ -94,9 +98,11 @@ func budgetWords(raw string) string {
 	return fmt.Sprintf("a %s data budget", daemon.SizeWords(n))
 }
 
+var hotspotLine = regexp.MustCompile(`(?m)^hotspot:.*$`)
+
 func printHotspot(user *config.UserConfig) {
 	if strings.TrimSpace(user.Hotspot) == "" {
-		utils.Info("hotspot: off - corgi agent hotspot \"<wifi name>\"")
+		utils.Info("hotspot: not learned yet - the first time this Mac is on your phone's hotspot the daemon remembers its name; or name it: corgi agent hotspot \"<wifi name>\"")
 		return
 	}
 	utils.Infof("hotspot: %s, %s\n", user.Hotspot, budgetWords(user.HotspotBudget))

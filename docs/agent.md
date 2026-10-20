@@ -1675,8 +1675,9 @@ corgi agent hotspot "Andrii's iPhone"          # Wi-Fi gone 90 s → the phone's
 corgi agent restart
 ```
 
-**The sudoers rule.** `corgi agent away` prints one line that lets your user
-run four `pmset` commands without a password - `disablesleep 1|0` and
+**The sudoers rule.** `corgi agent away` installs it, asking your password
+once in the terminal: one line that lets your user run four `pmset`
+commands without a password - `disablesleep 1|0` and
 `lowpowermode 1|0`, nothing else - into `/etc/sudoers.d/corgi`. With it, a
 daemon that holds the machine awake also lets the lid close while it runs and
 gives that back when it stops (so `disablesleep` is not a thing to remember to
@@ -1709,9 +1710,11 @@ While you are away:
   allowed: with the lid closed (the default), always, or never.
 - **Battery.** Under 20% on battery no new fix starts, one push; under 10%
   another. The lid closing on battery is said too.
-- **Wi-Fi.** `corgi agent hotspot "<name>"`: after 90 seconds offline the
-  daemon joins the hotspot and retries on a backoff (30 s, 1, 2, 5 min); the
-  push says how long the gap was. Back on Wi-Fi, another says how much the
+- **Wi-Fi.** The first time this Mac is on your phone's hotspot the daemon
+  remembers its name (`hotspot:` in the user config; `corgi agent hotspot
+  "<name>"` names another). After 90 seconds offline it joins that hotspot
+  and retries on a backoff (30 s, 1, 2, 5 min); the push says how long the
+  gap was. Back on Wi-Fi, another says how much the
   hotspot carried. Past the data budget (2 GB unless `--budget` says) no new
   fix starts until Wi-Fi is back - a dependency download should not eat the
   phone's plan. An iPhone on your Apple ID needs no password (System Settings
