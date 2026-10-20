@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"andriiklymiuk/corgi/utils/agent/supervisor"
 )
 
 func guardAt(t *testing.T, hours string, start time.Time) *lidGuard {
@@ -12,7 +14,7 @@ func guardAt(t *testing.T, hours string, start time.Time) *lidGuard {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &lidGuard{window: w, last: start}
+	return &lidGuard{window: &w, last: start}
 }
 
 func TestALidOpenedByDayRings(t *testing.T) {
@@ -90,5 +92,54 @@ func TestNightShiftHoldsTheWordUntilMorning(t *testing.T) {
 	d.notifyAttentionKey("corgi agent · acme", "fixed ABC-2", "acme", "", "k2")
 	if len(rang) != 1 {
 		t.Fatalf("a plain workspace rings as before: %v", rang)
+	}
+}
+
+func TestAClosedLidLetsTheScreenSleepAndMutesUntilItOpens(t *testing.T) {
+	oldExt, oldRead, oldSet := hasExternalDisplay, readMuted, setMuted
+	defer func() { hasExternalDisplay, readMuted, setMuted = oldExt, oldRead, oldSet }()
+	hasExternalDisplay = func() bool { return false }
+	muted := false
+	readMuted = func() bool { return muted }
+	setMuted = func(on bool) { muted = on }
+	d := testDaemon(t)
+	lock := supervisor.FakeWakeLock(supervisor.WakeLockAlways)
+	t.Cleanup(lock.Release)
+	_ = lock.SetDisplay(true)
+	d.Awake = lock
+	d.AwakePolicy = func() (bool, bool) { return true, true }
+	now := time.Now()
+	d.lidChanged(now, true, nil)
+	if lock.Display() || !muted {
+		t.Fatalf("closed: display=%v muted=%v", lock.Display(), muted)
+	}
+	d.lidChanged(now, false, nil)
+	if !lock.Display() || muted {
+		t.Fatalf("opened: display=%v muted=%v", lock.Display(), muted)
+	}
+	muted = true
+	d.lidChanged(now, true, nil)
+	d.lidChanged(now, false, nil)
+	if !muted {
+		t.Fatal("a Mac that was muted before stays muted after")
+	}
+}
+
+func TestAClosedLidWithASecondDisplayChangesNothing(t *testing.T) {
+	oldExt, oldSet := hasExternalDisplay, setMuted
+	defer func() { hasExternalDisplay, setMuted = oldExt, oldSet }()
+	hasExternalDisplay = func() bool { return true }
+	setMuted = func(bool) { t.Fatal("clamshell mode is someone working") }
+	d := testDaemon(t)
+	d.lidChanged(time.Now(), true, nil)
+}
+
+func TestExternalDisplayIn(t *testing.T) {
+	internal := "Displays:\n    Color LCD:\n      Connection Type: Internal\n"
+	if externalDisplayIn(internal) {
+		t.Fatal("the built-in screen only")
+	}
+	if !externalDisplayIn(internal + "    LG HDR 4K:\n      Connection Type: DisplayPort\n") {
+		t.Fatal("a monitor")
 	}
 }

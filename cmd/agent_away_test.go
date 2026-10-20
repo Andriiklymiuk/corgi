@@ -29,12 +29,6 @@ func TestAwayParsers(t *testing.T) {
 	if !captiveOK("<HTML><BODY>Success</BODY></HTML>") || captiveOK("<html>Hotel login</html>") {
 		t.Fatal("captive detection")
 	}
-	if l, ok := cpuSpeedLimit("CPU_Speed_Limit \t= 43\nCPU_Available_CPUs = 8\n"); !ok || l != 43 {
-		t.Fatalf("speed limit: %d %v", l, ok)
-	}
-	if _, ok := cpuSpeedLimit("Note: No thermal warning level has been recorded\n"); ok {
-		t.Fatal("no limit line means unknown")
-	}
 	if !fileVaultOn("FileVault is On.\n") || fileVaultOn("FileVault is Off.\n") {
 		t.Fatal("filevault")
 	}

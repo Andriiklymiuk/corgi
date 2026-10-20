@@ -138,6 +138,9 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 		}
 		d.AutoContinue = user.AutoContinue
 		d.Lid = strings.TrimSpace(user.Lid)
+		d.HeatPause = user.Heat
+		d.Hotspot = strings.TrimSpace(user.Hotspot)
+		d.HotspotBudget = hotspotBudgetOf(user.HotspotBudget)
 		d.Sessions.AutoContinue = user.AutoContinue
 		supervisor.KeepDisplay = user.KeepDisplay
 		d.SessionCap = user.SessionCap
@@ -266,9 +269,12 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 	}
 	printStartupDiagnostics(configs)
 
-	if lock := daemonWakeLock(dir); lock != nil {
-		defer lock.Release()
+	d.AwakePolicy = awakePolicy(dir)
+	if hold, _ := d.AwakePolicy(); hold && !supervisor.Supported() {
+		utils.Infof("⚠ stayAwake is set but no wake lock exists on %s\n", runtime.GOOS)
 	}
+	letTheLidClose(dir, d.AwakePolicy)
+	defer undoLidClose(dir)
 
 	restoreUpAtLogin(dir)
 
@@ -276,7 +282,8 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 	defer stop()
 
 	if supervisor.Supported() {
-		go d.HoldAwakeWhileWorking(ctx, supervisor.NewWakeLock(supervisor.WakeLockAlways))
+		d.Awake = supervisor.NewWakeLock(supervisor.WakeLockAlways)
+		go d.HoldAwakeWhileWorking(ctx, d.Awake)
 	}
 
 	telegramDone := make(<-chan struct{})
@@ -295,22 +302,78 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 	utils.Info(art.BlueColor, "corgi agent stopped", art.WhiteColor)
 }
 
-func daemonWakeLock(dir string) *supervisor.WakeLock {
-	user, err := config.LoadUser(agentUserConfigPath(dir))
-	if err != nil || user == nil || !user.StayAwake {
-		return nil
+// The policy is read from the file each tick, so awake on/off and --for
+// need no restart.
+func laptopLine(l *daemon.Laptop) string {
+	if l == nil {
+		return ""
 	}
-	if !supervisor.Supported() {
-		utils.Infof("⚠ stayAwake is set but no wake lock exists on %s\n", runtime.GOOS)
-		return nil
+	var parts []string
+	if l.Known {
+		parts = append(parts, l.Words())
+		if l.Battery >= 0 {
+			parts = append(parts, fmt.Sprintf("battery %d%% (%s)", l.Battery, powerWords(l.Charging)))
+		}
 	}
-	lock := supervisor.NewWakeLock(supervisor.WakeLockAlways)
-	if err := lock.Acquire(os.Getpid()); err != nil {
-		utils.Infof("⚠ stayAwake is set but the wake lock did not start: %v\n", err)
-		return nil
+	if l.Lid != "" {
+		parts = append(parts, "lid "+l.Lid)
 	}
-	utils.Info("agent: holding the machine awake for as long as this daemon runs (stayAwake)")
-	return lock
+	switch l.Network {
+	case "hotspot":
+		parts = append(parts, "on the hotspot "+l.Hotspot)
+	case "offline":
+		parts = append(parts, "offline")
+	}
+	if l.Paused > 0 {
+		parts = append(parts, fmt.Sprintf("%d session(s) paused for heat", l.Paused))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return "laptop: " + strings.Join(parts, " · ")
+}
+
+func awakePolicy(dir string) func() (bool, bool) {
+	path := agentUserConfigPath(dir)
+	return func() (bool, bool) {
+		user, err := config.LoadUser(path)
+		if err != nil || user == nil {
+			return false, false
+		}
+		return user.AwakeHeld(time.Now())
+	}
+}
+
+func hotspotBudgetOf(raw string) uint64 {
+	if strings.TrimSpace(raw) == "" {
+		return daemon.DefaultHotspotBudget
+	}
+	n, err := daemon.ParseSize(raw)
+	if err != nil {
+		return daemon.DefaultHotspotBudget
+	}
+	return n
+}
+
+// With the sudoers rule in place a daemon that holds the machine awake also
+// lets the lid close, and gives that back when it stops.
+func letTheLidClose(dir string, policy func() (bool, bool)) {
+	if hold, _ := policy(); !hold || !supervisor.PmsetAllowed() {
+		return
+	}
+	if err := supervisor.DisableSleep(dir, true); err != nil {
+		utils.Infof("agent: lid: %v\n", err)
+		return
+	}
+	utils.Info("agent: closing the lid does not sleep the machine while this daemon runs")
+}
+
+func undoLidClose(dir string) {
+	if !supervisor.PmsetAllowed() {
+		return
+	}
+	_ = supervisor.DisableSleep(dir, false)
+	_ = supervisor.LowPowerMode(dir, false)
 }
 
 func loadSpawnConfigs(dir string, foreground bool) ([]supervisor.SpawnConfig, error) {
@@ -538,6 +601,9 @@ func runAgentStatus(_ *cobra.Command, _ []string) {
 	}
 	if risk := supervisor.CheckSleepRisk(); risk.AtRisk() {
 		fmt.Printf("⚠ %s\n  fix: %s\n", risk.Reason, risk.Fix)
+	}
+	if line := laptopLine(status.Laptop); line != "" {
+		fmt.Println(line)
 	}
 	for _, w := range status.Workspaces {
 		printWorkspaceState(w)

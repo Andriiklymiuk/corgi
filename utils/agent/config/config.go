@@ -33,14 +33,36 @@ type UserConfig struct {
 	StayAwake  bool                       `yaml:"stayAwake"`
 	// Lid is the window (HH:MM-HH:MM, local) in which the laptop waking up
 	// or its lid opening rings the phone - a closed laptop left in a room.
-	Lid          string                     `yaml:"lid,omitempty"`
-	PulseUrl     string                     `yaml:"pulseUrl,omitempty"`
-	KeepDisplay  bool                       `yaml:"keepDisplay,omitempty"`
-	AutoContinue bool                       `yaml:"autoContinue"`
-	Profiles     map[string]WorkspaceConfig `yaml:"profiles"`
-	TrackSlots   int                        `yaml:"trackSlots,omitempty"`
-	SessionCap   int64                      `yaml:"sessionCap,omitempty"`
-	Stream       []string                   `yaml:"stream,omitempty"`
+	Lid         string `yaml:"lid,omitempty"`
+	PulseUrl    string `yaml:"pulseUrl,omitempty"`
+	KeepDisplay bool   `yaml:"keepDisplay,omitempty"`
+	// AwakeUntil holds the wake lock until then (RFC3339), stayAwake or not.
+	AwakeUntil string `yaml:"awakeUntil,omitempty"`
+	// Heat: "" pauses the sessions when hot with the lid closed, "pause"
+	// always, "off" never (new runs still wait for it to cool).
+	Heat string `yaml:"heat,omitempty"`
+	// Hotspot is the Wi-Fi to join when the internet is gone for a while;
+	// HotspotBudget ("2GB", "off") how much it may use before new runs hold.
+	Hotspot       string                     `yaml:"hotspot,omitempty"`
+	HotspotBudget string                     `yaml:"hotspotBudget,omitempty"`
+	AutoContinue  bool                       `yaml:"autoContinue"`
+	Profiles      map[string]WorkspaceConfig `yaml:"profiles"`
+	TrackSlots    int                        `yaml:"trackSlots,omitempty"`
+	SessionCap    int64                      `yaml:"sessionCap,omitempty"`
+	Stream        []string                   `yaml:"stream,omitempty"`
+}
+
+// AwakeHeld says whether the wake lock is to be held now, and whether the
+// screen stays lit with it.
+func (u *UserConfig) AwakeHeld(now time.Time) (hold, display bool) {
+	if u == nil {
+		return false, false
+	}
+	hold = u.StayAwake
+	if until, err := time.Parse(time.RFC3339, strings.TrimSpace(u.AwakeUntil)); err == nil && now.Before(until) {
+		hold = true
+	}
+	return hold, u.KeepDisplay
 }
 
 func (u *UserConfig) StreamAllowed(workspace string) bool {

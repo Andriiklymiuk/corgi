@@ -277,9 +277,6 @@ func (d *Daemon) startWatches(ctx context.Context) {
 		return
 	}
 	d.loadWatchFiles()
-	onHot = func() {
-		go d.notifyAttentionAt("corgi agent", "the laptop is hot - no fix starts until it cools", "", "")
-	}
 	onLowDisk = func() {
 		go d.notifyAttentionAt("corgi agent", "under 10 GB of disk left - no fix starts until there is room (corgi agent watch prune, docker system prune)", "", "")
 	}
@@ -969,6 +966,12 @@ func fixDeferral(spec WatchSpec, log *watch.FixLog, now time.Time) string {
 	}
 	if tooHot(now) {
 		return "too hot"
+	}
+	if lowBattery(now) {
+		return "low battery"
+	}
+	if hotspotOverBudget(now) {
+		return "hotspot data budget"
 	}
 	if lowDisk(now, firstNonEmpty(spec.AgentDir, ".")) {
 		return "low disk"

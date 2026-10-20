@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"andriiklymiuk/corgi/utils/agent/config"
 )
@@ -84,10 +85,36 @@ func TestParseOnOff(t *testing.T) {
 	}
 }
 
-func TestDaemonWakeLockIsOffByDefault(t *testing.T) {
-	if lock := daemonWakeLock(t.TempDir()); lock != nil {
-		lock.Release()
+func TestTheAwakePolicyIsOffByDefaultAndFollowsForAndOn(t *testing.T) {
+	dir := t.TempDir()
+	policy := awakePolicy(dir)
+	if hold, _ := policy(); hold {
 		t.Fatal("held the machine awake without being asked to")
+	}
+	path := agentUserConfigPath(dir)
+	until := time.Now().Add(time.Hour).Format(time.RFC3339)
+	if err := writeUserConfigLine(path, awakeUntilLine, "awakeUntil: "+until); err != nil {
+		t.Fatal(err)
+	}
+	if hold, _ := policy(); !hold {
+		t.Fatal("--for holds until then, no restart")
+	}
+	past := time.Now().Add(-time.Hour).Format(time.RFC3339)
+	_ = writeUserConfigLine(path, awakeUntilLine, "awakeUntil: "+past)
+	if hold, _ := policy(); hold {
+		t.Fatal("a --for that passed holds nothing")
+	}
+	_ = writeStayAwake(path, true)
+	if hold, display := policy(); !hold || display {
+		t.Fatalf("on: hold=%v display=%v", hold, display)
+	}
+}
+
+func TestStrayCaffeinatesSkipTheDaemonsAndItself(t *testing.T) {
+	ps := "  PID ARGS\n  880 caffeinate -i -m -s -w 697\n17483 caffeinate -dimsu\n17490 caffeinate -i -t 300\n  999 grep caffeinate\n   42 caffeinate -d\n"
+	got := strayCaffeinatesIn(ps, 42)
+	if len(got) != 1 || got[0] != "caffeinate -dimsu (pid 17483)" {
+		t.Fatalf("got %v", got)
 	}
 }
 

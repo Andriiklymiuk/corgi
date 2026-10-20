@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"andriiklymiuk/corgi/utils"
@@ -43,6 +44,7 @@ type Status struct {
 	WakeLockable bool                  `json:"wakeLockSupported"`
 	Workspaces   []supervisor.RunState `json:"workspaces"`
 	Diagnostics  []WorkspaceDiagnostic `json:"diagnostics,omitempty"`
+	Laptop       *Laptop               `json:"laptop,omitempty"`
 }
 
 type WorkspaceDiagnostic struct {
@@ -132,7 +134,22 @@ type Daemon struct {
 	SessionCap    int64
 	// Lid is the local HH:MM-HH:MM window in which a wake or a lid opening
 	// rings the phone; empty means no lid guard.
-	Lid            string
+	Lid string
+	// HeatPause: "" pauses the sessions when hot only with the lid closed,
+	// "pause" always, "off" never.
+	HeatPause string
+	// Hotspot is the Wi-Fi to hop onto when the internet is gone for a
+	// while; HotspotBudget the bytes it may use before new runs hold (0: no cap).
+	Hotspot       string
+	HotspotBudget uint64
+	// Awake is the daemon-wide wake lock; AwakePolicy says, each tick,
+	// whether to hold it and whether to keep the screen lit.
+	Awake          *supervisor.WakeLock
+	AwakePolicy    func() (hold, display bool)
+	laptopMu       sync.Mutex
+	laptop         Laptop
+	lidClosed      atomic.Bool
+	lidMuted       atomic.Bool
 	spent          map[string]spendMark
 	DigestAt       string
 	Digest         func(now time.Time) string
@@ -376,6 +393,12 @@ func (d *Daemon) runDynamic(ctx context.Context, configs []supervisor.SpawnConfi
 	pulseDone := make(chan struct{})
 	go func() { defer close(pulseDone); d.pulse(ctx) }()
 	defer func() { <-pulseDone }()
+	machineDone := make(chan struct{})
+	go func() { defer close(machineDone); d.watchMachine(ctx) }()
+	defer func() { <-machineDone }()
+	networkDone := make(chan struct{})
+	go func() { defer close(networkDone); d.watchNetwork(ctx) }()
+	defer func() { <-networkDone }()
 	peersDone := make(chan struct{})
 	go func() { defer close(peersDone); d.pulsePeers(ctx) }()
 	defer func() { <-peersDone }()
@@ -935,6 +958,7 @@ func (d *Daemon) Status() Status {
 		Version:      d.Version,
 		WakeLockable: supervisor.Supported(),
 		Diagnostics:  diags,
+		Laptop:       d.laptopStatus(),
 	}
 	for _, r := range d.Runners() {
 		s.Workspaces = append(s.Workspaces, r.State())
@@ -1127,15 +1151,34 @@ func (d *Daemon) HoldAwakeWhileWorking(ctx context.Context, lock *supervisor.Wak
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 	lastBusy := time.Time{}
+	held := false
 	for {
+		hold, display := false, false
+		if d.AwakePolicy != nil {
+			hold, display = d.AwakePolicy()
+		}
 		if d.anyoneWorking() {
 			lastBusy = time.Now()
+		}
+		busy := !lastBusy.IsZero() && time.Since(lastBusy) <= awakeGrace
+		if hold != held {
+			held = hold
+			if hold {
+				utils.Info("agent: holding the machine awake for as long as this daemon runs (stayAwake)")
+			} else {
+				utils.Info("agent: back to a wake lock per session")
+			}
+		}
+		if !d.lidIsClosed() {
+			_ = lock.SetDisplay(display)
+		}
+		if hold || busy {
 			if !lock.Held() {
 				if err := lock.Acquire(os.Getpid()); err != nil {
 					utils.Infof("agent: could not hold the machine awake: %v\n", err)
 				}
 			}
-		} else if lock.Held() && !lastBusy.IsZero() && time.Since(lastBusy) > awakeGrace {
+		} else if lock.Held() {
 			lock.Release()
 		}
 		select {

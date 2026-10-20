@@ -41,16 +41,24 @@ var readClamshell = func() (closed bool, known bool) {
 }
 
 func (d *Daemon) watchLid(ctx context.Context) {
-	if strings.TrimSpace(d.Lid) == "" {
+	if runtime.GOOS != "darwin" {
 		return
 	}
-	window, err := ParseQuiet(d.Lid)
-	if err != nil {
-		utils.Infof("agent: lid: %v\n", err)
-		return
+	g := lidGuard{last: time.Now()}
+	if hours := strings.TrimSpace(d.Lid); hours != "" {
+		window, err := ParseQuiet(hours)
+		if err != nil {
+			utils.Infof("agent: lid: %v\n", err)
+		} else {
+			g.window = &window
+			utils.Infof("agent: lid: a wake or an open lid between %s rings the phone\n", hours)
+		}
 	}
-	utils.Infof("agent: lid: a wake or an open lid between %s rings the phone\n", d.Lid)
-	g := lidGuard{window: window, last: time.Now()}
+	if closed, known := readClamshell(); known {
+		g.closed = closed
+		d.lidClosed.Store(closed)
+		d.setLid(closed)
+	}
 	t := time.NewTicker(guardTick)
 	defer t.Stop()
 	for {
@@ -59,15 +67,37 @@ func (d *Daemon) watchLid(ctx context.Context) {
 			return
 		case now := <-t.C:
 			closed, known := readClamshell()
+			was := g.closed
 			if body := g.observe(now, closed, known); body != "" {
 				d.ringLid(body)
+			}
+			if known && closed != was {
+				d.lidClosed.Store(closed)
+				d.setLid(closed)
+				d.lidChanged(now, closed, g.window)
 			}
 		}
 	}
 }
 
+func (d *Daemon) lidIsClosed() bool { return d.lidClosed.Load() }
+
+func (d *Daemon) setLid(closed bool) {
+	state := "open"
+	if closed {
+		state = "closed"
+	}
+	d.laptopMu.Lock()
+	changed := d.laptop.Lid != state
+	d.laptop.Lid = state
+	d.laptopMu.Unlock()
+	if changed {
+		d.requestPublish()
+	}
+}
+
 type lidGuard struct {
-	window   QuietHours
+	window   *QuietHours
 	last     time.Time
 	closed   bool
 	lastRing time.Time
@@ -86,7 +116,7 @@ func (g *lidGuard) observe(now time.Time, closed, known bool) string {
 	if !opened && !woke {
 		return ""
 	}
-	if !g.window.Contains(now) || now.Sub(g.lastRing) < guardRepeatGap {
+	if g.window == nil || !g.window.Contains(now) || now.Sub(g.lastRing) < guardRepeatGap {
 		return ""
 	}
 	g.lastRing = now
@@ -133,6 +163,68 @@ func (d *Daemon) ringLid(body string) {
 	}
 	if d.Notify != nil {
 		d.Notify("corgi agent · laptop", body)
+	}
+}
+
+// What a closed lid changes, Insomnia-style, and an open one undoes: the
+// screen is let go (a lit screen in a closed laptop is heat and no lock),
+// the sound is muted, and a close on battery is said. A second display in
+// clamshell mode is a screen someone looks at, so nothing changes then.
+var hasExternalDisplay = func() bool {
+	if runtime.GOOS != "darwin" {
+		return false
+	}
+	out, err := exec.Command("system_profiler", "SPDisplaysDataType").Output()
+	if err != nil {
+		return false
+	}
+	return externalDisplayIn(string(out))
+}
+
+func externalDisplayIn(profile string) bool {
+	for _, line := range strings.Split(profile, "\n") {
+		if strings.Contains(line, "Connection Type:") && !strings.Contains(line, "Internal") {
+			return true
+		}
+	}
+	return false
+}
+
+var readMuted = func() bool {
+	out, err := exec.Command("osascript", "-e", "output muted of (get volume settings)").Output()
+	return err == nil && strings.TrimSpace(string(out)) == "true"
+}
+
+var setMuted = func(on bool) {
+	_ = exec.Command("osascript", "-e", fmt.Sprintf("set volume output muted %t", on)).Run()
+}
+
+func (d *Daemon) lidChanged(now time.Time, closed bool, window *QuietHours) {
+	if hasExternalDisplay() {
+		utils.Info("agent: lid: a second display is on - the laptop is left as it is")
+		return
+	}
+	if closed {
+		if d.Awake != nil && d.Awake.Display() {
+			_ = d.Awake.SetDisplay(false)
+			utils.Info("agent: lid: closed - the screen may sleep and lock until it opens")
+		}
+		if !readMuted() {
+			setMuted(true)
+			d.lidMuted.Store(true)
+		}
+		if m, _ := currentMachine(now); m.Known && m.Battery >= 0 && !m.Charging && window != nil && window.Contains(now) {
+			d.ringLid(fmt.Sprintf("the lid closed on battery at %d%% - plug it in for a long run", m.Battery))
+		}
+		return
+	}
+	if d.lidMuted.Swap(false) {
+		setMuted(false)
+	}
+	if d.Awake != nil && d.AwakePolicy != nil {
+		if _, display := d.AwakePolicy(); display {
+			_ = d.Awake.SetDisplay(true)
+		}
 	}
 }
 

@@ -31,12 +31,24 @@ func ValidWakeLockMode(m WakeLockMode) bool {
 type WakeLock struct {
 	mu      sync.Mutex
 	cmd     *exec.Cmd
+	pid     int
 	mode    WakeLockMode
-	startFn func(pid int) (*exec.Cmd, error)
+	display bool
+	startFn func(pid int, display bool) (*exec.Cmd, error)
 }
 
 func NewWakeLock(mode WakeLockMode) *WakeLock {
-	return &WakeLock{mode: mode, startFn: startPlatformWakeLock}
+	return &WakeLock{mode: mode, display: KeepDisplay, startFn: startPlatformWakeLock}
+}
+
+// FakeWakeLock holds a sleeping process instead of caffeinate, for tests.
+func FakeWakeLock(mode WakeLockMode) *WakeLock {
+	w := NewWakeLock(mode)
+	w.startFn = func(int, bool) (*exec.Cmd, error) {
+		cmd := exec.Command("sleep", "30")
+		return cmd, cmd.Start()
+	}
+	return w
 }
 
 func (w *WakeLock) Acquire(pid int) error {
@@ -45,14 +57,18 @@ func (w *WakeLock) Acquire(pid int) error {
 	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	return w.acquireLocked(pid)
+}
+
+func (w *WakeLock) acquireLocked(pid int) error {
 	if w.cmd != nil {
 		return nil
 	}
-	cmd, err := w.startFn(pid)
+	cmd, err := w.startFn(pid, w.display)
 	if err != nil {
 		return err
 	}
-	w.cmd = cmd
+	w.cmd, w.pid = cmd, pid
 	return nil
 }
 
@@ -62,6 +78,10 @@ func (w *WakeLock) Release() {
 	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	w.releaseLocked()
+}
+
+func (w *WakeLock) releaseLocked() {
 	if w.cmd == nil {
 		return
 	}
@@ -70,6 +90,34 @@ func (w *WakeLock) Release() {
 		_, _ = w.cmd.Process.Wait()
 	}
 	w.cmd = nil
+}
+
+// SetDisplay keeps the screen lit with the lock or lets it sleep; a held lock
+// is taken again the new way. Lid closed: no screen to keep lit.
+func (w *WakeLock) SetDisplay(on bool) error {
+	if w == nil {
+		return nil
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.display == on {
+		return nil
+	}
+	w.display = on
+	if w.cmd == nil {
+		return nil
+	}
+	w.releaseLocked()
+	return w.acquireLocked(w.pid)
+}
+
+func (w *WakeLock) Display() bool {
+	if w == nil {
+		return false
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.display
 }
 
 func (w *WakeLock) Held() bool {
@@ -91,11 +139,13 @@ func Supported() bool {
 	return false
 }
 
-func WakeLockCommand(pid int) []string {
+func WakeLockCommand(pid int) []string { return wakeLockCommand(pid, KeepDisplay) }
+
+func wakeLockCommand(pid int, display bool) []string {
 	switch runtime.GOOS {
 	case "darwin":
 		argv := []string{"caffeinate", "-i", "-m", "-s"}
-		if KeepDisplay {
+		if display {
 			argv = append(argv, "-d")
 		}
 		return append(argv, "-w", strconv.Itoa(pid))
@@ -112,8 +162,8 @@ func WakeLockCommand(pid int) []string {
 	return nil
 }
 
-func startPlatformWakeLock(pid int) (*exec.Cmd, error) {
-	argv := WakeLockCommand(pid)
+func startPlatformWakeLock(pid int, display bool) (*exec.Cmd, error) {
+	argv := wakeLockCommand(pid, display)
 	if argv == nil {
 		return nil, fmt.Errorf("wake lock is not supported on %s", runtime.GOOS)
 	}

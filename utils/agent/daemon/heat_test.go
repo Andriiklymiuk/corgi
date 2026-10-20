@@ -7,34 +7,27 @@ import (
 	"andriiklymiuk/corgi/utils/agent/watch"
 )
 
-func TestTooHotCachesAndNotifiesOnce(t *testing.T) {
-	old := readThermal
-	defer func() { readThermal = old; onHot = nil; resetHeat() }()
-	calls, hot := 0, 0
+func TestTooHotCachesAReadingForAMinute(t *testing.T) {
+	old, oldB := readThermal, readBattery
+	defer func() { readThermal, readBattery = old, oldB; resetHeat() }()
+	calls := 0
+	readBattery = func() (int, bool, float64, bool) { return 80, true, 30, true }
 	readThermal = func() (int, bool) { calls++; return 40, true }
-	onHot = func() { hot++ }
 	resetHeat()
 	now := time.Now()
 	if !tooHot(now) || !tooHot(now.Add(10*time.Second)) {
-		t.Fatal("40% is hot")
+		t.Fatal("a CPU held at 40% is hot")
 	}
 	if calls != 1 {
 		t.Fatalf("second call within a minute must hit the cache, got %d reads", calls)
-	}
-	if hot != 1 {
-		t.Fatalf("one notification, got %d", hot)
 	}
 	readThermal = func() (int, bool) { return 100, true }
 	if tooHot(now.Add(2 * time.Minute)) {
 		t.Fatal("cooled")
 	}
-	readThermal = func() (int, bool) { return 30, true }
-	tooHot(now.Add(4 * time.Minute))
-	if hot != 2 {
-		t.Fatalf("hot again after cooling notifies again, got %d", hot)
-	}
 	readThermal = func() (int, bool) { return 0, false }
-	if tooHot(now.Add(6 * time.Minute)) {
+	readBattery = func() (int, bool, float64, bool) { return 0, false, 0, false }
+	if tooHot(now.Add(4 * time.Minute)) {
 		t.Fatal("unknown is not hot")
 	}
 }
@@ -47,6 +40,22 @@ func TestFixDeferralTooHot(t *testing.T) {
 	log := watch.LoadFixLog(t.TempDir())
 	if got := fixDeferral(WatchSpec{Workspace: "w"}, log, time.Now()); got != "too hot" {
 		t.Fatalf("got %q", got)
+	}
+}
+
+func TestFixDeferralLowBattery(t *testing.T) {
+	old := readBattery
+	defer func() { readBattery = old; resetHeat() }()
+	readBattery = func() (int, bool, float64, bool) { return 15, false, 30, true }
+	resetHeat()
+	log := watch.LoadFixLog(t.TempDir())
+	if got := fixDeferral(WatchSpec{Workspace: "w"}, log, time.Now()); got != "low battery" {
+		t.Fatalf("15%% on battery holds new runs, got %q", got)
+	}
+	readBattery = func() (int, bool, float64, bool) { return 15, true, 30, true }
+	resetHeat()
+	if got := fixDeferral(WatchSpec{Workspace: "w"}, log, time.Now()); got != "" {
+		t.Fatalf("plugged in at 15%% is fine, got %q", got)
 	}
 }
 

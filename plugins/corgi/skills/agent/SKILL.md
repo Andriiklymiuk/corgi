@@ -546,6 +546,13 @@ defaults:
 `off` never blocks sleep (a long build can be cut); `idle` keeps working
 sessions awake but sleeps between turns.
 
+For a laptop that leaves with its lid closed: `corgi agent awake on` (or
+`--for 6h`) is read live, `--display on` keeps the screen lit only while the
+lid is open; `corgi agent heat` holds new runs when warm and pauses sessions
+when hot; `corgi agent hotspot "<name>"` hops onto the phone when Wi-Fi is
+gone; `corgi agent away` lists the rest, sudoers rule included. Never ask the
+person to run `caffeinate` in a terminal.
+
 ### If a remote start does not appear
 
 | symptom | what to say / do |

@@ -7,10 +7,8 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"regexp"
 	"runtime"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -18,11 +16,11 @@ import (
 	"andriiklymiuk/corgi/utils/agent/config"
 	"andriiklymiuk/corgi/utils/agent/daemon"
 	"andriiklymiuk/corgi/utils/agent/push"
+	"andriiklymiuk/corgi/utils/agent/supervisor"
 )
 
 const (
 	awayDiskMinGB   = 20
-	awayHotLimit    = 60
 	captiveProbeURL = "http://captive.apple.com/hotspot-detect.html"
 )
 
@@ -50,17 +48,6 @@ func onACPower(batt string) bool { return strings.Contains(batt, "'AC Power'") }
 
 func captiveOK(body string) bool { return strings.Contains(body, "Success") }
 
-var speedLimitLine = regexp.MustCompile(`CPU_Speed_Limit\s*=\s*(\d+)`)
-
-func cpuSpeedLimit(therm string) (int, bool) {
-	m := speedLimitLine.FindStringSubmatch(therm)
-	if m == nil {
-		return 0, false
-	}
-	n, err := strconv.Atoi(m[1])
-	return n, err == nil
-}
-
 func fileVaultOn(out string) bool { return strings.Contains(out, "FileVault is On") }
 
 func awayCommand(name string, args ...string) (string, bool) {
@@ -77,9 +64,9 @@ func couldNotCheck(name string) agentCheck {
 func awayChecks(dir string) []agentCheck {
 	var checks []agentCheck
 	if runtime.GOOS == "darwin" {
-		checks = append(checks, checkMacUpdates(), checkLid(), checkPower(), checkFileVault(), checkHeat())
+		checks = append(checks, checkMacUpdates(), checkSudoers(), checkLid(dir), checkPower(), checkFileVault(), checkHeat(), checkCaffeinate())
 	}
-	checks = append(checks, checkDisk(dir), checkNetwork(), checkPulse(dir), checkTunnel(dir), checkPhone(dir), checkPeers(dir))
+	checks = append(checks, checkDisk(dir), checkNetwork(), checkHotspot(dir), checkPulse(dir), checkTunnel(dir), checkPhone(dir), checkPeers(dir))
 	if user, err := config.LoadUser(agentUserConfigPath(dir)); err == nil && user != nil {
 		checks = append(checks, digestChecks(user)...)
 		checks = append(checks, isolationChecks(user)...)
@@ -101,7 +88,15 @@ func checkMacUpdates() agentCheck {
 		Fix: "sudo softwareupdate --schedule off && sudo defaults write /Library/Preferences/com.apple.SoftwareUpdate AutomaticallyInstallMacOSUpdates -bool false"}
 }
 
-func checkLid() agentCheck {
+func checkSudoers() agentCheck {
+	const name = "pmset"
+	if supervisor.PmsetAllowed() {
+		return agentCheck{Name: name, OK: true, Detail: "corgi may let the lid close, turn Low Power Mode on when warm, and sleep the laptop when too hot (sudoers rule)"}
+	}
+	return agentCheck{Name: name, Detail: "corgi cannot touch sleep or Low Power Mode itself - four pmset lines, nothing else", Fix: supervisor.SudoersInstall()}
+}
+
+func checkLid(dir string) agentCheck {
 	const name = "lid"
 	out, ok := awayCommand("pmset", "-g")
 	if !ok {
@@ -110,7 +105,28 @@ func checkLid() agentCheck {
 	if lidSleepDisabled(out) {
 		return agentCheck{Name: name, OK: true, Detail: "closing the lid does not sleep the machine (SleepDisabled 1)"}
 	}
-	return agentCheck{Name: name, Detail: "closing the lid sleeps the machine, and everything with it", Fix: "sudo pmset -a disablesleep 1"}
+	if supervisor.PmsetAllowed() && stayAwakeEnabled(dir) {
+		return agentCheck{Name: name, OK: true, Detail: "the daemon sets SleepDisabled while it runs (stayAwake + sudoers rule)"}
+	}
+	return agentCheck{Name: name, Detail: "closing the lid sleeps the machine, and everything with it", Fix: "sudo pmset -a disablesleep 1, or the pmset row's sudoers rule with corgi agent awake on"}
+}
+
+func checkCaffeinate() agentCheck {
+	const name = "caffeinate"
+	strays := strayCaffeinates(os.Getpid())
+	if len(strays) == 0 {
+		return agentCheck{Name: name, OK: true, Detail: "no caffeinate of yours beside the daemon's"}
+	}
+	return agentCheck{Name: name, Detail: strings.Join(strays, ", ") + " keeps the screen lit with the lid closed", Fix: "stop it; corgi agent awake on (--display on for a lit screen while the lid is open)"}
+}
+
+func checkHotspot(dir string) agentCheck {
+	const name = "hotspot"
+	user, err := config.LoadUser(agentUserConfigPath(dir))
+	if err != nil || user == nil || strings.TrimSpace(user.Hotspot) == "" {
+		return agentCheck{Name: name, Detail: "when the Wi-Fi drops the laptop stays offline", Fix: "corgi agent hotspot \"<your iPhone>\" - joins it after 90 s offline, 2 GB budget"}
+	}
+	return agentCheck{Name: name, OK: true, Detail: user.Hotspot + " joins after 90 s offline, " + budgetWords(user.HotspotBudget)}
 }
 
 func checkPower() agentCheck {
@@ -139,15 +155,18 @@ func checkFileVault() agentCheck {
 
 func checkHeat() agentCheck {
 	const name = "heat"
-	out, ok := awayCommand("pmset", "-g", "therm")
-	if !ok {
+	m := daemon.ReadMachineNow()
+	if !m.Known {
 		return couldNotCheck(name)
 	}
-	limit, known := cpuSpeedLimit(out)
-	if !known || limit >= awayHotLimit {
-		return agentCheck{Name: name, OK: true, Detail: "no thermal pressure"}
+	words := m.Words()
+	switch {
+	case strings.HasPrefix(words, "hot"):
+		return agentCheck{Name: name, Detail: words + " - the sessions pause until it cools", Fix: "give the laptop air"}
+	case strings.HasPrefix(words, "warm"):
+		return agentCheck{Name: name, Detail: words + " - no fix starts until it cools", Fix: "give the laptop air"}
 	}
-	return agentCheck{Name: name, Detail: fmt.Sprintf("CPU held at %d%% for heat - no fix starts until it cools", limit), Fix: "give the laptop air"}
+	return agentCheck{Name: name, OK: true, Detail: words + "; warm at 40°C holds new runs, hot at 45°C pauses the sessions (corgi agent heat)"}
 }
 
 func checkDisk(dir string) agentCheck {

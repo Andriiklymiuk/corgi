@@ -166,7 +166,7 @@ func TestRunnerStopsWhenContextCancelled(t *testing.T) {
 func TestRunnerReleasesWakeLockOnReturn(t *testing.T) {
 	start, _ := scriptedStarter()
 	lock := NewWakeLock(WakeLockSession)
-	lock.startFn = func(int) (*exec.Cmd, error) {
+	lock.startFn = func(int, bool) (*exec.Cmd, error) {
 		cmd := exec.Command("sleep", "30")
 		return cmd, cmd.Start()
 	}

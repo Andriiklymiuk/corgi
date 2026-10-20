@@ -13,15 +13,12 @@ import (
 )
 
 const (
-	hotSpeedLimit = 60
-	lowDiskGB     = 10
-	gateCacheFor  = time.Minute
+	lowDiskGB    = 10
+	gateCacheFor = time.Minute
 )
 
 var speedLimitLine = regexp.MustCompile(`CPU_Speed_Limit\s*=\s*(\d+)`)
 
-// A laptop closed in a bag throttles itself; a fix run on top of that is
-// heat for nothing, so new runs wait until macOS lifts the limit.
 var readThermal = func() (int, bool) {
 	if runtime.GOOS != "darwin" {
 		return 0, false
@@ -46,7 +43,7 @@ var readFreeGB = func(dir string) (int, bool) {
 	return int(free / (1 << 30)), ok
 }
 
-var onHot, onLowDisk func()
+var onLowDisk func()
 
 // A gate holds new runs while a machine condition lasts, re-reads it at most
 // once a minute, and tells the person once per stretch.
@@ -82,18 +79,11 @@ func (g *gate) holds(now time.Time, read func() bool, tell func()) bool {
 	return true
 }
 
-var heat, disk gate
+var disk gate
 
-func resetHeat() { heat.reset() }
+func resetHeat() { resetMachine() }
 
 func resetDisk() { disk.reset() }
-
-func tooHot(now time.Time) bool {
-	return heat.holds(now, func() bool {
-		limit, known := readThermal()
-		return known && limit < hotSpeedLimit
-	}, onHot)
-}
 
 func lowDisk(now time.Time, dir string) bool {
 	return disk.holds(now, func() bool {

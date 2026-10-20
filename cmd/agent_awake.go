@@ -3,9 +3,12 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
+	"time"
 
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/agent/config"
@@ -21,18 +24,24 @@ var agentAwakeCmd = &cobra.Command{
 sessions the laptop sleeps, and a phone tap reaches nothing.
 
   corgi agent awake on     hold the wake lock for the daemon's whole life
-  corgi agent awake --display on   keep the display lit too - no lock screen while it holds
+  corgi agent awake --for 6h       hold it until then, whatever on/off says
+  corgi agent awake --display on   keep the display lit too while the lid is open
   corgi agent awake off    back to holding it per session (the default)
   corgi agent awake        what is set now
 
-Off by default: a machine that never sleeps is a flat battery, so it is the
-machine owner's call. On macOS the lock cannot beat a closed lid on battery -
-keep the lid open, or plug in, for a long unattended run.`,
+The daemon reads the setting every half minute: no restart. The screen is
+let go the moment the lid closes (a lit screen in a closed laptop is heat and
+no lock screen) and lit again when it opens - what a caffeinate -d in a
+terminal cannot do. Off by default: a machine that never sleeps is a flat
+battery, so it is the machine owner's call. A closed lid still sleeps the
+machine unless sudo pmset -a disablesleep 1, or the sudoers rule from
+corgi agent away, which lets corgi set it while the daemon runs.`,
 	Args: cobra.MaximumNArgs(1),
 	Run:  runAgentAwake,
 }
 
 var stayAwakeLine = regexp.MustCompile(`(?m)^stayAwake:.*$`)
+var awakeUntilLine = regexp.MustCompile(`(?m)^awakeUntil:.*$`)
 var keepDisplayLine = regexp.MustCompile(`(?m)^keepDisplay:.*$`)
 
 func runAgentAwake(cmd *cobra.Command, args []string) {
@@ -42,6 +51,18 @@ func runAgentAwake(cmd *cobra.Command, args []string) {
 	}
 	path := agentUserConfigPath(dir)
 
+	if until, _ := cmd.Flags().GetString("for"); until != "" {
+		span, err := time.ParseDuration(until)
+		if err != nil || span <= 0 {
+			exitWithError(utils.ErrUsage, fmt.Errorf("--for takes a span like 6h or 90m, not %q", until), 2)
+		}
+		at := time.Now().Add(span)
+		if err := writeUserConfigLine(path, awakeUntilLine, "awakeUntil: "+at.Format(time.RFC3339)); err != nil {
+			exitWithError("agent_awake", err, 1)
+		}
+		utils.Infof("✓ awake until %s - the daemon picks it up within a minute\n", at.Format("Mon 15:04"))
+		return
+	}
 	if len(args) == 0 {
 		printAwakeState(path)
 		return
@@ -55,9 +76,9 @@ func runAgentAwake(cmd *cobra.Command, args []string) {
 			exitWithError("agent_awake", err, 1)
 		}
 		if on {
-			utils.Infof("✓ keepDisplay: true in %s - the screen stays lit while the wake lock is held (no lock screen); corgi agent restart\n", path)
+			utils.Infof("✓ keepDisplay: true in %s - the screen stays lit while the lid is open\n", path)
 		} else {
-			utils.Infof("✓ keepDisplay: false in %s - the display may sleep and lock; corgi agent restart\n", path)
+			utils.Infof("✓ keepDisplay: false in %s - the display may sleep and lock\n", path)
 		}
 		return
 	}
@@ -80,17 +101,55 @@ func runAgentAwake(cmd *cobra.Command, args []string) {
 		utils.Infof("✓ stayAwake: false in %s\n", path)
 		utils.Info("back to a wake lock per session - the machine may sleep between them")
 	}
-	utils.Info("run `corgi agent restart` so the running daemon picks it up")
+	utils.Info("the daemon picks it up within a minute")
 }
 
 func printAwakeState(path string) {
 	user, err := config.LoadUser(path)
-	if err != nil || user == nil || !user.StayAwake {
-		utils.Infof("stayAwake is off (%s) - the machine may sleep between sessions\n", path)
-		utils.Info("turn it on with `corgi agent awake on`")
-		return
+	if err != nil || user == nil {
+		user = &config.UserConfig{}
 	}
-	utils.Infof("stayAwake is on (%s) - held for as long as the daemon runs\n", path)
+	hold, display := user.AwakeHeld(time.Now())
+	switch {
+	case user.StayAwake:
+		utils.Infof("stayAwake is on (%s) - held for as long as the daemon runs\n", path)
+	case hold:
+		utils.Infof("awake until %s (%s)\n", user.AwakeUntil, path)
+	default:
+		utils.Infof("stayAwake is off (%s) - the machine may sleep between sessions\n", path)
+		utils.Info("turn it on with `corgi agent awake on`, or for a while with `corgi agent awake --for 6h`")
+	}
+	if display {
+		utils.Info("the screen stays lit while the lid is open (keepDisplay)")
+	}
+	for _, c := range strayCaffeinates(os.Getpid()) {
+		utils.Infof("⚠ %s - the daemon already holds the machine; this one only keeps the screen lit, lid closed too. corgi agent awake --display on does that until the lid closes\n", c)
+	}
+}
+
+// A caffeinate of the person's own in a terminal, beside the daemon's.
+var listProcesses = func() string {
+	out, _ := exec.Command("ps", "-axo", "pid,args").Output()
+	return string(out)
+}
+
+func strayCaffeinates(self int) []string {
+	return strayCaffeinatesIn(listProcesses(), self)
+}
+
+func strayCaffeinatesIn(ps string, self int) []string {
+	var found []string
+	for _, line := range strings.Split(ps, "\n") {
+		f := strings.Fields(line)
+		if len(f) < 2 || f[1] != "caffeinate" || strings.Contains(line, " -w ") || strings.Contains(line, " -t ") {
+			continue
+		}
+		if pid, _ := strconv.Atoi(f[0]); pid == self {
+			continue
+		}
+		found = append(found, strings.Join(f[1:], " ")+" (pid "+f[0]+")")
+	}
+	return found
 }
 
 func stayAwakeEnabled(dir string) bool {
@@ -129,6 +188,7 @@ func writeStayAwake(path string, on bool) error {
 }
 
 func init() {
-	agentAwakeCmd.Flags().String("display", "", "on|off: keep the display lit too while the wake lock holds, so the screen never locks (macOS caffeinate -d)")
+	agentAwakeCmd.Flags().String("display", "", "on|off: keep the display lit too while the lid is open, so the screen never locks (macOS caffeinate -d)")
+	agentAwakeCmd.Flags().String("for", "", "Hold the lock for this long (6h, 90m), on or off")
 	agentCmd.AddCommand(agentAwakeCmd)
 }

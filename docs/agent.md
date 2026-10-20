@@ -285,7 +285,9 @@ corgi agent serve --foreground   # run it in this terminal and watch
 | `corgi agent serve` | supervise Remote Control for every enabled workspace |
 | `corgi agent install` / `uninstall` | start (or stop starting) at login - daemon only |
 | `corgi agent up --at-login` | the same, plus the endpoint and tunnel that up used |
-| `corgi agent awake [on\|off]` | keep the machine awake for the daemon's whole life |
+| `corgi agent awake [on\|off] [--for 6h] [--display on]` | keep the machine awake for the daemon's whole life, or until a clock (`--for 6h`); read live, no restart. `--display on` keeps the screen lit while the lid is open and lets it go the moment the lid closes - what a `caffeinate -d` in a terminal cannot do, and `corgi agent awake` names such a caffeinate of yours (2.31.32) |
+| `corgi agent heat [auto\|pause\|off]` | what hot does: at 40°C battery (or a CPU held under 60%) no new fix starts, one push; at 45°C the sessions pause (SIGSTOP) until it cools, with a push, and resume under 38°C with another. `auto` pauses only with the lid closed, `pause` always, `off` never. With the sudoers rule, Low Power Mode while warm, and sleep at 50°C with the lid closed (2.31.32) |
+| `corgi agent hotspot ["<wifi name>"\|off] [--password] [--budget 2GB]` | after 90 s offline the daemon joins your phone's hotspot and retries on a backoff; a push says how long it was offline, and another when Wi-Fi is back with how much the hotspot carried. Past the budget (2 GB unless you say) no new fix starts until Wi-Fi is back. An iPhone of yours joins without a password; `--password` keeps another network's in the login keychain (2.31.32) |
 | `corgi agent status [--json]` | what is running (`online` = device with no session yet), the launcher and connector URLs, restarts, which account |
 | `corgi agent doctor [--json] [--away]` | can this work here, and what to fix; `--away` adds what matters when nobody touches the machine for weeks (2.28.31). A watched workspace's Slack tokens are asked whether they still work, so a revoked one shows here and not at the first announce (2.31.20) |
 | `corgi agent away [--dry-run] [--pulse <url>]` | the away doctor, with every corgi-side fix applied: a digest routine per watched workspace, worktrees + pruning + harden where fixes run unattended; then the sudo lines only you can run (2.28.31) |
@@ -323,7 +325,7 @@ corgi agent serve --foreground   # run it in this terminal and watch
 | `corgi agent bot add\|list\|show\|rm\|open <name>` | named sessions you come back to: a workspace, a persona (the soul, appended to the system prompt), a model, an account, a worktree of its own - and the conversation it last had, resumed. `corgi agent claude --bot reviewer`; the phone's, the bar's and the editor's "+" list them. With `--on pr.review,ci.failed` a bot also **acts on its own**: an unattended run under its soul when that event arrives in its workspace, filed under its name (`bot show` lists its runs; the phone's bot sheet too). `--template reviewer\|fixer\|shipper\|chief\|proactive` fills a bot from a ready-made one (2.21; `proactive` runs on a clock, see `routine add suggest --bot proactive`, 2.28.11). A run that fails gets one more try a model up - haiku → sonnet → opus - and the record says `retry`; `bot show` sums a ledger (`roi`: runs, failed, retried, PRs and how many merged, the bill) so a person can tell whether the reviewer earns its keep (2.22) |
 | `corgi agent ask "<question>"` | the chief: one question about the board - what to look at first, what is blocked, who is on what - answered in a few lines by a short claude run on this machine (haiku; it sees sessions, inbox, kanban, workspace names, nothing else). The phone's Ask box, Telegram's `/ask` |
 | `corgi agent stream [enable\|disable] [--workspace X\|--all]` | which workspaces a paired phone may read as a conversation (off by default); the phone's Chat sheet, `POST /launch/transcript` |
-| `corgi agent awake --display on` | the wake lock keeps the display lit as well (`caffeinate -d`): the lock screen comes from the display sleeping, which the plain lock (`-i -m -s`) does not stop - what people ran `caffeinate -d` by hand for. `keepDisplay` in the user config; `corgi agent restart` after (2.25) |
+| `corgi agent awake --display on` | the wake lock keeps the display lit as well (`caffeinate -d`) while the lid is open: the lock screen comes from the display sleeping, which the plain lock (`-i -m -s`) does not stop - what people ran `caffeinate -d` by hand for. `keepDisplay` in the user config, read live (2.25; lid-aware and no restart since 2.31.32) |
 | `corgi agent ask --diff <session> [question]` | the chief reads the session's branch (files, counts, patch - bounded) and answers three plain lines and `risk: low\|medium\|high - why`; the phone's **Explain** on the diff sheet (`POST /launch/ask {session, diff:true}`); same gate as the diff: `corgi agent stream enable` (2.23) |
 | `corgi agent claim <file>... [--release] [--session <id>]` · `corgi agent claims` | a session says which files it is on - advisory, nothing is locked: a session starting in the same repository (any worktree of it) reads the claims in its context and leaves those files alone or asks first; the daemon rings once when a session edits a file another claimed. A claim ends with `--release`, when its session leaves the board, or after a day (2.25) |
 | `corgi agent timeline <session>` | one scroll of a session's story: every prompt, the tool calls between them folded into bursts, what it said, the test runs and the gate, the pull request with its checks, reviews, comments, hand-overs and merge - joined from the transcript, the board and the watch; the phone's Timeline (`GET /launch/timeline?session=`, same gate as the transcript) (2.25) |
@@ -355,7 +357,7 @@ corgi agent serve --foreground   # run it in this terminal and watch
 | `corgi agent watch prune [--older-than 7d] [--dry-run]` | remove the worktrees of isolated runs finished that long ago; the branch and any dirty worktree stay. `watch enable --prune-after 7d` does it from the daemon, hourly (2.28.14) |
 | `corgi agent watch enable --plan-review always\|risk>=N\|off [--workspace X]` | the stories skill waits for a human on the spec before it cuts a branch - always, or when the story's risk forecast reaches N of 10. Asked with a question the phone can answer. Off by default: nothing changes until you turn it on. `planReview` in `corgi_watch_switches` / `corgi_watch_set` too (2.28.27) |
 | `corgi agent watch enable --night-shift [--workspace X]` | the quiet hours stop ringing, not working: fixes and routines run through them as by day, every word about them is held, and one "N while you were away" says it all when the quiet hours end. Days off still sleep. The phone's repo sheet has the switch (2.31) |
-| `corgi agent lid [on\|off\|lock\|shutdown] [--hours 08:00-23:00]` | a laptop left closed in a room says when it wakes or its lid opens, by day (inside `--hours`; at night the one opening it is you): one push per opening, never twice in ten minutes. When it was not you, the push has Lock (screen saver, password to get back in) and Shut down (as the Apple menu does) behind Face ID; neither needs root, neither is stopped by a `caffeinate` in a terminal or `pmset disablesleep`. `lock` and `shutdown` work from here too. Restart the daemon after on/off (2.31) |
+| `corgi agent lid [on\|off\|lock\|shutdown] [--hours 08:00-23:00]` | a laptop left closed in a room says when it wakes or its lid opens, by day (inside `--hours`; at night the one opening it is you): one push per opening, never twice in ten minutes. When it was not you, the push has Lock (screen saver, password to get back in) and Shut down (as the Apple menu does) behind Face ID; neither needs root, neither is stopped by a `caffeinate` in a terminal or `pmset disablesleep`. `lock` and `shutdown` work from here too. Restart the daemon after on/off (2.31). Whatever the setting, a closing lid lets the screen sleep, mutes the Mac until it opens, and says so when it closed on battery; a second display in clamshell mode leaves all that alone (2.31.32) |
 | `corgi agent watch enable --silent [--workspace X]` | this workspace's watch keeps quiet: fixes run, the inbox and the kanban fill, but nothing rings - no toast, no phone push - until `--silent=false`. For a repository where comments and reviews should just get fixed. A permission prompt in a live session still rings. `silent` in the phone's repo switches too (2.28) |
 | `corgi agent watch enable --mentions [--channel '#incidents'] [--review-channel '#code-review'] [--trust @teammate]` | Slack joins the watch: a mention or a direct message rings like a review comment, a listened channel rings on every message, and a post in a review channel carrying pull-request links is one review to do. `--trust` names who may start an unattended run by mentioning you - empty means nobody, because a channel is open to whoever is in it. Needs `corgi agent watch auth slack` (2.29) |
 | `corgi agent chat post "<text>" [--to '#chan'] [--reply <event key>] [--as me\|bot]` · `chat react <event key> <emoji>` | say something back, in the thread the message came from. The bot speaks by default when a bot token is stored; `--as me` posts under your own name. Also the MCP tool `corgi_chat_post`, so a session answers the same way (2.29) |
@@ -1625,15 +1627,23 @@ reaches nothing. That is the gap people paper over with a `caffeinate` left
 running in a terminal all day.
 
 ```bash
-corgi agent awake on       # hold the lock for the daemon's whole life
-corgi agent awake          # what is set now
-corgi agent awake off      # back to per session (the default)
-corgi agent restart        # so the running daemon picks it up
+corgi agent awake on            # hold the lock for the daemon's whole life
+corgi agent awake --for 6h      # hold it until then, on or off
+corgi agent awake --display on  # keep the screen lit while the lid is open
+corgi agent awake               # what is set now
+corgi agent awake off           # back to per session (the default)
 ```
 
-It writes `stayAwake: true` into the user config, and the daemon takes
-`caffeinate -i -m -s -w <its own pid>` at startup. Off by default, because a
-machine that never sleeps is a flat battery and that is the owner's call.
+It writes `stayAwake: true` (or `awakeUntil`) into the user config; the
+daemon reads it every half minute and takes `caffeinate -i -m -s -w <its own
+pid>` - no restart. Off by default, because a machine that never sleeps is a
+flat battery and that is the owner's call.
+
+The screen is the lid's: with `--display on` it stays lit while the lid is
+open, and is let go the moment the lid closes, so a closed laptop locks and
+does not warm its own screen. That is the one thing a `caffeinate -d` left
+in a terminal gets wrong, and `corgi agent awake` names such a caffeinate
+of yours when it finds one running.
 
 **Honest limits:** `caffeinate -s` (prevent system sleep) is AC-only, but `-i`
 (prevent idle sleep) is honoured on battery too, so an idle laptop on battery
@@ -1656,22 +1666,32 @@ change, so corgi names them:
 
 ```bash
 corgi agent away                  # applies what corgi can, prints what only you can
-sudo pmset -a disablesleep 1      # the lid may close
+sudo pmset -a disablesleep 1      # the lid may close - or the sudoers rule below
 sudo softwareupdate --schedule off && \
   sudo defaults write /Library/Preferences/com.apple.SoftwareUpdate AutomaticallyInstallMacOSUpdates -bool false
 corgi agent pulse https://hc-ping.com/<uuid>   # a free healthchecks.io check; it emails when the pings stop
+corgi agent hotspot "Andrii's iPhone"          # Wi-Fi gone 90 s → the phone's hotspot
 corgi agent restart
 ```
+
+**The sudoers rule.** `corgi agent away` prints one line that lets your user
+run four `pmset` commands without a password - `disablesleep 1|0` and
+`lowpowermode 1|0`, nothing else - into `/etc/sudoers.d/corgi`. With it, a
+daemon that holds the machine awake also lets the lid close while it runs and
+gives that back when it stops (so `disablesleep` is not a thing to remember to
+undo), turns Low Power Mode on while the laptop is warm, and puts it to sleep
+at 50°C with the lid closed. Without it, everything below still works except
+those three.
 
 `corgi agent away` adds a `digest` routine to every watched workspace (five
 bullets a morning, on the phone), turns on worktrees and a seven-day prune
 where fixes run unattended, runs `harden` there, and then prints the rest as a
 list. `corgi agent doctor --away` is the same list without the changes:
-updates, lid, power, FileVault, disk, network (a captive portal shows up here -
-hotel Wi-Fi often asks again every day, and a closed laptop cannot click
-"accept"; a travel router or a spare phone's hotspot avoids that), heat, pulse,
-tunnel, phone, digest, isolation, and whether Claude Code may update itself
-mid-trip.
+updates, the sudoers rule, lid, power, FileVault, heat, a caffeinate of
+yours, disk, network (a captive portal shows up here - hotel Wi-Fi often asks
+again every day, and a closed laptop cannot click "accept"; a travel router or
+the hotspot hop avoids that), hotspot, pulse, tunnel, phone, peers, digest,
+isolation, and whether Claude Code may update itself mid-trip.
 
 While you are away:
 
@@ -1679,9 +1699,26 @@ While you are away:
   through argent or agent-device) shows in the phone's Chat under the tool
   line - `POST /launch/picture {session, id}` hands the bytes over, sealed
   like every other route; nothing is pushed for it.
-- **Heat.** A laptop in a bag throttles itself. While macOS reports a CPU
-  speed limit under 60%, no fix starts; you get one push, and runs resume when
-  it cools.
+- **Heat.** A laptop in a bag on a hotspot cooks its battery. The daemon
+  reads the battery temperature and the thermal state once a minute: warm
+  (40°C, or a CPU held under 60%) holds new runs with one push; hot (45°C)
+  pauses the running sessions - `SIGSTOP`, written down first, so a daemon
+  that dies with them paused thaws them when it is back - and resumes them
+  under 38°C, a push each way. `corgi agent heat` says when the pause is
+  allowed: with the lid closed (the default), always, or never.
+- **Battery.** Under 20% on battery no new fix starts, one push; under 10%
+  another. The lid closing on battery is said too.
+- **Wi-Fi.** `corgi agent hotspot "<name>"`: after 90 seconds offline the
+  daemon joins the hotspot and retries on a backoff (30 s, 1, 2, 5 min); the
+  push says how long the gap was. Back on Wi-Fi, another says how much the
+  hotspot carried. Past the data budget (2 GB unless `--budget` says) no new
+  fix starts until Wi-Fi is back - a dependency download should not eat the
+  phone's plan. An iPhone on your Apple ID needs no password (System Settings
+  › Wi-Fi › Ask to join hotspots: Automatically; Bluetooth on); another
+  network's goes in the login keychain with `--password`.
+- **The lid.** A closing lid lets the screen sleep and mutes the Mac until it
+  opens; `corgi agent status` and the status file's `laptop` say the degrees,
+  the battery, the lid, the network and how many sessions are paused.
 - **Disk.** Under 10 GB free, no fix starts either - worktrees and images
   pile up over weeks - with one push naming the prune commands.
 - **A trip cap.** `corgi agent watch enable --max-total 5` lets a workspace

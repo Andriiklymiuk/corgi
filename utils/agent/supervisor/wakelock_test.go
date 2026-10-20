@@ -16,7 +16,7 @@ func fakeLock(t *testing.T, mode WakeLockMode) (*WakeLock, *int) {
 	t.Helper()
 	starts := 0
 	w := NewWakeLock(mode)
-	w.startFn = func(int) (*exec.Cmd, error) {
+	w.startFn = func(int, bool) (*exec.Cmd, error) {
 		starts++
 		cmd := exec.Command("sleep", "30")
 		if err := cmd.Start(); err != nil {
@@ -100,7 +100,7 @@ func TestWakeLockNilIsSafe(t *testing.T) {
 func TestWakeLockPropagatesStartFailure(t *testing.T) {
 	w := NewWakeLock(WakeLockSession)
 	sentinel := errors.New("no caffeinate here")
-	w.startFn = func(int) (*exec.Cmd, error) { return nil, sentinel }
+	w.startFn = func(int, bool) (*exec.Cmd, error) { return nil, sentinel }
 
 	if err := w.Acquire(1); !errors.Is(err, sentinel) {
 		t.Errorf("Acquire() = %v, want %v - a missing binary must surface, not be swallowed", err, sentinel)
@@ -148,7 +148,7 @@ func TestWakeLockAlwaysSurvivesBetweenRestarts(t *testing.T) {
 
 	lock := NewWakeLock(WakeLockAlways)
 	var held atomic.Int32
-	lock.startFn = func(int) (*exec.Cmd, error) {
+	lock.startFn = func(int, bool) (*exec.Cmd, error) {
 		held.Add(1)
 		cmd := exec.Command("sleep", "30")
 		return cmd, cmd.Start()
@@ -209,5 +209,30 @@ func TestValidWakeLockModeAcceptsIdle(t *testing.T) {
 	}
 	if ValidWakeLockMode("nonsense") {
 		t.Error("an unknown mode must be rejected")
+	}
+}
+
+func TestSetDisplayRetakesAHeldLock(t *testing.T) {
+	w, starts := fakeLock(t, WakeLockAlways)
+	var seen []bool
+	inner := w.startFn
+	w.startFn = func(pid int, display bool) (*exec.Cmd, error) {
+		seen = append(seen, display)
+		return inner(pid, display)
+	}
+	if err := w.SetDisplay(true); err != nil || *starts != 0 {
+		t.Fatalf("a lock not held is not retaken: err=%v starts=%d", err, *starts)
+	}
+	if err := w.Acquire(42); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.SetDisplay(true); err != nil || *starts != 1 {
+		t.Fatalf("same setting, no restart: starts=%d", *starts)
+	}
+	if err := w.SetDisplay(false); err != nil || *starts != 2 || !w.Held() {
+		t.Fatalf("a change retakes the lock: starts=%d held=%v", *starts, w.Held())
+	}
+	if !slices.Equal(seen, []bool{true, false}) {
+		t.Fatalf("display flags passed: %v", seen)
 	}
 }
