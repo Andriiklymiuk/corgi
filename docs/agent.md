@@ -291,6 +291,7 @@ corgi agent serve --foreground   # run it in this terminal and watch
 | `corgi agent status [--json]` | what is running (`online` = device with no session yet), the launcher and connector URLs, restarts, which account |
 | `corgi agent doctor [--json] [--away]` | can this work here, and what to fix; `--away` adds what matters when nobody touches the machine for weeks (2.28.31). A watched workspace's Slack tokens are asked whether they still work, so a revoked one shows here and not at the first announce (2.31.20) |
 | `corgi agent away [--dry-run] [--pulse <url>]` | the away doctor, with every corgi-side fix applied: a digest routine per watched workspace, worktrees + pruning + harden where fixes run unattended; then the sudo lines only you can run (2.28.31) |
+| `corgi agent container [up\|shell\|logs\|stop\|down\|status] [--host ssh://…] [--clone <git url>] [--docker]` | the daemon in a Docker container, here or on a server over ssh: image with corgi, Claude Code, git, gh; volumes for the agent dir, the clones and the Claude login; a token asked once (2.31.35) |
 | `corgi agent pulse [url\|off]` | a dead-man ping every five minutes to a healthchecks.io / Uptime Kuma push URL, so a service alarms you when the machine goes quiet (2.28.31) |
 | `corgi agent workspaces` | list, `forget`, `relocate` |
 | `corgi agent resolve <name>` | what "the recipe app" resolves to |
@@ -2291,6 +2292,28 @@ each thing is, `corgi agent brief` what a run was on.
   KB each; `find … -mtime +30 -delete` from cron is enough. Docker wants the
   user in the `docker` group. `corgi upd` upgrades the daemon in place; put
   it in cron if nobody logs in.
+
+### In a container
+
+The same loop in a container, on this machine's Docker or on a server's:
+
+```bash
+corgi agent container up --clone git@github.com:acme/stack.git --docker   # here
+corgi agent container up --host ssh://me@build-1 --clone …                 # on a server, its Docker and volumes
+corgi agent container logs      # the pairing QR and the public URL
+corgi agent container shell     # corgi agent watch auth …, watch enable …, notify telegram …
+corgi agent container stop | down | status
+```
+
+`up` writes a Dockerfile, an entrypoint and a `compose.yml` under the agent
+dir (`container/`), asks once for a Claude token (`claude setup-token`
+prints one, kept in the container's `.env`), builds and starts. The image
+has corgi (this version), Claude Code, git, gh and the docker CLI; the agent
+dir (`/data`), the clones (`/work`) and the Claude login (`/claude`) are
+volumes, so `down` and `up` again lose nothing. `--clone` clones the stack
+and registers it at the first start; `--docker` mounts the host's socket so
+a fix can run the stack. Edit the files under `container/` and run `up`
+again to change the image (2.31.35).
 
 ## Platform support
 
