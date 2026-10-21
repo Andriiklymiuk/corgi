@@ -143,3 +143,23 @@ func TestALimitWithNoSpentWindowIsLeftToAPerson(t *testing.T) {
 		t.Fatalf("a session-credit limit with fresh windows: no plan, nothing typed; got resumeAt=%v typed=%d", s.ResumeAt, typed)
 	}
 }
+
+func TestAnOldUsageCacheFallsBackToTheResetInTheMessage(t *testing.T) {
+	d := trackingDaemon(t)
+	d.AutoContinue = true
+	d.Sessions.Load()
+	origJitter, origLimits := jitter, readLimits
+	defer func() { jitter, readLimits = origJitter, origLimits }()
+	jitter = func(time.Duration) time.Duration { return 0 }
+	now := time.Date(2026, 10, 20, 20, 17, 0, 0, time.Local)
+	readLimits = func(string) (usage.Limits, bool) {
+		return usage.Limits{FetchedAt: now.Add(-3 * time.Hour), FiveHour: usage.Window{Percent: 60, ResetsAt: now.Add(-time.Hour)}}, true
+	}
+	d.Sessions.Apply(sessions.Event{Name: "UserPromptSubmit", SessionID: "s1", Cwd: "/tmp/a", ClaudePID: 100, TermProgram: "iTerm.app", TTY: 5, At: now})
+	d.Sessions.Apply(sessions.Event{Name: "StopFailure", SessionID: "s1", Error: "rate_limit", Message: "You've hit your session limit · resets 2:50am", At: now})
+	d.autoContinue(context.Background(), now)
+	want := time.Date(2026, 10, 21, 2, 50, 0, 0, time.Local).Add(resumeGrace)
+	if got := d.Sessions.Sessions()[0].ResumeAt; !got.Equal(want) {
+		t.Fatalf("the cache predates the limit, so the message's clock plans it: want %v, got %v", want, got)
+	}
+}

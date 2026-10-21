@@ -101,6 +101,7 @@ type Event struct {
 	Branch       string         `json:"branch,omitempty"`
 	Summary      string         `json:"summary,omitempty"`
 	PR           string         `json:"pr,omitempty"`
+	Background   int            `json:"background,omitempty"`
 	Window       string         `json:"window,omitempty"`
 	Ticket       string         `json:"ticket,omitempty"`
 	TicketKey    string         `json:"ticketKey,omitempty"`

@@ -88,7 +88,7 @@ func resumeTime(s sessions.Session, now time.Time) time.Time {
 	case sessions.LimitOverload:
 		return overloadResumeTime(s.Resumes, now)
 	case sessions.LimitQuota:
-		return quotaResumeTime(s.ConfigDir, now)
+		return quotaResumeTime(s, now)
 	}
 	return time.Time{}
 }
@@ -101,12 +101,15 @@ func overloadResumeTime(resumes int, now time.Time) time.Time {
 	return now.Add(wait + jitter(resumeJitter))
 }
 
-func quotaResumeTime(configDir string, now time.Time) time.Time {
-	l, ok := readLimits(configDir)
-	if !ok {
-		return time.Time{}
+func quotaResumeTime(s sessions.Session, now time.Time) time.Time {
+	l, ok := readLimits(s.ConfigDir)
+	at := time.Time{}
+	if ok {
+		at = earliestSpentReset(l)
 	}
-	at := earliestSpentReset(l)
+	if at.IsZero() && (!ok || l.FetchedAt.Before(s.StatusSince)) {
+		at, _ = resetClock(s.Detail, now)
+	}
 	if at.IsZero() {
 		return time.Time{}
 	}

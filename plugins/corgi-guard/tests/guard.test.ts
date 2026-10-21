@@ -44,6 +44,18 @@ describe('corgi-guard', () => {
     expect(String((await $.tool.call({ tool: 'Bash', command: real })).deny)).toContain('read -r')
   })
 
+  test('quotes a glob in a --flag= value, which zsh would refuse as no matches found', async ($, on) => {
+    const seen: string[] = []
+    on('tool.call', { tool: 'Bash' }, (_$, e) => {
+      if (e.tool === 'Bash') seen.push(e.command)
+      return { result: { stdout: '', stderr: '', interrupted: false }, text: '' }
+    })
+    await $.tool.call({ tool: 'Bash', command: 'grep -rn "a\\|b" src --include=*.ts --exclude-dir=node_* | head' })
+    await $.tool.call({ tool: 'Bash', command: 'echo "see --include=*.ts" && grep -r x --include=*.{ts,tsx} . && grep -r y --include=\'*.go\' .' })
+    expect(seen[0]).toBe('grep -rn "a\\|b" src --include=\'*.ts\' --exclude-dir=\'node_*\' | head')
+    expect(seen[1]).toBe('echo "see --include=*.ts" && grep -r x --include=*.{ts,tsx} . && grep -r y --include=\'*.go\' .')
+  })
+
   test('a plain successful command passes untouched', async ($, on) => {
     on('tool.call', { tool: 'Bash' }, () => ({ result: { stdout: 'main', stderr: '', interrupted: false }, text: 'main' }))
     const got = await $.tool.call({ tool: 'Bash', command: 'git branch --show-current' })

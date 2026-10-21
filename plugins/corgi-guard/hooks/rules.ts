@@ -21,6 +21,30 @@ export function refusal(raw: string): string | undefined {
   return undefined
 }
 
+const flagGlob = /(?<=\s)(--[A-Za-z][\w-]*=)([^\s'"`$;&|(){}<>]*[*?[][^\s'"`$;&|(){}<>]*)(?=[\s;&|)]|$)/g
+
+export function quoteFlagGlobs(command: string): string {
+  if (command.includes('<<')) {
+    return command
+  }
+  const bare: boolean[] = []
+  let quote = ''
+  for (let i = 0; i < command.length; i++) {
+    const c = command[i]
+    bare.push(quote === '')
+    if (c === '\\' && quote !== "'") {
+      bare.push(false)
+      i++
+    } else if (quote === '' && (c === "'" || c === '"')) {
+      quote = c
+    } else if (c === quote) {
+      quote = ''
+    }
+  }
+  return command.replace(flagGlob, (word, flag: string, glob: string, at: number) =>
+    bare[at] ? `${flag}'${glob}'` : word)
+}
+
 export function hint(command: string, text: string): string | undefined {
   if (/graphql/.test(command) && /Could not coerce value|provided invalid value/.test(text)) {
     return 'A GraphQL variable arrived empty. For review threads, `corgi agent watch pr threads <url> <url>...` ' +

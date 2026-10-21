@@ -16,16 +16,18 @@ var agentContinueCmd = &cobra.Command{
 	Use:   "continue [on|off]",
 	Short: "Let the daemon continue a limited session when its limit is over",
 	Long: `A session that hit a usage limit is waiting on a clock, not on you. With this
-on, the daemon plans a resume from the account's reset time (or a few minutes
-after an overload), types "continue" once the numbers say the window is back,
-and gives up after a few tries if the limit comes straight back.
+on, the daemon plans a resume from the account's reset time (or the reset in
+the limit message when those numbers are older than the limit, or a few minutes
+after an overload), types "continue" once the window is back, and gives up
+after a few tries if the limit comes straight back.
 
   corgi agent continue on
   corgi agent continue off
   corgi agent continue        what is set now
 
-The board shows the plan on the key ("continues 14:02"). The VS Code extension
-has the same feature; when the daemon does it, the extension stands down.`,
+The board shows the plan on the key ("continues 14:02"). It types into a
+terminal, a VS Code terminal or tmux; a session in the Claude Code panel takes
+no typed text, so it gets the "limit lifted" push instead.`,
 	Args: cobra.MaximumNArgs(1),
 	Run:  runAgentContinue,
 }

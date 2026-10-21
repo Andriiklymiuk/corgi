@@ -679,8 +679,12 @@ limited session resumes (after a 20 s grace), and "the turn resumed after
 the limit … is done" when that turn ends. A limited key says which kind: **quota** (the
 account's window is spent; `resets 2pm`, carry or wait) or **overload**
 (the API said try later; minutes). With `corgi agent continue on` the daemon
-plans the resume itself - the key shows `continues 14:02` - and gives up after
-three tries when the limit comes straight back. The **phone launcher** has the same under each
+plans the resume itself - from the account's numbers, or from the `resets 2:50am`
+in the limit message when those numbers are older than the limit - the key shows
+`continues 14:02`, and it gives up after three tries when the limit comes straight
+back. A session in the Claude Code panel takes no typed text: it gets the push, not
+the continue. A finished turn whose background tasks still run says so on the key
+("2 tasks still running in the background"): it wakes itself when they end. The **phone launcher** has the same under each
 session row: Allow, Always, Deny when it needs you, Send… for any live one,
 and a PR link when the session mentioned one; its **New chat** box opens a
 session in a chosen editor window with a first prompt, a model and an

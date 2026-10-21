@@ -369,7 +369,7 @@ func (r *Registry) transition(s *Session, ev Event, now time.Time) {
 	case "Notification":
 		r.applyNotification(s, ev, now)
 	case "Stop":
-		s.Tool, s.Detail, s.Pending = "", "", nil
+		s.Tool, s.Detail, s.Pending = "", backgroundWords(ev.Background), nil
 		s.FailStreak, s.failSubject = 0, ""
 		r.setStatus(s, StatusDone, now)
 	case "StopFailure":
@@ -1834,4 +1834,14 @@ func (r *Registry) pullFactsLocked(s *Session) *PullFacts {
 		return &p
 	}
 	return nil
+}
+
+func backgroundWords(n int) string {
+	switch {
+	case n == 1:
+		return "1 task still running in the background"
+	case n > 1:
+		return strconv.Itoa(n) + " tasks still running in the background"
+	}
+	return ""
 }

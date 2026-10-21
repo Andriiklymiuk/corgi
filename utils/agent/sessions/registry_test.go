@@ -1136,3 +1136,19 @@ func TestFrontSessionIsTheNamedChatTab(t *testing.T) {
 		t.Fatalf("a label naming no session falls back to the busiest panel: %+v", st)
 	}
 }
+
+func TestATurnThatEndsWithWorkInTheBackgroundSaysSo(t *testing.T) {
+	r := newTestRegistry(t)
+	r.Apply(ev("UserPromptSubmit", "s1", 0))
+	stop := ev("Stop", "s1", time.Second)
+	stop.Background = 2
+	r.Apply(stop)
+	if s, _ := r.Lookup("s1"); s.Status != StatusDone || s.Detail != "2 tasks still running in the background" {
+		t.Fatalf("done, and the board says the watchers will bring it back: %+v", s)
+	}
+	r.Apply(ev("UserPromptSubmit", "s1", 2*time.Second))
+	r.Apply(ev("Stop", "s1", 3*time.Second))
+	if s, _ := r.Lookup("s1"); s.Detail != "" {
+		t.Fatalf("nothing left running, nothing said: %q", s.Detail)
+	}
+}

@@ -18,7 +18,7 @@
     {
       "name": "corgi-guard",
       "source": "./plugins/corgi-guard",
-      "description": "Stops the Bash shapes corgi runs lose turns to (zsh set -- $pair, rm -rf on corgi worktrees) and adds the corgi fix to errors it knows"
+      "description": "Stops the Bash shapes corgi runs lose turns to (zsh set -- $pair, unquoted --flag=*.ts, rm -rf on corgi worktrees) and adds the corgi fix to errors it knows"
     }
   ]
 }

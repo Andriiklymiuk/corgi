@@ -1,6 +1,6 @@
 import type { Register } from 'claude-code'
 
-import { hint, refusal } from './rules'
+import { hint, quoteFlagGlobs, refusal } from './rules'
 
 export const register: Register = on => {
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
@@ -8,7 +8,8 @@ export const register: Register = on => {
     if (why !== undefined) {
       return { deny: `corgi-guard: ${why}` }
     }
-    const ran = await next(e)
+    const command = quoteFlagGlobs(e.command)
+    const ran = await next(command === e.command ? e : { ...e, command })
     if (ran.deny !== undefined) {
       return ran
     }

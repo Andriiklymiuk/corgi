@@ -530,6 +530,7 @@ func runEmitHookAs(agent string, stdin io.Reader, getenv func(string) string, pa
 			ev.Title = usage.TitleOf(in.TranscriptPath)
 		}
 		if in.Event == "Stop" {
+			ev.Background = usage.BackgroundOf(in.TranscriptPath)
 			if sum, ok := usage.SummaryOf(in.TranscriptPath); ok {
 				ev.Summary, ev.PR = sum.Line, sum.PR
 			}

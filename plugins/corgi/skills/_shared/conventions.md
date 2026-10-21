@@ -122,8 +122,12 @@ then:
   left and the one question.
 - **Every item in the batch.** Five tickets asked for means five handled, each to its own
   done or its own BLOCKED line - not the first one plus a summary of the rest.
+- **A review is not a wall.** While one item waits on a reviewer, a merge or CI, start
+  the next one - stacked on the waiting branch when it needs that code. "When #58 merges
+  I start ABC-12" and "say go for the next one" are stops nobody asked for.
 - **Long work is waited for.** A build, a CI run, a deploy runs in the background and is
-  polled to its conclusion; "it's running, check later" is not an end.
+  polled to its conclusion; "it's running, check later" is not an end. Before the wait,
+  one line: what runs, about how long, and the link to watch it.
 - **Evidence before "done".** The PR URL, the green check, the posted comment, the test
   output - seen, not assumed. Short is fine; unverified is not.
 - **Report once, at the end.** What was done (with its links), what is blocked (with its

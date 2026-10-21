@@ -58,9 +58,9 @@ func writeBoardAccounts(t *testing.T, agentD string, accounts []sessions.Account
 func recordWaits(t *testing.T, agentD string, now time.Time) {
 	t.Helper()
 	for _, w := range []usage.Wait{
-		{At: now.Add(-2 * time.Hour), Kind: "wait", Label: "acme", Seconds: 30},
-		{At: now.Add(-time.Hour), Kind: "wait", Label: "web", Seconds: 300},
-		{At: now.Add(-30 * time.Minute), Kind: "limited", Label: "acme", Seconds: 600},
+		{At: now.Add(-3 * time.Second), Kind: "wait", Label: "acme", Seconds: 30},
+		{At: now.Add(-2 * time.Second), Kind: "wait", Label: "web", Seconds: 300},
+		{At: now.Add(-time.Second), Kind: "limited", Label: "acme", Seconds: 600},
 		{At: now.Add(-48 * time.Hour), Kind: "wait", Label: "yesterday", Seconds: 9999},
 	} {
 		if err := usage.RecordWait(agentD, w); err != nil {

@@ -3,6 +3,7 @@
 A Claude Code mod that stops the Bash shapes corgi runs lose turns to, and hands the model the corgi fix:
 
 - `set -- $pair` - zsh does not split it, so the second word arrives empty. Refused, with `read -r a b <<< "$pair"`.
+- `grep --include=*.ts` - zsh stops on "no matches found". The glob is quoted before it runs (`--include='*.ts'`), which bash reads the same way.
 - `rm -rf /tmp/corgi-wt/...` or `/tmp/corgi-review/...` - refused in a hardened workspace anyway. Refused, with the fresh-path recipe.
 - A GraphQL call with an empty variable - the result carries a pointer to `corgi agent watch pr threads`.
 - `gh pr checks` right after a push ("no checks reported") - the result carries the wait-for-checks loop.
