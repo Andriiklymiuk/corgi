@@ -149,6 +149,8 @@ func (g *lidGuard) observe(now time.Time, closed, known bool) string {
 
 func roughSpan(d time.Duration) string {
 	switch {
+	case d < time.Minute:
+		return "under a minute"
 	case d < time.Hour:
 		return plural(int(d.Minutes()), "minute")
 	case d < 48*time.Hour:

@@ -166,3 +166,9 @@ func TestAPhoneHotspotIsRecognisedByItsName(t *testing.T) {
 		}
 	}
 }
+
+func TestASpanUnderAMinuteIsNotZeroMinutes(t *testing.T) {
+	if got := roughSpan(20 * time.Second); got != "under a minute" {
+		t.Fatalf("got %q", got)
+	}
+}
