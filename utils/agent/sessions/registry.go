@@ -372,6 +372,7 @@ func (r *Registry) transition(s *Session, ev Event, now time.Time) {
 		s.Tool, s.Detail, s.Pending = "", backgroundWords(ev.Background), nil
 		s.FailStreak, s.failSubject = 0, ""
 		r.setStatus(s, StatusDone, now)
+		s.Background = ev.Background
 	case "StopFailure":
 		s.Tool, s.Pending = "", nil
 		if kind, reset, limited := ClassifyLimit(ev.Error, ev.Message); limited {
@@ -598,6 +599,7 @@ func (r *Registry) setStatus(s *Session, st Status, now time.Time) {
 	if st != StatusLimited {
 		s.Limit, s.ResumeAt = "", time.Time{}
 	}
+	s.Background = 0
 	if st == StatusDone || st == StatusNeedsInput {
 		s.Resumes = 0
 	}
@@ -1280,19 +1282,20 @@ func notASession(args string) bool {
 }
 
 type FocusTarget struct {
-	SessionID string
-	Kind      HostKind
-	App       string
-	Folder    string
-	WindowID  string
-	ShellPID  int
-	Panel     bool
-	TTY       uint64
-	Pane      string
-	New       bool
-	Connected bool
-	Title     string
-	Label     string
+	SessionID  string
+	Kind       HostKind
+	App        string
+	Folder     string
+	WindowID   string
+	ShellPID   int
+	Panel      bool
+	TTY        uint64
+	Pane       string
+	New        bool
+	Connected  bool
+	PanelInput bool
+	Title      string
+	Label      string
 }
 
 var ErrNoSession = errors.New("no such session")
@@ -1311,7 +1314,7 @@ func (r *Registry) Focus(ref string) (FocusTarget, error) {
 	return FocusTarget{
 		SessionID: s.ID, Kind: h.Kind, App: h.App, Folder: h.Folder, WindowID: h.WindowID,
 		ShellPID: h.ShellPID, Panel: h.Kind == HostVSCodePanel, Connected: h.Connected, TTY: s.TTY, Pane: h.Pane,
-		Title: s.Title, Label: r.displayLocked(s),
+		PanelInput: r.windows[h.WindowID].PanelInput, Title: s.Title, Label: r.displayLocked(s),
 	}, nil
 }
 

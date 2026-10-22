@@ -151,7 +151,7 @@ func (g *GitHub) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 		at, _ := time.Parse(time.RFC3339, t.UpdatedAt)
 		pull := g.pull(ctx, pulls, t.Subject.URL)
 		author, body, bot, hasComment := g.latestComment(ctx, t.Subject.LatestCommentURL, t.Subject.URL)
-		kind := r.kind
+		kind, review := r.kind, ""
 		key := "github:" + ref + ":" + t.ID + ":" + t.UpdatedAt
 		if id := githubCommentKey(t.Subject.LatestCommentURL); id != "" {
 			key = "github:" + ref + ":" + id
@@ -163,7 +163,7 @@ func (g *GitHub) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 			// the webhook gives the same review, so the two are one event.
 			if rv, ok := g.reviewBehind(ctx, t.Repository.FullName, number, at); ok {
 				author, body, bot, hasComment = rv.author, rv.body, rv.bot, true
-				kind = KindPRReview
+				kind, review = KindPRReview, rv.state
 				key = "github:" + ref + ":r" + rv.id
 			}
 		}
@@ -182,6 +182,7 @@ func (g *GitHub) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 			Mine:   r.mine && isMe(g.Me, pull.author),
 			Bot:    bot,
 			State:  pull.state,
+			Review: review,
 			At:     at,
 		})
 	}
@@ -216,8 +217,8 @@ func (g *GitHub) latestComment(ctx context.Context, commentURL, subjectURL strin
 }
 
 type githubReview struct {
-	id, author, body string
-	bot              bool
+	id, author, body, state string
+	bot                     bool
 }
 
 // reviewBehind is the review that raised a thread whose latest_comment_url is
@@ -261,6 +262,7 @@ func (g *GitHub) reviewBehind(ctx context.Context, repo, num string, at time.Tim
 			id:     strconv.FormatInt(r.ID, 10),
 			author: r.User.Login,
 			body:   clip(strings.TrimSpace(r.Body), bodyMax),
+			state:  strings.ToLower(r.State),
 			bot:    githubBot(r.User.Login, r.User.Type),
 		}
 	}

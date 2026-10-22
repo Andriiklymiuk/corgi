@@ -57,6 +57,16 @@ func PullLinks(text string) []string {
 	return out
 }
 
+// PullLink is the pull request's own address, without a tab or anchor after the number.
+func PullLink(link string) string {
+	for _, re := range []*regexp.Regexp{githubPull, gitlabMR} {
+		if m := re.FindString(link); m != "" {
+			return m
+		}
+	}
+	return link
+}
+
 func PullRef(link string) string {
 	if m := githubPull.FindStringSubmatch(link); m != nil {
 		return m[1] + "#" + m[2]

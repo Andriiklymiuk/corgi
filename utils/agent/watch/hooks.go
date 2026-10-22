@@ -199,7 +199,7 @@ func parseGitHubHook(event string, body []byte, me string) ([]Event, error) {
 		}
 		return []Event{{Key: fmt.Sprintf("github:%s:r%d", ref, p.Review.ID), Source: "github", Kind: KindPRReview, Ref: ref,
 			Title: title, URL: url, Body: clip(p.Review.Body, 200), Author: p.Review.User.Login, State: p.Review.State,
-			Mine: mine, At: hookTime(p.Review.SubmittedAt)}}, nil
+			Review: strings.ToLower(p.Review.State), Mine: mine, At: hookTime(p.Review.SubmittedAt)}}, nil
 	case "pull_request_review_comment", "issue_comment":
 		if p.Comment == nil || isMe(me, p.Comment.User.Login) || githubBot(p.Comment.User.Login, p.Comment.User.Type) {
 			return nil, nil

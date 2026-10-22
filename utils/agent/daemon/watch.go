@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -1459,23 +1460,35 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 	}
 	if runErr != nil {
 		fmt.Fprintf(logFile, "\n=== failed: %v\n", runErr)
-		d.watchState.Fixes.Finish(e.Key, nil, "", runErr.Error(), time.Now())
+		failure := runErr.Error()
+		cause := watch.EnvironmentFailure(string(out))
+		if cause != "" {
+			failure = watch.EnvironmentPrefix + cause
+			fmt.Fprintf(logFile, "=== %s: not the work's fault, tried again in %s\n", cause, retryCrashAfter)
+		}
+		d.watchState.Fixes.Finish(e.Key, nil, "", failure, time.Now())
 		for _, r := range e.Riders {
-			d.watchState.Fixes.Finish(r.Key, nil, "", runErr.Error(), time.Now())
-			d.retryOnceLater(spec, r)
+			d.watchState.Fixes.Finish(r.Key, nil, "", failure, time.Now())
+			d.retryLater(spec, r, cause)
 		}
-		d.watchState.Fixes.SetHandover(e.Key, runHandover(spec.Dir, e.Ref, started, string(out)), time.Now())
-		d.mirrorHandoff(spec, e.Ref, started)
-		d.tripBreaker(spec, e, runErr.Error())
+		if cause == "" {
+			d.watchState.Fixes.SetHandover(e.Key, runHandover(spec.Dir, e.Ref, started, string(out)), time.Now())
+			d.mirrorHandoff(spec, e.Ref, started)
+			d.tripBreaker(spec, e, failure)
+		}
 		if e.Source == "slack" {
-			d.say(ctx, spec, e, chatOutcome(nil, "", runErr.Error()), "x")
+			d.say(ctx, spec, e, chatOutcome(nil, "", failure), "x")
 		}
-		retry := d.retryOnceLater(spec, e)
-		if e.Kind == watch.KindRoutine {
-			d.routineReport(spec, e, string(out), runErr, logPath)
+		retry := d.retryLater(spec, e, cause)
+		if cause != "" && retry {
+			utils.Infof("agent: %s did not run: %s - again in %s\n", e.Ref, cause, retryCrashAfter)
 			return
 		}
-		body := fmt.Sprintf("fix for %s failed: %v - log: %s", e.Ref, runErr, logPath)
+		if e.Kind == watch.KindRoutine {
+			d.routineReport(spec, e, string(out), errors.New(firstNonEmpty(cause, runErr.Error())), logPath)
+			return
+		}
+		body := fmt.Sprintf("fix for %s failed: %v - log: %s", e.Ref, firstNonEmpty(cause, runErr.Error()), logPath)
 		if retry {
 			body += fmt.Sprintf(" - one retry in %s", retryCrashAfter)
 		}
@@ -1707,10 +1720,7 @@ func (d *Daemon) refreshPulls(ctx context.Context, spec WatchSpec) {
 	add := func(link string) {
 		if ref := watch.PullRef(link); ref != "" {
 			refs[ref] = true
-			if i := strings.Index(link, "#"); i > 0 {
-				link = link[:i]
-			}
-			links[ref] = link
+			links[ref] = watch.PullLink(link)
 		}
 	}
 	for _, e := range watch.RecentEvents(d.Dir, 40) {
@@ -1881,6 +1891,22 @@ func (d *Daemon) retryOnceLater(spec WatchSpec, e watch.Event) bool {
 		return false
 	}
 	if _, blocked := d.watchState.Fixes.Blocked(spec.Workspace, e.Ref); blocked {
+		return false
+	}
+	e.NotBefore = time.Now().Add(retryCrashAfter)
+	d.watchState.Fixes.Defer(e)
+	return true
+}
+
+const environmentRetries = 4
+
+// retryLater runs a failed fix again in half an hour: once when the work
+// failed, a few times when the machine did (no network, an expired login).
+func (d *Daemon) retryLater(spec WatchSpec, e watch.Event, cause string) bool {
+	if cause == "" {
+		return d.retryOnceLater(spec, e)
+	}
+	if e.Ref == "" || spec.NoRetry || d.watchState.Fixes.EnvironmentFailures(spec.Workspace, e.Ref) > environmentRetries {
 		return false
 	}
 	e.NotBefore = time.Now().Add(retryCrashAfter)

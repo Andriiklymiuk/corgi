@@ -177,6 +177,7 @@ type Session struct {
 	Limit         LimitKind      `json:"limit,omitempty"`
 	ResumeAt      time.Time      `json:"resumeAt,omitzero"`
 	Resumes       int            `json:"resumes,omitempty"`
+	Background    int            `json:"background,omitempty"`
 	AutoAllowed   int            `json:"autoAllowed,omitempty"`
 	FailStreak    int            `json:"failStreak,omitempty"`
 	failSubject   string
@@ -325,8 +326,10 @@ type Window struct {
 	PanelActive    bool       `json:"panelActive,omitempty"`
 	ClaudeTabs     *int       `json:"claudeTabs,omitempty"`
 	// The label of the Claude Code chat tab in front, when one is.
-	ActiveClaudeTab string    `json:"activeClaudeTab,omitempty"`
-	UpdatedAt       time.Time `json:"updatedAt"`
+	ActiveClaudeTab string `json:"activeClaudeTab,omitempty"`
+	// PanelInput: the window's extension can put text into a Claude Code chat tab and submit it.
+	PanelInput bool      `json:"panelInput,omitempty"`
+	UpdatedAt  time.Time `json:"updatedAt"`
 }
 
 func EditorFromChain(names []string) string {

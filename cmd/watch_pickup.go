@@ -110,7 +110,7 @@ func markDelivered(agentD, workspaceID string, e watch.Event, prs []string) {
 }
 
 func writeWorkpad(agentD, workspaceID, ref, section, text string) {
-	if strings.TrimSpace(ref) == "" {
+	if strings.TrimSpace(ref) == "" || strings.HasPrefix(ref, "routine/") || strings.HasPrefix(ref, "slack-") {
 		return
 	}
 	w, _, err := watchWriter(agentD, workspaceID)

@@ -449,7 +449,10 @@ func (d *Daemon) deliverText(ctx context.Context, t sessions.FocusTarget, text s
 		}
 		return sessions.WriteReveal(d.Dir, sessions.Reveal{WindowID: t.WindowID, SessionID: t.SessionID, ShellPID: t.ShellPID, Text: text, Enter: enter})
 	case sessions.HostVSCodePanel:
-		return fmt.Errorf("%s runs in the Claude Code panel, which takes text only from the keyboard", t.Label)
+		if t.WindowID == "" || !t.Connected || !t.PanelInput || strings.Trim(text, "0123456789\r\x1b") == "" {
+			return fmt.Errorf("%s runs in the Claude Code panel, which takes text only from the keyboard (update the corgi VS Code extension)", t.Label)
+		}
+		return sessions.WriteReveal(d.Dir, sessions.Reveal{WindowID: t.WindowID, SessionID: t.SessionID, Panel: true, Title: t.Title, Text: text, Enter: enter})
 	case sessions.HostITerm, sessions.HostTerminalApp:
 		if d.TypeText != nil {
 			return d.TypeText(ctx, t, text, enter)

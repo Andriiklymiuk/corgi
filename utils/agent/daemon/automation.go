@@ -2,6 +2,8 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
@@ -14,6 +16,7 @@ import (
 	"andriiklymiuk/corgi/utils/agent/lessons"
 	"andriiklymiuk/corgi/utils/agent/sessions"
 	"andriiklymiuk/corgi/utils/agent/watch"
+	"andriiklymiuk/corgi/utils/atomicfile"
 )
 
 type Policy struct {
@@ -144,26 +147,57 @@ func (d *Daemon) pullChanged(ctx context.Context, spec WatchSpec, ref, link stri
 }
 
 type mergeFailure struct {
-	at        time.Time
-	msg       string
-	permanent bool
+	At        time.Time `json:"at"`
+	Msg       string    `json:"msg"`
+	Permanent bool      `json:"permanent"`
 }
 
-// A merge that failed is tried again after a while, unless the forge said the
-// token cannot do it - that answer does not change by asking again.
-const mergeRetryAfter = 30 * time.Minute
+// A merge that failed is tried again after a while; one the forge refused
+// because the token cannot do it waits a day, across restarts, since asking
+// again changes nothing until the token does.
+const (
+	mergeRetryAfter   = 30 * time.Minute
+	mergeRefusedAfter = 24 * time.Hour
+)
+
+func (d *Daemon) mergeRefusedPath() string {
+	return filepath.Join(d.Dir, "watch", "merge-refused.json")
+}
+
+func (d *Daemon) loadMergeFailuresLocked() {
+	if d.mergeFailed != nil {
+		return
+	}
+	d.mergeFailed = map[string]mergeFailure{}
+	if data, err := os.ReadFile(d.mergeRefusedPath()); err == nil {
+		_ = json.Unmarshal(data, &d.mergeFailed)
+	}
+}
+
+func (d *Daemon) saveMergeRefusalsLocked() {
+	kept := map[string]mergeFailure{}
+	for link, f := range d.mergeFailed {
+		if f.Permanent {
+			kept[link] = f
+		}
+	}
+	if data, err := json.Marshal(kept); err == nil && os.MkdirAll(filepath.Dir(d.mergeRefusedPath()), 0o700) == nil {
+		_ = atomicfile.Write(d.mergeRefusedPath(), data, 0o600)
+	}
+}
 
 func (d *Daemon) mergeWorthTrying(link string, now time.Time) bool {
 	d.mergeMu.Lock()
 	defer d.mergeMu.Unlock()
+	d.loadMergeFailuresLocked()
 	f, ok := d.mergeFailed[link]
 	if !ok {
 		return true
 	}
-	if f.permanent {
-		return false
+	if f.Permanent {
+		return now.Sub(f.At) >= mergeRefusedAfter
 	}
-	return now.Sub(f.at) >= mergeRetryAfter
+	return now.Sub(f.At) >= mergeRetryAfter
 }
 
 // rememberMergeFailure keeps the refusal and says whether it is news: the same
@@ -171,22 +205,29 @@ func (d *Daemon) mergeWorthTrying(link string, now time.Time) bool {
 func (d *Daemon) rememberMergeFailure(link string, err error, now time.Time) (body string, first bool) {
 	d.mergeMu.Lock()
 	defer d.mergeMu.Unlock()
-	if d.mergeFailed == nil {
-		d.mergeFailed = map[string]mergeFailure{}
-	}
+	d.loadMergeFailuresLocked()
 	prev, had := d.mergeFailed[link]
-	f := mergeFailure{at: now, msg: err.Error(), permanent: watch.Permanent(err)}
+	f := mergeFailure{At: now, Msg: err.Error(), Permanent: watch.Permanent(err)}
 	d.mergeFailed[link] = f
-	body = "could not merge " + link + ": " + f.msg
-	if fix := watch.WriteFix(err); fix != "" {
-		body = "could not merge " + link + " - " + fix + " (auto-merge is paused for it until the daemon restarts)"
+	if f.Permanent || prev.Permanent {
+		d.saveMergeRefusalsLocked()
 	}
-	return body, !had || prev.msg != f.msg
+	body = "could not merge " + link + ": " + f.Msg
+	if fix := watch.WriteFix(err); fix != "" {
+		body = "could not merge " + link + " - " + fix + " (auto-merge tries it again in a day)"
+	}
+	return body, !had || prev.Msg != f.Msg
 }
 
 func (d *Daemon) forgetMergeFailure(link string) {
 	d.mergeMu.Lock()
 	defer d.mergeMu.Unlock()
+	d.loadMergeFailuresLocked()
+	if d.mergeFailed[link].Permanent {
+		delete(d.mergeFailed, link)
+		d.saveMergeRefusalsLocked()
+		return
+	}
 	delete(d.mergeFailed, link)
 }
 
@@ -214,15 +255,28 @@ func (d *Daemon) ticketAfterMerge(ctx context.Context, spec WatchSpec, link stri
 	if rec.Parent != "" && strings.TrimSpace(wc.AfterMergeSubtasks) != "" {
 		status = strings.TrimSpace(wc.AfterMergeSubtasks)
 	}
-	if err := d.MoveTicket(ctx, spec.Workspace, rec.Ref, status); err != nil {
-		utils.Infof("agent: %s after merge: %v\n", rec.Ref, err)
-		go d.notifyAttentionAt(notifyTitlePrefix+spec.Workspace, "could not move "+rec.Ref+" to "+status+": "+err.Error(), spec.Workspace, rec.URL)
+	ticket := ticketOfRun(rec)
+	if ticket == "" {
+		return
+	}
+	if err := d.MoveTicket(ctx, spec.Workspace, ticket, status); err != nil {
+		utils.Infof("agent: %s after merge: %v\n", ticket, err)
+		go d.notifyAttentionAt(notifyTitlePrefix+spec.Workspace, "could not move "+ticket+" to "+status+": "+err.Error(), spec.Workspace, rec.URL)
 		return
 	}
 	if d.Events != nil {
-		d.Events.Append(spec.Workspace, events.Event{At: time.Now().UTC(), Kind: "moved", Reason: rec.Ref + " → " + status + " - every pull request merged", URL: rec.URL})
+		d.Events.Append(spec.Workspace, events.Event{At: time.Now().UTC(), Kind: "moved", Reason: ticket + " → " + status + " - every pull request merged", URL: rec.URL})
 	}
-	go d.notifyAttentionAt(notifyTitlePrefix+spec.Workspace, rec.Ref+" → "+status+" - every pull request merged", spec.Workspace, rec.URL)
+	go d.notifyAttentionAt(notifyTitlePrefix+spec.Workspace, ticket+" → "+status+" - every pull request merged", spec.Workspace, rec.URL)
+}
+
+// ticketOfRun is the tracker key a run worked on: its ref for a ticket run,
+// the key in its title or branch for a run on a pull request; "" for neither.
+func ticketOfRun(rec watch.FixRecord) string {
+	if !strings.ContainsAny(rec.Ref, "#!/") && !strings.HasPrefix(rec.Ref, "slack-") {
+		return rec.Ref
+	}
+	return storyInTitle.FindString(rec.Title + " " + rec.Branch)
 }
 
 func (d *Daemon) allowsByPolicy(s sessions.Session) bool {

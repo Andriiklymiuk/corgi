@@ -479,11 +479,54 @@ func TestAMergeThatFailedForNowIsTriedAgainLater(t *testing.T) {
 	}
 	d.mergeMu.Lock()
 	f := d.mergeFailed[link]
-	f.at = f.at.Add(-mergeRetryAfter)
+	f.At = f.At.Add(-mergeRetryAfter)
 	d.mergeFailed[link] = f
 	d.mergeMu.Unlock()
 	d.pullChanged(context.Background(), spec, "acme/api#7", link, watch.PullStatus{}, ready, false)
 	if attempts != 2 {
 		t.Fatalf("asked %d times - a passing refusal deserves another try after a while", attempts)
+	}
+}
+
+func TestATokenRefusalOutlivesARestart(t *testing.T) {
+	d := testDaemon(t)
+	d.Notify = func(string, string) {}
+	attempts := 0
+	d.MergePull = func(_ context.Context, workspace, link string) error {
+		attempts++
+		return errors.New(`closing ` + link + `: HTTP 403: {"error":"insufficient_scope"}`)
+	}
+	writeWatchConfig(t, d, "acme", "      autoMerge: true\n")
+	spec := WatchSpec{Workspace: "acme", Dir: t.TempDir(), AgentDir: d.Dir}
+	link := "https://gitlab.com/acme/core/-/merge_requests/9"
+	ready := watch.PullStatus{State: "open", Checks: "passing", Review: "approved", Mine: true, At: time.Now()}
+	d.pullChanged(context.Background(), spec, "acme/core!9", link, watch.PullStatus{}, ready, false)
+
+	d.mergeMu.Lock()
+	d.mergeFailed = nil
+	d.mergeMu.Unlock()
+	d.pullChanged(context.Background(), spec, "acme/core!9", link, watch.PullStatus{}, ready, false)
+	if attempts != 1 {
+		t.Fatalf("asked %d times: a restarted daemon still knows the token cannot merge", attempts)
+	}
+	if !d.mergeWorthTrying(link, time.Now().Add(mergeRefusedAfter)) {
+		t.Fatal("a day later it asks again - the token may have changed")
+	}
+}
+
+func TestTheTicketOfARunIsATrackerKeyNeverAPullRequest(t *testing.T) {
+	for _, c := range []struct {
+		rec  watch.FixRecord
+		want string
+	}{
+		{watch.FixRecord{Ref: "ABC-12"}, "ABC-12"},
+		{watch.FixRecord{Ref: "acme/core!9093", Title: "ABC-7 translate the ad code screen"}, "ABC-7"},
+		{watch.FixRecord{Ref: "acme/api#5", Branch: "feature/ABC-9/thing"}, "ABC-9"},
+		{watch.FixRecord{Ref: "acme/core!9101", Title: "fix review notes"}, ""},
+		{watch.FixRecord{Ref: "routine/digest"}, ""},
+	} {
+		if got := ticketOfRun(c.rec); got != c.want {
+			t.Errorf("ticketOfRun(%+v) = %q, want %q", c.rec, got, c.want)
+		}
 	}
 }

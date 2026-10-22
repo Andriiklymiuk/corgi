@@ -26,8 +26,9 @@ after a few tries if the limit comes straight back.
   corgi agent continue        what is set now
 
 The board shows the plan on the key ("continues 14:02"). It types into a
-terminal, a VS Code terminal or tmux; a session in the Claude Code panel takes
-no typed text, so it gets the "limit lifted" push instead.`,
+terminal, a VS Code terminal or tmux, and into the Claude Code panel through
+the corgi VS Code extension (macOS: it fills the chat box and presses Return,
+so VS Code needs Accessibility once).`,
 	Args: cobra.MaximumNArgs(1),
 	Run:  runAgentContinue,
 }

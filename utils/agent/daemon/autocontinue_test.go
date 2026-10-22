@@ -2,6 +2,9 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"strconv"
 	"sync"
 	"testing"
@@ -161,5 +164,41 @@ func TestAnOldUsageCacheFallsBackToTheResetInTheMessage(t *testing.T) {
 	want := time.Date(2026, 10, 21, 2, 50, 0, 0, time.Local).Add(resumeGrace)
 	if got := d.Sessions.Sessions()[0].ResumeAt; !got.Equal(want) {
 		t.Fatalf("the cache predates the limit, so the message's clock plans it: want %v, got %v", want, got)
+	}
+}
+
+func TestAPanelSessionIsContinuedThroughItsWindowsExtension(t *testing.T) {
+	d := trackingDaemon(t)
+	d.AutoContinue = true
+	d.Sessions.Load()
+	d.Raise = func(context.Context, sessions.FocusTarget) error { return nil }
+	origJitter, origLimits := jitter, readLimits
+	defer func() { jitter, readLimits = origJitter, origLimits }()
+	jitter = func(time.Duration) time.Duration { return 0 }
+	now := time.Now()
+	readLimits = func(string) (usage.Limits, bool) {
+		return usage.Limits{FetchedAt: now, FiveHour: usage.Window{Percent: 100, ResetsAt: now.Add(time.Minute)}}, true
+	}
+	d.Sessions.SetWindows([]sessions.Window{{ID: "w1", App: "Visual Studio Code", ExtHostPID: 555, PanelInput: true, UpdatedAt: now}})
+	d.Sessions.Apply(sessions.Event{Name: "UserPromptSubmit", SessionID: "s1", Cwd: "/tmp/a", ClaudePID: 300, Ancestors: []int{300, 555, 70}, At: now})
+	d.Sessions.Apply(sessions.Event{Name: "StopFailure", SessionID: "s1", Error: "rate_limit", Message: "usage limit", At: now})
+
+	d.autoContinue(context.Background(), now)
+	at := d.Sessions.Sessions()[0].ResumeAt
+	if at.IsZero() {
+		t.Fatal("a panel whose window can type gets a plan")
+	}
+	readLimits = func(string) (usage.Limits, bool) {
+		return usage.Limits{FetchedAt: at, FiveHour: usage.Window{Percent: 2}}, true
+	}
+	d.autoContinue(context.Background(), at.Add(time.Second))
+	d.swaps.Wait()
+	data, err := os.ReadFile(filepath.Join(sessions.RevealDir(d.Dir), "w1.json"))
+	if err != nil {
+		t.Fatalf("the continue goes to the window as a reveal: %v", err)
+	}
+	var got sessions.Reveal
+	if json.Unmarshal(data, &got) != nil || !got.Panel || got.SessionID != "s1" || got.Text != "continue" || !got.Enter {
+		t.Fatalf("reveal = %s", data)
 	}
 }

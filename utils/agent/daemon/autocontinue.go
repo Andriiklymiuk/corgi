@@ -61,10 +61,10 @@ func (d *Daemon) resumeIsDue(s sessions.Session, now time.Time) bool {
 }
 
 func (d *Daemon) resumeSession(ctx context.Context, s sessions.Session) {
-	if target, err := d.Sessions.Focus(s.ID); err != nil || target.Kind == sessions.HostVSCodePanel {
+	if target, err := d.Sessions.Focus(s.ID); err != nil || (target.Kind == sessions.HostVSCodePanel && !target.PanelInput) {
 		d.Sessions.PlanResume(s.ID, time.Time{})
 		if err == nil {
-			utils.Infof("agent: %s: limit should be over, but it runs in the Claude Code panel - continue it by hand\n", s.Display)
+			utils.Infof("agent: %s: limit should be over, but its Claude Code panel window has no corgi extension that can type - continue it by hand\n", s.Display)
 		}
 		return
 	}

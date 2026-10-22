@@ -50,6 +50,8 @@ type Event struct {
 	Mine      bool     `json:"mine,omitempty"`
 	Self      bool     `json:"self,omitempty"`
 	Bot       bool     `json:"bot,omitempty"`
+	// A pull request review's verdict: approved, changes_requested, commented.
+	Review string `json:"review,omitempty"`
 	// A subtask names its parent; a parent lists its open subtasks of mine.
 	Parent      string    `json:"parent,omitempty"`
 	ParentTitle string    `json:"parentTitle,omitempty"`
@@ -151,6 +153,9 @@ func (r Rules) Why(e Event) string {
 		if approvingVerdict.MatchString(e.Body) {
 			return "it approves - nothing to change"
 		}
+		if e.Kind == KindPRReview && strings.EqualFold(e.Review, "approved") && !mustWords.MatchString(notMust.ReplaceAllString(e.Body, "")) {
+			return "it approves - notes on an approval are optional; an inline comment still counts"
+		}
 		if e.Bot && !r.Bots {
 			return "it is from a bot; --bots makes those count"
 		}
@@ -211,6 +216,10 @@ var closedStates = map[string]string{
 }
 
 var approvingVerdict = regexp.MustCompile(`(?im)^\W*verdict:?\W*approved?\b`)
+
+var notMust = regexp.MustCompile(`(?i)\b(not|non)[- ](blocking|a blocker|required)\b|\bno blockers?\b`)
+
+var mustWords = regexp.MustCompile(`(?i)\b(must|blocking|blocker|required|please fix|needs? to|before (you )?merg\w*)\b`)
 
 var (
 	ackWords = regexp.MustCompile(`(?i)\b(thanks?|thank you|thx|ty|ok|okay|lgtm|works?|working|good|great|perfect|nice|awesome|approved?|merged|done|confirmed|verified|passed|passing|green|fixed|resolved|all good|looks good)\b|👍|✅|🙏|🎉|👌`)
@@ -1045,7 +1054,7 @@ func (l *FixLog) FailedInARow(workspace, ref string) int {
 		if r.Workspace != workspace || r.Ref != ref || !r.Done() {
 			continue
 		}
-		if strings.HasPrefix(r.Error, "not started") || killedByTheDaemon(r.Error) {
+		if strings.HasPrefix(r.Error, "not started") || killedByTheDaemon(r.Error) || strings.HasPrefix(r.Error, EnvironmentPrefix) {
 			continue
 		}
 		if r.Error == "" || r.Forgiven {
@@ -1137,6 +1146,48 @@ func (l *FixLog) Interrupted(reason string, at time.Time) []string {
 }
 
 // a run the daemon stopped (a restart, an upgrade) says nothing about the work
+// EnvironmentFailures counts the runs in a row that the machine stopped, not the work.
+func (l *FixLog) EnvironmentFailures(workspace, ref string) int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	n := 0
+	for i := len(l.Started) - 1; i >= 0; i-- {
+		r := l.Started[i]
+		if r.Workspace != workspace || r.Ref != ref || !r.Done() || strings.HasPrefix(r.Error, "not started") {
+			continue
+		}
+		if !strings.HasPrefix(r.Error, EnvironmentPrefix) {
+			break
+		}
+		n++
+	}
+	return n
+}
+
+const EnvironmentPrefix = "environment: "
+
+var environmentCauses = []struct{ cause, words string }{
+	{"the Claude login expired", "failed to authenticate|oauth session expired|oauth token has expired|invalid api key|please run /login"},
+	{"no internet", "can't reach the api server|enotfound|econnreset|econnrefused|getaddrinfo|network is unreachable|no such host"},
+	{"the account hit its limit", "hit your session limit|hit your usage limit|usage limit reached|weekly limit"},
+	{"the API is overloaded", "overloaded_error|api error: 5|internal server error|service unavailable"},
+}
+
+// EnvironmentFailure names why a run that failed could not work at all - the
+// login, the network, the account - when its output says so; "" when the
+// failure was the run's own.
+func EnvironmentFailure(output string) string {
+	tail := strings.ToLower(TailLines(output, 20))
+	for _, c := range environmentCauses {
+		for _, w := range strings.Split(c.words, "|") {
+			if strings.Contains(tail, w) {
+				return c.cause
+			}
+		}
+	}
+	return ""
+}
+
 func killedByTheDaemon(err string) bool {
 	return err == InterruptedReason || strings.Contains(err, "exit status 143")
 }

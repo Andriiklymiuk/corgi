@@ -43,3 +43,22 @@ func TestAnApprovingReviewSummaryIsNotWorkToDo(t *testing.T) {
 		t.Fatal("a short sign-off still counts")
 	}
 }
+
+func TestAnApprovalWithOptionalNotesStartsNoRun(t *testing.T) {
+	rules := Rules{Enabled: true, PRs: true}
+	optional := Event{Kind: KindPRReview, Ref: "acme/api#581", Mine: true, Author: "reviewer", Review: "approved",
+		Body: "Looks good. I5 is not blocking but worth a look sometime."}
+	if why := rules.Why(optional); !strings.Contains(why, "approves") {
+		t.Fatalf("an approval's side notes are not a run: %q", why)
+	}
+	must := optional
+	must.Body = "Approving, but the migration must be split before you merge."
+	if why := rules.Why(must); why != "" {
+		t.Fatalf("an approval that still asks for a must is work: %q", why)
+	}
+	changes := optional
+	changes.Review = "changes_requested"
+	if why := rules.Why(changes); why != "" {
+		t.Fatalf("changes requested is work: %q", why)
+	}
+}
