@@ -2,7 +2,7 @@
 
 ## corgi agent routine
 
-Runs on a clock: digest, babysit-pr, deps, release-notes, flaky, doc-drift, suggest, or your own
+Runs on a clock: digest, babysit-pr, deps, release-notes, flaky, doc-drift, suggest, lessons, or your own
 
 ### Synopsis
 

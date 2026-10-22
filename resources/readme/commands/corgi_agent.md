@@ -101,7 +101,7 @@ Getting started:
 * [corgi agent rescan](corgi_agent_rescan)	 - Look for running Claude sessions no hook has reported
 * [corgi agent resolve](corgi_agent_resolve)	 - Show which workspace a name resolves to, without starting anything
 * [corgi agent restart](corgi_agent_restart)	 - corgi agent down && corgi agent up --fresh, in one command
-* [corgi agent routine](corgi_agent_routine)	 - Runs on a clock: digest, babysit-pr, deps, release-notes, flaky, doc-drift, suggest, or your own
+* [corgi agent routine](corgi_agent_routine)	 - Runs on a clock: digest, babysit-pr, deps, release-notes, flaky, doc-drift, suggest, lessons, or your own
 * [corgi agent scan](corgi_agent_scan)	 - Find corgi stacks under a directory and register them
 * [corgi agent scope](corgi_agent_scope)	 - The contract a ticket's change stays inside: paths, a diff budget, done-when
 * [corgi agent scorecard](corgi_agent_scorecard)	 - What the unattended runs came to: pushed, green, failed or idle, by workspace and kind

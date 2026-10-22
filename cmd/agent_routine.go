@@ -16,7 +16,7 @@ import (
 
 var agentRoutineCmd = &cobra.Command{
 	Use:   "routine",
-	Short: "Runs on a clock: digest, babysit-pr, deps, release-notes, flaky, doc-drift, suggest, or your own",
+	Short: "Runs on a clock: digest, babysit-pr, deps, release-notes, flaky, doc-drift, suggest, lessons, or your own",
 	Long: `Routines run in a workspace on a schedule, through the daemon, with the same
 caps, quiet hours and budget as an unattended fix. Each report is one row in
 the inbox with the log behind it.

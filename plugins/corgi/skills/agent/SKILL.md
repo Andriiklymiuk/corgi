@@ -925,7 +925,7 @@ default); the unattended runner picks per kind and steps up after a failure.
 
 **Routines** are runs on a clock through the same runner: `corgi agent
 routine add digest` (daily 08:30), `babysit-pr` (every 2h), `deps`,
-`release-notes`, `flaky`, `doc-drift`, `suggest`, or `--prompt "…" --schedule
+`release-notes`, `flaky`, `doc-drift`, `suggest`, `lessons` (reviews of your PRs → rules every session reads), or `--prompt "…" --schedule
 "daily 03:00"`. Each report is one inbox row with the log behind it; `routine
 run <name>` runs one now. Caps, quiet hours and budget apply. `--bot <name>`
 runs a routine as that bot (soul, model, account, filed under its name):
