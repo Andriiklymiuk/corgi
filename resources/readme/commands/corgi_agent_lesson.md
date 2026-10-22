@@ -13,7 +13,7 @@ context hook tells a new session how many there are and where.
 
   corgi agent lesson add "never mock the database in api tests"
   corgi agent lesson list
-  corgi agent watch enable --lessons     # the daemon writes reviews, red gates, failed bots
+  corgi agent watch enable --lessons     # the daemon writes red gates and failed bots
 
 ### Options
 

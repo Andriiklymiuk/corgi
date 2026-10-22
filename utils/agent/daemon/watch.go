@@ -447,13 +447,6 @@ func (d *Daemon) watchSink(spec WatchSpec) watch.Sink {
 				body += " (" + note + ")"
 			}
 		}
-		if e.Mine && (e.Kind == watch.KindPRReview || e.Kind == watch.KindPRComment) && strings.TrimSpace(e.Body) != "" {
-			who := e.Author
-			if who == "" {
-				who = "someone"
-			}
-			d.learn(spec, string(e.Kind)+" "+e.Ref+" ("+who+")", e.Body)
-		}
 		d.startBots(ctx, spec, e)
 		if d.handOverEvent(ctx, spec, e) {
 			body += " (handed to the session on it)"

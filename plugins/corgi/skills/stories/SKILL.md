@@ -371,6 +371,9 @@ PR body, never into a file in the repo to stand in for the comment:
 - **Tier** - adjustment/bug/feature.
 - Root cause / current behaviour, `file:line` refs.
 - Change plan (snippets) **grouped by service**, tests, manual verification, risks.
+  Risks name the kinds from `../_shared/second-reviewer.md` that apply, each with
+  its answer in one line (`check then write: one transaction, conditional update`;
+  `installed apps: still read items[0] - kept`).
   Name what the plan deliberately does **not** build and what covers it instead (a
   native element, an existing helper) - the cheapest spec is the one with the fewest
   new parts. Multi-service: `## Contract` + cross-service order.
@@ -728,8 +731,16 @@ tokens).
 - Review `git -C <branch-dir> diff <base>...HEAD` - a review subagent passed only
   that diff + the spec (works everywhere), or `/code-review` /
   `superpowers:requesting-code-review` if present.
+- The reviewer gets `../_shared/second-reviewer.md` with the diff and hunts every
+  kind that applies to it, from the whole tree, each finding a scenario (who does
+  what, in which order, what breaks). A scenario that is cheap to run gets a probe
+  spec that fails on the head commit. "No findings" means each applicable kind was
+  checked - name them in one line.
 - Fix **blocking** findings (correctness, missing test, scope creep), re-run gate.
   Cap ~1 extra round; still blocked → Stop rule. Non-blocking → PR body.
+- Before the push, re-read the PR body against the head commit: every claim in it
+  (what is enforced, what is tested, what the other PR does) true now, the product
+  values nobody gave you under `## Assumptions`.
 
 ## Phase 4 - Commit, then multi-repo ordering
 

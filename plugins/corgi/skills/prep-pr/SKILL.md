@@ -1,6 +1,6 @@
 ---
 name: prep-pr
-description: "Use when the user says \"prep my PR\", \"get this ready for review\", \"open a PR for this branch\". One entry point: complexity gate, `corgi test --changed`, risk score, then the draft PR. NOT for reviewing someone else's PR (review)."
+description: "Use when the user says \"prep my PR\", \"get this ready for review\", \"open a PR for this branch\". One entry point: complexity gate, `corgi test --changed`, a second-reviewer pass, risk score, then the draft PR. NOT for reviewing someone else's PR (review)."
 ---
 
 # Prep PR
@@ -31,9 +31,12 @@ first red.
    that differs). It finds nothing changed → `corgi test --service <svc>` per repo in
    scope. Also run the repo's own CI gate when it has one (coverage floor, typecheck,
    lint) through `corgi exec <svc> -- <cmd>`.
-3. **Risk**: the `risk` skill on the local diff. Keep the card; it goes in the body.
+3. **Second reviewer**: hunt the diff for every kind in
+   `../_shared/second-reviewer.md` that applies, from the whole tree, each finding a
+   scenario. Blocking → fix and re-run the tests; the rest → the PR body.
+4. **Risk**: the `risk` skill on the local diff. Keep the card; it goes in the body.
 
-Show the three results in one table before drafting. Red → fix, re-run only the red
+Show the four results in one table before drafting. Red → fix, re-run only the red
 gate, continue.
 
 ## 2. Draft the PR/MR
@@ -54,6 +57,7 @@ the spec comment.
 prep-pr <branch>
 complexity  pass (max CC 7, threshold 10)
 tests       api 212 passed · web 88 passed (corgi test --changed)
+reviewer    2 fixed (check-then-write in invite, error toast) · checked: rollout, logs, delete
 risk        4/10 medium · auto-approve: no (touches auth)
 pr          <link> (draft)
 next        gh pr checks <n> --watch

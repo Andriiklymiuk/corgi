@@ -93,8 +93,7 @@ func sessionContext(dir string, in contextHookInput, configDir string, now time.
 		lines = append(lines, fmt.Sprintf("workspace memory: %d facts in %s - read it before changing code", facts, path))
 	}
 	if learned := lessons.List(dir, wsID); len(learned) > 0 {
-		last := learned[len(learned)-1]
-		lines = append(lines, fmt.Sprintf("%d lesson(s) this workspace learned the hard way in %s - read them first; the last: %s", len(learned), lessons.Path(dir, wsID), last.Text))
+		lines = append(lines, lessonLines(learned, lessons.Path(dir, wsID))...)
 	}
 	if line := handoffLine(root, sessions.Branch(in.Cwd), now); line != "" {
 		lines = append(lines, line)
@@ -373,4 +372,31 @@ func composeNames[V any](m map[string]V) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+const lessonsShown = 20
+
+// lessonLines hands a new session the newest rules themselves, not a pointer
+// to them: a rule that has to be opened first is a rule that gets broken.
+func lessonLines(learned []lessons.Lesson, path string) []string {
+	shown := learned
+	if len(shown) > lessonsShown {
+		shown = shown[len(shown)-lessonsShown:]
+	}
+	head := fmt.Sprintf("lessons this workspace learned the hard way - follow them (%d in %s):", len(learned), path)
+	if len(shown) == len(learned) {
+		head = "lessons this workspace learned the hard way - follow them:"
+	}
+	out := []string{head}
+	for _, l := range shown {
+		out = append(out, "  - "+clipLesson(l.Text))
+	}
+	return out
+}
+
+func clipLesson(text string) string {
+	if r := []rune(text); len(r) > 320 {
+		return string(r[:319]) + "…"
+	}
+	return text
 }

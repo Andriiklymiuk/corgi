@@ -324,6 +324,11 @@ line should know whether to look closer.
   engine, library, vendor, or infra detail to end users (`nit`); suggest selling
   the user benefit, not the mechanism. Skip if the ticket is about that copy.
 - Ticket-intent mismatch (diff doesn't do what the ticket asked).
+- **The second-reviewer kinds** the evidence sweep below does not cover -
+  `../_shared/second-reviewer.md` §1 two steps that should be one, §2 the old world
+  still running, §5 personal data, §6 what the person sees when it fails, §7 delete
+  means all of it, §10 house rules and unasked product values. Each finding is a
+  scenario; a cheap one is proven with a probe spec that fails on the head.
 
 ### Evidence sweep - follow every change out of the diff
 
@@ -829,6 +834,14 @@ P4 order) and cross-link the two replies. Then one combined report (6).
    which post a standalone PR-level note detached from the thread (reads as ignoring
    the reviewer, and resolving leaves their question visually unanswered).
    **Resolve only what you addressed**; a pushed-back thread stays **open**.
+   **One lesson per kind, not per thread.** For every applied finding, name the kind
+   in `../_shared/second-reviewer.md` it belongs to and why the self-review missed it.
+   A house rule (a naming, a UI convention, an input shape) or a kind that repeats
+   becomes one line for every later session:
+   `corgi agent lesson add "<repo>: <the rule, in the words you would want to read before writing the code>"`
+   - the rule, never the finding (`web: every clickable element gets
+   cursor-pointer`, not `I14 missing cursor-pointer`). One already there in other
+   words → skip it. Unattended runs do this too.
    **Durable convention → memory (confirm first).** If a resolved thread settles a
    lasting convention/decision for the stack and `.corgi/memory/` exists, draft a
    `decision` fact and list it in the report as a proposed fact - written only on the

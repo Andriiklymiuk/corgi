@@ -92,6 +92,15 @@ Better engineered, not more engineered. The diff is the explanation.
   not `TestLidChanged2`. One behaviour per test; fakes over mocks; no sleeps.
 - **Nothing speculative.** No TODOs, no commented-out code, no feature flags for a
   future nobody has asked for.
+- **Written for the second reviewer.** Before the first edit, read
+  `second-reviewer.md` (next to this file) and answer the kinds that apply to the
+  change - two steps that should be one, the old clients still running, the quiet
+  fallback, the other readers of what changed, personal data in logs, what the person
+  sees when it fails, delete means all of it. Build the answers in; they are what a
+  careful reviewer finds on the first round.
+- **The repo's house rules first.** The workspace's lessons (the session's first
+  lines) and the repo's CLAUDE.md come before your own taste: a rule a reviewer has
+  already written down must not come back on the next PR.
 
 ## Describing a change
 

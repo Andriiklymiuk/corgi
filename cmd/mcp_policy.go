@@ -17,7 +17,7 @@ import (
 
 func registerPolicyMCPTools(s *server.MCPServer) {
 	s.AddTool(newCorgiTool("corgi_watch_switches",
-		mcp.WithDescription("What each workspace does on its own, as switches: {workspace, enabled, action, prs, reviews, ci, comments, isolate, quiet, daysOff, autoMerge, handOver, autoAllow, doneWhen[], compactAt, rebase, lessons, planReview}. autoAllow \"reads\" means the daemon answers Read/Grep/Glob prompts itself; doneWhen are the commands that define finished (a red one is typed back into the session); compactAt sends /compact past that context fill; rebase rebases a stopped clean branch when main moved; lessons writes reviews, red checks and failed bots down for every new session; planReview (\"\", always, risk>=N) says when the stories skill must wait for a human on the spec before cutting a branch. Read-only."),
+		mcp.WithDescription("What each workspace does on its own, as switches: {workspace, enabled, action, prs, reviews, ci, comments, isolate, quiet, daysOff, autoMerge, handOver, autoAllow, doneWhen[], compactAt, rebase, lessons, planReview}. autoAllow \"reads\" means the daemon answers Read/Grep/Glob prompts itself; doneWhen are the commands that define finished (a red one is typed back into the session); compactAt sends /compact past that context fill; rebase rebases a stopped clean branch when main moved; lessons writes red checks and failed bots down for every new session; planReview (\"\", always, risk>=N) says when the stories skill must wait for a human on the spec before cutting a branch. Read-only."),
 		mcp.WithString("workspace", mcp.Description("Only this workspace id")),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
 		return mcpWatchSwitches(r.GetString("workspace", ""))

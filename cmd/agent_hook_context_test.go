@@ -54,7 +54,7 @@ func TestSessionContextTellsTheSessionWhatTheDaemonKnows(t *testing.T) {
 		"budget: 5h 57% (resets 12:00) · week 41% - at this pace the 5h window runs out at 11:00",
 		"last session here ended 2h ago: was on feat/x · 1 repo has uncommitted changes",
 		"workspace memory: 2 facts in .corgi/memory/index.md",
-		"2 lesson(s) this workspace learned the hard way in " + lessons.Path(dir, "acme-api") + " - read them first; the last: never mock the database",
+		"lessons this workspace learned the hard way - follow them:\n  - retries need a cap\n  - never mock the database",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q in:\n%s", want, got)

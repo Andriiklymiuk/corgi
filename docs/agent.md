@@ -322,7 +322,7 @@ corgi agent serve --foreground   # run it in this terminal and watch
 | `corgi agent transcript <session> [--after N] [--why]` | a session's conversation from the command line, the way the phone's chat reads it - what an editor panel polls (2.22). `--why` folds it into steps: what the agent said, the tools it ran on it, the files it touched - plan step, tool call and diff side by side; `POST /launch/transcript {why:true}` gives the phone the same (2.28.27) |
 | `corgi agent attempts [ref] [pick <ref> <n>]` | the sessions a fan-out opened on a ticket (`watch work --attempts 3 --models opus,sonnet`), side by side - status, changes, tests, done-when, cost, PR - and keep one (2.22) |
 | `corgi agent event <start\|prompt\|tool\|done\|fail\|permission\|stop\|end>` | one event from an agent that is not Claude Code - Codex, Gemini CLI, your own - so its session sits on the board with the agent's name, its tool's risk word and its host (2.22) |
-| `corgi agent lesson add\|list` | what the workspace learned the hard way, one line each, outside the repo; `watch enable --lessons` has the daemon write reviews on your PRs, red done-when checks and failed bot runs; the context hook points every new session at the file (2.22) |
+| `corgi agent lesson add\|list` | what the workspace learned the hard way, one line each, outside the repo; `watch enable --lessons` has the daemon write red done-when checks and failed bot runs; a run that answers a review writes the rule behind each finding; the context hook hands every new session the newest twenty (2.22) |
 | `corgi agent bot add\|list\|show\|rm\|open <name>` | named sessions you come back to: a workspace, a persona (the soul, appended to the system prompt), a model, an account, a worktree of its own - and the conversation it last had, resumed. `corgi agent claude --bot reviewer`; the phone's, the bar's and the editor's "+" list them. With `--on pr.review,ci.failed` a bot also **acts on its own**: an unattended run under its soul when that event arrives in its workspace, filed under its name (`bot show` lists its runs; the phone's bot sheet too). `--template reviewer\|fixer\|shipper\|chief\|proactive` fills a bot from a ready-made one (2.21; `proactive` runs on a clock, see `routine add suggest --bot proactive`, 2.28.11). A run that fails gets one more try a model up - haiku → sonnet → opus - and the record says `retry`; `bot show` sums a ledger (`roi`: runs, failed, retried, PRs and how many merged, the bill) so a person can tell whether the reviewer earns its keep (2.22) |
 | `corgi agent ask "<question>"` | the chief: one question about the board - what to look at first, what is blocked, who is on what - answered in a few lines by a short claude run on this machine (haiku; it sees sessions, inbox, kanban, workspace names, nothing else). The phone's Ask box, Telegram's `/ask` |
 | `corgi agent stream [enable\|disable] [--workspace X\|--all]` | which workspaces a paired phone may read as a conversation (off by default); the phone's Chat sheet, `POST /launch/transcript` |
@@ -736,12 +736,14 @@ corgi agent lesson list
 corgi agent watch enable --lessons
 ```
 
-With the switch on the daemon writes its own: a review or a comment on a
-pull request of yours (`pr.review acme/api#7 (dan): retries need a cap`), a
-done-when check that stayed red three times, a bot run that failed. A line
-is never written twice. The SessionStart context hook tells every new
-session in the workspace how many there are, where, and the last one - so
-the same thing is not learned twice by two sessions.
+With the switch on the daemon writes its own: a done-when check that stayed
+red three times, a bot run that failed. A review is not copied in - its first
+line is a title, not a rule. The run that answers a review (the `review`
+skill's Mode B) writes the rule behind each finding instead: `api: a check
+followed by a write runs in one transaction, under a lock`. A line is never
+written twice. The SessionStart context hook hands every new session in the
+workspace the newest twenty lines themselves, so the reviewer does not have to
+say the same thing on the next pull request.
 
 ### Sessions on a Stream Deck
 

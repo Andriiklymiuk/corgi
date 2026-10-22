@@ -978,10 +978,10 @@ CLI or the phone's repo sheet, no restart:
   it sits when main moved; with `--hand-over`, one that would conflict is
   told which files. The sweep measures `behind` (`main moved 12 · conflicts
   in api.go`) on every live branch.
-- `--lessons` - reviews on the user's PRs, checks that stayed red and failed
-  bot runs are written one line each to `<agentDir>/lessons/<workspace>.md`;
-  `corgi agent lesson add|list`; the SessionStart hook tells you how many
-  and the last one. **Read them before changing code.**
+- `--lessons` - checks that stayed red and failed bot runs are written one
+  line each to `<agentDir>/lessons/<workspace>.md`; a run that answers a review
+  adds the rule behind each finding (`corgi agent lesson add "<repo>: <rule>"`);
+  the SessionStart hook hands you the newest twenty. **Follow them.**
 - `--night-shift`: the quiet hours hold the phone, not the work - fixes and
   routines run through the night, one summary in the morning. `--quiet` must
   be set for it to mean anything. The lid guard (`corgi agent lid on`) is
