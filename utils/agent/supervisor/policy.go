@@ -17,7 +17,14 @@ const (
 	CauseCrash           ExitCause = "crash"
 	CauseUnsupportedFlag ExitCause = "unsupported-flag"
 	CauseOffline         ExitCause = "offline"
+	CauseServedElsewhere ExitCause = "served-elsewhere"
 )
+
+// An open Claude session with Remote Control on already serves the folder:
+// the phone reaches it through that one, so this one waits its turn quietly.
+const servedElsewhereMarker = "already served by"
+
+const ServedElsewhereRetry = 3 * time.Minute
 
 // OfflineRetry is how often a start that could not reach the network is retried
 const OfflineRetry = 30 * time.Second
@@ -95,6 +102,9 @@ func Classify(e Exit, consecutiveStartupFailures int) ExitCause {
 		return CauseRequested
 	}
 	lower := strings.ToLower(e.Output)
+	if strings.Contains(lower, servedElsewhereMarker) {
+		return CauseServedElsewhere
+	}
 	if e.Uptime < e.healthyThreshold() || strings.Contains(lower, registrationFailureMarker) || serverErrorLine.MatchString(lastOutputLine(e.Output)) {
 		if strings.Contains(lower, expiredTokenMarker) {
 			return CauseStartupFailure
@@ -131,6 +141,14 @@ func Decide(e Exit, attempt, consecutiveStartupFailures int) Decision {
 	switch cause {
 	case CauseRequested:
 		return Decision{Cause: cause, Reason: "stopped on request"}
+
+	case CauseServedElsewhere:
+		return Decision{
+			Cause:   cause,
+			Restart: true,
+			Delay:   ServedElsewhereRetry,
+			Reason:  "an open Claude session already serves this folder to the phone - taking over when it closes",
+		}
 
 	case CauseOffline:
 		return Decision{

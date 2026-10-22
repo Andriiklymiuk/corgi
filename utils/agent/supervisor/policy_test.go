@@ -290,3 +290,13 @@ func TestAnOverloadedAPIExitIsQuiet(t *testing.T) {
 		}
 	}
 }
+
+func TestAFolderAnOpenSessionServesWaitsQuietly(t *testing.T) {
+	out := "Error: This folder is already served by a terminal `claude remote-control` on this device. Stop it first."
+	for _, uptime := range []time.Duration{2 * time.Second, 70 * time.Second} {
+		d := Decide(Exit{Code: 1, Uptime: uptime, Output: out}, 3, MaxStartupFailures-1)
+		if d.Cause != CauseServedElsewhere || d.Notify || d.Disable || !d.Restart || d.Delay != ServedElsewhereRetry {
+			t.Fatalf("uptime %v: an open session serving the folder is not a crash: %+v", uptime, d)
+		}
+	}
+}

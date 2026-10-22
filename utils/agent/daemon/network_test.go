@@ -45,7 +45,11 @@ func TestTheHopperWithNoHotspotOnlySaysTheGap(t *testing.T) {
 	if s := h.tick(start.Add(5*time.Minute), false, "", 0); s.Join {
 		t.Fatal("nothing to join")
 	}
-	if s := h.tick(start.Add(6*time.Minute), true, "Hotel", 0); s.Say != "back online after 6 minutes" {
+	if s := h.tick(start.Add(6*time.Minute), true, "Hotel", 0); s.Say != "" || !s.Back {
+		t.Fatalf("a few minutes off is the Wi-Fi changing rooms: back, nothing said; got %+v", s)
+	}
+	h.tick(start.Add(7*time.Minute), false, "", 0)
+	if s := h.tick(start.Add(19*time.Minute), true, "Hotel", 0); s.Say != "back online after 12 minutes" {
 		t.Fatalf("got %q", s.Say)
 	}
 }

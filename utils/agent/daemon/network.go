@@ -65,6 +65,9 @@ func looksLikePhoneHotspot(ssid string) bool {
 	return false
 }
 
+// A blip of a few minutes is the Wi-Fi changing rooms, not news.
+const offlineWorthSaying = 10 * time.Minute
+
 func onHotspotName(current, hotspot string) bool {
 	c, h := strings.ToLower(strings.TrimSpace(current)), strings.ToLower(strings.TrimSpace(hotspot))
 	return c != "" && h != "" && (c == h || strings.Contains(c, h))
@@ -87,9 +90,10 @@ func (h *hopper) tick(now time.Time, online bool, current string, bytes uint64) 
 			gap := now.Sub(h.offlineSince)
 			h.offlineSince, h.attempts, h.nextTry = time.Time{}, 0, time.Time{}
 			step.Back = true
-			if h.onHotspot {
+			switch {
+			case h.onHotspot:
 				step.Say = "offline for " + roughSpan(gap) + " - hopped onto the hotspot " + strings.TrimSpace(current)
-			} else {
+			case gap >= offlineWorthSaying:
 				step.Say = "back online after " + roughSpan(gap)
 			}
 		} else if wasOnHotspot && !h.onHotspot && current != "" {

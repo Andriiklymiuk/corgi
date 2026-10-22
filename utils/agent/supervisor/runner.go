@@ -64,6 +64,7 @@ type Runner struct {
 
 	mu          sync.Mutex
 	state       RunState
+	rang        map[ExitCause]time.Time
 	proc        Process
 	stopping    bool
 	stopped     chan struct{}
@@ -240,8 +241,8 @@ func (r *Runner) Run(ctx context.Context) error {
 		}
 		decision := Decide(exit, s.attempt, s.startupFailures)
 		healthy := decision.Cause != CauseStartupFailure
-		offline := decision.Cause == CauseOffline
-		if !offline {
+		waiting := decision.Cause == CauseOffline || decision.Cause == CauseServedElsewhere
+		if !waiting {
 			s.observe(healthy)
 		}
 
@@ -253,7 +254,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		}
 		// Only a long run earns the short delay back: a crash a minute in,
 		// over and over through an outage, backs off like any other failure.
-		if !offline {
+		if !waiting {
 			s.advance(healthy && exit.Uptime >= r.longRun())
 		}
 		r.sleepUnlessStopped(ctx, decision.Delay)
@@ -441,7 +442,7 @@ func (r *Runner) announce(d Decision, detail string) {
 	if !d.Notify || r.Notify == nil {
 		return
 	}
-	if d.Restart && detail == "" && r.idleDevice() {
+	if d.Restart && detail == "" && (r.idleDevice() || r.rangRecently(d.Cause)) {
 		return
 	}
 	body := d.Reason
@@ -449,6 +450,23 @@ func (r *Runner) announce(d Decision, detail string) {
 		body += " · " + detail
 	}
 	r.Notify("corgi agent · "+r.Config.WorkspaceID, body)
+}
+
+// A restart that keeps failing the same way rings once an hour, not once a loop.
+const sameRestartQuiet = time.Hour
+
+func (r *Runner) rangRecently(cause ExitCause) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	now := time.Now()
+	if at, ok := r.rang[cause]; ok && now.Sub(at) < sameRestartQuiet {
+		return true
+	}
+	if r.rang == nil {
+		r.rang = map[ExitCause]time.Time{}
+	}
+	r.rang[cause] = now
+	return false
 }
 
 func (r *Runner) idleDevice() bool {

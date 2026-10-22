@@ -762,3 +762,20 @@ func TestIdleDeviceRestartStillRingsWhenASessionWasOpen(t *testing.T) {
 		t.Errorf("notification %q should say the session crashed - someone was in it", notified[0])
 	}
 }
+
+func TestACrashLoopRingsOnce(t *testing.T) {
+	r := testRunner(t, nil)
+	var rang int
+	r.Notify = func(string, string) { rang++ }
+	crash := Decision{Cause: CauseCrash, Restart: true, Notify: true, Reason: "remote control restarted after an unexpected exit"}
+	for i := 0; i < 5; i++ {
+		r.announce(crash, "")
+	}
+	if rang != 1 {
+		t.Fatalf("rang %d times: the same failure every minute rings once an hour", rang)
+	}
+	r.announce(Decision{Cause: CauseNetworkTimeout, Restart: true, Notify: true, Reason: "timeout"}, "")
+	if rang != 2 {
+		t.Fatal("a different failure is news")
+	}
+}
