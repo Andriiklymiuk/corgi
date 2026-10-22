@@ -54,10 +54,10 @@ func TestRunsOnSinceCountsOneKindOnOneRef(t *testing.T) {
 
 func TestAMachineFailureIsNotTheWorks(t *testing.T) {
 	for out, want := range map[string]string{
-		"Failed to authenticate: OAuth session expired and could not be refreshed": "the Claude login expired",
+		"Failed to authenticate: OAuth session expired and could not be refreshed":       "the Claude login expired",
 		"API Error: Can't reach the API server - check your internet or DNS (ENOTFOUND)": "no internet",
-		"You've hit your session limit · resets 2:50am (Europe/Berlin)":                "the account hit its limit",
-		"Tests: 2 failed, 10564 passed":                                                "",
+		"You've hit your session limit · resets 2:50am (Europe/Berlin)":                  "the account hit its limit",
+		"Tests: 2 failed, 10564 passed":                                                  "",
 	} {
 		if got := EnvironmentFailure(out); got != want {
 			t.Errorf("EnvironmentFailure(%q) = %q, want %q", out, got, want)
