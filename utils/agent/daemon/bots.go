@@ -40,7 +40,7 @@ func (d *Daemon) startBots(ctx context.Context, spec WatchSpec, e watch.Event) {
 		if b.Workspace != spec.Workspace || !b.RunsOn(string(e.Kind)) {
 			continue
 		}
-		if reason := firstNonEmpty(chatRunRefusal(spec, e), firstNonEmpty(d.stillWorthFixing(ctx, spec, e), fixDeferral(spec, d.watchState.Fixes, time.Now()))); reason != "" {
+		if reason := firstNonEmpty(chatRunRefusal(spec, e), firstNonEmpty(d.stillWorthFixing(ctx, spec, e), d.deferral(spec, time.Now()))); reason != "" {
 			utils.Infof("agent: bot %s not run on %s: %s\n", b.Name, e.Ref, reason)
 			continue
 		}

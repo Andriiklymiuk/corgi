@@ -333,7 +333,7 @@ func (d *Daemon) handleWatchEvent(ctx context.Context, e watch.Event) {
 			if spec.Workspace != e.Workspace || d.watchState == nil {
 				continue
 			}
-			if reason := fixDeferral(spec, d.watchState.Fixes, time.Now()); reason != "" {
+			if reason := d.deferral(spec, time.Now()); reason != "" {
 				d.logRoutineWait(spec.Workspace+"/"+e.Title, e.Title, reason)
 				return
 			}
@@ -548,7 +548,7 @@ func (d *Daemon) retryDeferred(ctx context.Context, spec WatchSpec, now time.Tim
 	if len(queue) == 0 {
 		return
 	}
-	if fixDeferral(spec, d.watchState.Fixes, now) != "" {
+	if d.deferral(spec, now) != "" {
 		return
 	}
 	sort.SliceStable(queue, func(i, j int) bool { return watch.Less(queue[i], queue[j]) })
@@ -772,7 +772,7 @@ func (d *Daemon) startFix(ctx context.Context, spec WatchSpec, e watch.Event) st
 		utils.Infof("agent: watch %s: review of %s held until %s\n", spec.Workspace, e.Ref, at.Local().Format("15:04"))
 		return "review held until " + at.Local().Format("15:04")
 	}
-	if reason := fixDeferral(spec, d.watchState.Fixes, now); reason != "" {
+	if reason := d.deferral(spec, now); reason != "" {
 		d.watchState.Fixes.Defer(e)
 		d.watchState.Unsee(e.Key)
 		utils.Infof("agent: watch %s: fix for %s deferred: %s\n", spec.Workspace, e.Ref, reason)
@@ -942,6 +942,30 @@ func (d *Daemon) spawnFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 	}()
 }
 
+// A trip cap is for a trip: past a month it no longer holds the work back.
+const (
+	tripCapLasts  = 30 * 24 * time.Hour
+	tripCapReason = "trip cap"
+)
+
+// deferral is fixDeferral that says so once when a trip's runs are used up -
+// otherwise every fix and routine waits behind a line only the log shows.
+func (d *Daemon) deferral(spec WatchSpec, now time.Time) string {
+	reason := fixDeferral(spec, d.watchState.Fixes, now)
+	if !strings.HasPrefix(reason, tripCapReason) {
+		return reason
+	}
+	mark := filepath.Join(d.Dir, "watch", "trip-cap-told-"+safeName(spec.Workspace))
+	stamp := spec.CapSince.UTC().Format(time.RFC3339)
+	if told, err := os.ReadFile(mark); err == nil && strings.TrimSpace(string(told)) == stamp {
+		return reason
+	}
+	_ = os.MkdirAll(filepath.Dir(mark), 0o700)
+	_ = os.WriteFile(mark, []byte(stamp+"\n"), 0o600)
+	go d.notifyAttentionAt(notifyTitlePrefix+spec.Workspace, fmt.Sprintf("the %d unattended runs allowed since %s are used - no fix, routine or bot starts here until you lift it: corgi agent watch enable --max-total 0", spec.MaxFixesTotal, spec.CapSince.Local().Format("2 Jan")), spec.Workspace, "")
+	return reason
+}
+
 func fixDeferral(spec WatchSpec, log *watch.FixLog, now time.Time) string {
 	perHour, perDay := spec.FixCaps()
 	if log.StartedSince(spec.Workspace, now.Add(-time.Hour)) >= perHour {
@@ -950,8 +974,8 @@ func fixDeferral(spec WatchSpec, log *watch.FixLog, now time.Time) string {
 	if log.StartedSince(spec.Workspace, now.Add(-24*time.Hour)) >= perDay {
 		return fmt.Sprintf("%d/day cap", perDay)
 	}
-	if spec.MaxFixesTotal > 0 && log.StartedSince(spec.Workspace, spec.CapSince) >= spec.MaxFixesTotal {
-		return fmt.Sprintf("trip cap %d", spec.MaxFixesTotal)
+	if spec.MaxFixesTotal > 0 && now.Sub(spec.CapSince) < tripCapLasts && log.StartedSince(spec.Workspace, spec.CapSince) >= spec.MaxFixesTotal {
+		return fmt.Sprintf("%s %d", tripCapReason, spec.MaxFixesTotal)
 	}
 	if dayOff(spec, now) {
 		return "day off"

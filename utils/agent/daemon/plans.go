@@ -52,7 +52,7 @@ func (d *Daemon) advancePlans(ctx context.Context) {
 			if d.planTaskTried(p.Workspace, t) {
 				continue
 			}
-			if reason := fixDeferral(spec, d.watchState.Fixes, now); reason != "" {
+			if reason := d.deferral(spec, now); reason != "" {
 				utils.Infof("agent: plan %s: %s waits: %s\n", p.Ref(), t.Ref(), reason)
 				break
 			}

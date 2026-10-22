@@ -707,3 +707,29 @@ func TestADriftThatFlickersRingsOnce(t *testing.T) {
 		t.Fatal("a later drift, or another session, rings")
 	}
 }
+
+func TestATripCapEndsWithTheMonthAndIsSaidOnce(t *testing.T) {
+	d := trackingDaemon(t)
+	d.watchState = watch.LoadState(d.Dir)
+	var mu sync.Mutex
+	var rang []string
+	d.Notify = func(_, body string) { mu.Lock(); rang = append(rang, body); mu.Unlock() }
+	now := time.Now()
+	spec := WatchSpec{Workspace: "w", ConfigDir: t.TempDir(), MaxFixesTotal: 1, CapSince: now.Add(-time.Hour), MaxFixesPerHour: 10, MaxFixesPerDay: 10}
+	d.watchState.Fixes.Start("w", "a", now.Add(-30*time.Minute))
+	for i := 0; i < 3; i++ {
+		if got := d.deferral(spec, now); got != "trip cap 1" {
+			t.Fatalf("got %q", got)
+		}
+	}
+	waitFor(t, func() bool { mu.Lock(); defer mu.Unlock(); return len(rang) == 1 })
+	mu.Lock()
+	defer mu.Unlock()
+	if !strings.Contains(rang[0], "corgi agent watch enable --max-total 0") {
+		t.Fatalf("says how to lift it: %q", rang[0])
+	}
+	spec.CapSince = now.Add(-31 * 24 * time.Hour)
+	if got := fixDeferral(spec, d.watchState.Fixes, now); got != "" {
+		t.Fatalf("a month-old trip holds nothing back: %q", got)
+	}
+}

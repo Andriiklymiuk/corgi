@@ -98,7 +98,7 @@ func (d *Daemon) runRoutines(ctx context.Context, now time.Time) {
 			if !ok {
 				continue
 			}
-			if reason := fixDeferral(spec, d.watchState.Fixes, now); reason != "" {
+			if reason := d.deferral(spec, now); reason != "" {
 				d.logRoutineWait(spec.Workspace+"/"+e.Title, e.Title, reason)
 				continue
 			}

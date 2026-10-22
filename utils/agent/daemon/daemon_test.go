@@ -769,6 +769,12 @@ func TestStatusIsNotRewrittenWhenUnchanged(t *testing.T) {
 	done := make(chan struct{})
 	go func() { defer close(done); _ = d.Run(ctx, nil) }()
 	waitFor(t, func() bool { _, err := os.Stat(d.StatusPath()); return err == nil })
+	waitFor(t, func() bool {
+		first, _ := os.ReadFile(d.StatusPath())
+		time.Sleep(150 * time.Millisecond)
+		again, _ := os.ReadFile(d.StatusPath())
+		return string(first) == string(again)
+	})
 
 	before, err := os.Stat(d.StatusPath())
 	if err != nil {
