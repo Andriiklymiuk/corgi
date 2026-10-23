@@ -165,6 +165,13 @@ var agentWatchEnableCmd = &cobra.Command{
 		if flags.Changed("isolate") {
 			wc.Isolate, _ = flags.GetBool("isolate")
 		}
+		if flags.Changed("run-db") {
+			v, _ := flags.GetString("run-db")
+			if v = strings.TrimSpace(v); v != "own" && v != "shared" && v != "off" {
+				return fmt.Errorf("--run-db is own, shared or off")
+			}
+			wc.RunDB = v
+		}
 		if flags.Changed(watchFlagReviewDelay) {
 			v, _ := flags.GetString(watchFlagReviewDelay)
 			if _, err := watch.ParseAge(v); err != nil {
@@ -1085,7 +1092,7 @@ func watchSpecOf(dir string, w workspace.Workspace, resolved config.Resolved) (d
 	spec := daemon.WatchSpec{Workspace: w.ID, Dir: w.AbsPath, ConfigDir: expandTilde(resolved.ConfigDir), Kind: resolved.Kind, Agents: resolved.AgentOrder(), Bin: expandTilde(resolved.Bin), Project: wc.Project, Repos: wc.Repos,
 		Rules:    watch.Rules{Enabled: true, Labels: wc.Labels, States: wc.States, Assignee: wc.Assignee, Comments: wc.Comments, PRs: wc.PRs, CI: wc.CI, Reviews: wc.Reviews, From: wc.From, Bots: wc.Bots},
 		Interval: 3 * time.Minute, Action: "notify", SkipPermissions: resolved.DangerouslySkipPermissions,
-		MaxFixesPerHour: wc.MaxFixesPerHour, MaxFixesPerDay: wc.MaxFixesPerDay, LimitCeiling: wc.LimitCeiling, MaxFixesTotal: wc.MaxFixesTotal, CapSince: wc.CapSince, Quiet: wc.Quiet, NightShift: wc.NightShift, FixKinds: wc.FixKinds, DoneWhen: wc.DoneWhen, PlanReview: wc.PlanReview, Lease: wc.Lease, Isolate: wc.Isolate, Slots: wc.Slots, Batch: wc.Batch, RerunCI: wc.RerunCI, Silent: wc.Silent, NoRetry: wc.NoRetry, ReviewStatus: wc.ReviewStatus, Approve: wc.Approve, Models: resolved.Models, Routines: resolved.Routines}
+		MaxFixesPerHour: wc.MaxFixesPerHour, MaxFixesPerDay: wc.MaxFixesPerDay, LimitCeiling: wc.LimitCeiling, MaxFixesTotal: wc.MaxFixesTotal, CapSince: wc.CapSince, Quiet: wc.Quiet, NightShift: wc.NightShift, FixKinds: wc.FixKinds, DoneWhen: wc.DoneWhen, PlanReview: wc.PlanReview, Lease: wc.Lease, Isolate: wc.Isolate, RunDB: wc.RunDB, Slots: wc.Slots, Batch: wc.Batch, RerunCI: wc.RerunCI, Silent: wc.Silent, NoRetry: wc.NoRetry, ReviewStatus: wc.ReviewStatus, Approve: wc.Approve, Models: resolved.Models, Routines: resolved.Routines}
 	if wc.Action == "fix" {
 		spec.Action = "fix"
 	}
@@ -1471,6 +1478,7 @@ func init() {
 	f.String(watchFlagReviewStatus, "", "Column a ticket moves to once a run opened a pull request for it, e.g. \"In Review\"")
 	f.Bool("lease", false, "Claim a ticket on the tracker before working it, so a second machine watching the same board leaves it alone")
 	f.Bool("isolate", false, "Give every unattended run its own worktrees on a corgi/<ref> branch, so it never touches your checkout")
+	f.String("run-db", "own", "How an isolated run gets databases: own (empty ones on ports nobody else uses, the default), shared (the workspace's own, read only - for a database too big to copy) or off")
 	f.String("kind", "", "The agent that runs here: claude (default) or codex; also what corgi agent claude opens in this workspace")
 	f.StringSlice("agents", nil, "The agents to try in order, e.g. claude,codex: the next takes a run when the first cannot")
 	f.String(watchFlagPruneAfter, "", "Remove an isolated run's worktrees this long after it finished, e.g. 7d; the branch stays, a dirty worktree stays (empty keeps them until `watch undo` or `watch prune`)")

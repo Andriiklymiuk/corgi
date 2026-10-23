@@ -2458,6 +2458,12 @@ An isolated run in a workspace with `db_services` is told how to start a stack
 of its own - `corgi --isolate run-<ticket> db -u --wait`, then
 `corgi --isolate run-<ticket> exec <service> --feature <branch> -- <command>` -
 so a migration or a spec that needs a database runs instead of being skipped.
+The databases start empty: the run builds what a check needs from the schema
+and the specs' own fixtures, and is told never to load a dump, since a
+production-sized copy takes hours. A workspace whose database is too big to
+work without takes `watch enable --run-db shared`: runs use the workspace's
+own databases, read only - no migration, seed, restore or write; a check that
+needs one is left for you. `--run-db off` says nothing about databases.
 corgi stops those databases and frees the lease when the run ends. A worktree
 also gets the main checkout's `node_modules` (or `vendor`, `deps`) as a
 copy-on-write copy when the lockfile is the same, so lint and tests do not

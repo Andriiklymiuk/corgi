@@ -35,6 +35,7 @@ type WatchSpec struct {
 	Agents          []string
 	Bin             string
 	Isolate         bool
+	RunDB           string
 	PruneAfter      time.Duration
 	ReviewDelay     time.Duration
 	RerunCI         bool
@@ -1456,9 +1457,9 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 		}
 		fmt.Fprintf(logFile, "=== worktrees on %s: %s\n", branch, strings.Join(trees, ", "))
 		if d.RunStack != nil {
-			if note := d.RunStack(spec.Dir, branch); note != "" {
+			if note := d.RunStack(spec.Dir, branch, spec.RunDB); note != "" {
 				print.Prompt += note
-				if d.ReleaseStack != nil {
+				if d.ReleaseStack != nil && spec.RunDB != "shared" {
 					defer d.ReleaseStack(spec.Dir, branch)
 				}
 			}

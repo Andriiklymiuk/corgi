@@ -266,10 +266,13 @@ type WatchConfig struct {
 	DaysOff         []string  `yaml:"daysOff,omitempty"`
 	// NightShift keeps the fixes and routines going through the quiet hours;
 	// only the phone sleeps, and hears about it all in the morning.
-	NightShift bool   `yaml:"nightShift,omitempty"`
-	Lease      bool   `yaml:"lease,omitempty"`
-	NoRetry    bool   `yaml:"noRetry,omitempty"`
-	Isolate    bool   `yaml:"isolate,omitempty"`
+	NightShift bool `yaml:"nightShift,omitempty"`
+	Lease      bool `yaml:"lease,omitempty"`
+	NoRetry    bool `yaml:"noRetry,omitempty"`
+	Isolate    bool `yaml:"isolate,omitempty"`
+	// RunDB is how an isolated run gets its databases: own (empty ones of its
+	// own, the default), shared (the workspace's, read only) or off.
+	RunDB      string `yaml:"runDB,omitempty"`
 	PruneAfter string `yaml:"pruneAfter,omitempty"`
 	// ReviewDelay holds a review someone asked for this long before it runs,
 	// so the answer does not land the minute the request does.

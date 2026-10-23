@@ -21,17 +21,29 @@ func TestARunLeaseIsAValidLeaseName(t *testing.T) {
 
 func TestARunInAWorkspaceWithDatabasesIsToldHowToStartItsOwn(t *testing.T) {
 	dir := t.TempDir()
-	if runStackNote(dir, "corgi/abc-7") != "" {
+	if runStackNote(dir, "corgi/abc-7", "own") != "" {
 		t.Fatal("no compose, no note")
 	}
 	if err := os.WriteFile(filepath.Join(dir, "corgi-compose.yml"), []byte("name: acme\nservices:\n  api:\n    port: 4500\ndb_services:\n  pg:\n    driver: postgres\n    port: 5432\n    databaseName: acme\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	note := runStackNote(dir, "corgi/abc-7")
-	for _, want := range []string{"corgi --isolate run-abc-7 db -u --wait", "(pg)", "exec <service> --feature corgi/abc-7", "frees the lease when the run ends"} {
+	note := runStackNote(dir, "corgi/abc-7", "own")
+	for _, want := range []string{"corgi --isolate run-abc-7 db -u --wait", "(pg on :5432)", "empty", "Never restore, copy or load a dump", "exec <service> --feature corgi/abc-7", "frees the lease when the run ends"} {
 		if !strings.Contains(note, want) {
 			t.Errorf("missing %q in:\n%s", want, note)
 		}
+	}
+	shared := runStackNote(dir, "corgi/abc-7", "shared")
+	for _, want := range []string{"pg on :5432", "shared with the person and every other run", "never run a migration, a seed, a restore"} {
+		if !strings.Contains(shared, want) {
+			t.Errorf("shared: missing %q in:\n%s", want, shared)
+		}
+	}
+	if strings.Contains(shared, "--isolate") {
+		t.Errorf("a shared database takes no lease:\n%s", shared)
+	}
+	if runStackNote(dir, "corgi/abc-7", "off") != "" {
+		t.Error("off says nothing")
 	}
 	releaseRunStack(dir, "corgi/abc-7")
 }

@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -78,7 +79,10 @@ func runLease(branch string) string {
 	return strings.TrimRight(name, "-._")
 }
 
-func runStackNote(dir, branch string) string {
+func runStackNote(dir, branch, mode string) string {
+	if mode == "off" {
+		return ""
+	}
 	path := composeIn(dir)
 	if path == "" {
 		return ""
@@ -89,14 +93,24 @@ func runStackNote(dir, branch string) string {
 	}
 	var dbs []string
 	for _, db := range corgi.DatabaseServices {
-		dbs = append(dbs, db.ServiceName)
+		name := db.ServiceName
+		if db.Port != 0 {
+			name += " on :" + strconv.Itoa(db.Port)
+		}
+		dbs = append(dbs, name)
+	}
+	if mode == "shared" {
+		return "\n\nThe databases this run may use are the workspace's own (" + strings.Join(dbs, ", ") + "), shared with the person and every other run. " +
+			"Read and query them as much as a check needs; never run a migration, a seed, a restore, a dump load or any write against them. " +
+			"A check that needs one goes under `## Left for you` with the exact command.\n"
 	}
 	lease := runLease(branch)
 	return "\n\nThis run has a stack of its own, so a check that needs a database is never skipped for want of one. From `" + dir + "`:\n" +
-		"- `corgi --isolate " + lease + " db -u --wait` starts this workspace's databases (" + strings.Join(dbs, ", ") + ") on ports and database names nobody else uses.\n" +
-		"- `corgi --isolate " + lease + " exec <service> --feature " + branch + " -- <command>` runs a migration, a SQL check or a spec in your worktree against them, with that service's env.\n" +
+		"- `corgi --isolate " + lease + " db -u --wait` starts this workspace's databases (" + strings.Join(dbs, ", ") + ") empty, on ports and database names nobody else uses.\n" +
+		"- `corgi --isolate " + lease + " exec <service> --feature " + branch + " -- <command>` runs a migration, a schema load, a SQL check or a spec in your worktree against them, with that service's env.\n" +
 		"- `corgi --isolate " + lease + " test --feature " + branch + " --changed` runs the tests of what you changed.\n" +
-		"corgi stops these databases and frees the lease when the run ends. Your report names the checks you ran this way."
+		"They start empty: build what a check needs with the schema and the specs' own fixtures. Never restore, copy or load a dump of another database into them - a production-sized copy takes hours. " +
+		"A check that needs real data goes under `## Left for you`. corgi stops these databases and frees the lease when the run ends. Your report names the checks you ran this way."
 }
 
 func releaseRunStack(dir, branch string) {
