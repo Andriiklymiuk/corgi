@@ -47,3 +47,35 @@ func TestARunInAWorkspaceWithDatabasesIsToldHowToStartItsOwn(t *testing.T) {
 	}
 	releaseRunStack(dir, "corgi/abc-7")
 }
+
+func TestAnIsolatedRunsWorktreesComeWithThePackages(t *testing.T) {
+	ws := t.TempDir()
+	api := filepath.Join(ws, "api")
+	newRepo(t, api)
+	for name, body := range map[string]string{".gitignore": "node_modules/\n", "package-lock.json": `{"lockfileVersion":3}`} {
+		if err := os.WriteFile(filepath.Join(api, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	gitIn(t, api, "add", ".")
+	gitIn(t, api, "commit", "-qm", "lock")
+	if err := os.MkdirAll(filepath.Join(api, "node_modules", "pad"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(ws, "corgi-compose.yml"), []byte("name: acme\nservices:\n  api:\n    path: ./api\n    port: 4500\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	trees, err := isolateFixWorktrees(ws, "corgi/abc-7")
+	if err != nil || len(trees) != 1 {
+		t.Fatalf("one worktree: %v %v", trees, err)
+	}
+	if _, err := os.Stat(filepath.Join(trees[0], "node_modules", "pad")); err != nil {
+		t.Fatalf("the packages came along: %v", err)
+	}
+	if _, err := isolateFixWorktrees(t.TempDir(), "corgi/abc-7"); err == nil {
+		t.Fatal("a folder without a compose file has nothing to isolate")
+	}
+	if removed, kept, err := releaseFixWorktrees(ws, ""); removed != nil || kept != nil || err != nil {
+		t.Fatal("no branch, nothing to release")
+	}
+}

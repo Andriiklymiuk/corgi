@@ -119,3 +119,26 @@ func TestSelfCheckRingsOnceAWeekOnMondayMorning(t *testing.T) {
 	case <-time.After(200 * time.Millisecond):
 	}
 }
+
+func TestEarlierRunsAreReadBackFromTheirLogs(t *testing.T) {
+	d := testDaemon(t)
+	d.Watches = []WatchSpec{{Workspace: "acme"}}
+	d.loadWatchFiles()
+	now := time.Now()
+	d.watchState.Fixes.StartFor(watch.Event{Key: "github:acme/api#9", Workspace: "acme", Ref: "acme/api#9", Kind: watch.KindPRReview}, now)
+	d.watchState.Fixes.Finish("github:acme/api#9", nil, "", "", now)
+	runs := filepath.Join(d.Dir, "watch", "runs")
+	if err := os.MkdirAll(runs, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	log := "=== 2026-10-22T10:00:00+02:00 pr.review acme/api#9\nThe SQL did not run: no Postgres here.\n## What you do next\n- Run the SQL against a local database.\n"
+	if err := os.WriteFile(filepath.Join(runs, safeName("github:acme/api#9")+".log"), []byte(log), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	d.backfillRunNotes()
+	r := d.watchState.Fixes.Records()[0]
+	if len(r.Left) != 1 || len(r.Gaps) != 1 || r.Gaps[0] != watch.GapNoDatabase {
+		t.Fatalf("read back: %+v %+v", r.Left, r.Gaps)
+	}
+	(&Daemon{}).backfillRunNotes()
+}

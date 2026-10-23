@@ -51,3 +51,27 @@ func TestThePhoneMergesOnlyAPullRequestOfMineThatCorgiWatches(t *testing.T) {
 		}
 	}
 }
+
+func TestThePhonePullRouteTakesOnlyMergeOrClose(t *testing.T) {
+	dir := phoneBoard(t, true)
+	_ = watch.LoadPullLog(dir).Set("acme/api#3", watch.PullStatus{State: "open", Mine: true, Link: "https://github.com/acme/api/pull/3", Workspace: "acme"})
+	if rec := post(launchPullHandler, "/launch/pull", `{"link":"https://github.com/acme/api/pull/3","do":"rebase"}`); rec.Code != 400 || !strings.Contains(rec.Body.String(), "merge or close") {
+		t.Fatalf("%d %s", rec.Code, rec.Body)
+	}
+	if rec := post(launchPullHandler, "/launch/pull", `not json`); rec.Code != 400 {
+		t.Fatalf("%d", rec.Code)
+	}
+	rec := httptest.NewRecorder()
+	launchPullHandler(rec, httptest.NewRequest(http.MethodGet, "/launch/pull", nil))
+	if rec.Code != 405 {
+		t.Fatalf("POST only: %d", rec.Code)
+	}
+	rec = httptest.NewRecorder()
+	launchLeftHandler(rec, httptest.NewRequest(http.MethodDelete, "/launch/left", nil))
+	if rec.Code != 405 {
+		t.Fatalf("GET or POST: %d", rec.Code)
+	}
+	if rows := leftRows(dir, true, time.Now()); rows != nil {
+		t.Fatalf("nothing left on an empty laptop: %+v", rows)
+	}
+}
