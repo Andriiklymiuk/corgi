@@ -1,7 +1,7 @@
 {
   "name": "corgi-band",
-  "version": "0.1.1",
-  "description": "A band above the prompt: corgi sessions waiting on you elsewhere (with Focus), and what this turn posted, moved or pushed - each with a tick or the error",
+  "version": "0.2.0",
+  "description": "A band above the prompt: corgi sessions waiting on you elsewhere (with Focus), this branch when it conflicts, fails its checks or has changes requested (with Fix it), and any post, move or push this turn that failed",
   "types": "./types/index.d.ts",
   "author": {
     "name": "Andrii Klymiuk",

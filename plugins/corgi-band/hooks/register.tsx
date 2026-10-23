@@ -1,12 +1,13 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Action, Snapshot, Waiting } from '../types'
+import type { Action, Here, Snapshot, Waiting } from '../types'
 import {
-  actionsIn, budgetOf, cardsOf, failureOf, fiveHourOf, glyph, readBoard, sessionsOf, settle, signature, stackOf, statusText, waitingOf,
+  actionsIn, budgetOf, cardsOf, failureOf, fiveHourOf, glyph, hereLine, hereOf, readBoard, sessionsOf, settle, signature, stackOf, statusText, waitingOf,
 } from './board'
 
 const waiting = atom({ plugin: 'corgi-band', key: 'waiting' } as const, [] as Waiting[])
+const here = atom({ plugin: 'corgi-band', key: 'here' } as const, null as Here | null)
 const actions = atom({ plugin: 'corgi-band', key: 'actions' } as const, [] as Action[])
 const hidden = atom({ plugin: 'corgi-band', key: 'hidden' } as const, '')
 const snapshot = atom({ plugin: 'corgi-band', key: 'snapshot' } as const, null as Snapshot | null)
@@ -56,6 +57,8 @@ async function refresh($: EngineInterface): Promise<boolean> {
   const now = await $.clock.now()
   const list = waitingOf(board, me.id)
   await update($, waiting, () => list)
+  const mine = hereOf(board, me.id) ?? null
+  await update($, here, () => mine)
   $.ui.status(statusText(list.length, fiveHourOf(board, me.configDir, now)))
   if (me.wantsPane) await refreshPane($)
   return true
@@ -151,7 +154,7 @@ export const register: Register = on => {
     if (labels.length === 0) return next(e)
     const ran = await next(e)
     const why = ran.deny ?? failureOf(ran.isError === true, ran.text ?? '')
-    await update($, actions, list => [...list, ...settle(labels, why)].slice(-12))
+    if (why !== undefined) await update($, actions, list => [...list, ...settle(labels, why)].slice(-6))
     if (why !== undefined) {
       $.ui.toast(`corgi: ${labels.join(', ')} failed - ${why}`, { timeoutMs: 8000 })
     }
@@ -160,9 +163,10 @@ export const register: Register = on => {
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const list = await read($, waiting)
-    const done = e.props.isWorking ? [] : await read($, actions)
-    const isHidden = (await read($, hidden)) === signature(list, done)
-    if (e.props.hasSurvey || isHidden || (list.length === 0 && done.length === 0)) {
+    const failed = e.props.isWorking ? [] : await read($, actions)
+    const mine = e.props.isWorking ? null : await read($, here)
+    const isHidden = (await read($, hidden)) === signature(list, failed, mine ?? undefined)
+    if (e.props.hasSurvey || isHidden || (list.length === 0 && failed.length === 0 && mine === null)) {
       return next(e)
     }
     const { Box, Button, Text } = $.ui.resolve(e)
@@ -184,21 +188,30 @@ export const register: Register = on => {
           </Box>
         ))}
         {list.length > shown.length && <Text dimColor>+{list.length - shown.length} more waiting</Text>}
-        {done.length > 0 && (
+        {mine !== null && (
           <Box>
-            <Text dimColor>this turn: </Text>
-            <Text wrap="truncate-end">
-              {done.map(a => (a.isDone ? `✓ ${a.label}` : `✗ ${a.label} (${a.why})`)).join(' · ')}{' '}
-            </Text>
+            <Text color={mine.fix ? 'red' : undefined} dimColor={!mine.fix}>{mine.fix ? '✗ ' : '· '}</Text>
+            <Text wrap="truncate-end">this branch: {hereLine(mine)} </Text>
+            {mine.fix && (
+              <Button key="fix" label="Fix it" onPress={() => void $.prompt.submit({ text: mine.fix! })} />
+            )}
           </Box>
         )}
+        {failed.map((a, i) => (
+          <Box key={`f-${i}`}>
+            <Text color="red">✗ </Text>
+            <Text wrap="truncate-end">
+              {a.label} failed: {a.why}{' '}
+            </Text>
+          </Box>
+        ))}
         <Box>
           <Button
             key="hide"
             label="Hide"
             plain
             dimColor
-            onPress={() => update($, hidden, () => signature(list, done))}
+            onPress={() => update($, hidden, () => signature(list, failed, mine ?? undefined))}
           />
         </Box>
       </Box>

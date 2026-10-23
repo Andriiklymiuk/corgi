@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { actionsIn, failureOf, fiveHourOf, statusText, waitingOf } from '../hooks/board'
+import { actionsIn, failureOf, fiveHourOf, hereOf, statusText, waitingOf } from '../hooks/board'
 
 describe('board helpers', () => {
   test('names the outward actions in a command', () => {
@@ -35,5 +35,14 @@ describe('board helpers', () => {
     expect(fiveHourOf(board, '', Date.parse('2026-10-07T00:00:00Z'))).toBe(undefined)
     expect(statusText(2, 91)).toBe('corgi · 2 waiting on you · 5h 91%')
     expect(statusText(0, 40)).toBe(undefined)
+  })
+  test('says this branch only when it needs something or the context runs full', () => {
+    const at = (standing: object, percent?: number) => hereOf({ sessions: [{ id: 'me', standing, context: { percent } }] }, 'me')
+    expect(at({ word: 'working' }, 40)).toBe(undefined)
+    expect(at({ word: 'in review' }, 40)).toBe(undefined)
+    expect(at({ word: 'working' }, 75)?.context).toBe(75)
+    expect(at({ word: 'checks failing', why: 'checks ✗' })?.fix).toContain('failing job')
+    expect(at({ word: 'ready to merge', why: 'checks ✓ · approved' })?.fix).toBe(undefined)
+    expect(hereOf({ sessions: [{ id: 'other', standing: { word: 'conflicts' } }] }, 'me')).toBe(undefined)
   })
 })

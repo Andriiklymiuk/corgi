@@ -13,7 +13,7 @@
     {
       "name": "corgi-band",
       "source": "./plugins/corgi-band",
-      "description": "Band above the prompt: corgi sessions waiting on you (Focus), what this turn posted/moved/pushed with a tick or the error, a status line, and /corgi - a pane with sessions, tickets, the stack and the budget"
+      "description": "Band above the prompt: corgi sessions waiting on you (Focus), this branch when it conflicts, fails its checks or has changes requested (Fix it), what this turn failed to post/move/push with the error, a status line, and /corgi - a pane with sessions, tickets, the stack and the budget"
     },
     {
       "name": "corgi-guard",

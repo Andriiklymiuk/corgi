@@ -1,4 +1,4 @@
-import type { Action, PaneCard, PaneService, PaneSession, Waiting } from '../types'
+import type { Action, Here, PaneCard, PaneService, PaneSession, Waiting } from '../types'
 
 type BoardSession = {
   id: string
@@ -9,6 +9,8 @@ type BoardSession = {
   detail?: string
   configDir?: string
   pending?: { tool?: string; subject?: string } | null
+  standing?: { word?: string; why?: string } | null
+  context?: { percent?: number } | null
 }
 type Window = { percent?: number; resetsAt?: string }
 type Board = {
@@ -35,6 +37,42 @@ export function waitingOf(board: Board, me: string): Waiting[] {
         what: clip(pending || s.detail || 'a question', 60),
       }
     })
+}
+
+const fixes: Record<string, (why: string) => string> = {
+  conflicts: why =>
+    `This branch conflicts with its base (${why}). Rebase it, resolve every conflict keeping both sides' intent, run the tests, and push.`,
+  'checks failing': why =>
+    `The checks on this branch's pull request are failing (${why}). Read the failing job's log, fix the cause, run it locally, and push.`,
+  'tests failing': () => 'The last test run on this branch failed. Find why, fix it, and run the tests again.',
+  'changes requested': () =>
+    "This branch's pull request has changes requested. Read the open threads with `corgi agent watch pr threads`, fix each valid one, reply, and push.",
+}
+
+const worthSaying = new Set([...Object.keys(fixes), 'ready to merge', 'approved', 'merged', 'closed', 'stuck', 'blocked', 'handoff waits'])
+
+const contextWorthSaying = 70
+
+export function hereOf(board: Board, me: string): Here | undefined {
+  const s = (board.sessions ?? []).find(x => x.id === me)
+  if (s === undefined) return undefined
+  const word = s.standing?.word ?? ''
+  const why = s.standing?.why ?? ''
+  const context = s.context?.percent
+  const showWord = worthSaying.has(word)
+  const showContext = context !== undefined && context >= contextWorthSaying
+  if (!showWord && !showContext) return undefined
+  return {
+    word: showWord ? word : '',
+    why: showWord ? clip(why, 70) : '',
+    context: showContext ? context : undefined,
+    fix: showWord ? fixes[word]?.(why) : undefined,
+  }
+}
+
+export function hereLine(h: Here): string {
+  const parts = [h.word && (h.why ? `${h.word} · ${h.why}` : h.word), h.context !== undefined && `context ${h.context}%`].filter(Boolean)
+  return parts.join(' · ')
 }
 
 export function fiveHourOf(board: Board, configDir: string, now: number): number | undefined {
@@ -89,8 +127,8 @@ export function settle(labels: string[], why: string | undefined): Action[] {
   return labels.map(label => (why === undefined ? { label, isDone: true } : { label, isDone: false, why }))
 }
 
-export function signature(waiting: Waiting[], actions: Action[]): string {
-  return JSON.stringify([waiting.map(w => w.id + w.what), actions])
+export function signature(waiting: Waiting[], actions: Action[], here?: Here): string {
+  return JSON.stringify([waiting.map(w => w.id + w.what), actions, here ? hereLine(here) : ''])
 }
 
 function bare(s: string | undefined): string {
