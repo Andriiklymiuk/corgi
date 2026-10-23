@@ -85,7 +85,7 @@ func TestAStoppedSessionBehindMainIsRebasedOrTold(t *testing.T) {
 		return nil
 	}
 	t.Cleanup(func() { gitClean, gitRebase = prevClean, prevRebase })
-	policy := Policy{Rebase: true, HandOver: true}
+	policy := Policy{Rebase: true}
 	d.Policy = func(sessions.Session) Policy { return policy }
 	now := time.Now()
 	d.Sessions.Apply(sessions.Event{Name: "UserPromptSubmit", SessionID: "s1", Cwd: "/tmp/acme", ClaudePID: 1, TermProgram: "iTerm.app", TTY: 5, At: now})

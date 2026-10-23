@@ -6,7 +6,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var APP_VERSION = "2.31.43"
+var APP_VERSION = "2.32.0"
 
 var rootCmd = &cobra.Command{
 	Use:   "corgi",

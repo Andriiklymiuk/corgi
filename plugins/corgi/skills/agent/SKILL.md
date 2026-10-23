@@ -663,6 +663,8 @@ corgi agent watch comment ABC-123 "text" --file a.png --file repro.mp4 --file re
 corgi agent today [--write]                          # today since midnight, the watch's own runs included
 corgi agent today --json                             # + waits{count, medianS} and days[14] from the daemon's own ledger - the phone's share card numbers
 corgi agent standup [--since 48h] [--write]          # a rolling window of the same
+corgi agent left [--done <id>]                       # what unattended runs left for a person; green checks and merges tick items off by themselves
+corgi agent selfcheck [--days 7]                     # what kept going wrong in unattended runs (skipped checks and why, machine failures, idle spend)
 corgi agent digest --send                            # the daily message (digestAt in the user config)
 corgi agent workspaces pause|resume <id>             # stop supervising one (autostart: false), or resume
 ```

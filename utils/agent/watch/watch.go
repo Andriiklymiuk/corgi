@@ -905,7 +905,9 @@ type FixRecord struct {
 	// GreenAt is when the checks of the pull request it worked on passed after it
 	GreenAt time.Time `json:"greenAt,omitzero"`
 	// Said is the outcome the run reported: pushed, replied, nothing or blocked
-	Said string `json:"said,omitempty"`
+	Said string     `json:"said,omitempty"`
+	Left []LeftItem `json:"left,omitempty"`
+	Gaps []Gap      `json:"gaps,omitempty"`
 }
 
 func (r FixRecord) Done() bool { return !r.FinishedAt.IsZero() }

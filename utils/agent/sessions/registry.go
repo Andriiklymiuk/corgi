@@ -42,6 +42,7 @@ type Registry struct {
 	notice       string
 	noticeAt     time.Time
 	accounts     []Account
+	work         Work
 	peers        []PeerBoard
 	ended        []Session
 	AutoContinue bool
@@ -68,6 +69,7 @@ type State struct {
 	Groups          []Group   `json:"groups,omitempty"`
 	Windows         []Window  `json:"windows,omitempty"`
 	Accounts        []Account `json:"accounts,omitempty"`
+	Work
 	// Peers are the other laptops' boards, as their last pulse told them (2.29.1).
 	Peers []PeerBoard `json:"peers,omitempty"`
 }
@@ -1651,6 +1653,7 @@ func (r *Registry) snapshotLocked(now time.Time) State {
 	st.Groups = Groups(st.Sessions)
 	st.Windows = r.sortedWindowsLocked()
 	st.Accounts = append([]Account(nil), r.accounts...)
+	st.Work = r.work
 	st.Peers = append([]PeerBoard(nil), r.peers...)
 	st.Ended = append([]Session(nil), r.ended...)
 	if w, ok := r.frontWindowLocked(); ok {

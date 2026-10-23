@@ -278,6 +278,7 @@ func (d *Daemon) startWatches(ctx context.Context) {
 		return
 	}
 	d.loadWatchFiles()
+	d.backfillRunNotes()
 	onLowDisk = func() {
 		go d.notifyAttentionAt("corgi agent", "under 10 GB of disk left - no fix starts until there is room (corgi agent watch prune, docker system prune)", "", "")
 	}
@@ -318,6 +319,7 @@ func (d *Daemon) startWatches(ctx context.Context) {
 func (d *Daemon) refresh() {
 	d.rescan()
 	d.sampleAccounts(time.Now())
+	d.sampleWork(time.Now())
 	go d.pulsePeersOnce(context.Background())
 	for _, w := range d.watchers {
 		w.Nudge()
@@ -1291,6 +1293,7 @@ func unattendedSuffix(spec WatchSpec, e watch.Event) string {
 			"Run the tests your change touches before the push; corgi watches the pipeline and starts a run if it goes red.\n"
 	}
 	s += "Say plainly at the end what you changed and what your own review found.\n"
+	s += watch.LeftInstruction()
 	s += "Start your final message with one line, exactly one of: `Outcome: pushed` (commits went up), `Outcome: replied` (comments only), " +
 		"`Outcome: nothing` (nothing needed doing) or `Outcome: blocked` (stuck, the handoff says why).\n"
 	if ownPR {
@@ -1425,7 +1428,7 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 	if d.Pickup != nil {
 		d.Pickup(spec.Workspace, e)
 	}
-	env := headlessEnv(spec.ConfigDir, os.Getenv("CORGI_OMIT"))
+	env := withForgeShims(d.Dir, headlessEnv(spec.ConfigDir, os.Getenv("CORGI_OMIT")))
 	fmt.Fprintf(logFile, "=== %s %s %s\n", time.Now().Format(time.RFC3339), e.Kind, e.Ref)
 	before, hadBefore := usage.ReadLimits(spec.ConfigDir)
 	handover := d.watchState.Fixes.LastHandover(spec.Workspace, e.Ref)
@@ -1452,6 +1455,14 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 			print.Prompt += IsolationNote(branch, trees)
 		}
 		fmt.Fprintf(logFile, "=== worktrees on %s: %s\n", branch, strings.Join(trees, ", "))
+		if d.RunStack != nil {
+			if note := d.RunStack(spec.Dir, branch); note != "" {
+				print.Prompt += note
+				if d.ReleaseStack != nil {
+					defer d.ReleaseStack(spec.Dir, branch)
+				}
+			}
+		}
 	}
 	h := d.pickHarnessFor(spec)
 	if h.Name != harness.Claude {
@@ -1529,6 +1540,8 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 	}
 	d.watchState.Fixes.Finish(e.Key, links, note, "", time.Now())
 	d.watchState.Fixes.SetOutcome(e.Key, watch.RunOutcome(string(out)))
+	d.watchState.Fixes.SetLeft(e.Key, watch.LeftFor(string(out)))
+	d.watchState.Fixes.SetGaps(e.Key, watch.GapsIn(string(out)))
 	d.watchState.Fixes.SetHandover(e.Key, runHandover(spec.Dir, e.Ref, started, string(out)), time.Now())
 	d.mirrorHandoff(spec, e.Ref, started)
 	d.blockIfRunSaidSo(spec, e, started)
@@ -1789,6 +1802,7 @@ func (d *Daemon) refreshPulls(ctx context.Context, spec WatchSpec) {
 				continue
 			}
 			if st, ok := asker.PullStatus(ctx, ref); ok {
+				st.Carry(was, known, links[ref], spec.Workspace, now)
 				_ = pulls.Set(ref, st)
 				d.pullChanged(ctx, spec, ref, links[ref], was, st, known)
 				break

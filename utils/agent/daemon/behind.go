@@ -81,7 +81,7 @@ func (d *Daemon) onMainMoved(s sessions.Session) {
 		utils.Infof("agent: rebased %s onto %s (%d commits)\n", label, s.Behind.Upstream, s.Behind.Commits)
 		d.Sessions.MainMovedTold(s.ID, true)
 		d.flushSessions()
-	case len(s.Behind.Conflicts) > 0 && p.HandOver:
+	case len(s.Behind.Conflicts) > 0 && (p.HandOver || p.Rebase):
 		msg := "Main moved: " + s.Behind.Upstream + " is " + strconv.Itoa(s.Behind.Commits) + " commits past your base and would conflict in " + strings.Join(s.Behind.Conflicts, ", ") + ". Rebase onto " + s.Behind.Upstream + ", resolve those, run the tests, then stop."
 		d.Sessions.MainMovedTold(s.ID, false)
 		d.sendToSession(context.Background(), s.ID, msg, true)

@@ -333,6 +333,8 @@ corgi agent serve --foreground   # run it in this terminal and watch
 | `corgi agent top` | the board in the terminal, live, like top: every session with its standing, what it is doing and its spend, the ones that need you first, refreshed every second; `j`/`k` move, `a` allow, `d` deny, `i` interrupt, `o` open, `q` quit - each through the daemon like a press on the phone. For a laptop with no menu bar (2.24) |
 | `corgi agent cost --by repo\|day\|bot [--days N]` | tokens by workspace, by day, or by bot - the daemon's day ledger (every live session's tokens booked to its workspace as the sweep counts them) plus the fix log (what each unattended run said it cost, with dollars); the phone's repo sheet draws the last 14 days (`GET /launch/cost`) (2.24) |
 | `corgi agent scorecard [--days N] [--repo <ws>]` | what the unattended runs came to, by workspace and kind: pushed, green (the checks passed after the run), replied, nothing, blocked, failed - from the `Outcome:` line each run now ends with; names a kind that mostly finds nothing to do (`GET /launch/scorecard`) (2.31.6) |
+| `corgi agent left [--done <id>] [--all]` | what unattended runs left for a person: each run ends with a `## Left for you` list, and corgi ticks an item off itself when it sees it happen - the checks of the pull request went green, the pull request merged; `--done` ticks the rest. On the board as `left`, `GET`/`POST {id} /launch/left` for the phone. Runs before 2.32 are read back from their logs (2.32.0) |
+| `corgi agent selfcheck [--days N]` | what kept going wrong in the unattended runs: checks they skipped and why (no database, a tool missing, no device, no live service, tests not run), machine failures, money on runs that found nothing, items still left for you - each with what corgi does about it. The daemon sends it Monday morning when there is something to say; on the board as `selfCheck` (2.32.0) |
 | `corgi agent cap --repo <ws> <tokens\|off>` | a tokens-per-day budget for one workspace (`dayCap` in its watch config); the daemon rings once when a day's sessions pass it (2.24) |
 | `corgi agent guard install\|uninstall\|check` | a git pre-push hook for this checkout: a session on the branch whose done-when gate is red, or whose last test run went red, stops the push and names the command; a branch with no session on it is not its business; `CORGI_FORCE=1 git push` goes through (2.24) |
 | `corgi agent lesson promote <n> [--pr]` | writes lesson n into the workspace's `CLAUDE.md` under a `## Lessons` heading, once - where every session reads it, not only the ones corgi starts; `--pr` puts the line on a `corgi/lesson-…` branch in a worktree of its own and opens a pull request (2.24) |
@@ -2444,3 +2446,35 @@ first-party feature built for exactly that.
 Hosting it for other people, or routing anyone else's requests through your
 seat, is not. If agent mode ever grows a multi-user mode, that mode must require
 API-key authentication and refuse to start on subscription credentials.
+
+## What runs leave, and what corgi does with it (2.32)
+
+Every unattended run ends with a `## Left for you` list when a person has
+something to do. corgi keeps those items, ticks off the ones it sees happen
+(green checks, a merge) and lists the rest: `corgi agent left`, the board's
+`left`, the phone's `/launch/left`.
+
+An isolated run in a workspace with `db_services` is told how to start a stack
+of its own - `corgi --isolate run-<ticket> db -u --wait`, then
+`corgi --isolate run-<ticket> exec <service> --feature <branch> -- <command>` -
+so a migration or a spec that needs a database runs instead of being skipped.
+corgi stops those databases and frees the lease when the run ends. A worktree
+also gets the main checkout's `node_modules` (or `vendor`, `deps`) as a
+copy-on-write copy when the lockfile is the same, so lint and tests do not
+start with "not installed".
+
+`gh` and `glab` calls inside a run end after two minutes instead of hanging the
+run (a wrapper on the run's PATH; perl does the timing).
+
+The board (`sessions.json`) carries three more lists for the apps:
+
+| Field | What |
+|---|---|
+| `left` | items runs left for a person, open first, closed ones for a day with who closed them (`checks ✓`, `merged`, `you`, `phone`) |
+| `stalled` | your own pull requests that wait: approved and green for a day (`action: merge`, `POST /launch/pull {link, do: "merge"}`), changes asked for two days ago, checks red for a day (`action: work`, with a `prompt` for a new session) |
+| `runSpend` | the week's unattended runs: dollars, runs, failed, skipped checks, runs that found nothing and what they cost, merged pull requests and the cost per merged one, and a fortnight of days |
+| `selfCheck` | the self-check's headline and lines |
+
+A stopped session whose branch conflicts with main is told to rebase under
+`--rebase` too, not only under `--hand-over`.
+

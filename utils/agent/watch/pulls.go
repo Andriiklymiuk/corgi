@@ -25,6 +25,42 @@ type PullStatus struct {
 	// answered leaves the inbox.
 	MyReviewAt time.Time `json:"myReviewAt,omitempty"`
 	At         time.Time `json:"at"`
+	Link       string    `json:"link,omitempty"`
+	Workspace  string    `json:"workspace,omitempty"`
+	Since      time.Time `json:"since,omitzero"`
+}
+
+func (p PullStatus) SameAs(q PullStatus) bool {
+	return p.State == q.State && p.Checks == q.Checks && p.Review == q.Review
+}
+
+func (p *PullStatus) Carry(was PullStatus, known bool, link, workspace string, now time.Time) {
+	p.Link, p.Workspace = firstSet(link, was.Link), firstSet(workspace, was.Workspace)
+	switch {
+	case known && p.SameAs(was) && !was.Since.IsZero():
+		p.Since = was.Since
+	case known && p.SameAs(was):
+		p.Since = was.At
+	default:
+		p.Since = now
+	}
+}
+
+func firstSet(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
+}
+
+func (l *PullLog) All() map[string]PullStatus {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	out := make(map[string]PullStatus, len(l.Pulls))
+	for k, v := range l.Pulls {
+		out[k] = v
+	}
+	return out
 }
 
 func (p PullStatus) Facts() sessions.PullFacts {

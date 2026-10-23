@@ -125,6 +125,9 @@ func (d *Daemon) pullChanged(ctx context.Context, spec WatchSpec, ref, link stri
 	if link != "" && known && now.Checks == "passing" && was.Checks != "" && was.Checks != "passing" {
 		d.creditGreen(spec, ref, link)
 	}
+	if link != "" && now.Checks == "passing" && (!known || was.Checks != "passing") {
+		d.tickLeft(spec, link, "checks ✓", watch.LeftCI)
+	}
 	if autoMerge && link != "" && now.Ready() && now.Checks == "passing" && now.Mine && d.MergePull != nil && d.mergeWorthTrying(link, time.Now()) {
 		if err := d.MergePull(ctx, spec.Workspace, link); err != nil {
 			utils.Infof("agent: auto-merge %s: %v\n", ref, err)
@@ -142,6 +145,7 @@ func (d *Daemon) pullChanged(ctx context.Context, spec WatchSpec, ref, link stri
 		now = watch.PullStatus{State: "merged", Checks: now.Checks, Review: now.Review, At: now.At}
 	}
 	if now.State == "merged" && (!known || was.State != "merged") {
+		d.tickLeft(spec, link, "merged", watch.LeftCI, watch.LeftMerge)
 		d.ticketAfterMerge(ctx, spec, link)
 	}
 }
@@ -445,8 +449,21 @@ func (d *Daemon) compactIfFull(s sessions.Session) {
 
 const compactCooldown = 10 * time.Minute
 
+func (d *Daemon) fixLog() *watch.FixLog {
+	if d.watchState != nil && d.watchState.Fixes != nil {
+		return d.watchState.Fixes
+	}
+	return watch.LoadFixLog(d.Dir)
+}
+
+func (d *Daemon) tickLeft(spec WatchSpec, link, why string, kinds ...watch.LeftKind) {
+	if n := d.fixLog().TickLeft(spec.Workspace, link, kinds, why, time.Now()); n > 0 {
+		utils.Infof("agent: watch %s: %d left for you on %s done - %s\n", spec.Workspace, n, link, why)
+	}
+}
+
 func (d *Daemon) creditGreen(spec WatchSpec, ref, link string) {
-	r, ok := watch.LoadFixLog(d.Dir).MarkGreen(spec.Workspace, link, time.Now())
+	r, ok := d.fixLog().MarkGreen(spec.Workspace, link, time.Now())
 	if !ok {
 		return
 	}

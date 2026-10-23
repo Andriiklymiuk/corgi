@@ -146,6 +146,7 @@ func (d *Daemon) startSessionTracking() {
 	d.rescan()
 	d.syncWindows()
 	d.sampleAccounts(time.Now())
+	d.sampleWork(time.Now())
 	d.flushSessions()
 }
 
@@ -554,6 +555,8 @@ func (d *Daemon) reapSessions(ctx context.Context) {
 				utils.Infof("agent: days ledger: %v\n", err)
 			}
 			d.sampleAccounts(now)
+			d.sampleWork(now)
+			d.weeklySelfCheck(now)
 			d.autoContinue(ctx, now)
 			d.autoCarry(ctx, now)
 			d.checkDrift(now)
