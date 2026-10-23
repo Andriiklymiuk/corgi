@@ -751,3 +751,31 @@ func appendTestEvent(t *testing.T, dir string, e watch.Event) {
 	defer f.Close()
 	_, _ = f.Write(append(line, '\n'))
 }
+
+func TestWatchEnableStoresHowRunsGetTheirDatabases(t *testing.T) {
+	dir, ws := watchFixture(t, nil)
+	wd, _ := os.Getwd()
+	if err := os.Chdir(ws); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(wd)
+	f := agentWatchEnableCmd.Flags()
+	defer func() {
+		_ = f.Set("run-db", "own")
+		f.Lookup("run-db").Changed = false
+	}()
+	_ = f.Set("run-db", "shared")
+	captureStdout(t, func() {
+		if err := agentWatchEnableCmd.RunE(agentWatchEnableCmd, nil); err != nil {
+			t.Fatal(err)
+		}
+	})
+	user, _ := config.LoadUser(agentUserConfigPath(dir))
+	if wc := user.Workspaces["acme-stack"].Watch; wc == nil || wc.RunDB != "shared" {
+		t.Fatalf("a database too big to copy is shared: %+v", wc)
+	}
+	_ = f.Set("run-db", "copy")
+	if err := agentWatchEnableCmd.RunE(agentWatchEnableCmd, nil); err == nil || !strings.Contains(err.Error(), "own, shared or off") {
+		t.Fatalf("an unknown way is refused: %v", err)
+	}
+}
