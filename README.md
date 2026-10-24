@@ -229,6 +229,40 @@ corgi mcp --http :8765 --tunnel  # remote: a bearer-token-protected public URL
 
 More: [agents & scripting](docs/agents.md) · [MCP server](docs/mcp.md) · [planning from your tracker](docs/tracker.md).
 
+## From a sentence to a page everyone can mark up
+
+The software factory idea, in corgi's words: you say what you want, the agent writes the page, people argue on the page, the agent keeps it true, and when it reads right the same page becomes the board and the build. One command, one page, no jargon:
+
+```bash
+corgi idea new "a scheduling app for a coffee shop"
+```
+
+The agent (Claude Code or Codex, whichever the workspace runs) names the project, tags it, writes the page - what it is, who uses it, screens, data, a concrete infra choice, open questions, the first tasks - puts those tasks on the board under the page's name and tags, and leaves two or three **proposals** on the page as comments: an alternative stack, a feature to cut, a risk it saw.
+
+```text
+corgi idea new "…"
+   │
+   ▼
+the page (markdown, on your disk)  ◄──  highlight words, comment, attach a sketch
+   ├─ in the browser     corgi idea open brewshift   (same port as the dashboard; the link is shareable)
+   ├─ in VS Code         preview beside the code, comment threads in the editor
+   ├─ on the phone       the Ideas sheet
+   └─ the agent answers every comment, amends the page where asked, keeps the Tasks list in step
+                                                            │
+                                               Build it  ◄─┘  tasks on the board → a plan → the daemon builds, a worktree and a PR per task
+```
+
+- **Highlight to comment.** Select words on the page and say what should change. The comment remembers the words (with a little context either side), so it stays put when the page is rewritten.
+- **Statuses, kept honest.** A comment is *open* until the agent reads it; *answered* when it replied; *fixed* when it changed the page for it (the reply says what and where); *resolved* when you close it. Reopen any time; the agent takes another look.
+- **Proposals.** The agent's own suggestions sit in the thread as proposals. *Accept* and it does the work on the page; *dismiss* and it is gone.
+- **Files and links.** Attach a screenshot, a sketch, a competitor's link; they ride with the comment and the agent sees them.
+- **Live, everywhere.** The browser, VS Code and the phone follow the page as it changes - a comment from one shows on the others within a second, the agent's answer too.
+- **Shareable.** The browser link carries a key: anyone you send it to reads and comments, no login. `corgi idea share <slug> --off` closes it, `--rotate` gives it a new key. Building needs the dashboard (`corgi agent dashboard`) or the terminal.
+- **It rings.** Every comment, answer and page change rings on the desktop and the notifyUrl - Telegram for most. `corgi idea notify off` keeps idea pages quiet.
+- **Build it.** The button at the end of the page (or `corgi idea build <slug> --workspace api`) hands the page to the agents: a planner cuts it into tasks on the board, a plan works through them in order, the daemon starts the first - the same unattended run a ticket gets, a worktree and a pull request per task. The page says what happened.
+
+Everything is files: `idea.md` (edit it in any editor; the browser follows) and `comments.json` with every comment, reply and answer, in the agent directory (`corgi idea path <slug>`). The terminal does it all too: `corgi idea comment brewshift "use postgres" --quote "sqlite"`, `corgi idea resolve brewshift 3`, `corgi idea answer brewshift` for one pass of the agent by hand, `corgi idea watch` to keep answering on a machine without the dashboard.
+
 ## Code from your phone
 
 Run `corgi agent up` on your laptop and scan the QR once. Your phone now has a
@@ -580,6 +614,7 @@ Beyond the ones above, these are the ones that come up in a normal week:
 | `corgi mc` | one pane: each service's run state with its branch, PR and CI |
 | `corgi open web` | opens the localhost URLs in the browser |
 | `corgi doctor --fix` | missing tools, busy ports, Docker not running |
+| `corgi idea new "…"` · `idea open\|comment\|build` | one page per thing to build: written by the agent, commented by anyone with the link, answered live, built from ([above](#from-a-sentence-to-a-page-everyone-can-mark-up)) |
 | `corgi memory list` | decisions and incidents the team commits next to the code |
 
 38 database drivers ([list](docs/databases.md)), and all of this behaves the same whether the
