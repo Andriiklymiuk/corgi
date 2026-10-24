@@ -334,8 +334,16 @@ func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 	}
 	mux.Handle("/mcp", mcpEndpointGuard(origins, bearerAuthWithOAuth(token, httpSrv, deviceStore, oa)))
 
+	// An idea page is open to whoever has its link (the share key rides in
+	// it), on this same port; building from it still needs the dashboard.
+	// This process answers the comments on its own as they arrive.
+	mux.Handle("/idea/", ideaOpenHandler(token, deviceStore))
+	ideaAutoAnswerHere = true
+
 	if token != "" || deviceStore != "" {
 		mux.HandleFunc("/app", launcherPageHandler)
+		mux.Handle("/launch/ideas", launchAuth(token, http.HandlerFunc(launchIdeasHandler), deviceStore))
+		mux.Handle("/launch/idea", launchAuth(token, http.HandlerFunc(launchIdeaHandler), deviceStore))
 		mux.Handle("/launch/workspaces", launchAuth(token, http.HandlerFunc(launchWorkspacesHandler), deviceStore))
 		mux.Handle("/launch/start", launchAuth(token, http.HandlerFunc(launchStartHandler), deviceStore))
 		mux.Handle("/launch/stop", launchAuth(token, http.HandlerFunc(launchStopHandler), deviceStore))
@@ -433,6 +441,9 @@ func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	if dir, err := agentDir(); err == nil {
+		go ideaAnswerLoop(ctx, dir, 5*time.Second)
+	}
 	var tunnelDone <-chan struct{}
 	if opts.tunnel {
 		tunnelDone = startMCPTunnel(ctx, addr, token, opts, origins, oa)

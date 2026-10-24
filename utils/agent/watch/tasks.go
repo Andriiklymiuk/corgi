@@ -19,12 +19,16 @@ const KindTask Kind = "task"
 var TaskColumns = []string{"Todo", "Doing", "Review", "Done", "Canceled"}
 
 type Task struct {
-	ID        int       `json:"id"`
-	Title     string    `json:"title"`
-	Body      string    `json:"body,omitempty"`
-	Workspace string    `json:"workspace,omitempty"`
-	State     string    `json:"state"`
-	By        string    `json:"by,omitempty"`
+	ID        int    `json:"id"`
+	Title     string `json:"title"`
+	Body      string `json:"body,omitempty"`
+	Workspace string `json:"workspace,omitempty"`
+	State     string `json:"state"`
+	By        string `json:"by,omitempty"`
+	// Idea is the idea page (its slug) this task was cut from; Tags are the
+	// page's tags, so the board can group what belongs together.
+	Idea      string    `json:"idea,omitempty"`
+	Tags      []string  `json:"tags,omitempty"`
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }
@@ -35,7 +39,34 @@ func (t Task) Key() string { return fmt.Sprintf("task:%d", t.ID) }
 
 func (t Task) Event() Event {
 	return Event{Key: t.Key(), Source: "task", Kind: KindTask, Workspace: t.Workspace, Ref: t.Ref(),
-		Title: t.Title, Body: t.Body, State: t.State, Mine: true, At: t.UpdatedAt}
+		Title: t.Title, Body: t.Body, State: t.State, Mine: true, At: t.UpdatedAt, Labels: t.Tags}
+}
+
+// Tag files a task under an idea page with its tags.
+func (l *TaskLog) Tag(arg, idea string, tags []string, now time.Time) (Task, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	id := TaskID(arg)
+	for i := range l.Tasks {
+		if l.Tasks[i].ID == id {
+			l.Tasks[i].Idea, l.Tasks[i].Tags, l.Tasks[i].UpdatedAt = idea, tags, now
+			return l.Tasks[i], l.save()
+		}
+	}
+	return Task{}, fmt.Errorf("no task %s", arg)
+}
+
+// ByIdea is every task cut from that idea page, oldest first.
+func (l *TaskLog) ByIdea(idea string) []Task {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	var out []Task
+	for _, t := range l.Tasks {
+		if t.Idea == idea {
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
 type TaskLog struct {

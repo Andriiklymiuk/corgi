@@ -18,12 +18,14 @@ type streamFrame struct {
 	At   time.Time `json:"at"`
 }
 
-var allFeeds = []string{"board", "inbox", "kanban", "workspaces", "bots"}
+var allFeeds = []string{"board", "inbox", "kanban", "workspaces", "bots", "ideas"}
 
 var streamFiles = map[string][]string{
 	"sessions.json": {"board", "kanban"},
 	"status.json":   {"board", "workspaces"},
 	"bots.json":     {"bots"},
+	// every change to an idea page or its comments touches this marker
+	"ideas/changed": {"ideas"},
 }
 
 var watchFiles = []string{"events.jsonl", "ignored.json", "state.json", "states.json", "fixes.json", "picks.json", "pulls.json", "handed.json", "tasks.json", "board.json"}
