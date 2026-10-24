@@ -11,6 +11,11 @@ A wrong reading of the request is the most expensive token spend there is: every
 built on it is thrown away. A question that grep could have answered is the second most
 expensive. Align spends the minimum to rule out the first without paying the second.
 
+When the request would need more than five forks, or several people have to agree,
+align is the wrong tool: say so in one line and offer a page -
+`corgi idea new "<the request>" --type spec` - where the forks become the open
+questions and the people comment (the `idea` skill).
+
 ## Step 0 - look before asking
 
 Read the request, then the code it points at (`grep`, `rg`, `git log -5`, the compose

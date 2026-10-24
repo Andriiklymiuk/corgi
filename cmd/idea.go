@@ -211,31 +211,85 @@ func cleanTags(tags []string) []string {
 
 // anchorFor turns a proposal's quote into an anchor on the page, or nil
 // when the words are not on it.
-func anchorFor(doc, quote string) *idea.Anchor {
+func anchorFor(doc, quote string) *idea.Anchor { return anchorAt(doc, quote, "", "") }
+
+// anchorAt turns quoted words into an anchor on the page. When the words
+// are on it more than once, the context a client sent (what came before
+// and after where the person highlighted) picks the right one; the anchor
+// then carries the page's own context around that spot. Words not on the
+// page give nil.
+func anchorAt(doc, quote, prefix, suffix string) *idea.Anchor {
 	quote = strings.TrimSpace(quote)
 	if quote == "" {
 		return nil
 	}
-	at := strings.Index(doc, quote)
-	if at < 0 {
+	best, bestScore := -1, -1
+	for at := strings.Index(doc, quote); at >= 0; {
+		score := 0
+		if p := tail(prefix, 20); p != "" {
+			if strings.HasSuffix(doc[:at], p) {
+				score += 2
+			} else if strings.Contains(doc[max(0, at-40):at], tail(p, 8)) {
+				score++
+			}
+		}
+		if s := head(suffix, 20); s != "" {
+			if strings.HasPrefix(doc[at+len(quote):], s) {
+				score += 2
+			} else if strings.Contains(doc[at+len(quote):min(len(doc), at+len(quote)+40)], head(s, 8)) {
+				score++
+			}
+		}
+		if score > bestScore {
+			best, bestScore = at, score
+		}
+		if bestScore >= 4 {
+			break
+		}
+		next := strings.Index(doc[at+1:], quote)
+		if next < 0 {
+			break
+		}
+		at += 1 + next
+	}
+	if best < 0 {
 		return nil
 	}
-	a := &idea.Anchor{Quote: quote, Heading: idea.HeadingFor(doc, quote)}
-	if at > 0 {
-		from := at - 40
-		if from < 0 {
-			from = 0
-		}
-		a.Prefix = doc[from:at]
-	}
-	if end := at + len(quote); end < len(doc) {
-		to := end + 40
-		if to > len(doc) {
-			to = len(doc)
-		}
-		a.Suffix = doc[end:to]
+	a := &idea.Anchor{Quote: quote, Heading: idea.HeadingAt(doc, best)}
+	a.Prefix = doc[max(0, best-40):best]
+	if end := best + len(quote); end < len(doc) {
+		a.Suffix = doc[end:min(len(doc), end+40)]
 	}
 	return a
+}
+
+func tail(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[len(s)-n:]
+}
+
+func head(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n]
+}
+
+// anchorOrGiven is the page's anchor for the words, or, when they are not
+// on the page (an older copy, a ticket's title), the client's own.
+func anchorOrGiven(doc, quote, prefix, suffix, heading string) *idea.Anchor {
+	if strings.TrimSpace(quote) == "" {
+		return nil
+	}
+	if a := anchorAt(doc, quote, prefix, suffix); a != nil {
+		if heading != "" && a.Heading == "" {
+			a.Heading = heading
+		}
+		return a
+	}
+	return &idea.Anchor{Quote: strings.TrimSpace(quote), Prefix: prefix, Suffix: suffix, Heading: heading}
 }
 
 func ideaWorkspaceRoot(ws string) string {
@@ -971,6 +1025,9 @@ when corgi idea watch is on; corgi idea answer <slug> does one pass now.`,
 		dir := mustAgentDir()
 		slug, text := args[0], strings.TrimSpace(strings.Join(args[1:], " "))
 		quote, _ := cmd.Flags().GetString("quote")
+		prefix, _ := cmd.Flags().GetString("prefix")
+		suffix, _ := cmd.Flags().GetString("suffix")
+		heading, _ := cmd.Flags().GetString("heading")
 		by, _ := cmd.Flags().GetString("by")
 		links, _ := cmd.Flags().GetStringArray("link")
 		files, _ := cmd.Flags().GetStringArray("file")
@@ -1009,13 +1066,7 @@ when corgi idea watch is on; corgi idea answer <slug> does one pass now.`,
 				result = r
 				return err
 			}
-			var anchor *idea.Anchor
-			if strings.TrimSpace(quote) != "" {
-				anchor = anchorFor(id.Doc, quote)
-				if anchor == nil {
-					anchor = &idea.Anchor{Quote: strings.TrimSpace(quote)}
-				}
-			}
+			anchor := anchorOrGiven(id.Doc, quote, prefix, suffix, heading)
 			c, err := id.AddComment(idea.KindComment, by, text, anchor, attached, links, now)
 			result = c
 			return err
@@ -1274,6 +1325,83 @@ Confluence gets the page itself. The credentials are the watch's
 	},
 }
 
+// ideaChanges is what a person may change about a page without rewriting
+// it; "" leaves a field alone.
+type ideaChanges struct {
+	Name, Summary, Workspace, Type, Auto string
+	Tags                                 *[]string
+}
+
+// setIdea applies the changes, checking each.
+func setIdea(dir, slug string, ch ideaChanges) (*idea.Idea, error) {
+	if ch.Workspace != "" {
+		if _, err := workspaceRoot(ch.Workspace); err != nil {
+			return nil, err
+		}
+	}
+	if ch.Type != "" && !idea.ValidType(ch.Type) {
+		return nil, fmt.Errorf("--type is one of %s", strings.Join(idea.Types, ", "))
+	}
+	switch strings.ToLower(ch.Auto) {
+	case "", "on", "off", "true", "false":
+	default:
+		return nil, fmt.Errorf("--auto is on or off")
+	}
+	return idea.Update(dir, slug, func(id *idea.Idea) error {
+		if ch.Name != "" {
+			id.Meta.Name = clipTitle(strings.TrimSpace(ch.Name), 60)
+		}
+		if ch.Summary != "" {
+			id.Meta.Summary = clipTitle(strings.TrimSpace(ch.Summary), 300)
+		}
+		if ch.Tags != nil {
+			id.Meta.Tags = cleanTags(*ch.Tags)
+		}
+		if ch.Workspace != "" {
+			id.Meta.Workspace = ch.Workspace
+		}
+		if ch.Type != "" {
+			id.Meta.Type = ch.Type
+		}
+		switch strings.ToLower(ch.Auto) {
+		case "on", "true":
+			id.Meta.Auto = true
+		case "off", "false":
+			id.Meta.Auto = false
+		}
+		return nil
+	})
+}
+
+var ideaSetCmd = &cobra.Command{
+	Use:   "set <slug> [--name …] [--tags a,b] [--workspace X] [--type spec] [--auto off]",
+	Short: "Change what the page is called, tagged, typed, where it builds, whether the agent answers on its own",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		dir := mustAgentDir()
+		ch := ideaChanges{}
+		ch.Name, _ = cmd.Flags().GetString("name")
+		ch.Summary, _ = cmd.Flags().GetString("summary")
+		ch.Workspace, _ = cmd.Flags().GetString("workspace")
+		ch.Type, _ = cmd.Flags().GetString("type")
+		ch.Auto, _ = cmd.Flags().GetString("auto")
+		if cmd.Flags().Changed("tags") {
+			raw, _ := cmd.Flags().GetString("tags")
+			tags := strings.Split(raw, ",")
+			ch.Tags = &tags
+		}
+		id, err := setIdea(dir, args[0], ch)
+		if err != nil {
+			exitWithError("idea", err, 2)
+		}
+		if utils.JSONOutput {
+			utils.PrintJSON(map[string]any{"idea": id.Meta})
+			return
+		}
+		fmt.Printf("%s: %s (%s) · tags %s · workspace %s · auto %v\n", id.Meta.Slug, firstNonEmpty(id.Meta.Name, id.Meta.Title), id.Meta.Type, strings.Join(id.Meta.Tags, ","), firstNonEmpty(id.Meta.Workspace, "-"), id.Meta.Auto)
+	},
+}
+
 var ideaShareCmd = &cobra.Command{
 	Use:   "share <slug> [--off] [--rotate]",
 	Short: "The open link (anyone with it reads and comments); --off closes the page, --rotate gives it a new key",
@@ -1372,6 +1500,15 @@ func init() {
 	ideaSendCmd.Flags().String("space", "", "the Confluence space key")
 	ideaOpenCmd.Flags().Bool("print", false, "print the link instead of opening it")
 	ideaCommentCmd.Flags().String("quote", "", "the words on the page the comment is about")
+	ideaCommentCmd.Flags().String("prefix", "", "what comes just before the words, when they are on the page more than once")
+	ideaCommentCmd.Flags().String("suffix", "", "what comes just after them")
+	ideaCommentCmd.Flags().String("heading", "", "the section the words are under")
+	ideaSetCmd.Flags().String("name", "", "the project's name")
+	ideaSetCmd.Flags().String("summary", "", "the one-line summary")
+	ideaSetCmd.Flags().String("tags", "", "comma-separated tags (replaces them)")
+	ideaSetCmd.Flags().String("workspace", "", "the workspace it belongs to and builds in")
+	ideaSetCmd.Flags().String("type", "", "idea, spec, hld or rfc")
+	ideaSetCmd.Flags().String("auto", "", "on or off: whether the agent answers comments on its own")
 	ideaCommentCmd.Flags().String("by", "", "your name on the comment (default: $USER)")
 	ideaCommentCmd.Flags().StringArray("link", nil, "a link to attach (repeatable)")
 	ideaCommentCmd.Flags().StringArray("file", nil, "a file to attach (repeatable)")
@@ -1392,7 +1529,7 @@ func init() {
 	ideaCmd.AddCommand(ideaNewCmd, ideaListCmd, ideaOpenCmd, ideaPathCmd, ideaShowCmd, ideaCommentCmd,
 		ideaStatusCommand("resolve", "Close a comment: it is settled", idea.StatusResolved),
 		ideaStatusCommand("reopen", "Open a comment again: the agent takes another look", idea.StatusOpen),
-		ideaAnswerCmd, ideaWatchCmd, ideaBuildCmd, ideaSendCmd, ideaTicketsCmd, ideaShareCmd, ideaNotifyCmd, ideaRmCmd)
+		ideaAnswerCmd, ideaWatchCmd, ideaBuildCmd, ideaSendCmd, ideaTicketsCmd, ideaSetCmd, ideaShareCmd, ideaNotifyCmd, ideaRmCmd)
 	rootCmd.AddCommand(ideaCmd)
 }
 

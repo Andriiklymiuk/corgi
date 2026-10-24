@@ -12,6 +12,19 @@ Work items - tracker issues (Linear/Jira) **or** a free-text feature - → spec 
 loop until clean (Phase 5.5) → grouped report. Services, dirs, dependency order: all from `corgi-compose.yml`. Never
 hard-code.
 
+## When the work is an idea page
+
+A request that names a page - `/idea/<slug>`, a slug, "the spec on the page", a
+`corgi idea …` link - was already specified and argued over there. Read it with
+`corgi idea show <slug> --json`: `markdown` is the spec, `tickets` are the stories
+(one branch each; `after` is the order; a ticket with a `ref` is already a board task
+or a tracker ticket - use that key), and `comments` are the decisions, so Phase 2's
+sign-off is already given when no comment is `open`. Work the tickets as stories.
+Report progress on the page, not only in the chat:
+`corgi idea comment <slug> "<what shipped, the PR link>" --as-agent` - and when a
+story changed the plan, keep the split true with `corgi_idea_edit`. The `idea` skill
+has the rest.
+
 ## Speed model
 
 **One blocking gate** on the adjustment/bug fast path; complex stories add

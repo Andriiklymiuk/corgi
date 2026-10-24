@@ -752,3 +752,82 @@ func TestTheLoopClearsAnAnsweringFlagLeftByADeadProcess(t *testing.T) {
 		t.Fatal("the stale flag is cleared at start")
 	}
 }
+
+func TestAnAnchorLandsWhereTheContextSays(t *testing.T) {
+	doc := "# T\n\n## A\n\nHere the owner sets the shifts. Fine.\n\n## B\n\nAgain the owner sets the shifts, later.\n"
+	first := anchorAt(doc, "the owner sets the shifts", "", "")
+	if first == nil || first.Heading != "A" || !strings.HasSuffix(first.Prefix, "Here ") {
+		t.Fatalf("no context: the first: %+v", first)
+	}
+	second := anchorAt(doc, "the owner sets the shifts", "Again ", ", later")
+	if second == nil || second.Heading != "B" || !strings.HasPrefix(second.Suffix, ", later") {
+		t.Fatalf("with context: the second: %+v", second)
+	}
+	loose := anchorAt(doc, "the owner sets the shifts", "gain", "lat")
+	if loose == nil || loose.Heading != "B" {
+		t.Fatalf("partial context still picks the second: %+v", loose)
+	}
+	if anchorAt(doc, "nowhere", "x", "y") != nil {
+		t.Fatal("not on the page")
+	}
+	given := anchorOrGiven(doc, "Scaffold the app", "", "", "Tickets")
+	if given == nil || given.Heading != "Tickets" || given.Prefix != "" {
+		t.Fatalf("words off the page keep the client's anchor: %+v", given)
+	}
+	if anchorOrGiven(doc, " ", "", "", "") != nil {
+		t.Fatal("no words, no anchor")
+	}
+	if a := anchorOrGiven(doc, "Fine.", "", "", "Elsewhere"); a.Heading != "A" {
+		t.Fatalf("the page's heading wins when found: %+v", a)
+	}
+}
+
+func TestSetChangesWhatAPageIsCalled(t *testing.T) {
+	dir := phoneBoard(t, false)
+	var calls []string
+	fakeWriter(t, &calls)
+	quietIdeaNotify(t)
+	reg := &workspace.Registry{}
+	reg.Upsert(workspace.Workspace{ID: "api", AbsPath: t.TempDir(), Status: workspace.StatusOK})
+	_ = workspace.Save(agentRegistryPath(dir), reg)
+	id, _, err := newIdea(dir, ideaRequest{Text: "shifts", Model: "sonnet"}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	tags := []string{"Rota", "coffee", "rota"}
+	got, err := setIdea(dir, id.Meta.Slug, ideaChanges{Name: "Rota", Summary: "Shifts, swaps.", Tags: &tags, Workspace: "api", Type: idea.TypeSpec, Auto: "off"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Meta.Name != "Rota" || got.Meta.Summary != "Shifts, swaps." || strings.Join(got.Meta.Tags, ",") != "rota,coffee" || got.Meta.Workspace != "api" || got.Meta.Type != idea.TypeSpec || got.Meta.Auto {
+		t.Fatalf("set: %+v", got.Meta)
+	}
+	if _, err := setIdea(dir, id.Meta.Slug, ideaChanges{Workspace: "nope"}); err == nil {
+		t.Fatal("unknown workspace")
+	}
+	if _, err := setIdea(dir, id.Meta.Slug, ideaChanges{Type: "poem"}); err == nil {
+		t.Fatal("unknown type")
+	}
+	if _, err := setIdea(dir, id.Meta.Slug, ideaChanges{Auto: "maybe"}); err == nil {
+		t.Fatal("auto is on or off")
+	}
+	if _, err := setIdea(dir, "nope", ideaChanges{Name: "x"}); err == nil {
+		t.Fatal("no such page")
+	}
+	// Over HTTP, the dashboard may; a link holder may not.
+	open := ideaOpenHandler("secret", "")
+	if rec := post(open, "/idea/"+id.Meta.Slug+"/set?k="+got.Meta.Key, `{"name":"X"}`); rec.Code != 403 {
+		t.Fatalf("a key may not rename: %d", rec.Code)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/idea/"+id.Meta.Slug+"/set", strings.NewReader(`{"name":"BrewShift","tags":["a","b"],"auto":true}`))
+	req.Header.Set("Authorization", "Bearer secret")
+	rec := httptest.NewRecorder()
+	open(rec, req)
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), `"name":"BrewShift"`) || !strings.Contains(rec.Body.String(), `"auto":true`) {
+		t.Fatalf("the owner renames: %d %s", rec.Code, rec.Body)
+	}
+	after, _ := idea.Load(dir, id.Meta.Slug)
+	if strings.Join(after.Meta.Tags, ",") != "a,b" || !after.Meta.Auto || after.Meta.Workspace != "api" {
+		t.Fatalf("fields left out stay: %+v", after.Meta)
+	}
+}
