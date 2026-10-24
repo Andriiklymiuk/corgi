@@ -426,6 +426,7 @@ const ideaPageHTML = `<!doctype html>
       if (x.ref) { const ref = el('span', 'ref'); if (x.url) { const a = el('a', '', x.ref); a.href = x.url; a.target = '_blank'; a.rel = 'noopener'; ref.appendChild(a); } else ref.textContent = x.ref; row.appendChild(ref); }
       if (x.state) row.appendChild(el('span', 'pill ' + x.state, x.state));
       if ((x.after || []).length) row.appendChild(el('span', 'after', 'after ' + x.after.join(', ')));
+      const cb = el('button', 'btn small ghost', '+ comment'); cb.title = 'comment on this ticket'; cb.onclick = ev => { ev.stopPropagation(); openCompose({ quote: x.title, prefix: '', suffix: '', heading: 'Tickets' }); }; row.appendChild(cb);
       d.appendChild(row); if (x.body) d.appendChild(el('div', 'body', x.body)); tk.appendChild(d);
     }
     const sent = $('#sentlist'); sent.innerHTML = '';

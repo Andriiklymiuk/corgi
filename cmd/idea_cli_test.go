@@ -478,6 +478,17 @@ func TestTheIdeaMCPToolsDoTheSameFromASession(t *testing.T) {
 	if rows := out["ideas"].([]any); len(rows) != 1 || rows[0].(map[string]any)["status"] != "building" {
 		t.Fatalf("list after: %v", out)
 	}
+	out, _ = call("corgi_idea_set", map[string]any{"slug": "brewshift", "name": "Rota", "tags": []any{"rota", "x"}, "auto": false, "type": "rfc"})
+	if m := out["idea"].(map[string]any); m["name"] != "Rota" || m["auto"] != false || m["type"] != "rfc" {
+		t.Fatalf("set: %v", out)
+	}
+	if _, msg := call("corgi_idea_set", map[string]any{"slug": "brewshift", "workspace": "nope"}); msg == "" {
+		t.Fatal("set with an unknown workspace")
+	}
+	out, _ = call("corgi_idea_comment", map[string]any{"slug": "brewshift", "text": "here", "quote": "the app", "prefix": "Scaffold ", "heading": "Tickets"})
+	if out["comment"].(map[string]any)["anchor"] == nil {
+		t.Fatalf("comment with context: %v", out)
+	}
 }
 
 // lockedRecorder is a response recorder a test may read while a handler
@@ -797,5 +808,39 @@ func TestPrintInRunsTheHarnessInTheWorkspace(t *testing.T) {
 	t.Setenv("FAIL", "1")
 	if _, err := printIn(context.Background(), "", "", "", "x"); err == nil || !strings.Contains(err.Error(), "boom") {
 		t.Fatalf("the failure carries stderr: %v", err)
+	}
+}
+
+func TestTheCommentFlagsCarryContextAndSetRenames(t *testing.T) {
+	dir := phoneBoard(t, false)
+	var calls []string
+	fakeWriter(t, &calls)
+	quietIdeaNotify(t)
+	reg := &workspace.Registry{}
+	reg.Upsert(workspace.Workspace{ID: "api", AbsPath: t.TempDir(), Status: workspace.StatusOK})
+	_ = workspace.Save(agentRegistryPath(dir), reg)
+	if _, code := runIdea(t, "new", "shifts"); code != 0 {
+		t.Fatal("new")
+	}
+	twice := strings.Replace(fakePage, "## Tasks", "## More\n\nShift scheduling for one coffee shop, again.\n\n## Tasks", 1)
+	_, _ = idea.Update(dir, "brewshift", func(id *idea.Idea) error { return id.SetDoc(twice, time.Now()) })
+	out, code := runIdea(t, "comment", "brewshift", "--quote", "Shift scheduling for one coffee shop", "--prefix", "## More\n\n", "--suffix", ", again", "--json", "--", "- the second one")
+	if code != 0 {
+		t.Fatalf("comment: %d %s", code, out)
+	}
+	c := ideaJSONOut(t, out)["comment"].(map[string]any)
+	if c["text"] != "- the second one" || c["anchor"].(map[string]any)["heading"] != "More" {
+		t.Fatalf("the words that start with a dash, anchored by context: %v", c)
+	}
+	out, code = runIdea(t, "set", "brewshift", "--name", "Rota", "--tags", "rota,coffee", "--workspace", "api", "--type", "spec", "--auto", "off")
+	if code != 0 || !strings.Contains(out, "brewshift: Rota (spec) · tags rota,coffee · workspace api · auto false") {
+		t.Fatalf("set: %d %s", code, out)
+	}
+	out, code = runIdea(t, "set", "brewshift", "--summary", "Shifts.", "--json")
+	if code != 0 || ideaJSONOut(t, out)["idea"].(map[string]any)["summary"] != "Shifts." {
+		t.Fatalf("set json: %d %s", code, out)
+	}
+	if _, code := runIdea(t, "set", "brewshift", "--type", "poem"); code != 2 {
+		t.Fatalf("bad type: %d", code)
 	}
 }

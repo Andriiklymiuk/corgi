@@ -75,6 +75,9 @@ func registerIdeaMCPTools(s *server.MCPServer) {
 		slugOpt,
 		mcp.WithString("text", mcp.Required(), mcp.Description("The comment")),
 		mcp.WithString("quote", mcp.Description("The words on the page it is about")),
+		mcp.WithString("prefix", mcp.Description("What comes just before the words, when they are on the page more than once")),
+		mcp.WithString("suffix", mcp.Description("What comes just after them")),
+		mcp.WithString("heading", mcp.Description("The section they are under")),
 		mcp.WithString("by", mcp.Description("Who says it (default: mcp); \"agent\" for the agent's own reply")),
 		mcp.WithNumber("replyTo", mcp.Description("Reply under this comment id instead of starting one")),
 		mcp.WithBoolean("changed", mcp.Description("With by agent and replyTo: the page was changed for this comment")),
@@ -100,9 +103,12 @@ func registerIdeaMCPTools(s *server.MCPServer) {
 			}
 			var anchor *idea.Anchor
 			if q := strings.TrimSpace(r.GetString("quote", "")); q != "" {
-				anchor = anchorFor(id.Doc, q)
+				anchor = anchorAt(id.Doc, q, r.GetString("prefix", ""), r.GetString("suffix", ""))
 				if anchor == nil {
 					return fmt.Errorf("the quote is not on the page verbatim: %q", clipTitle(q, 80))
+				}
+				if h := strings.TrimSpace(r.GetString("heading", "")); h != "" && anchor.Heading == "" {
+					anchor.Heading = h
 				}
 			}
 			c, err := id.AddComment(idea.KindComment, by, r.GetString("text", ""), anchor, nil, nil, now)
@@ -197,6 +203,40 @@ func registerIdeaMCPTools(s *server.MCPServer) {
 			return nil, err
 		}
 		return map[string]any{"idea": id.Meta, "tickets": id.Meta.Tickets}, nil
+	}))
+
+	s.AddTool(newCorgiTool("corgi_idea_set",
+		mcp.WithDescription("Change what a page is called, its summary, tags, type, the workspace it belongs to and builds in, and whether the agent answers comments on its own. Fields left out stay as they are."),
+		slugOpt,
+		mcp.WithString("name", mcp.Description("The project's name")),
+		mcp.WithString("summary", mcp.Description("The one-line summary")),
+		mcp.WithArray("tags", mcp.Description("The tags (replaces them)"), mcp.Items(map[string]any{"type": "string"})),
+		mcp.WithString("workspace", mcp.Description("Workspace id")),
+		mcp.WithString("type", mcp.Description("idea, spec, hld or rfc")),
+		mcp.WithBoolean("auto", mcp.Description("Whether the agent answers on its own")),
+	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
+		dir, err := agentDir()
+		if err != nil {
+			return nil, err
+		}
+		ch := ideaChanges{Name: r.GetString("name", ""), Summary: r.GetString("summary", ""), Workspace: r.GetString("workspace", ""), Type: r.GetString("type", "")}
+		if raw, ok := r.GetArguments()["auto"].(bool); ok {
+			ch.Auto = map[bool]string{true: "on", false: "off"}[raw]
+		}
+		if raw, ok := r.GetArguments()["tags"].([]any); ok {
+			var tags []string
+			for _, t := range raw {
+				if s, ok := t.(string); ok {
+					tags = append(tags, s)
+				}
+			}
+			ch.Tags = &tags
+		}
+		id, err := setIdea(dir, r.GetString("slug", ""), ch)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"idea": id.Meta}, nil
 	}))
 
 	s.AddTool(newCorgiTool("corgi_idea_build",

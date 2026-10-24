@@ -62,6 +62,9 @@ type ideaAction struct {
 	// the Confluence space.
 	To    string `json:"to"`
 	Space string `json:"space"`
+	// set: Name, Summary, Tags, Workspace, Type, Auto.
+	Summary string   `json:"summary"`
+	Tags    []string `json:"tags"`
 }
 
 const ideaBodyLimit = 12 << 20
@@ -203,7 +206,7 @@ func ideaOpenHandler(token, deviceStore string) http.HandlerFunc {
 			ideaStream(w, r, dir, id)
 		case "file":
 			ideaFile(w, r, dir, id, name)
-		case "comment", "reply", "status", "build", "edit", "auto", "send":
+		case "comment", "reply", "status", "build", "edit", "auto", "send", "set":
 			if r.Method != http.MethodPost {
 				writeLaunchError(w, http.StatusMethodNotAllowed, "POST to "+what)
 				return
@@ -274,13 +277,7 @@ func ideaPerform(dir string, a ideaAction, trusted bool, defaultBy string) (any,
 	case "comment":
 		var c idea.Comment
 		id, err := idea.Update(dir, a.Slug, func(id *idea.Idea) error {
-			var anchor *idea.Anchor
-			if strings.TrimSpace(a.Quote) != "" {
-				anchor = &idea.Anchor{Quote: a.Quote, Prefix: a.Prefix, Suffix: a.Suffix, Heading: a.Heading}
-				if anchor.Heading == "" {
-					anchor.Heading = idea.HeadingFor(id.Doc, a.Quote)
-				}
-			}
+			anchor := anchorOrGiven(id.Doc, a.Quote, a.Prefix, a.Suffix, a.Heading)
 			var err error
 			c, err = id.AddComment(idea.KindComment, by, a.Text, anchor, ownFiles(id, a.Files), a.Links, now)
 			return err
@@ -361,6 +358,22 @@ func ideaPerform(dir string, a ideaAction, trusted bool, defaultBy string) (any,
 			return nil, ideaHTTPStatus(err), err
 		}
 		return ideaDocument(dir, id, true, true), 0, nil
+	case "set":
+		if !trusted {
+			return nil, http.StatusForbidden, fmt.Errorf("only the dashboard changes that")
+		}
+		ch := ideaChanges{Name: a.Name, Summary: a.Summary, Workspace: a.Workspace, Type: a.Type}
+		if a.Auto != nil {
+			ch.Auto = map[bool]string{true: "on", false: "off"}[*a.Auto]
+		}
+		if a.Tags != nil {
+			ch.Tags = &a.Tags
+		}
+		id, err := setIdea(dir, a.Slug, ch)
+		if err != nil {
+			return nil, ideaHTTPStatus(err), err
+		}
+		return map[string]any{"idea": id.Meta}, 0, nil
 	case "auto":
 		if !trusted {
 			return nil, http.StatusForbidden, fmt.Errorf("only the dashboard sets that")

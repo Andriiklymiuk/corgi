@@ -30,6 +30,14 @@ tool name.**
 - **Plan, don't build** - code → `stories`, ideas → `suggest`.
 - Read `../_shared/conventions.md` first (attribution, `manualRun`, preflight, worktrees).
 
+## When a page fits better
+
+A decompose that is really a spec - a vague epic, "break this down" with no detail
+in the tracker - is better written as a page the team can mark up before tickets
+exist: `corgi idea new "<the epic's words>" --type spec` (the `idea` skill), then
+`corgi idea send <slug> --to linear|jira` makes the epic and its tickets once the
+split reads right. Offer it when the epic has fewer than three lines of description.
+
 ## Phase 0 - Workspace + tracker + forge
 
 - **Workspace + forge** - preflight per `../_shared/conventions.md`; read service→dir +

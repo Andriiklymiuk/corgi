@@ -710,6 +710,14 @@ func HeadingFor(doc, quote string) string {
 	if at < 0 {
 		return ""
 	}
+	return HeadingAt(doc, at)
+}
+
+// HeadingAt is the nearest markdown heading above byte offset at.
+func HeadingAt(doc string, at int) string {
+	if at < 0 || at > len(doc) {
+		return ""
+	}
 	heading := ""
 	for _, line := range strings.Split(doc[:at], "\n") {
 		if strings.HasPrefix(line, "#") {
