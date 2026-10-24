@@ -12,11 +12,13 @@ corgi idea new "<what you want built>" [flags]
 
 ```
       --by string          who asked (default: cli)
+      --from string        a markdown file you already wrote: kept as is; the agent names, tags and splits it
   -h, --help               help for new
       --kind string        run the writer under this agent: claude or codex (default: the workspace's)
       --model string       the writer's model: sonnet (default), opus, haiku; a codex model for a codex workspace
       --no-tasks           write the page only; no tasks on the board yet
       --open               open the page in the browser when the dashboard runs
+      --type string        what kind of page: idea (default), spec, hld, rfc
       --workspace string   the workspace it goes into (default: the one you are in; none is fine)
 ```
 

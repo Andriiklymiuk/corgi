@@ -45,6 +45,12 @@ const (
 	Building = "building"
 	Built    = "built"
 
+	// Page types: what the agent writes, and how it is read.
+	TypeIdea = "idea" // a thing to build from nothing: pitch, users, screens, data, infra
+	TypeSpec = "spec" // a feature in an existing product: goals, stories, flows, changes
+	TypeHLD  = "hld"  // a high-level design: architecture, components, data flow, risks
+	TypeRFC  = "rfc"  // a proposal to decide on: problem, proposal, alternatives, impact
+
 	// Agent is the author name the agent's replies and proposals carry.
 	Agent = "agent"
 
@@ -60,7 +66,31 @@ const (
 )
 
 // Meta is what the page is about, in a form a board or a list can show.
+// Ticket is one piece of the split: how the page becomes work. ID is its
+// place in the list (1-based); After names the ones it waits for. Once on
+// the board or in the tracker, Ref, URL and State say where it stands.
+type Ticket struct {
+	ID    int    `json:"id"`
+	Title string `json:"title"`
+	Body  string `json:"body,omitempty"`
+	After []int  `json:"after,omitempty"`
+	Ref   string `json:"ref,omitempty"`
+	URL   string `json:"url,omitempty"`
+	State string `json:"state,omitempty"`
+}
+
+// Link is something the page was sent to: an epic, a tracker ticket, a
+// Confluence page.
+type Link struct {
+	Kind  string    `json:"kind"`
+	Ref   string    `json:"ref"`
+	URL   string    `json:"url,omitempty"`
+	Title string    `json:"title,omitempty"`
+	At    time.Time `json:"at"`
+}
+
 type Meta struct {
+	Type      string   `json:"type,omitempty"`
 	Slug      string   `json:"slug"`
 	Title     string   `json:"title"`
 	Name      string   `json:"name,omitempty"`
@@ -78,7 +108,11 @@ type Meta struct {
 	// Tasks are the board tasks made from this page, in order.
 	Tasks []int `json:"tasks,omitempty"`
 	// Plan is the plan (P-n) that works through the tasks, once built.
-	Plan      int       `json:"plan,omitempty"`
+	Plan int `json:"plan,omitempty"`
+	// Tickets is the proposed split of the page into work, kept in step by
+	// the agent; Sent is where the page went (an epic, a Confluence page).
+	Tickets   []Ticket  `json:"tickets,omitempty"`
+	Sent      []Link    `json:"sent,omitempty"`
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
 	// Answering is set while the agent is working through open comments.
@@ -148,6 +182,29 @@ func Dir(agentDir, slug string) string { return filepath.Join(Root(agentDir), sl
 
 var slugPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,63}$`)
 
+// Types is every page type, the default first.
+var Types = []string{TypeIdea, TypeSpec, TypeHLD, TypeRFC}
+
+// ValidType says whether t names a page type.
+func ValidType(t string) bool {
+	for _, k := range Types {
+		if k == t {
+			return true
+		}
+	}
+	return false
+}
+
+// FindTicket is the ticket with that id.
+func (m Meta) FindTicket(id int) (Ticket, bool) {
+	for _, t := range m.Tickets {
+		if t.ID == id {
+			return t, true
+		}
+	}
+	return Ticket{}, false
+}
+
 // ValidSlug says whether s can name an idea's directory.
 func ValidSlug(s string) bool { return slugPattern.MatchString(s) }
 
@@ -213,6 +270,12 @@ func Create(agentDir, slug, title, doc string, meta Meta, now time.Time) (*Idea,
 	meta.Title = strings.TrimSpace(title)
 	if meta.Status == "" {
 		meta.Status = Draft
+	}
+	if !ValidType(meta.Type) {
+		meta.Type = TypeIdea
+	}
+	for i := range meta.Tickets {
+		meta.Tickets[i].ID = i + 1
 	}
 	if meta.Key == "" {
 		meta.Key = NewKey()
