@@ -56,6 +56,12 @@ type ideaAction struct {
 	Data      string            `json:"data"`
 	Markdown  string            `json:"markdown"`
 	Auto      *bool             `json:"auto"`
+	// new: Type (the page type; for a file it is the MIME type) and
+	// Markdown (a page already written); send: To (jira, linear,
+	// confluence), Workspace doubles as the project or team key, Space is
+	// the Confluence space.
+	To    string `json:"to"`
+	Space string `json:"space"`
 }
 
 const ideaBodyLimit = 12 << 20
@@ -84,6 +90,9 @@ func ideaDocument(dir string, id *idea.Idea, withHTML bool) map[string]any {
 		"markdown": id.Doc,
 		"comments": id.Comments.Comments,
 		"tasks":    tasks,
+		"tickets":  liveTickets(dir, id.Meta),
+		"sent":     id.Meta.Sent,
+		"send":     ideaSendOptions(dir, id.Meta),
 		"plan":     plan,
 		"counts":   id.Counts(),
 		"open":     id.Open(),
@@ -135,7 +144,23 @@ func ideaOpenHandler(token, deviceStore string) http.HandlerFunc {
 			name = parts[2]
 		}
 		if slug == "" {
-			writeLaunchError(w, http.StatusNotFound, "an idea page is /idea/<slug>")
+			// The menu of every page: a shell for any browser, the list itself
+			// only for the dashboard's own (a share key opens one page, not all).
+			if !strings.Contains(r.Header.Get("Accept"), "json") {
+				w.Header().Set(headerContentType, "text/html; charset=utf-8")
+				_, _ = fmt.Fprint(w, ideaIndexHTML)
+				return
+			}
+			if !ideaTrusted(r, token, deviceStore) {
+				writeLaunchError(w, http.StatusForbidden, "the list of pages is for the dashboard: open it from corgi agent dashboard")
+				return
+			}
+			dir, err := agentDir()
+			if err != nil {
+				writeLaunchError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			writeLaunchJSON(w, map[string]any{"ideas": ideaRows(dir)})
 			return
 		}
 		if what == "" {
@@ -170,7 +195,7 @@ func ideaOpenHandler(token, deviceStore string) http.HandlerFunc {
 			ideaStream(w, r, dir, id)
 		case "file":
 			ideaFile(w, r, dir, id, name)
-		case "comment", "reply", "status", "build", "edit", "auto":
+		case "comment", "reply", "status", "build", "edit", "auto", "send":
 			if r.Method != http.MethodPost {
 				writeLaunchError(w, http.StatusMethodNotAllowed, "POST to "+what)
 				return
@@ -300,6 +325,15 @@ func ideaPerform(dir string, a ideaAction, trusted bool, defaultBy string) (any,
 			return nil, http.StatusBadRequest, err
 		}
 		return map[string]any{"file": att}, 0, nil
+	case "send":
+		if !trusted {
+			return nil, http.StatusForbidden, fmt.Errorf("sending needs the dashboard: open the page from corgi agent dashboard, or run corgi idea send %s", a.Slug)
+		}
+		links, err := sendIdea(dir, a.Slug, a.To, a.Workspace, a.Space)
+		if err != nil {
+			return nil, ideaHTTPStatus(err), err
+		}
+		return map[string]any{"sent": links}, 0, nil
 	case "build":
 		if !trusted {
 			return nil, http.StatusForbidden, fmt.Errorf("building needs the dashboard: open the page from corgi agent dashboard, or run corgi idea build %s", a.Slug)
@@ -509,7 +543,7 @@ func launchIdeaHandler(w http.ResponseWriter, r *http.Request) {
 // minute or more, so the answer is the page once it exists.
 func launchIdeaNew(w http.ResponseWriter, dir string, a ideaAction) {
 	text := strings.TrimSpace(a.Text)
-	if text == "" {
+	if text == "" && strings.TrimSpace(a.Markdown) == "" {
 		writeLaunchError(w, http.StatusBadRequest, "say what to build")
 		return
 	}
@@ -519,7 +553,7 @@ func launchIdeaNew(w http.ResponseWriter, dir string, a ideaAction) {
 			return
 		}
 	}
-	id, tasks, err := newIdea(dir, text, strings.TrimSpace(a.Workspace), ideaModel, firstNonEmpty(strings.TrimSpace(a.By), "phone"), true, time.Now())
+	id, tasks, err := newIdea(dir, ideaRequest{Text: text, Workspace: strings.TrimSpace(a.Workspace), Model: ideaModel, By: firstNonEmpty(strings.TrimSpace(a.By), "phone"), Type: a.Type, From: a.Markdown, Tasks: true}, time.Now())
 	if err != nil {
 		writeLaunchError(w, http.StatusBadGateway, err.Error())
 		return

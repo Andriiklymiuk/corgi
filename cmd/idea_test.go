@@ -25,13 +25,14 @@ func fakeWriter(t *testing.T, calls *[]string) {
 	runIdeaPrint = func(_ context.Context, dir, model, system, prompt string) (string, error) {
 		*calls = append(*calls, system[:30])
 		switch {
-		case strings.Contains(system, "product-minded"):
-			return `{"name":"BrewShift","tags":["Scheduling","coffee","Shift Work","scheduling"],"summary":"Shifts for a coffee shop.","markdown":` + jsonString(fakePage) + `,"tasks":[{"title":"Scaffold the app","body":"Next.js + SQLite."},{"title":"Shift calendar","body":"Week view."}],"proposals":[{"quote":"SQLite on a single VPS","text":"Postgres on Fly would survive a second shop."},{"quote":"not on the page","text":"Add a waitlist."}]}`, nil
-		case strings.Contains(system, "keeps it"):
-			page := strings.Replace(fakePage, "SQLite on a single VPS", "Postgres on Fly", 1)
-			return "Sure:\n" + `{"page":` + jsonString(page) + `,"answers":[{"id":3,"reply":"Switched Infra to Postgres on Fly.","changed":true}],"proposals":[{"quote":"Postgres on Fly","text":"Add pgbouncer in front."}]}`, nil
 		case strings.Contains(system, "staff engineer breaking"):
 			return `{"summary":"Three steps.","tasks":[{"title":"Scaffold","body":"go"},{"title":"Calendar","body":"go","after":[1]},{"title":"PIN login","body":"go","after":[1]}]}`, nil
+		case strings.Contains(system, `"tickets"`) && !strings.Contains(system, `"answers"`):
+			// Every page soul (idea, spec, hld, rfc, import) ends the same way.
+			return `{"name":"BrewShift","tags":["Scheduling","coffee","Shift Work","scheduling"],"summary":"Shifts for a coffee shop.","markdown":` + jsonString(fakePage) + `,"tasks":[{"title":"Scaffold the app","body":"Next.js + SQLite."},{"title":"Shift calendar","body":"Week view."}],"proposals":[{"quote":"SQLite on a single VPS","text":"Postgres on Fly would survive a second shop."},{"quote":"not on the page","text":"Add a waitlist."}]}`, nil
+		case strings.Contains(system, "the engineer who wrote"):
+			page := strings.Replace(fakePage, "SQLite on a single VPS", "Postgres on Fly", 1)
+			return "Sure:\n" + `{"page":` + jsonString(page) + `,"answers":[{"id":3,"reply":"Switched Infra to Postgres on Fly.","changed":true}],"proposals":[{"quote":"Postgres on Fly","text":"Add pgbouncer in front."}]}`, nil
 		}
 		return "", nil
 	}
@@ -54,7 +55,7 @@ func TestANewIdeaIsNamedTaggedTaskedAndProposedOn(t *testing.T) {
 	var calls []string
 	fakeWriter(t, &calls)
 	rang := quietIdeaNotify(t)
-	id, tasks, err := newIdea(dir, "a scheduling app for a coffee shop", "", "sonnet", "cli", true, time.Now())
+	id, tasks, err := newIdea(dir, ideaRequest{Text: "a scheduling app for a coffee shop", Workspace: "", Model: "sonnet", By: "cli", Tasks: true}, time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,6 +67,9 @@ func TestANewIdeaIsNamedTaggedTaskedAndProposedOn(t *testing.T) {
 	}
 	if len(tasks) != 2 || tasks[0].Idea != "brewshift" || len(tasks[0].Tags) != 3 || !strings.Contains(tasks[0].Body, "corgi idea open brewshift") {
 		t.Fatalf("tasks on the board carry the idea: %+v", tasks)
+	}
+	if id.Meta.Type != idea.TypeIdea || len(id.Meta.Tickets) != 2 || id.Meta.Tickets[0].Ref != "TASK-1" || id.Meta.Tickets[0].State != "Todo" || id.Meta.Tickets[1].ID != 2 {
+		t.Fatalf("the split is kept with the board refs: %+v", id.Meta.Tickets)
 	}
 	if got := watch.LoadTasks(dir).ByIdea("brewshift"); len(got) != 2 {
 		t.Fatalf("tasks found by idea: %d", len(got))
@@ -84,7 +88,7 @@ func TestANewIdeaIsNamedTaggedTaskedAndProposedOn(t *testing.T) {
 		t.Fatalf("writing the page rings nobody: %v", *rang)
 	}
 	// A dead-end workspace is refused before the agent runs.
-	if _, _, err := newIdea(dir, "x", "nope", "sonnet", "cli", true, time.Now()); err == nil {
+	if _, _, err := newIdea(dir, ideaRequest{Text: "x", Workspace: "nope", Model: "sonnet", By: "cli", Tasks: true}, time.Now()); err == nil {
 		t.Fatal("an unknown workspace is refused")
 	}
 }
@@ -94,7 +98,7 @@ func TestTheAgentAnswersCommentsAndAmendsThePage(t *testing.T) {
 	var calls []string
 	fakeWriter(t, &calls)
 	rang := quietIdeaNotify(t)
-	id, _, err := newIdea(dir, "coffee shop shifts", "", "sonnet", "cli", false, time.Now())
+	id, _, err := newIdea(dir, ideaRequest{Text: "coffee shop shifts", Workspace: "", Model: "sonnet", By: "cli", Tasks: false}, time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +148,7 @@ func TestBuildHandsThePageToAPlanAndTheBoard(t *testing.T) {
 	if err := workspace.Save(agentRegistryPath(dir), reg); err != nil {
 		t.Fatal(err)
 	}
-	id, first, err := newIdea(dir, "coffee shop shifts", "", "sonnet", "cli", true, time.Now())
+	id, first, err := newIdea(dir, ideaRequest{Text: "coffee shop shifts", Workspace: "", Model: "sonnet", By: "cli", Tasks: true}, time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -160,14 +164,14 @@ func TestBuildHandsThePageToAPlanAndTheBoard(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(res.Tasks) != 3 || res.Plan.Workspace != "api" || res.Plan.Slots != 2 || res.Running {
-		t.Fatalf("plan: %+v running=%v", res.Plan, res.Running)
+	if len(res.Tasks) != 2 || res.Plan.Workspace != "api" || res.Plan.Slots != 2 || res.Running {
+		t.Fatalf("the page's own split is built, not a fresh plan: %+v running=%v", res.Plan, res.Running)
 	}
 	if res.Why == "" || !strings.Contains(res.Why, "watch enable") {
 		t.Fatalf("an unwatched workspace is said: %q", res.Why)
 	}
 	left := watch.LoadTasks(dir).ByIdea(id.Meta.Slug)
-	if len(left) != 4 {
+	if len(left) != 3 {
 		t.Fatalf("the Todo first cut is replaced, the Doing one stays: %+v", left)
 	}
 	for _, task := range left {
@@ -176,8 +180,11 @@ func TestBuildHandsThePageToAPlanAndTheBoard(t *testing.T) {
 		}
 	}
 	after, _ := idea.Load(dir, id.Meta.Slug)
-	if after.Meta.Status != idea.Building || after.Meta.Plan != res.Plan.ID || after.Meta.Workspace != "api" || len(after.Meta.Tasks) != 3 {
+	if after.Meta.Status != idea.Building || after.Meta.Plan != res.Plan.ID || after.Meta.Workspace != "api" || len(after.Meta.Tasks) != 2 {
 		t.Fatalf("meta after build: %+v", after.Meta)
+	}
+	if tk := after.Meta.Tickets; len(tk) != 2 || tk[0].Ref != res.Tasks[0].Ref() || tk[1].Ref != res.Tasks[1].Ref() {
+		t.Fatalf("the split points at the new board tasks: %+v", tk)
 	}
 	last := after.Comments.Comments[len(after.Comments.Comments)-1]
 	if last.By != idea.Agent || last.Status != idea.StatusAnswered || !strings.Contains(last.Text, res.Plan.Ref()) {
@@ -202,7 +209,7 @@ func TestTheOpenPageAnswersToItsKeyAndTheDashboardToItsToken(t *testing.T) {
 	was := ideaAutoAnswerHere
 	ideaAutoAnswerHere = false
 	t.Cleanup(func() { ideaAutoAnswerHere = was })
-	id, _, err := newIdea(dir, "coffee shop shifts", "", "sonnet", "cli", true, time.Now())
+	id, _, err := newIdea(dir, ideaRequest{Text: "coffee shop shifts", Workspace: "", Model: "sonnet", By: "cli", Tasks: true}, time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -348,7 +355,7 @@ func TestACommentSchedulesTheAgentOnceForABurst(t *testing.T) {
 	wasHere, wasDelay := ideaAutoAnswerHere, ideaAnswerDelay
 	ideaAutoAnswerHere, ideaAnswerDelay = true, 60*time.Millisecond
 	t.Cleanup(func() { ideaAutoAnswerHere, ideaAnswerDelay = wasHere, wasDelay })
-	id, _, err := newIdea(dir, "coffee shop shifts", "", "sonnet", "cli", false, time.Now())
+	id, _, err := newIdea(dir, ideaRequest{Text: "coffee shop shifts", Workspace: "", Model: "sonnet", By: "cli", Tasks: false}, time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -394,5 +401,210 @@ func TestIdeaAnswersAreParsedLeniently(t *testing.T) {
 	}
 	if got := renderIdeaHTML("# Hi\n\n<script>x</script> **b** [a](javascript:alert(1)) \"q\""); strings.Contains(got, "<script") || !strings.Contains(got, "<strong>b</strong>") || !strings.Contains(got, "&quot;q&quot;") || strings.Contains(got, "javascript:") {
 		t.Fatalf("html: %s", got)
+	}
+}
+
+func TestOtherPageTypesAndAnImportedPage(t *testing.T) {
+	dir := phoneBoard(t, false)
+	var calls []string
+	fakeWriter(t, &calls)
+	quietIdeaNotify(t)
+	id, _, err := newIdea(dir, ideaRequest{Text: "split payments out of the monolith", Type: idea.TypeHLD, Model: "sonnet", By: "cli"}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id.Meta.Type != idea.TypeHLD {
+		t.Fatalf("type: %s", id.Meta.Type)
+	}
+	if !strings.Contains(calls[len(calls)-1], "principal engineer") {
+		t.Fatalf("the HLD soul: %v", calls)
+	}
+	own := "# Our rota\n\n## Infra\n\nWe keep SQLite on a single VPS for now.\n"
+	imported, _, err := newIdea(dir, ideaRequest{From: own, Type: idea.TypeSpec, Model: "sonnet", By: "cli", Tasks: false}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if imported.Doc != own || imported.Meta.Title != "BrewShift" || imported.Meta.Type != idea.TypeSpec || len(imported.Meta.Tickets) != 2 {
+		t.Fatalf("an imported page is kept as written and only named and split: %+v %q", imported.Meta, imported.Doc)
+	}
+	if !strings.Contains(calls[len(calls)-1], "engineer who keeps") {
+		t.Fatalf("the import soul: %v", calls)
+	}
+	if c := imported.Comments.Comments; len(c) != 2 || c[0].Anchor == nil || c[0].Anchor.Quote != "SQLite on a single VPS" {
+		t.Fatalf("a proposal lands on the imported words: %+v", c)
+	}
+	if _, _, err := newIdea(dir, ideaRequest{Text: "x", Type: "poem", Model: "sonnet"}, time.Now()); err != nil {
+		t.Fatal("an unknown type falls back to idea:", err)
+	}
+}
+
+func TestTheAgentCanRewriteTheSplitWhenScopeMoves(t *testing.T) {
+	dir := phoneBoard(t, false)
+	quietIdeaNotify(t)
+	was := runIdeaPrint
+	runIdeaPrint = func(_ context.Context, dir, model, system, prompt string) (string, error) {
+		if strings.Contains(system, "product-minded") {
+			return `{"name":"BrewShift","markdown":` + jsonString(fakePage) + `,"tickets":[{"title":"Scaffold the app"},{"title":"Shift calendar"}]}`, nil
+		}
+		if !strings.Contains(prompt, "# The split into tickets") || !strings.Contains(prompt, "1. Scaffold the app") {
+			t.Errorf("the agent sees the split: %s", prompt)
+		}
+		return `{"page":"","answers":[{"id":1,"reply":"Dropping the calendar, adding a list."}],"tickets":[{"title":"Scaffold the app"},{"title":"Shift list","after":[1]}]}`, nil
+	}
+	t.Cleanup(func() { runIdeaPrint = was })
+	id, _, err := newIdea(dir, ideaRequest{Text: "shifts", Model: "sonnet", Tasks: true}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = idea.Update(dir, id.Meta.Slug, func(id *idea.Idea) error {
+		_, err := id.AddComment(idea.KindComment, "andrii", "no calendar, a list is enough", nil, nil, nil, time.Now())
+		return err
+	})
+	if _, err := answerIdea(dir, id.Meta.Slug, ""); err != nil {
+		t.Fatal(err)
+	}
+	after, _ := idea.Load(dir, id.Meta.Slug)
+	tk := after.Meta.Tickets
+	if len(tk) != 2 || tk[1].Title != "Shift list" || tk[0].Ref != "TASK-1" || tk[1].Ref != "" || len(tk[1].After) != 1 {
+		t.Fatalf("the split is replaced, refs kept where titles match: %+v", tk)
+	}
+}
+
+func TestSendMakesAnEpicWithTicketsOrAConfluencePage(t *testing.T) {
+	dir := phoneBoard(t, false)
+	var calls []string
+	fakeWriter(t, &calls)
+	quietIdeaNotify(t)
+	var jiraBodies []map[string]any
+	n := 0
+	jira := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		jiraBodies = append(jiraBodies, body)
+		n++
+		switch r.URL.Path {
+		case "/rest/api/3/issue":
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": itoa(n), "key": "SHOP-" + itoa(n)})
+		case "/wiki/rest/api/content":
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": "99", "_links": map[string]string{"base": r.Host, "webui": "/spaces/ENG/pages/99"}})
+		default:
+			w.WriteHeader(404)
+		}
+	}))
+	defer jira.Close()
+	if err := watch.SaveSecrets(dir, watch.Secrets{JiraURL: jira.URL, JiraEmail: "me@x", JiraToken: "tok"}); err != nil {
+		t.Fatal(err)
+	}
+	id, _, err := newIdea(dir, ideaRequest{Text: "shifts", Model: "sonnet", Tasks: true}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sendIdea(dir, id.Meta.Slug, "", "", ""); err == nil || !strings.Contains(err.Error(), "project") {
+		t.Fatalf("jira needs a project: %v", err)
+	}
+	links, err := sendIdea(dir, id.Meta.Slug, "jira", "SHOP", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(links) != 3 || links[0].Kind != "epic" || links[0].Ref != "SHOP-1" || links[1].Kind != "ticket" || links[2].Ref != "SHOP-3" {
+		t.Fatalf("an epic and two tickets: %+v", links)
+	}
+	fields := func(i int) map[string]any { return jiraBodies[i]["fields"].(map[string]any) }
+	if fields(0)["issuetype"].(map[string]any)["name"] != "Epic" || fields(1)["parent"].(map[string]any)["key"] != "SHOP-1" || fields(2)["summary"] != "Shift calendar" {
+		t.Fatalf("jira bodies: %v", jiraBodies)
+	}
+	after, _ := idea.Load(dir, id.Meta.Slug)
+	if tk := after.Meta.Tickets; tk[0].Ref != "SHOP-2" || !strings.HasPrefix(tk[0].URL, jira.URL+"/browse/") || tk[1].State != "Todo" {
+		t.Fatalf("tickets now point at jira: %+v", tk)
+	}
+	if len(after.Meta.Sent) != 1 || after.Meta.Sent[0].Kind != "epic" {
+		t.Fatalf("sent: %+v", after.Meta.Sent)
+	}
+	opts := ideaSendOptions(dir, after.Meta)
+	if opts["jira"] == nil || opts["confluence"] == nil || opts["linear"] != nil {
+		t.Fatalf("send options follow the credentials: %v", opts)
+	}
+	pages, err := sendIdea(dir, id.Meta.Slug, "confluence", "", "ENG")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pages) != 1 || pages[0].Kind != "page" || !strings.HasSuffix(pages[0].URL, "/spaces/ENG/pages/99") {
+		t.Fatalf("the confluence page: %+v", pages)
+	}
+	last := jiraBodies[len(jiraBodies)-1]
+	storage := last["body"].(map[string]any)["storage"].(map[string]any)["value"].(string)
+	if last["space"].(map[string]any)["key"] != "ENG" || !strings.Contains(storage, "<h2 id=\"infra\">Infra</h2>") || !strings.Contains(storage, "SHOP-2") {
+		t.Fatalf("the page body: %s", storage)
+	}
+	if _, err := sendIdea(dir, id.Meta.Slug, "linear", "ABC", ""); err == nil || !strings.Contains(err.Error(), "linear") {
+		t.Fatalf("no linear credentials: %v", err)
+	}
+}
+
+func TestSendToLinearUsesTheTeamAndParent(t *testing.T) {
+	dir := phoneBoard(t, false)
+	var calls []string
+	fakeWriter(t, &calls)
+	quietIdeaNotify(t)
+	var queries []string
+	n := 0
+	linear := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]string
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		queries = append(queries, body["query"])
+		switch {
+		case strings.Contains(body["query"], "teams("):
+			_, _ = w.Write([]byte(`{"data":{"teams":{"nodes":[{"id":"team-1"}]}}}`))
+		default:
+			n++
+			_, _ = w.Write([]byte(`{"data":{"issueCreate":{"success":true,"issue":{"id":"id-` + itoa(n) + `","identifier":"ABC-` + itoa(n) + `","url":"https://linear.app/x/issue/ABC-` + itoa(n) + `"}}}}`))
+		}
+	}))
+	defer linear.Close()
+	t.Setenv("LINEAR_API_KEY", "lin_tok")
+	id, _, err := newIdea(dir, ideaRequest{Text: "shifts", Model: "sonnet"}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	was := ideaLinearURL
+	ideaLinearURL = linear.URL
+	t.Cleanup(func() { ideaLinearURL = was })
+	links, err := sendIdea(dir, id.Meta.Slug, "", "ABC", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(links) != 3 || links[0].Ref != "ABC-1" || links[2].URL != "https://linear.app/x/issue/ABC-3" {
+		t.Fatalf("linear links: %+v", links)
+	}
+	joined := strings.Join(queries, "\n")
+	if !strings.Contains(joined, `teamId: "team-1"`) || !strings.Contains(joined, `parentId: "id-1"`) || strings.Count(joined, "issueCreate") != 3 {
+		t.Fatalf("queries: %s", joined)
+	}
+}
+
+func TestTheIndexIsForTheDashboardOnly(t *testing.T) {
+	dir := phoneBoard(t, false)
+	var calls []string
+	fakeWriter(t, &calls)
+	quietIdeaNotify(t)
+	if _, _, err := newIdea(dir, ideaRequest{Text: "shifts", Model: "sonnet"}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	open := ideaOpenHandler("secret", "")
+	req := httptest.NewRequest(http.MethodGet, "/idea/", nil)
+	req.Header.Set("Accept", "application/json")
+	rec := httptest.NewRecorder()
+	open(rec, req)
+	if rec.Code != 403 {
+		t.Fatalf("no token, no list: %d", rec.Code)
+	}
+	req.Header.Set("Authorization", "Bearer secret")
+	rec = httptest.NewRecorder()
+	open(rec, req)
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), `"slug":"brewshift"`) {
+		t.Fatalf("the list: %d %s", rec.Code, rec.Body)
+	}
+	if rec := ideaGet(open, "/idea/"); rec.Code != 200 || !strings.Contains(rec.Body.String(), "Pages") {
+		t.Fatalf("the shell: %d", rec.Code)
 	}
 }

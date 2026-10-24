@@ -32,9 +32,33 @@ const ideaTimeout = 5 * time.Minute
 
 const ideaModel = "sonnet"
 
-const ideaSoul = `You are a product-minded staff engineer. Someone tells you in a sentence what they want built. Write the page a small team and a fleet of coding agents would build from: a name for the project (short, memorable, one or two words), 3-6 tags (lowercase, one word each), a one-sentence summary, and the page itself in markdown. The page has these sections, in this order, each short and concrete: "## What it is" (the pitch, who it is for), "## Users and jobs" (who uses it and what they come to do), "## Screens" (one line per screen or surface), "## Data" (the entities and their fields), "## Infra" (a specific stack choice and why, hosting, auth, payments if any - name real tools), "## Open questions" (what you had to guess), "## Tasks" (a checklist "- [ ] ..." of 4-8 first tasks, each one session's work). Write in plain words, no fluff. Also offer 2-4 proposals: things worth deciding that you did not put in the page (an alternative stack, a feature to cut or add, a risk). Each proposal quotes a short exact phrase from the page it is about (copy it verbatim, under 80 characters) and says the proposal in one or two sentences. Answer with JSON only, no prose and no code fence: {"name": "...", "tags": ["..."], "summary": "...", "markdown": "...", "tasks": [{"title": "...", "body": "..."}], "proposals": [{"quote": "...", "text": "..."}]} where "tasks" repeats the page's task checklist with a title (one line, imperative, under 80 characters) and a body that says what to build and how one knows it is done.`
+// The page's shape, by type. Each soul ends the same way: JSON with a name,
+// tags, a summary, the page, the tickets it splits into, and proposals.
+const ideaJSONTail = ` Also offer 2-4 proposals: things worth deciding that you did not put in the page (an alternative, a thing to cut or add, a risk). Each proposal quotes a short exact phrase from the page it is about (copy it verbatim, under 80 characters) and says the proposal in one or two sentences. Split the work into 3-8 tickets, each one session's work, each with a title (one line, imperative, under 80 characters) and a body that says what to build and how one knows it is done; "after" lists the 1-based numbers of the tickets it waits for. Answer with JSON only, no prose and no code fence: {"name": "...", "tags": ["..."], "summary": "...", "markdown": "...", "tickets": [{"title": "...", "body": "...", "after": [1]}], "proposals": [{"quote": "...", "text": "..."}]}.`
 
-const ideaAnswerSoul = `You are the engineer who wrote this page and keeps it. People left comments on it: a comment quotes the words it is about (or is about the whole page) and may have replies. Answer every comment listed as waiting. When a comment asks for a change, or you agree one is right, make it: return the whole page with the change in it, and say in the reply what you changed and where (the section). When a comment is a question, answer it in the reply and leave the page alone. Be brief and specific; never pad. Keep the page's sections and headings; change only what the comments call for, and keep the "## Tasks" checklist in step with the rest. If the comments changed something big, add one or two new proposals (each quoting a short exact phrase from the new page it is about, under 80 characters). Answer with JSON only, no prose and no code fence: {"page": "<the whole page, or an empty string when nothing on it changed>", "answers": [{"id": 3, "reply": "...", "changed": true}], "proposals": [{"quote": "...", "text": "..."}]} where "changed" says that reply came with a change to the page.`
+const specSoul = `You are a staff engineer writing the spec for one feature in an existing product. Someone tells you the feature in a sentence or two; the repository picture tells you what exists. Give it a short name (two or three words), 3-6 tags (lowercase, one word each), a one-sentence summary, and the spec in markdown with these sections, in this order, each short and concrete: "## Summary", "## Goals and non-goals", "## User stories" (as a person would say them), "## Flows" (step by step, one per story), "## Changes" (API, data model, services, UI - what changes where, naming real files or services when the picture shows them), "## Edge cases", "## Rollout" (flags, migration, metrics), "## Open questions". Plain words, no fluff.` + ideaJSONTail
+
+const hldSoul = `You are a principal engineer writing a high-level design. Someone tells you the system or change in a sentence or two; the repository picture tells you what exists. Give it a short name, 3-6 tags (lowercase, one word each), a one-sentence summary, and the design in markdown with these sections, in this order, each short and concrete: "## Context" (what exists, what hurts), "## Goals and constraints", "## Architecture" (the pieces and how they talk; a small ASCII diagram in a code block is welcome), "## Components" (one paragraph each: responsibility, interface, owner), "## Data" (entities, where they live, how they move), "## Failure and scale" (what breaks first, how it degrades, limits), "## Security", "## Alternatives considered" (two or three, and why not), "## Risks", "## Open questions". Plain words, no fluff.` + ideaJSONTail
+
+const rfcSoul = `You are an engineer writing an RFC: a proposal the team decides on. Someone tells you the proposal in a sentence or two. Give it a short name, 3-6 tags (lowercase, one word each), a one-sentence summary, and the RFC in markdown with these sections, in this order: "## Problem" (what is wrong today, with evidence), "## Proposal" (what to do, concretely), "## Alternatives" (what else was considered, and why not), "## Impact" (who and what changes, migration, cost), "## Decision needed" (the one question to answer, with your recommendation), "## Open questions". Plain words, no fluff.` + ideaJSONTail
+
+const importSoul = `You are the engineer who keeps this page. Someone wrote it already; do not rewrite it. Read it and give it a short name (two or three words, or the title it has), 3-6 tags (lowercase, one word each), a one-sentence summary, the work it splits into, and proposals. Return the page in "markdown" exactly as given.` + ideaJSONTail
+
+func soulFor(typ string) string {
+	switch typ {
+	case idea.TypeSpec:
+		return specSoul
+	case idea.TypeHLD:
+		return hldSoul
+	case idea.TypeRFC:
+		return rfcSoul
+	}
+	return ideaSoul
+}
+
+const ideaSoul = `You are a product-minded staff engineer. Someone tells you in a sentence what they want built. Write the page a small team and a fleet of coding agents would build from: a name for the project (short, memorable, one or two words), 3-6 tags (lowercase, one word each), a one-sentence summary, and the page itself in markdown. The page has these sections, in this order, each short and concrete: "## What it is" (the pitch, who it is for), "## Users and jobs" (who uses it and what they come to do), "## Screens" (one line per screen or surface), "## Data" (the entities and their fields), "## Infra" (a specific stack choice and why, hosting, auth, payments if any - name real tools), "## Open questions" (what you had to guess), "## Tasks" (a checklist "- [ ] ..." of 4-8 first tasks, each one session's work). Write in plain words, no fluff.` + ideaJSONTail
+
+const ideaAnswerSoul = `You are the engineer who wrote this page and keeps it. People left comments on it: a comment quotes the words it is about (or is about the whole page) and may have replies. Answer every comment listed as waiting. When a comment asks for a change, or you agree one is right, make it: return the whole page with the change in it, and say in the reply what you changed and where (the section). When a comment is a question, answer it in the reply and leave the page alone. Be brief and specific; never pad. Keep the page's sections and headings; change only what the comments call for, and keep the "## Tasks" checklist, if there is one, in step with the rest. The page also has a split into tickets (given after the page); when a change moves the scope of the work, return the whole split again in "tickets" with the same shape, else leave "tickets" out. If the comments changed something big, add one or two new proposals (each quoting a short exact phrase from the new page it is about, under 80 characters). Answer with JSON only, no prose and no code fence: {"page": "<the whole page, or an empty string when nothing on it changed>", "answers": [{"id": 3, "reply": "...", "changed": true}], "tickets": [{"title": "...", "body": "...", "after": [1]}], "proposals": [{"quote": "...", "text": "..."}]} where "changed" says that reply came with a change to the page.`
 
 type ideaProposal struct {
 	Quote string `json:"quote"`
@@ -47,6 +71,7 @@ type ideaPageAnswer struct {
 	Summary   string         `json:"summary"`
 	Markdown  string         `json:"markdown"`
 	Tasks     []plannerTask  `json:"tasks"`
+	Tickets   []plannerTask  `json:"tickets"`
 	Proposals []ideaProposal `json:"proposals"`
 }
 
@@ -59,7 +84,46 @@ type ideaReply struct {
 type ideaCommentsAnswer struct {
 	Page      string         `json:"page"`
 	Answers   []ideaReply    `json:"answers"`
+	Tickets   []plannerTask  `json:"tickets"`
 	Proposals []ideaProposal `json:"proposals"`
+}
+
+// ticketsFrom is the planner's tasks as a page's split, bad "after"
+// numbers dropped.
+func ticketsFrom(tasks []plannerTask) []idea.Ticket {
+	var out []idea.Ticket
+	for _, t := range tasks {
+		t.Title = clipTitle(strings.TrimSpace(t.Title), 200)
+		if t.Title == "" {
+			continue
+		}
+		out = append(out, idea.Ticket{ID: len(out) + 1, Title: t.Title, Body: strings.TrimSpace(t.Body), After: t.After})
+	}
+	for i := range out {
+		var after []int
+		for _, n := range out[i].After {
+			if n >= 1 && n <= len(out) && n != i+1 {
+				after = append(after, n)
+			}
+		}
+		out[i].After = after
+	}
+	return out
+}
+
+// keepRefs carries the refs of an older split onto a new one where the
+// titles still match, so a ticket already on the board keeps its link.
+func keepRefs(old, now []idea.Ticket) []idea.Ticket {
+	byTitle := map[string]idea.Ticket{}
+	for _, t := range old {
+		byTitle[strings.ToLower(t.Title)] = t
+	}
+	for i := range now {
+		if o, ok := byTitle[strings.ToLower(now[i].Title)]; ok {
+			now[i].Ref, now[i].URL, now[i].State = o.Ref, o.URL, o.State
+		}
+	}
+	return now
 }
 
 // runIdeaPrint is one unattended agent run in dir's workspace (claude or
@@ -90,8 +154,11 @@ func parseIdeaPage(text string) (ideaPageAnswer, error) {
 	}
 	ans.Tags = cleanTags(ans.Tags)
 	ans.Summary = clipTitle(strings.TrimSpace(ans.Summary), 300)
+	if len(ans.Tickets) == 0 {
+		ans.Tickets = ans.Tasks
+	}
 	var tasks []plannerTask
-	for _, t := range ans.Tasks {
+	for _, t := range ans.Tickets {
 		t.Title = clipTitle(strings.TrimSpace(t.Title), 200)
 		if t.Title != "" {
 			tasks = append(tasks, t)
@@ -100,7 +167,7 @@ func parseIdeaPage(text string) (ideaPageAnswer, error) {
 	if len(tasks) > 12 {
 		tasks = tasks[:12]
 	}
-	ans.Tasks = tasks
+	ans.Tickets, ans.Tasks = tasks, tasks
 	return ans, nil
 }
 
@@ -179,7 +246,19 @@ func ideaWorkspaceRoot(ws string) string {
 // newIdea writes the page for one sentence: the agent names it, tags it,
 // writes the page, puts its first tasks on the board and leaves its
 // proposals as comments for a person to take or leave.
-func newIdea(dir, text, ws, model, by string, withTasks bool, now time.Time) (*idea.Idea, []watch.Task, error) {
+// ideaRequest is what a new page is made from.
+type ideaRequest struct {
+	Text      string // the sentence
+	Workspace string
+	Model     string
+	By        string
+	Type      string // idea (default), spec, hld, rfc
+	From      string // a page already written: kept as is, the agent only names, tags and splits it
+	Tasks     bool   // put the tickets on the board now
+}
+
+func newIdea(dir string, req ideaRequest, now time.Time) (*idea.Idea, []watch.Task, error) {
+	text, ws := strings.TrimSpace(req.Text), req.Workspace
 	root := ""
 	if ws != "" {
 		var err error
@@ -191,13 +270,33 @@ func newIdea(dir, text, ws, model, by string, withTasks bool, now time.Time) (*i
 	if runIn == "" {
 		runIn = mustCwd()
 	}
-	prompt := "Build this: " + strings.TrimSpace(text) + "\n"
+	typ := req.Type
+	if !idea.ValidType(typ) {
+		typ = idea.TypeIdea
+	}
+	soul := soulFor(typ)
+	prompt := "Build this: " + text + "\n"
+	switch typ {
+	case idea.TypeSpec:
+		prompt = "The feature: " + text + "\n"
+	case idea.TypeHLD:
+		prompt = "The system or change to design: " + text + "\n"
+	case idea.TypeRFC:
+		prompt = "The proposal: " + text + "\n"
+	}
+	if from := strings.TrimSpace(req.From); from != "" {
+		soul = importSoul
+		prompt = "The page, as written:\n\n" + from + "\n"
+		if text != "" {
+			prompt = "About: " + text + "\n\n" + prompt
+		}
+	}
 	if root != "" {
 		prompt += "\nIt goes into an existing repository; fit its stack and conventions.\n" + repoPicture(root)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), ideaTimeout)
 	defer cancel()
-	out, err := runIdeaPrint(ctx, runIn, model, ideaSoul, prompt)
+	out, err := runIdeaPrint(ctx, runIn, req.Model, soul, prompt)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -205,23 +304,33 @@ func newIdea(dir, text, ws, model, by string, withTasks bool, now time.Time) (*i
 	if err != nil {
 		return nil, nil, err
 	}
-	title := clipTitle(strings.TrimSpace(text), 120)
-	meta := idea.Meta{Name: ans.Name, Tags: ans.Tags, Summary: ans.Summary, Workspace: ws, By: by, Model: model, Auto: true}
-	id, err := idea.Create(dir, "", title, ans.Markdown, meta, now)
+	page := ans.Markdown
+	if strings.TrimSpace(req.From) != "" {
+		// Kept as written, down to the last line break.
+		page = strings.TrimRight(req.From, "\n") + "\n"
+	}
+	title := clipTitle(text, 120)
+	if title == "" {
+		title = firstNonEmpty(ans.Name, firstHeading(page), "page")
+	}
+	meta := idea.Meta{Type: typ, Name: ans.Name, Tags: ans.Tags, Summary: ans.Summary, Workspace: ws, By: req.By, Model: req.Model, Auto: true,
+		Tickets: ticketsFrom(ans.Tickets)}
+	id, err := idea.Create(dir, "", title, page, meta, now)
 	if err != nil {
 		return nil, nil, err
 	}
 	var made []watch.Task
-	if withTasks {
+	if req.Tasks {
 		tasks := watch.LoadTasks(dir)
-		for _, pt := range ans.Tasks {
-			t, err := tasks.Add(pt.Title, taskBodyFor(id.Meta, pt.Body), ws, "idea", now)
+		for i, tk := range id.Meta.Tickets {
+			t, err := tasks.Add(tk.Title, taskBodyFor(id.Meta, tk.Body), ws, "idea", now)
 			if err != nil {
 				continue
 			}
 			t, _ = tasks.Tag(t.Key(), id.Meta.Slug, id.Meta.Tags, now)
 			made = append(made, t)
 			id.Meta.Tasks = append(id.Meta.Tasks, t.ID)
+			id.Meta.Tickets[i].Ref, id.Meta.Tickets[i].State = t.Ref(), t.State
 		}
 	}
 	for _, p := range ans.Proposals {
@@ -232,6 +341,15 @@ func newIdea(dir, text, ws, model, by string, withTasks bool, now time.Time) (*i
 	}
 	nudgeDaemon(dir)
 	return id, made, nil
+}
+
+func firstHeading(md string) string {
+	for _, line := range strings.Split(md, "\n") {
+		if strings.HasPrefix(line, "#") {
+			return clipTitle(strings.TrimSpace(strings.TrimLeft(line, "#")), 120)
+		}
+	}
+	return ""
 }
 
 func taskBodyFor(m idea.Meta, body string) string {
@@ -277,7 +395,7 @@ func answerIdea(dir, slug, model string) (bool, error) {
 	for _, c := range waiting {
 		ids = append(ids, strconv.Itoa(c.ID))
 	}
-	prompt := fmt.Sprintf("# The page\n\n%s\n\n# Comments waiting on you: %s\n\n%s", id.Doc, strings.Join(ids, ", "), idea.Transcript(waiting))
+	prompt := fmt.Sprintf("# The page\n\n%s\n\n# The split into tickets\n\n%s\n# Comments waiting on you: %s\n\n%s", id.Doc, ticketsText(id.Meta.Tickets), strings.Join(ids, ", "), idea.Transcript(waiting))
 	if others := otherComments(id, waiting); others != "" {
 		prompt += "# Earlier comments, for context (do not answer these)\n\n" + others
 	}
@@ -323,6 +441,9 @@ func answerIdea(dir, slug, model string) (bool, error) {
 				_, _ = id.AddComment(idea.KindProposal, idea.Agent, p.Text, anchorFor(id.Doc, p.Quote), nil, nil, now)
 			}
 		}
+		if split := ticketsFrom(ans.Tickets); len(split) > 0 {
+			id.Meta.Tickets = keepRefs(id.Meta.Tickets, split)
+		}
 		return nil
 	})
 	if err != nil {
@@ -335,6 +456,27 @@ func answerIdea(dir, slug, model string) (bool, error) {
 	ideaNotify(dir, updated.Meta, fmt.Sprintf("%s %d comment(s)", what, len(told)), firstReplyLine(updated, ans.Answers))
 	nudgeDaemon(dir)
 	return true, nil
+}
+
+func ticketsText(ts []idea.Ticket) string {
+	if len(ts) == 0 {
+		return "(no split yet)\n"
+	}
+	var b strings.Builder
+	for _, t := range ts {
+		fmt.Fprintf(&b, "%d. %s", t.ID, t.Title)
+		if len(t.After) > 0 {
+			fmt.Fprintf(&b, " (after %v)", t.After)
+		}
+		if t.Ref != "" {
+			fmt.Fprintf(&b, " [%s %s]", t.Ref, t.State)
+		}
+		b.WriteString("\n")
+		if t.Body != "" {
+			fmt.Fprintf(&b, "   %s\n", strings.ReplaceAll(strings.TrimSpace(t.Body), "\n", "\n   "))
+		}
+	}
+	return b.String()
 }
 
 func firstReplyLine(id *idea.Idea, answers []ideaReply) string {
@@ -396,16 +538,24 @@ func buildIdea(dir, slug, ws, model string, slots int, run bool) (ideaBuild, err
 	if slots < 1 {
 		slots = 1
 	}
-	prompt := fmt.Sprintf("Goal: build what this page describes.\n\nAt most 8 tasks.\n\n%s\n\n--- The page ---\n%s", repoPicture(root), id.Doc)
-	ctx, cancel := context.WithTimeout(context.Background(), ideaTimeout)
-	defer cancel()
-	out, err := runIdeaPrint(ctx, root, model, planSoul, prompt)
-	if err != nil {
-		return res, err
-	}
-	ans, err := parsePlannerAnswer(out, 8)
-	if err != nil {
-		return res, err
+	var ans plannerAnswer
+	if len(id.Meta.Tickets) > 0 {
+		// The page's own split: what people read and amended, not a fresh guess.
+		for _, t := range id.Meta.Tickets {
+			ans.Tasks = append(ans.Tasks, plannerTask{Title: t.Title, Body: t.Body, After: t.After})
+		}
+		ans.Summary = id.Meta.Summary
+	} else {
+		prompt := fmt.Sprintf("Goal: build what this page describes.\n\nAt most 8 tasks.\n\n%s\n\n--- The page ---\n%s", repoPicture(root), id.Doc)
+		ctx, cancel := context.WithTimeout(context.Background(), ideaTimeout)
+		defer cancel()
+		out, err := runIdeaPrint(ctx, root, model, planSoul, prompt)
+		if err != nil {
+			return res, err
+		}
+		if ans, err = parsePlannerAnswer(out, 8); err != nil {
+			return res, err
+		}
 	}
 	now := time.Now()
 	tasks := watch.LoadTasks(dir)
@@ -467,6 +617,12 @@ func buildIdea(dir, slug, ws, model string, slots int, run bool) (ideaBuild, err
 		id.Meta.Tasks = nil
 		for _, t := range made {
 			id.Meta.Tasks = append(id.Meta.Tasks, t.ID)
+		}
+		id.Meta.Tickets = ticketsFrom(ans.Tasks)
+		for i := range id.Meta.Tickets {
+			if i < len(made) {
+				id.Meta.Tickets[i].Ref, id.Meta.Tickets[i].State, id.Meta.Tickets[i].URL = made[i].Ref(), made[i].State, ""
+			}
 		}
 		c, err := id.AddComment(idea.KindComment, idea.Agent, note, nil, nil, nil, now)
 		if err == nil {
@@ -577,7 +733,7 @@ var ideaNewCmd = &cobra.Command{
 	Args:  cobra.ArbitraryArgs,
 	Run: func(cmd *cobra.Command, args []string) {
 		text := strings.TrimSpace(strings.Join(args, " "))
-		if text == "" {
+		if text == "" && !cmd.Flags().Changed("from") {
 			_ = cmd.Help()
 			return
 		}
@@ -588,6 +744,22 @@ var ideaNewCmd = &cobra.Command{
 		by, _ := cmd.Flags().GetString("by")
 		noTasks, _ := cmd.Flags().GetBool("no-tasks")
 		open, _ := cmd.Flags().GetBool("open")
+		typ, _ := cmd.Flags().GetString("type")
+		fromPath, _ := cmd.Flags().GetString("from")
+		if typ != "" && !idea.ValidType(typ) {
+			exitWithError("idea", fmt.Errorf("--type is one of %s", strings.Join(idea.Types, ", ")), 2)
+		}
+		from := ""
+		if fromPath != "" {
+			data, err := os.ReadFile(fromPath)
+			if err != nil {
+				exitWithError("idea", err, 2)
+			}
+			from = string(data)
+			if strings.TrimSpace(from) == "" {
+				exitWithError("idea", fmt.Errorf("%s is empty", fromPath), 2)
+			}
+		}
 		if kind != "" {
 			if !harness.Known(kind) {
 				exitWithError("idea", fmt.Errorf("--kind is one of %s", strings.Join(harness.Names(), ", ")), 2)
@@ -608,7 +780,7 @@ var ideaNewCmd = &cobra.Command{
 			model = ideaModel
 		}
 		utils.Infof("writing the page with %s…\n", model)
-		id, tasks, err := newIdea(dir, text, ws, model, firstNonEmpty(by, "cli"), !noTasks, time.Now())
+		id, tasks, err := newIdea(dir, ideaRequest{Text: text, Workspace: ws, Model: model, By: firstNonEmpty(by, "cli"), Type: typ, From: from, Tasks: !noTasks}, time.Now())
 		if err != nil {
 			exitWithError("idea", err, 1)
 		}
@@ -617,15 +789,15 @@ var ideaNewCmd = &cobra.Command{
 			utils.PrintJSON(map[string]any{"idea": id.Meta, "tasks": tasks, "file": filepath.Join(id.Dir, idea.DocName), "link": link, "proposals": len(id.Comments.Comments)})
 			return
 		}
-		fmt.Printf("%s - %s\n", id.Meta.Slug, firstNonEmpty(id.Meta.Name, id.Meta.Title))
+		fmt.Printf("%s - %s (%s)\n", id.Meta.Slug, firstNonEmpty(id.Meta.Name, id.Meta.Title), id.Meta.Type)
 		if id.Meta.Summary != "" {
 			fmt.Printf("  %s\n", id.Meta.Summary)
 		}
 		if len(id.Meta.Tags) > 0 {
 			fmt.Printf("  tags: %s\n", strings.Join(id.Meta.Tags, ", "))
 		}
-		for _, t := range tasks {
-			fmt.Printf("  %-8s %s\n", t.Ref(), t.Title)
+		for _, t := range id.Meta.Tickets {
+			fmt.Printf("  %-8s %s\n", t.Ref, t.Title)
 		}
 		fmt.Printf("  page: %s\n", filepath.Join(id.Dir, idea.DocName))
 		fmt.Printf("  %d proposal(s) from the agent wait on the page\n", len(id.Comments.Comments))
@@ -1015,6 +1187,63 @@ corgi agent watch enable --workspace api --isolate.`,
 	},
 }
 
+var ideaTicketsCmd = &cobra.Command{
+	Use:   "tickets <slug>",
+	Short: "The page's split into tickets, and where each stands",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		dir := mustAgentDir()
+		id, err := idea.Load(dir, args[0])
+		if err != nil {
+			exitWithError("idea", err, 2)
+		}
+		tickets := liveTickets(dir, id.Meta)
+		if utils.JSONOutput {
+			utils.PrintJSON(map[string]any{"tickets": tickets, "sent": id.Meta.Sent})
+			return
+		}
+		if len(tickets) == 0 {
+			fmt.Println("no split yet - corgi idea answer or build makes one")
+			return
+		}
+		fmt.Print(ticketsText(tickets))
+		for _, l := range id.Meta.Sent {
+			fmt.Printf("sent: %s %s %s\n", l.Kind, l.Ref, l.URL)
+		}
+	},
+}
+
+var ideaSendCmd = &cobra.Command{
+	Use:   "send <slug> --to jira|linear|confluence",
+	Short: "Send the page out: an epic with its tickets in Jira or Linear, or a Confluence page",
+	Long: `  corgi idea send brewshift --to linear                 the workspace's team, from its watch
+  corgi idea send brewshift --to jira --project SHOP
+  corgi idea send brewshift --to confluence --space ENG
+
+Jira and Linear get one parent (an epic, or a parent issue) and one ticket
+under it per line of the page's split, each linked back to the page.
+Confluence gets the page itself. The credentials are the watch's
+(corgi agent watch auth, or LINEAR_API_KEY / JIRA_URL+JIRA_EMAIL+JIRA_API_TOKEN).`,
+	Args: cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		dir := mustAgentDir()
+		to, _ := cmd.Flags().GetString("to")
+		project, _ := cmd.Flags().GetString("project")
+		space, _ := cmd.Flags().GetString("space")
+		links, err := sendIdea(dir, args[0], to, project, space)
+		if err != nil {
+			exitWithError("idea", err, 1)
+		}
+		if utils.JSONOutput {
+			utils.PrintJSON(map[string]any{"sent": links})
+			return
+		}
+		for _, l := range links {
+			fmt.Printf("%-7s %-12s %s\n", l.Kind, l.Ref, l.URL)
+		}
+	},
+}
+
 var ideaShareCmd = &cobra.Command{
 	Use:   "share <slug> [--off] [--rotate]",
 	Short: "The open link (anyone with it reads and comments); --off closes the page, --rotate gives it a new key",
@@ -1106,6 +1335,11 @@ func init() {
 	ideaNewCmd.Flags().String("by", "", "who asked (default: cli)")
 	ideaNewCmd.Flags().Bool("no-tasks", false, "write the page only; no tasks on the board yet")
 	ideaNewCmd.Flags().Bool("open", false, "open the page in the browser when the dashboard runs")
+	ideaNewCmd.Flags().String("type", "", "what kind of page: idea (default), spec, hld, rfc")
+	ideaNewCmd.Flags().String("from", "", "a markdown file you already wrote: kept as is; the agent names, tags and splits it")
+	ideaSendCmd.Flags().String("to", "", "jira, linear or confluence")
+	ideaSendCmd.Flags().String("project", "", "the Jira project key or Linear team key (default: the workspace's watch)")
+	ideaSendCmd.Flags().String("space", "", "the Confluence space key")
 	ideaOpenCmd.Flags().Bool("print", false, "print the link instead of opening it")
 	ideaCommentCmd.Flags().String("quote", "", "the words on the page the comment is about")
 	ideaCommentCmd.Flags().String("by", "", "your name on the comment (default: $USER)")
@@ -1126,7 +1360,7 @@ func init() {
 	ideaCmd.AddCommand(ideaNewCmd, ideaListCmd, ideaOpenCmd, ideaPathCmd, ideaShowCmd, ideaCommentCmd,
 		ideaStatusCommand("resolve", "Close a comment: it is settled", idea.StatusResolved),
 		ideaStatusCommand("reopen", "Open a comment again: the agent takes another look", idea.StatusOpen),
-		ideaAnswerCmd, ideaWatchCmd, ideaBuildCmd, ideaShareCmd, ideaNotifyCmd, ideaRmCmd)
+		ideaAnswerCmd, ideaWatchCmd, ideaBuildCmd, ideaSendCmd, ideaTicketsCmd, ideaShareCmd, ideaNotifyCmd, ideaRmCmd)
 	rootCmd.AddCommand(ideaCmd)
 }
 

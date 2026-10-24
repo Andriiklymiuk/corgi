@@ -1519,6 +1519,7 @@ const launcherPageHTML = `<!doctype html>
     <button role="tab" data-tab="kanban" aria-selected="false">Board<span class="n" id="n-kanban"></span></button>
     <button role="tab" data-tab="sessions" aria-selected="false">Sessions<span class="n" id="n-sessions"></span></button>
     <button role="tab" data-tab="stacks" aria-selected="false">Stacks<span class="n" id="n-stacks"></span></button>
+    <button role="tab" data-tab="ideas" aria-selected="false">Pages<span class="n" id="n-ideas"></span></button>
     <button role="tab" data-tab="laptop" aria-selected="false">Laptop</button>
     <button role="tab" data-tab="settings" aria-selected="false">Settings</button>
   </div>
@@ -1536,6 +1537,10 @@ const launcherPageHTML = `<!doctype html>
   </div>
   <div data-pane="stacks" hidden>
     <div id="list" class="msg">Loading…</div>
+  </div>
+  <div data-pane="ideas" hidden>
+    <p class="hostnote">Ideas, specs, designs and proposals the agent keeps: one page each, commented by anyone with its link, answered live, built from. <code>corgi idea new "…"</code> adds one; <a href="/idea/" style="color:var(--accent)">all pages</a>.</p>
+    <div id="ideas" class="msg">Loading…</div>
   </div>
   <div data-pane="laptop" hidden>
   <details class="tips" id="tips" hidden>
@@ -1745,7 +1750,33 @@ const launcherPageHTML = `<!doctype html>
     if (openPanel || document.querySelector('.startbox.on')) return;
     load();
     loadBoard();
+    loadIdeas();
   }
+
+  // The pages: one row each, the count on the tab is what waits on a person.
+  async function loadIdeas() {
+    const box = document.getElementById('ideas');
+    if (!box) return;
+    try {
+      const r = await fetch('/launch/ideas', { headers: auth });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const j = await r.json();
+      const ideas = j.ideas || [];
+      tabCount('ideas', ideas.reduce((n, m) => n + (m.open || 0), 0));
+      box.className = ''; box.innerHTML = '';
+      if (!ideas.length) { box.className = 'msg'; box.textContent = 'No pages yet. corgi idea new "a scheduling app for a coffee shop"'; return; }
+      for (const m of ideas) {
+        const a = document.createElement('a'); a.href = '/idea/' + encodeURIComponent(m.slug); a.className = 'ev';
+        a.style.cssText = 'display:block;text-decoration:none;color:inherit;border:1px solid var(--line);border-radius:.6rem;background:var(--card);padding:.6rem .75rem;margin:0 0 .45rem';
+        const b = document.createElement('b'); b.textContent = m.name || m.title; a.appendChild(b);
+        const s = document.createElement('div'); s.style.cssText = 'color:var(--dim);font-size:.78rem;margin-top:.1rem'; s.textContent = m.summary || m.title; a.appendChild(s);
+        const meta = document.createElement('div'); meta.style.cssText = 'display:flex;gap:.5rem;flex-wrap:wrap;font-size:.7rem;color:var(--dim);margin-top:.3rem';
+        for (const t of [m.type || 'idea', m.status || 'draft', (m.open || 0) + ' open', m.forAgent ? m.forAgent + ' waiting on the agent' : '', m.workspace || '']) { if (!t) continue; const sp = document.createElement('span'); sp.textContent = t; meta.appendChild(sp); }
+        a.appendChild(meta); box.appendChild(a);
+      }
+    } catch (e) { box.className = 'msg err'; box.textContent = '✗ ' + e.message; }
+  }
+  loadIdeas();
 
   function initSettings() {
     const s = document.getElementById('settings');

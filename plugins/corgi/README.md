@@ -35,6 +35,7 @@ review pull requests, and keep the work moving while you are away from the desk.
 | `complexity` | Measures and lowers the complexity of changed code |
 | `prep-pr` | Gets a branch ready for review and opens the PR |
 | `tracker` | Status, triage and planning on Linear or Jira |
+| `idea` | One page per thing to build or decide (idea, spec, HLD, RFC): written, kept, answered and split into tickets by the agent; built from or sent to Jira, Linear, Confluence |
 | `autopilot` | A supervised loop that drains build-ready tickets into draft PRs |
 | `suggest`, `suggest-proactive` | Ranked improvement ideas; one a week on the board |
 | `align` | Settles a request that can be read two ways before building |
