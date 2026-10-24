@@ -18,6 +18,11 @@ func TestWorkspaceTokensBeatTheMachineWideOnesAndTheEnvironment(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("LINEAR_API_KEY", "env-linear")
+	// A machine that carries forge tokens in its environment (a CI runner, a
+	// sandbox) must not leak them into what the file is expected to say.
+	for _, k := range []string{"GITHUB_TOKEN", "GITLAB_TOKEN", "GITLAB_URL", "JIRA_URL", "JIRA_EMAIL", "JIRA_API_TOKEN", "SLACK_USER_TOKEN", "SLACK_BOT_TOKEN"} {
+		t.Setenv(k, "")
+	}
 
 	global := LoadSecrets(dir)
 	if global.Linear != "env-linear" || global.JiraToken != "" {

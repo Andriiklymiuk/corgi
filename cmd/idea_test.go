@@ -514,8 +514,14 @@ func TestSendMakesAnEpicWithTicketsOrAConfluencePage(t *testing.T) {
 		t.Fatalf("jira bodies: %v", jiraBodies)
 	}
 	after, _ := idea.Load(dir, id.Meta.Slug)
-	if tk := after.Meta.Tickets; tk[0].Ref != "SHOP-2" || !strings.HasPrefix(tk[0].URL, jira.URL+"/browse/") || tk[1].State != "Todo" {
-		t.Fatalf("tickets now point at jira: %+v", tk)
+	if tk := after.Meta.Tickets; tk[0].Ref != "SHOP-2" || tk[0].Task != "TASK-1" || !strings.HasPrefix(tk[0].URL, jira.URL+"/browse/") || tk[1].State != "Todo" {
+		t.Fatalf("tickets now point at jira and still know their board task: %+v", tk)
+	}
+	if _, err := watch.LoadTasks(dir).Move("TASK-1", "Done", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if live := liveTickets(dir, after.Meta); live[0].State != "Done" {
+		t.Fatalf("the board's state still reaches a ticket sent to jira: %+v", live)
 	}
 	if len(after.Meta.Sent) != 1 || after.Meta.Sent[0].Kind != "epic" {
 		t.Fatalf("sent: %+v", after.Meta.Sent)
@@ -606,5 +612,143 @@ func TestTheIndexIsForTheDashboardOnly(t *testing.T) {
 	}
 	if rec := ideaGet(open, "/idea/"); rec.Code != 200 || !strings.Contains(rec.Body.String(), "Pages") {
 		t.Fatalf("the shell: %d", rec.Code)
+	}
+}
+
+func TestAViewerDeviceSeesPagesButNoKeyOrPath(t *testing.T) {
+	dir := phoneBoard(t, false)
+	var calls []string
+	fakeWriter(t, &calls)
+	quietIdeaNotify(t)
+	id, _, err := newIdea(dir, ideaRequest{Text: "shifts", Model: "sonnet"}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/launch/ideas", nil)
+	req.Header.Set(viewerHeader, "1")
+	rec := httptest.NewRecorder()
+	launchIdeasHandler(rec, req)
+	if !strings.Contains(rec.Body.String(), `"slug":"brewshift"`) || strings.Contains(rec.Body.String(), id.Meta.Key) || strings.Contains(rec.Body.String(), `"file"`) {
+		t.Fatalf("a viewer gets the page, not its key or path: %s", rec.Body)
+	}
+	rec = ideaGet(launchIdeasHandler, "/launch/ideas")
+	if !strings.Contains(rec.Body.String(), id.Meta.Key) {
+		t.Fatalf("the owner's phone gets the link: %s", rec.Body)
+	}
+	// A friend with the link gets the page, not where it lives on the owner's disk.
+	open := ideaOpenHandler("secret", "")
+	rec = ideaGet(open, "/idea/brewshift/doc?k="+id.Meta.Key)
+	if rec.Code != 200 || strings.Contains(rec.Body.String(), `"file"`) || strings.Contains(rec.Body.String(), `"key"`) {
+		t.Fatalf("a key holder sees no path and no key: %d %s", rec.Code, clipTitle(rec.Body.String(), 300))
+	}
+	// A client cannot claim or shed the viewer mark itself.
+	req = httptest.NewRequest(http.MethodGet, "/launch/ideas", nil)
+	req.Header.Set(viewerHeader, "1")
+	rec = httptest.NewRecorder()
+	launchAuth("secret", http.HandlerFunc(launchIdeasHandler), "").ServeHTTP(rec, withBearer(req, "secret"))
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), id.Meta.Key) {
+		t.Fatalf("the owner's token wins over a header the client set: %d %s", rec.Code, clipTitle(rec.Body.String(), 200))
+	}
+}
+
+func withBearer(r *http.Request, token string) *http.Request {
+	r.Header.Set("Authorization", "Bearer "+token)
+	return r
+}
+
+func TestAnEditMadeWhileTheAgentWroteIsNotLost(t *testing.T) {
+	dir := phoneBoard(t, false)
+	quietIdeaNotify(t)
+	was := runIdeaPrint
+	runIdeaPrint = func(_ context.Context, _, model, system, prompt string) (string, error) {
+		if strings.Contains(system, "product-minded") {
+			return `{"name":"BrewShift","markdown":` + jsonString(fakePage) + `}`, nil
+		}
+		// While the agent writes, the owner edits the page in an editor.
+		_, _ = idea.Update(dir, "brewshift", func(id *idea.Idea) error { return id.SetDoc(id.Doc+"\n## Pricing\n\nFree.\n", time.Now()) })
+		return `{"page":` + jsonString(strings.Replace(fakePage, "SQLite", "Postgres", 1)) + `,"answers":[{"id":1,"reply":"Switched to Postgres.","changed":true}]}`, nil
+	}
+	t.Cleanup(func() { runIdeaPrint = was })
+	id, _, err := newIdea(dir, ideaRequest{Text: "shifts", Model: "sonnet"}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = idea.Update(dir, id.Meta.Slug, func(id *idea.Idea) error {
+		_, err := id.AddComment(idea.KindComment, "andrii", "postgres please", nil, nil, nil, time.Now())
+		return err
+	})
+	if _, err := answerIdea(dir, id.Meta.Slug, ""); err != nil {
+		t.Fatal(err)
+	}
+	after, _ := idea.Load(dir, id.Meta.Slug)
+	if !strings.Contains(after.Doc, "## Pricing") || strings.Contains(after.Doc, "Postgres") {
+		t.Fatalf("the owner's edit stays, the agent's rewrite of the old page does not land:\n%s", after.Doc)
+	}
+	c, _ := after.Find(1)
+	if c.Status != idea.StatusAnswered || !strings.Contains(c.Replies[0].Text, "page changed while I was writing") {
+		t.Fatalf("the reply says so and the comment is answered, not fixed: %+v", c)
+	}
+}
+
+func TestAnInterruptedSendIsFinishedNotRepeated(t *testing.T) {
+	dir := phoneBoard(t, false)
+	var calls []string
+	fakeWriter(t, &calls)
+	quietIdeaNotify(t)
+	creates, fail := 0, true
+	jira := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		creates++
+		if fail && creates == 3 {
+			w.WriteHeader(429)
+			_, _ = w.Write([]byte(`{"errorMessages":["slow down"]}`))
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"id": itoa(creates), "key": "SHOP-" + itoa(creates)})
+	}))
+	defer jira.Close()
+	if err := watch.SaveSecrets(dir, watch.Secrets{JiraURL: jira.URL, JiraEmail: "me@x", JiraToken: "tok"}); err != nil {
+		t.Fatal(err)
+	}
+	id, _, err := newIdea(dir, ideaRequest{Text: "shifts", Model: "sonnet"}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sendIdea(dir, id.Meta.Slug, "jira", "SHOP", ""); err == nil || !strings.Contains(err.Error(), "run send again") {
+		t.Fatalf("the failure says what to do: %v", err)
+	}
+	mid, _ := idea.Load(dir, id.Meta.Slug)
+	if len(mid.Meta.Sent) != 1 || mid.Meta.Tickets[0].Ref != "SHOP-2" || mid.Meta.Tickets[1].URL != "" {
+		t.Fatalf("the epic and the first ticket are kept: %+v %+v", mid.Meta.Sent, mid.Meta.Tickets)
+	}
+	fail = false
+	links, err := sendIdea(dir, id.Meta.Slug, "jira", "SHOP", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if creates != 4 || len(links) != 3 || links[0].Ref != "SHOP-1" || links[1].Ref != "SHOP-2" || links[2].Ref != "SHOP-4" {
+		t.Fatalf("only the missing ticket is created the second time (%d creates): %+v", creates, links)
+	}
+	after, _ := idea.Load(dir, id.Meta.Slug)
+	if len(after.Meta.Sent) != 1 {
+		t.Fatalf("one epic, not two: %+v", after.Meta.Sent)
+	}
+}
+
+func TestTheLoopClearsAnAnsweringFlagLeftByADeadProcess(t *testing.T) {
+	dir := phoneBoard(t, false)
+	var calls []string
+	fakeWriter(t, &calls)
+	quietIdeaNotify(t)
+	id, _, err := newIdea(dir, ideaRequest{Text: "shifts", Model: "sonnet"}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = idea.Update(dir, id.Meta.Slug, func(id *idea.Idea) error { id.Meta.Answering = true; return nil })
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	ideaAnswerLoop(ctx, dir, time.Hour)
+	after, _ := idea.Load(dir, id.Meta.Slug)
+	if after.Meta.Answering {
+		t.Fatal("the stale flag is cleared at start")
 	}
 }

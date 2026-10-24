@@ -3,7 +3,9 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -120,7 +122,7 @@ func keepRefs(old, now []idea.Ticket) []idea.Ticket {
 	}
 	for i := range now {
 		if o, ok := byTitle[strings.ToLower(now[i].Title)]; ok {
-			now[i].Ref, now[i].URL, now[i].State = o.Ref, o.URL, o.State
+			now[i].Ref, now[i].URL, now[i].State, now[i].Task = o.Ref, o.URL, o.State, o.Task
 		}
 	}
 	return now
@@ -330,7 +332,7 @@ func newIdea(dir string, req ideaRequest, now time.Time) (*idea.Idea, []watch.Ta
 			t, _ = tasks.Tag(t.Key(), id.Meta.Slug, id.Meta.Tags, now)
 			made = append(made, t)
 			id.Meta.Tasks = append(id.Meta.Tasks, t.ID)
-			id.Meta.Tickets[i].Ref, id.Meta.Tickets[i].State = t.Ref(), t.State
+			id.Meta.Tickets[i].Ref, id.Meta.Tickets[i].Task, id.Meta.Tickets[i].State = t.Ref(), t.Ref(), t.State
 		}
 	}
 	for _, p := range ans.Proposals {
@@ -363,13 +365,15 @@ func taskBodyFor(m idea.Meta, body string) string {
 
 var ideaAnswering sync.Map
 
+var errAlreadyAnswering = errors.New("the agent is already answering this page")
+
 // answerIdea is one pass of the agent over what waits on it: every open
 // comment by a person and every proposal a person accepted. It replies to
 // each, amends the page when a comment asks for it, and says who was told.
 // It returns false when nothing waited.
 func answerIdea(dir, slug, model string) (bool, error) {
 	if _, busy := ideaAnswering.LoadOrStore(slug, true); busy {
-		return false, fmt.Errorf("the agent is already answering %s", slug)
+		return false, fmt.Errorf("%w: %s", errAlreadyAnswering, slug)
 	}
 	defer ideaAnswering.Delete(slug)
 	id, err := idea.Load(dir, slug)
@@ -413,11 +417,16 @@ func answerIdea(dir, slug, model string) (bool, error) {
 	}
 	now := time.Now()
 	var told []string
-	changed := false
+	changed, stale := false, false
+	seen := id.Doc
 	updated, err := idea.Update(dir, slug, func(id *idea.Idea) error {
 		id.Meta.Answering = false
 		if ans.Page != "" && ans.Page != strings.TrimSpace(id.Doc) {
-			if err := id.SetDoc(ans.Page+"\n", now); err == nil {
+			// The page the agent rewrote is the one it read; an edit made
+			// meanwhile (an editor, the browser, another tool) wins over it.
+			if id.Doc != seen {
+				stale = true
+			} else if err := id.SetDoc(ans.Page+"\n", now); err == nil {
 				changed = true
 			}
 		}
@@ -426,7 +435,11 @@ func answerIdea(dir, slug, model string) (bool, error) {
 			if strings.TrimSpace(a.Reply) == "" {
 				continue
 			}
-			if _, err := id.Reply(a.ID, idea.Agent, a.Reply, a.Changed && changed, nil, nil, now); err == nil {
+			reply := a.Reply
+			if stale && a.Changed {
+				reply += "\n\n(The page changed while I was writing, so I did not apply my edit; say so again and I will redo it on the new page.)"
+			}
+			if _, err := id.Reply(a.ID, idea.Agent, reply, a.Changed && changed, nil, nil, now); err == nil {
 				answered[a.ID] = true
 				told = append(told, fmt.Sprintf("%d", a.ID))
 			}
@@ -621,7 +634,7 @@ func buildIdea(dir, slug, ws, model string, slots int, run bool) (ideaBuild, err
 		id.Meta.Tickets = ticketsFrom(ans.Tasks)
 		for i := range id.Meta.Tickets {
 			if i < len(made) {
-				id.Meta.Tickets[i].Ref, id.Meta.Tickets[i].State, id.Meta.Tickets[i].URL = made[i].Ref(), made[i].State, ""
+				id.Meta.Tickets[i].Ref, id.Meta.Tickets[i].Task, id.Meta.Tickets[i].State, id.Meta.Tickets[i].URL = made[i].Ref(), made[i].Ref(), made[i].State, ""
 			}
 		}
 		c, err := id.AddComment(idea.KindComment, idea.Agent, note, nil, nil, nil, now)
@@ -818,7 +831,7 @@ var ideaListCmd = &cobra.Command{
 	Args:  cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
 		dir := mustAgentDir()
-		rows := ideaRows(dir)
+		rows := ideaRows(dir, true)
 		if utils.JSONOutput {
 			utils.PrintJSON(map[string]any{"ideas": rows})
 			return
@@ -841,19 +854,27 @@ type ideaRow struct {
 	Open     int            `json:"open"`
 	ForAgent int            `json:"forAgent"`
 	Counts   map[string]int `json:"counts"`
-	File     string         `json:"file"`
+	File     string         `json:"file,omitempty"`
 	Link     string         `json:"link,omitempty"`
 }
 
-func ideaRows(dir string) []ideaRow {
+// ideaRows is every page with its counts. withLinks adds the share link
+// (its key in it) and the file's path: for the owner, never for a device
+// that may only read.
+func ideaRows(dir string, withLinks bool) []ideaRow {
 	out := []ideaRow{}
 	for _, m := range idea.List(dir) {
 		id, err := idea.Load(dir, m.Slug)
 		if err != nil {
 			continue
 		}
-		out = append(out, ideaRow{Meta: id.Meta, Open: id.Open(), ForAgent: len(id.ForAgent()), Counts: id.Counts(),
-			File: filepath.Join(id.Dir, idea.DocName), Link: ideaLink(dir, id.Meta, true)})
+		row := ideaRow{Meta: id.Meta, Open: id.Open(), ForAgent: len(id.ForAgent()), Counts: id.Counts()}
+		if withLinks {
+			row.File, row.Link = filepath.Join(id.Dir, idea.DocName), ideaLink(dir, id.Meta, true)
+		} else {
+			row.Meta.Key = ""
+		}
+		out = append(out, row)
 	}
 	return out
 }
@@ -921,7 +942,7 @@ var ideaShowCmd = &cobra.Command{
 			exitWithError("idea", err, 2)
 		}
 		if utils.JSONOutput {
-			utils.PrintJSON(ideaDocument(dir, id, true))
+			utils.PrintJSON(ideaDocument(dir, id, true, true))
 			return
 		}
 		fmt.Print(id.Doc)
@@ -950,8 +971,19 @@ when corgi idea watch is on; corgi idea answer <slug> does one pass now.`,
 		links, _ := cmd.Flags().GetStringArray("link")
 		files, _ := cmd.Flags().GetStringArray("file")
 		replyTo, _ := cmd.Flags().GetInt("reply-to")
+		asAgent, _ := cmd.Flags().GetBool("as-agent")
+		changed, _ := cmd.Flags().GetBool("changed")
+		if asAgent {
+			by = idea.Agent
+		}
 		if by == "" {
 			by = osUserName()
+		}
+		if by == idea.Agent && !asAgent {
+			exitWithError("idea", fmt.Errorf("--by agent is the agent's own name; say --as-agent when you answer as it"), 2)
+		}
+		if changed && (replyTo == 0 || !asAgent) {
+			exitWithError("idea", fmt.Errorf("--changed goes with --as-agent --reply-to <id>: the page was amended for that comment"), 2)
 		}
 		var attached []idea.Attachment
 		var result any
@@ -969,7 +1001,7 @@ when corgi idea watch is on; corgi idea answer <slug> does one pass now.`,
 			}
 			now := time.Now()
 			if replyTo > 0 {
-				r, err := id.Reply(replyTo, by, text, false, attached, links, now)
+				r, err := id.Reply(replyTo, by, text, changed, attached, links, now)
 				result = r
 				return err
 			}
@@ -987,8 +1019,12 @@ when corgi idea watch is on; corgi idea answer <slug> does one pass now.`,
 		if err != nil {
 			exitWithError("idea", err, 1)
 		}
-		ideaNotify(dir, id.Meta, "comment by "+by, clipTitle(text, 160))
-		scheduleIdeaAnswer(dir, slug)
+		if asAgent {
+			ideaNotify(dir, id.Meta, "answered", clipTitle(text, 160))
+		} else {
+			ideaNotify(dir, id.Meta, "comment by "+by, clipTitle(text, 160))
+			scheduleIdeaAnswer(dir, slug)
+		}
 		if utils.JSONOutput {
 			utils.PrintJSON(map[string]any{"comment": result, "open": id.Open(), "forAgent": len(id.ForAgent())})
 			return
@@ -1017,23 +1053,13 @@ func osUserName() string {
 }
 
 func mimeFor(name string) string {
-	switch strings.ToLower(filepath.Ext(name)) {
-	case ".png":
-		return "image/png"
-	case ".jpg", ".jpeg":
-		return "image/jpeg"
-	case ".gif":
-		return "image/gif"
-	case ".webp":
-		return "image/webp"
-	case ".svg":
-		return "image/svg+xml"
-	case ".pdf":
-		return "application/pdf"
+	ext := strings.ToLower(filepath.Ext(name))
+	switch ext {
 	case ".md", ".txt":
 		return "text/plain; charset=utf-8"
-	case ".json":
-		return "application/json"
+	}
+	if t := mime.TypeByExtension(ext); t != "" {
+		return t
 	}
 	return "application/octet-stream"
 }
@@ -1346,6 +1372,8 @@ func init() {
 	ideaCommentCmd.Flags().StringArray("link", nil, "a link to attach (repeatable)")
 	ideaCommentCmd.Flags().StringArray("file", nil, "a file to attach (repeatable)")
 	ideaCommentCmd.Flags().Int("reply-to", 0, "reply under this comment instead of starting one")
+	ideaCommentCmd.Flags().Bool("as-agent", false, "the reply is the agent's own answer (a session answering the page): the comment becomes answered")
+	ideaCommentCmd.Flags().Bool("changed", false, "with --as-agent --reply-to: the page was amended for this comment, so it becomes fixed")
 	ideaAnswerCmd.Flags().String("model", "", "the answering model (default: the page's)")
 	ideaAnswerCmd.Flags().String("kind", "", "claude or codex (default: the workspace's)")
 	ideaWatchCmd.Flags().String("model", "", "the answering model (default: each page's)")
@@ -1388,6 +1416,9 @@ func scheduleIdea(dir, slug string, restart bool) {
 	if !ideaAutoAnswerHere {
 		return
 	}
+	if _, running := ideaAnswering.Load(slug); running {
+		return
+	}
 	if at, ok := ideaAnswerFailed.Load(slug); ok && time.Since(at.(time.Time)) < ideaRetryAfter {
 		return
 	}
@@ -1404,7 +1435,7 @@ func scheduleIdea(dir, slug string, restart bool) {
 		switch {
 		case err == nil:
 			ideaAnswerFailed.Delete(slug)
-		case strings.Contains(err.Error(), "already answering"):
+		case errors.Is(err, errAlreadyAnswering):
 		default:
 			ideaAnswerFailed.Store(slug, time.Now())
 			utils.Infof("idea %s: %v\n", slug, err)
@@ -1431,6 +1462,13 @@ func scheduleIdea(dir, slug string, restart bool) {
 // arrived some other way (the CLI, an editor writing comments.json, a
 // phone through another route) gets answered too.
 func ideaAnswerLoop(ctx context.Context, dir string, every time.Duration) {
+	// A run this process is not making is not running: a page left saying
+	// "answering" by a process that died says so no more.
+	for _, m := range idea.List(dir) {
+		if m.Answering {
+			_, _ = idea.Update(dir, m.Slug, func(id *idea.Idea) error { id.Meta.Answering = false; return nil })
+		}
+	}
 	t := time.NewTicker(every)
 	defer t.Stop()
 	for {
@@ -1439,7 +1477,7 @@ func ideaAnswerLoop(ctx context.Context, dir string, every time.Duration) {
 			return
 		case <-t.C:
 			for _, m := range idea.List(dir) {
-				if m.Auto && !m.Answering {
+				if m.Auto {
 					scheduleIdea(dir, m.Slug, false)
 				}
 			}
@@ -1452,11 +1490,10 @@ func ideaAnswerLoop(ctx context.Context, dir string, every time.Duration) {
 var ideaAutoAnswerHere = false
 
 func ideaHTTPStatus(err error) int {
-	msg := err.Error()
 	switch {
-	case strings.HasPrefix(msg, "no idea"), strings.HasPrefix(msg, "no comment"):
+	case errors.Is(err, idea.ErrNotFound), errors.Is(err, idea.ErrNoComment):
 		return http.StatusNotFound
-	case strings.Contains(msg, "already answering"):
+	case errors.Is(err, errAlreadyAnswering):
 		return http.StatusConflict
 	}
 	return http.StatusBadRequest

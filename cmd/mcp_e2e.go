@@ -22,6 +22,12 @@ func launchAuth(token string, next http.Handler, deviceStorePath string) http.Ha
 		if !ok {
 			return
 		}
+		// Handlers that hand out more to an owner than to a viewer read this;
+		// a client cannot set it.
+		r.Header.Del(viewerHeader)
+		if id.viewer {
+			r.Header.Set(viewerHeader, "1")
+		}
 		if id.key == nil {
 			next.ServeHTTP(w, r)
 			return
@@ -29,6 +35,11 @@ func launchAuth(token string, next http.Handler, deviceStorePath string) http.Ha
 		serveSealed(w, r, next, id.key)
 	})
 }
+
+// viewerHeader marks a request from a device that may only read.
+const viewerHeader = "X-Corgi-Viewer"
+
+func isViewer(r *http.Request) bool { return r.Header.Get(viewerHeader) == "1" }
 
 type launchIdentity struct {
 	key    []byte
