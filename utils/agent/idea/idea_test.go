@@ -1,8 +1,10 @@
 package idea
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -178,4 +180,94 @@ func indexOf(s, sub string) int {
 		}
 	}
 	return -1
+}
+
+func TestTheSmallHelpersAndTheLimits(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Now()
+	id, err := Create(dir, "", "Limits", "# L\n", Meta{Type: "poem", Tickets: []Ticket{{Title: "a"}, {Title: "b"}}}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id.Meta.Type != TypeIdea || !ValidType(TypeHLD) || ValidType("poem") {
+		t.Fatalf("types: %+v", id.Meta)
+	}
+	if tk, ok := id.Meta.FindTicket(2); !ok || tk.Title != "b" {
+		t.Fatalf("tickets are numbered: %+v", id.Meta.Tickets)
+	}
+	if _, ok := id.Meta.FindTicket(9); ok {
+		t.Fatal("no ticket 9")
+	}
+	if err := id.SetDoc(string(make([]byte, MaxDoc+1)), now); err == nil {
+		t.Fatal("a page has a size")
+	}
+	if err := id.SetDoc("# New\n", now); err != nil || id.Doc != "# New\n" {
+		t.Fatalf("set: %v", err)
+	}
+	if _, err := Create(dir, "Bad Slug", "x", "y", Meta{}, now); err == nil {
+		t.Fatal("a slug is lowercase")
+	}
+	if _, err := Create(dir, "", "  ", "y", Meta{}, now); err == nil {
+		t.Fatal("a title is needed")
+	}
+	if _, err := Create(dir, "big", "x", string(make([]byte, MaxDoc+1)), Meta{}, now); err == nil {
+		t.Fatal("a page has a size at birth too")
+	}
+	if NewKey() == NewKey() || len(NewKey()) != 18 {
+		t.Fatal("keys differ")
+	}
+	if clip("héllo", 2) != "hé" || firstNonEmpty(" ", "b") != "b" || firstNonEmpty("a", "b") != "a" {
+		t.Fatal("clip and firstNonEmpty")
+	}
+	if _, err := id.AddComment(KindComment, "x", string(make([]byte, MaxComment+1)), nil, nil, nil, now); err == nil {
+		t.Fatal("a comment has a size")
+	}
+	c, _ := id.AddComment(KindComment, "x", "hi", &Anchor{Quote: "  "}, nil, nil, now)
+	if c.Anchor != nil {
+		t.Fatal("an empty quote is no anchor")
+	}
+	if _, err := id.Reply(c.ID, "y", "", false, nil, nil, now); err == nil {
+		t.Fatal("a reply needs words")
+	}
+	if _, err := id.Reply(c.ID, "y", string(make([]byte, MaxComment+1)), false, nil, nil, now); err == nil {
+		t.Fatal("a reply has a size")
+	}
+	if _, err := id.Reply(77, "y", "x", false, nil, nil, now); err == nil || !errors.Is(err, ErrNoComment) {
+		t.Fatalf("no comment 77: %v", err)
+	}
+	if _, err := id.SetStatus(77, StatusOpen, now); err == nil || !errors.Is(err, ErrNoComment) {
+		t.Fatalf("no comment 77: %v", err)
+	}
+	// Files: a count and a size, together.
+	for i := 0; i < MaxFiles; i++ {
+		if _, err := id.AddFile("f.txt", []byte("x"), ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := id.AddFile("one-more.txt", []byte("x"), ""); err == nil || !strings.Contains(err.Error(), "enough files") {
+		t.Fatalf("the count holds: %v", err)
+	}
+	if _, err := id.AddFile("huge.bin", make([]byte, MaxFile+1), ""); err == nil {
+		t.Fatal("one file has a size")
+	}
+	n, bytes := id.filesHeld()
+	if n != MaxFiles || bytes != int64(MaxFiles) {
+		t.Fatalf("held: %d %d", n, bytes)
+	}
+	// A broken meta.json is an error, not a page.
+	if err := os.WriteFile(filepath.Join(id.Dir, MetaName), []byte("{"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(dir, "limits"); err == nil {
+		t.Fatal("broken meta")
+	}
+	if _, err := Load(dir, "nope"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("missing: %v", err)
+	}
+	if _, err := Load(dir, "../x"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("not a slug: %v", err)
+	}
+	if got := List(dir); len(got) != 0 {
+		t.Fatalf("a broken page is left out of the list: %+v", got)
+	}
 }

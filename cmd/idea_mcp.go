@@ -39,7 +39,11 @@ func registerIdeaMCPTools(s *server.MCPServer) {
 			return nil, err
 		}
 		out := ideaDocument(dir, id, false, true)
-		out["waiting"] = id.ForAgent()
+		waiting := id.ForAgent()
+		if waiting == nil {
+			waiting = []idea.Comment{}
+		}
+		out["waiting"] = waiting
 		return out, nil
 	}))
 
@@ -55,8 +59,8 @@ func registerIdeaMCPTools(s *server.MCPServer) {
 		if err != nil {
 			return nil, err
 		}
-		req := ideaRequest{Text: r.GetString("text", ""), Type: r.GetString("type", ""), Workspace: r.GetString("workspace", ""), From: r.GetString("markdown", ""), By: "mcp", Model: ideaModel, Tasks: r.GetBool("tasks", true)}
-		if req.Text == "" && req.From == "" {
+		req := ideaRequest{Text: strings.TrimSpace(r.GetString("text", "")), Type: r.GetString("type", ""), Workspace: strings.TrimSpace(r.GetString("workspace", "")), From: r.GetString("markdown", ""), By: "mcp", Model: ideaModel, Tasks: r.GetBool("tasks", true)}
+		if req.Text == "" && strings.TrimSpace(req.From) == "" {
 			return nil, fmt.Errorf("say what the page is about")
 		}
 		id, tasks, err := newIdea(dir, req, time.Now())
