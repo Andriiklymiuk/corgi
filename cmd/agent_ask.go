@@ -44,6 +44,9 @@ func printIn(ctx context.Context, dir, model, system, prompt string) (string, er
 	}
 	cmd := exec.CommandContext(ctx, h.Bin, h.PrintArgs(harness.Print{Prompt: prompt, System: system, Model: model, Text: true})...)
 	cmd.Stdin = nil
+	if dir != "" {
+		cmd.Dir = dir
+	}
 	for _, kv := range os.Environ() {
 		if !strings.HasPrefix(kv, "CLAUDECODE=") {
 			cmd.Env = append(cmd.Env, kv)

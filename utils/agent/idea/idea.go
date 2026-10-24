@@ -16,6 +16,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -63,6 +64,14 @@ const (
 	MaxDoc     = 400 << 10
 	MaxComment = 8000
 	MaxFile    = 8 << 20
+	// A page's files, together: a link holder may attach, not fill the disk.
+	MaxFiles      = 200
+	MaxFilesBytes = 64 << 20
+)
+
+var (
+	ErrNotFound  = errors.New("no such idea page")
+	ErrNoComment = errors.New("no such comment")
 )
 
 // Meta is what the page is about, in a form a board or a list can show.
@@ -77,12 +86,16 @@ type Ticket struct {
 	Ref   string `json:"ref,omitempty"`
 	URL   string `json:"url,omitempty"`
 	State string `json:"state,omitempty"`
+	// Task is the board task (TASK-n) this ticket became, kept when Ref
+	// moves to the tracker's key, so the board's state still reaches it.
+	Task string `json:"task,omitempty"`
 }
 
 // Link is something the page was sent to: an epic, a tracker ticket, a
 // Confluence page.
 type Link struct {
 	Kind  string    `json:"kind"`
+	ID    string    `json:"id,omitempty"`
 	Ref   string    `json:"ref"`
 	URL   string    `json:"url,omitempty"`
 	Title string    `json:"title,omitempty"`
@@ -295,13 +308,13 @@ func Create(agentDir, slug, title, doc string, meta Meta, now time.Time) (*Idea,
 // Load reads one idea by slug.
 func Load(agentDir, slug string) (*Idea, error) {
 	if !ValidSlug(slug) {
-		return nil, fmt.Errorf("no idea %q", slug)
+		return nil, fmt.Errorf("%w: %q", ErrNotFound, slug)
 	}
 	dir := Dir(agentDir, slug)
 	raw, err := os.ReadFile(filepath.Join(dir, MetaName))
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("no idea %q - corgi idea list", slug)
+			return nil, fmt.Errorf("%w: %s - corgi idea list", ErrNotFound, slug)
 		}
 		return nil, err
 	}
@@ -336,7 +349,8 @@ func Load(agentDir, slug string) (*Idea, error) {
 	return id, nil
 }
 
-// List is every idea's meta, newest change first.
+// List is every idea's meta, newest change first. Only meta.json is read:
+// a loop that looks every few seconds must not read every page's text.
 func List(agentDir string) []Meta {
 	entries, err := os.ReadDir(Root(agentDir))
 	if err != nil {
@@ -347,11 +361,16 @@ func List(agentDir string) []Meta {
 		if !e.IsDir() || !ValidSlug(e.Name()) {
 			continue
 		}
-		id, err := Load(agentDir, e.Name())
+		raw, err := os.ReadFile(filepath.Join(Root(agentDir), e.Name(), MetaName))
 		if err != nil {
 			continue
 		}
-		out = append(out, id.Meta)
+		var m Meta
+		if json.Unmarshal(raw, &m) != nil {
+			continue
+		}
+		m.Slug = e.Name()
+		out = append(out, m)
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].UpdatedAt.After(out[j].UpdatedAt) })
 	return out
@@ -467,7 +486,7 @@ func (id *Idea) Reply(commentID int, by, text string, changed bool, files []Atta
 	}
 	c := id.find(commentID)
 	if c == nil {
-		return Reply{}, fmt.Errorf("no comment %d", commentID)
+		return Reply{}, fmt.Errorf("%w %d", ErrNoComment, commentID)
 	}
 	r := Reply{ID: id.Comments.Next, By: author(by), Text: text, At: now, Changed: changed, Files: files, Links: cleanLinks(links)}
 	id.Comments.Next++
@@ -495,7 +514,7 @@ func (id *Idea) SetStatus(commentID int, status string, now time.Time) (Comment,
 	}
 	c := id.find(commentID)
 	if c == nil {
-		return Comment{}, fmt.Errorf("no comment %d", commentID)
+		return Comment{}, fmt.Errorf("%w %d", ErrNoComment, commentID)
 	}
 	c.Status = status
 	c.Updated = now
@@ -587,6 +606,9 @@ func (id *Idea) AddFile(name string, data []byte, mime string) (Attachment, erro
 	if len(data) > MaxFile {
 		return Attachment{}, fmt.Errorf("a file is under %d MB", MaxFile>>20)
 	}
+	if n, bytes := id.filesHeld(); n >= MaxFiles || bytes+int64(len(data)) > MaxFilesBytes {
+		return Attachment{}, fmt.Errorf("this page holds enough files (%d, %d MB); remove some first", n, bytes>>20)
+	}
 	base := fileNamePattern.ReplaceAllString(filepath.Base(strings.TrimSpace(name)), "-")
 	base = strings.Trim(base, "-.")
 	if base == "" {
@@ -604,6 +626,23 @@ func (id *Idea) AddFile(name string, data []byte, mime string) (Attachment, erro
 		return Attachment{}, err
 	}
 	return Attachment{Name: base, Path: filepath.ToSlash(rel), Type: mime, Size: int64(len(data))}, nil
+}
+
+// filesHeld is how many files the page holds, and their size together.
+func (id *Idea) filesHeld() (int, int64) {
+	entries, err := os.ReadDir(filepath.Join(id.Dir, FilesDir))
+	if err != nil {
+		return 0, 0
+	}
+	var n int
+	var bytes int64
+	for _, e := range entries {
+		if info, err := e.Info(); err == nil && !e.IsDir() {
+			n++
+			bytes += info.Size()
+		}
+	}
+	return n, bytes
 }
 
 // FilePath is the attachment's path on disk, or "" when the name is not

@@ -431,9 +431,11 @@ const ideaPageHTML = `<!doctype html>
     const sent = $('#sentlist'); sent.innerHTML = '';
     for (const l of doc.sent || []) { const a = el('a', '', (l.kind === 'page' ? '📄 ' : '🎯 ') + l.ref + (l.title ? ' · ' + l.title : '')); a.href = l.url; a.target = '_blank'; a.rel = 'noopener'; sent.appendChild(a); }
     const p = doc.plan;
-    if (p) $('#buildWhy').textContent = p.ref + ' ' + p.state + ' · ' + p.done + ' done · ' + p.doing + ' doing · ' + p.review + ' in review · ' + p.todo + ' to do';
     const canBuild = !!token; $('#build').disabled = !canBuild; $('#buildTop').hidden = !canBuild;
-    if (!canBuild && !p) $('#buildWhy').textContent += ' Building and sending need the dashboard: open this page from corgi agent dashboard, or run corgi idea build ' + slug + '.';
+    let why = 'The split below is the agent\'s proposal of how the page becomes work; it keeps it in step with the page. When it reads right, hand it over: the tickets go on the board, a plan works through them, a worktree and a pull request per ticket.';
+    if (p) why = p.ref + ' ' + p.state + ' · ' + p.done + ' done · ' + p.doing + ' doing · ' + p.review + ' in review · ' + p.todo + ' to do';
+    else if (!canBuild) why += ' Building and sending need the dashboard: open this page from corgi agent dashboard, or run corgi idea build ' + slug + '.';
+    $('#buildWhy').textContent = why;
     $('#editBtn').hidden = !token;
     const sb = $('#sendbtns'); sb.innerHTML = '';
     if (token) for (const to of ['linear', 'jira', 'confluence']) { const opt = (doc.send || {})[to]; if (!opt) continue; const b = el('button', 'btn', 'send to ' + to); b.onclick = () => send(to, opt); sb.appendChild(b); }

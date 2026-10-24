@@ -66,8 +66,9 @@ type ideaAction struct {
 
 const ideaBodyLimit = 12 << 20
 
-// ideaDocument is the page as a client draws it.
-func ideaDocument(dir string, id *idea.Idea, withHTML bool) map[string]any {
+// ideaDocument is the page as a client draws it. trusted adds what only
+// the owner should see: the file's path on this machine and the share link.
+func ideaDocument(dir string, id *idea.Idea, withHTML, trusted bool) map[string]any {
 	type taskRow struct {
 		Ref   string `json:"ref"`
 		Key   string `json:"key"`
@@ -75,18 +76,23 @@ func ideaDocument(dir string, id *idea.Idea, withHTML bool) map[string]any {
 		State string `json:"state"`
 	}
 	tasks := []taskRow{}
-	for _, t := range watch.LoadTasks(dir).ByIdea(id.Meta.Slug) {
+	board := watch.LoadTasks(dir)
+	for _, t := range board.ByIdea(id.Meta.Slug) {
 		tasks = append(tasks, taskRow{Ref: t.Ref(), Key: t.Key(), Title: t.Title, State: t.State})
 	}
 	plan := map[string]any(nil)
 	if id.Meta.Plan > 0 {
 		if p, ok := watch.LoadPlans(dir).Find(fmt.Sprintf("P-%d", id.Meta.Plan)); ok {
-			pr := p.Progress(watch.LoadTasks(dir))
+			pr := p.Progress(board)
 			plan = map[string]any{"ref": p.Ref(), "state": p.State, "todo": pr.Todo, "doing": pr.Doing, "review": pr.Review, "done": pr.Done}
 		}
 	}
+	meta := id.Meta
+	if !trusted {
+		meta.Key = ""
+	}
 	out := map[string]any{
-		"idea":     id.Meta,
+		"idea":     meta,
 		"markdown": id.Doc,
 		"comments": id.Comments.Comments,
 		"tasks":    tasks,
@@ -97,8 +103,10 @@ func ideaDocument(dir string, id *idea.Idea, withHTML bool) map[string]any {
 		"counts":   id.Counts(),
 		"open":     id.Open(),
 		"forAgent": len(id.ForAgent()),
-		"file":     filepath.Join(id.Dir, idea.DocName),
-		"link":     ideaLink(dir, id.Meta, false),
+	}
+	if trusted {
+		out["file"] = filepath.Join(id.Dir, idea.DocName)
+		out["link"] = ideaLink(dir, id.Meta, false)
 	}
 	if withHTML {
 		out["html"] = renderIdeaHTML(id.Doc)
@@ -160,7 +168,7 @@ func ideaOpenHandler(token, deviceStore string) http.HandlerFunc {
 				writeLaunchError(w, http.StatusInternalServerError, err.Error())
 				return
 			}
-			writeLaunchJSON(w, map[string]any{"ideas": ideaRows(dir)})
+			writeLaunchJSON(w, map[string]any{"ideas": ideaRows(dir, true)})
 			return
 		}
 		if what == "" {
@@ -190,7 +198,7 @@ func ideaOpenHandler(token, deviceStore string) http.HandlerFunc {
 				writeLaunchError(w, http.StatusMethodNotAllowed, "GET the page")
 				return
 			}
-			writeLaunchJSON(w, ideaDocument(dir, id, true))
+			writeLaunchJSON(w, ideaDocument(dir, id, true, trusted))
 		case "stream":
 			ideaStream(w, r, dir, id)
 		case "file":
@@ -352,7 +360,7 @@ func ideaPerform(dir string, a ideaAction, trusted bool, defaultBy string) (any,
 		if err != nil {
 			return nil, ideaHTTPStatus(err), err
 		}
-		return ideaDocument(dir, id, true), 0, nil
+		return ideaDocument(dir, id, true, true), 0, nil
 	case "auto":
 		if !trusted {
 			return nil, http.StatusForbidden, fmt.Errorf("only the dashboard sets that")
@@ -473,7 +481,7 @@ func launchIdeasHandler(w http.ResponseWriter, r *http.Request) {
 		writeLaunchError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeLaunchJSON(w, map[string]any{"ideas": ideaRows(dir), "notify": ideaNotifyOn(dir)})
+	writeLaunchJSON(w, map[string]any{"ideas": ideaRows(dir, !isViewer(r)), "notify": ideaNotifyOn(dir)})
 }
 
 func launchIdeaHandler(w http.ResponseWriter, r *http.Request) {
@@ -505,7 +513,7 @@ func launchIdeaHandler(w http.ResponseWriter, r *http.Request) {
 			writeLaunchJSON(w, map[string]any{"name": filepath.Base(path), "type": mimeFor(path), "data": base64.StdEncoding.EncodeToString(data)})
 			return
 		}
-		writeLaunchJSON(w, ideaDocument(dir, id, r.URL.Query().Get("html") == "1"))
+		writeLaunchJSON(w, ideaDocument(dir, id, r.URL.Query().Get("html") == "1", !isViewer(r)))
 	case http.MethodPost:
 		var a ideaAction
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, ideaBodyLimit)).Decode(&a); err != nil {
@@ -558,7 +566,7 @@ func launchIdeaNew(w http.ResponseWriter, dir string, a ideaAction) {
 		writeLaunchError(w, http.StatusBadGateway, err.Error())
 		return
 	}
-	out := ideaDocument(dir, id, false)
+	out := ideaDocument(dir, id, false, true)
 	out["made"] = len(tasks)
 	writeLaunchJSON(w, out)
 }

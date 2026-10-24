@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"html"
 	"strings"
 	"time"
 
@@ -80,7 +81,7 @@ func liveTickets(dir string, m idea.Meta) []idea.Ticket {
 		byRef[t.Ref()] = t
 	}
 	for i, t := range out {
-		if bt, ok := byRef[t.Ref]; ok {
+		if bt, ok := byRef[firstNonEmpty(t.Task, t.Ref)]; ok {
 			out[i].State = bt.State
 		}
 	}
@@ -124,18 +125,41 @@ func sendIdea(dir, slug, to, project, space string) ([]idea.Link, error) {
 		if link != "" {
 			body += "\n\nThe page: " + link
 		}
-		epic, err := creator.Create(ctx, watch.NewIssue{Title: name, Body: body, Epic: true})
-		if err != nil {
-			return nil, err
+		// A send that broke part-way is finished, not repeated: the epic it
+		// made and the tickets it made are kept and reused.
+		var epicLink *idea.Link
+		for i := range id.Meta.Sent {
+			if l := id.Meta.Sent[i]; l.Kind == "epic" && strings.HasPrefix(l.Title, to+":") {
+				epicLink = &l
+				break
+			}
 		}
-		links = append(links, idea.Link{Kind: "epic", Ref: epic.Ref, URL: epic.URL, Title: name, At: now})
-		parent := epic.Ref
+		if epicLink == nil {
+			epic, err := creator.Create(ctx, watch.NewIssue{Title: name, Body: body, Epic: true})
+			if err != nil {
+				return nil, err
+			}
+			epicLink = &idea.Link{Kind: "epic", ID: epic.ID, Ref: epic.Ref, URL: epic.URL, Title: to + ":" + name, At: now}
+			if _, err := idea.Update(dir, slug, func(id *idea.Idea) error { id.Meta.Sent = append(id.Meta.Sent, *epicLink); return nil }); err != nil {
+				return nil, err
+			}
+		}
+		links = append(links, *epicLink)
+		parent := epicLink.Ref
 		if to == "linear" {
-			parent = epic.ID
+			parent = epicLink.ID
 		}
 		refs := make([]idea.Ticket, len(id.Meta.Tickets))
 		copy(refs, id.Meta.Tickets)
+		keep := func() {
+			_, _ = idea.Update(dir, slug, func(id *idea.Idea) error { id.Meta.Tickets = refs; return nil })
+		}
 		for i, t := range refs {
+			if t.URL != "" {
+				// Already in the tracker from an earlier, interrupted send.
+				links = append(links, idea.Link{Kind: "ticket", Ref: t.Ref, URL: t.URL, Title: t.Title, At: now})
+				continue
+			}
 			tb := t.Body
 			if link != "" {
 				tb += "\n\nFrom the page: " + link
@@ -144,14 +168,19 @@ func sendIdea(dir, slug, to, project, space string) ([]idea.Link, error) {
 				var after []string
 				for _, n := range t.After {
 					if n >= 1 && n <= len(refs) {
-						after = append(after, firstNonEmpty(refs[n-1].Ref, fmt.Sprintf("#%d", n)))
+						if n-1 < i && refs[n-1].URL != "" {
+							after = append(after, refs[n-1].Ref)
+						} else {
+							after = append(after, fmt.Sprintf("#%d %s", n, refs[n-1].Title))
+						}
 					}
 				}
 				tb += "\nAfter: " + strings.Join(after, ", ")
 			}
 			made, err := creator.Create(ctx, watch.NewIssue{Title: t.Title, Body: tb, Parent: parent})
 			if err != nil {
-				return links, fmt.Errorf("after %d ticket(s): %v", i, err)
+				keep()
+				return links, fmt.Errorf("after %d ticket(s) (kept; run send again to finish): %v", i, err)
 			}
 			refs[i].Ref, refs[i].URL = made.Ref, made.URL
 			if refs[i].State == "" {
@@ -161,9 +190,8 @@ func sendIdea(dir, slug, to, project, space string) ([]idea.Link, error) {
 		}
 		_, err = idea.Update(dir, slug, func(id *idea.Idea) error {
 			id.Meta.Tickets = refs
-			id.Meta.Sent = append(id.Meta.Sent, links[0])
-			note := fmt.Sprintf("Sent to %s as %s (%s): %d ticket(s) under it.", to, epic.Ref, epic.URL, len(refs))
-			if c, err := id.AddComment(idea.KindComment, idea.Agent, note, nil, nil, []string{epic.URL}, now); err == nil {
+			note := fmt.Sprintf("Sent to %s as %s (%s): %d ticket(s) under it.", to, epicLink.Ref, epicLink.URL, len(refs))
+			if c, err := id.AddComment(idea.KindComment, idea.Agent, note, nil, nil, []string{epicLink.URL}, now); err == nil {
 				_, _ = id.SetStatus(c.ID, idea.StatusAnswered, now)
 			}
 			return nil
@@ -219,7 +247,4 @@ func sendIdea(dir, slug, to, project, space string) ([]idea.Link, error) {
 	return links, nil
 }
 
-func htmlEscape(s string) string {
-	r := strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;")
-	return r.Replace(s)
-}
+func htmlEscape(s string) string { return html.EscapeString(s) }

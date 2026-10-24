@@ -37,9 +37,15 @@ last word is a person's wait on you. For each: read its `anchor.quote` in the pa
 then either
 
 - change the page (`corgi_idea_edit` with the whole markdown, or edit the file at
-  `corgi idea path <slug>`) and reply `--reply-to <id>` saying what changed and in
-  which section - the status becomes **fixed**; or
-- answer in the reply without touching the page - **answered**.
+  `corgi idea path <slug>`) and reply as the agent:
+  `corgi idea comment <slug> "<what changed, in which section>" --reply-to <id> --as-agent --changed`
+  (or `corgi_idea_comment` with `by: "agent"`, `replyTo`, `changed: true`) - the
+  status becomes **fixed**; or
+- answer in the reply without touching the page: the same without `--changed` -
+  **answered**.
+
+A reply without `--as-agent` is a person's: it keeps the comment waiting on the
+agent, and the dashboard will answer it again.
 
 Keep the `## Tickets`-level split in step: when scope moved, pass the new split to
 `corgi_idea_edit` (`tickets`). A proposal of yours that a person accepted (replied

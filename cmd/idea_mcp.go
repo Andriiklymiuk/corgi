@@ -23,7 +23,7 @@ func registerIdeaMCPTools(s *server.MCPServer) {
 		if err != nil {
 			return nil, err
 		}
-		return map[string]any{"ideas": ideaRows(dir)}, nil
+		return map[string]any{"ideas": ideaRows(dir, true)}, nil
 	}))
 
 	s.AddTool(newCorgiTool("corgi_idea_read",
@@ -38,7 +38,7 @@ func registerIdeaMCPTools(s *server.MCPServer) {
 		if err != nil {
 			return nil, err
 		}
-		out := ideaDocument(dir, id, false)
+		out := ideaDocument(dir, id, false, true)
 		out["waiting"] = id.ForAgent()
 		return out, nil
 	}))
@@ -158,10 +158,12 @@ func registerIdeaMCPTools(s *server.MCPServer) {
 		if raw, ok := r.GetArguments()["tickets"].([]any); ok {
 			for _, item := range raw {
 				m, _ := item.(map[string]any)
-				t := plannerTask{Title: fmt.Sprint(m["title"]), Body: fmt.Sprint(m["body"])}
-				if m["body"] == nil {
-					t.Body = ""
+				title, _ := m["title"].(string)
+				body, _ := m["body"].(string)
+				if strings.TrimSpace(title) == "" {
+					continue
 				}
+				t := plannerTask{Title: title, Body: body}
 				if after, ok := m["after"].([]any); ok {
 					for _, n := range after {
 						if f, ok := n.(float64); ok {
