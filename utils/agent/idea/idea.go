@@ -617,10 +617,18 @@ func (id *Idea) AddFile(name string, data []byte, mime string) (Attachment, erro
 	if len(base) > 80 {
 		base = base[len(base)-80:]
 	}
-	stamp := fmt.Sprintf("%d-%s", time.Now().UnixMilli(), base)
-	rel := filepath.Join(FilesDir, stamp)
 	if err := os.MkdirAll(filepath.Join(id.Dir, FilesDir), 0o700); err != nil {
 		return Attachment{}, err
+	}
+	// Two files in the same millisecond (a burst from one phone) must not
+	// land on one name.
+	ms := time.Now().UnixMilli()
+	rel := filepath.Join(FilesDir, fmt.Sprintf("%d-%s", ms, base))
+	for i := 2; ; i++ {
+		if _, err := os.Stat(filepath.Join(id.Dir, rel)); os.IsNotExist(err) {
+			break
+		}
+		rel = filepath.Join(FilesDir, fmt.Sprintf("%d-%d-%s", ms, i, base))
 	}
 	if err := atomicfile.Write(filepath.Join(id.Dir, rel), data, 0o600); err != nil {
 		return Attachment{}, err
