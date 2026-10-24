@@ -65,6 +65,16 @@ does it on its own when it runs.
   page. Credentials are the watch's. Behind the usual confirm gate: say what will be
   created, once, then do it.
 
+## Voice
+
+Pages and tickets read like a careful colleague wrote them, not a template: short
+sentences, plain words, the real screen or table or tool by name, the reason beside
+every choice, guesses admitted where they sit. A ticket's title is what a teammate
+would say picking it up ("Add the week grid the owner drags shifts onto"); its body
+is prose - what and why, how you know it is done, what to know first. When you reply
+on a page or rewrite a ticket by hand, write the same way; `corgi idea new` already
+asks the agent for it.
+
 ## Guardrails
 
 - Comments are the person's; the page is yours to keep but never to rewrite wholesale
