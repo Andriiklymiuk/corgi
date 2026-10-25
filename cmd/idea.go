@@ -334,26 +334,7 @@ func newIdea(dir string, req ideaRequest, now time.Time) (*idea.Idea, []watch.Ta
 	if !idea.ValidType(typ) {
 		typ = idea.TypeIdea
 	}
-	soul := soulFor(typ)
-	prompt := "Build this: " + text + "\n"
-	switch typ {
-	case idea.TypeSpec:
-		prompt = "The feature: " + text + "\n"
-	case idea.TypeHLD:
-		prompt = "The system or change to design: " + text + "\n"
-	case idea.TypeRFC:
-		prompt = "The proposal: " + text + "\n"
-	}
-	if from := strings.TrimSpace(req.From); from != "" {
-		soul = importSoul
-		prompt = "The page, as written:\n\n" + from + "\n"
-		if text != "" {
-			prompt = "About: " + text + "\n\n" + prompt
-		}
-	}
-	if root != "" {
-		prompt += "\nIt goes into an existing repository; fit its stack and conventions.\n" + repoPicture(root)
-	}
+	soul, prompt := ideaPrompt(typ, text, req.From, root)
 	ctx, cancel := context.WithTimeout(context.Background(), ideaTimeout)
 	defer cancel()
 	out, err := runIdeaPrint(ctx, runIn, req.Model, soul, prompt)
@@ -401,6 +382,34 @@ func newIdea(dir string, req ideaRequest, now time.Time) (*idea.Idea, []watch.Ta
 	}
 	nudgeDaemon(dir)
 	return id, made, nil
+}
+
+// ideaPrompt is the soul and the prompt the agent writes a page from: by
+// type, from a page already written (kept as is), and with a look at the
+// repository when the page goes into one.
+func ideaPrompt(typ, text, from, root string) (soul, prompt string) {
+	soul = soulFor(typ)
+	switch typ {
+	case idea.TypeSpec:
+		prompt = "The feature: " + text + "\n"
+	case idea.TypeHLD:
+		prompt = "The system or change to design: " + text + "\n"
+	case idea.TypeRFC:
+		prompt = "The proposal: " + text + "\n"
+	default:
+		prompt = "Build this: " + text + "\n"
+	}
+	if from = strings.TrimSpace(from); from != "" {
+		soul = importSoul
+		prompt = "The page, as written:\n\n" + from + "\n"
+		if text != "" {
+			prompt = "About: " + text + "\n\n" + prompt
+		}
+	}
+	if root != "" {
+		prompt += "\nIt goes into an existing repository; fit its stack and conventions.\n" + repoPicture(root)
+	}
+	return soul, prompt
 }
 
 func firstHeading(md string) string {

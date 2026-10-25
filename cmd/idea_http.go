@@ -518,37 +518,7 @@ func launchIdeaHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	switch r.Method {
 	case http.MethodGet:
-		id, err := idea.Load(dir, strings.TrimSpace(r.URL.Query().Get("slug")))
-		if err != nil {
-			writeLaunchError(w, http.StatusNotFound, err.Error())
-			return
-		}
-		if rev := strings.TrimSpace(r.URL.Query().Get("rev")); rev != "" {
-			n, _ := strconv.Atoi(rev)
-			rv, doc, err := id.RevisionDoc(n)
-			if err != nil {
-				writeLaunchError(w, ideaHTTPStatus(err), err.Error())
-				return
-			}
-			writeLaunchJSON(w, map[string]any{"revision": rv, "markdown": doc})
-			return
-		}
-		if name := strings.TrimSpace(r.URL.Query().Get("file")); name != "" {
-			// A phone speaks sealed, so a file comes back inside JSON.
-			path := id.FilePath(name)
-			if path == "" {
-				writeLaunchError(w, http.StatusNotFound, "no such file on this page")
-				return
-			}
-			data, err := os.ReadFile(path)
-			if err != nil {
-				writeLaunchError(w, http.StatusInternalServerError, err.Error())
-				return
-			}
-			writeLaunchJSON(w, map[string]any{"name": filepath.Base(path), "type": mimeFor(path), "data": base64.StdEncoding.EncodeToString(data)})
-			return
-		}
-		writeLaunchJSON(w, ideaDocument(dir, id, r.URL.Query().Get("html") == "1", !isViewer(r)))
+		launchIdeaGet(w, r, dir)
 	case http.MethodPost:
 		var a ideaAction
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, ideaBodyLimit)).Decode(&a); err != nil {
@@ -560,15 +530,7 @@ func launchIdeaHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if a.Do == "notify" {
-			want := "on"
-			if a.Auto != nil && !*a.Auto {
-				want = "off"
-			}
-			if err := writeUserConfigLine(agentUserConfigPath(dir), ideaNotifyLine, ideaNotifyKey+": "+want); err != nil {
-				writeLaunchError(w, http.StatusInternalServerError, err.Error())
-				return
-			}
-			writeLaunchJSON(w, map[string]any{"notify": want == "on"})
+			launchIdeaNotify(w, dir, a)
 			return
 		}
 		out, status, err := ideaPerform(dir, a, true, "phone")
@@ -580,6 +542,61 @@ func launchIdeaHandler(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeLaunchError(w, http.StatusMethodNotAllowed, "GET ?slug=, or POST {slug, do, …}")
 	}
+}
+
+// launchIdeaGet answers a device reading a page: the document, one
+// revision of it (rev=), or one of its files (file=).
+func launchIdeaGet(w http.ResponseWriter, r *http.Request, dir string) {
+	q := r.URL.Query()
+	id, err := idea.Load(dir, strings.TrimSpace(q.Get("slug")))
+	if err != nil {
+		writeLaunchError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	if rev := strings.TrimSpace(q.Get("rev")); rev != "" {
+		n, _ := strconv.Atoi(rev)
+		rv, doc, err := id.RevisionDoc(n)
+		if err != nil {
+			writeLaunchError(w, ideaHTTPStatus(err), err.Error())
+			return
+		}
+		writeLaunchJSON(w, map[string]any{"revision": rv, "markdown": doc})
+		return
+	}
+	if name := strings.TrimSpace(q.Get("file")); name != "" {
+		launchIdeaFile(w, id, name)
+		return
+	}
+	writeLaunchJSON(w, ideaDocument(dir, id, q.Get("html") == "1", !isViewer(r)))
+}
+
+// launchIdeaFile sends one attachment inside JSON: a phone speaks sealed,
+// so bytes travel as base64.
+func launchIdeaFile(w http.ResponseWriter, id *idea.Idea, name string) {
+	path := id.FilePath(name)
+	if path == "" {
+		writeLaunchError(w, http.StatusNotFound, "no such file on this page")
+		return
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		writeLaunchError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeLaunchJSON(w, map[string]any{"name": filepath.Base(path), "type": mimeFor(path), "data": base64.StdEncoding.EncodeToString(data)})
+}
+
+// launchIdeaNotify turns the machine-wide ring on comments and answers on or off.
+func launchIdeaNotify(w http.ResponseWriter, dir string, a ideaAction) {
+	want := "on"
+	if a.Auto != nil && !*a.Auto {
+		want = "off"
+	}
+	if err := writeUserConfigLine(agentUserConfigPath(dir), ideaNotifyLine, ideaNotifyKey+": "+want); err != nil {
+		writeLaunchError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeLaunchJSON(w, map[string]any{"notify": want == "on"})
 }
 
 // launchIdeaNew writes a page from the phone: the agent run takes a
