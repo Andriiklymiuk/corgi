@@ -881,3 +881,43 @@ func TestHistoryFromTheTerminal(t *testing.T) {
 		t.Fatalf("no revision 7: %d", code)
 	}
 }
+
+func TestEditFromTheTerminalKeepsARevision(t *testing.T) {
+	dir := phoneBoard(t, false)
+	var calls []string
+	fakeWriter(t, &calls)
+	quietIdeaNotify(t)
+	if _, code := runIdea(t, "new", "shifts"); code != 0 {
+		t.Fatal("new")
+	}
+	file := filepath.Join(t.TempDir(), "page.md")
+	if err := os.WriteFile(file, []byte("# Rota\n\nShifts for a coffee shop.\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out, code := runIdea(t, "edit", "brewshift", "--from", file, "--by", "mac", "--json")
+	if code != 0 {
+		t.Fatalf("edit: %d %s", code, out)
+	}
+	doc := ideaJSONOut(t, out)
+	if doc["markdown"] != "# Rota\n\nShifts for a coffee shop.\n" {
+		t.Fatalf("the page did not take the file: %v", doc["markdown"])
+	}
+	id, err := idea.Load(dir, "brewshift")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(id.Meta.Revisions) != 1 || id.Meta.Revisions[0].By != "mac" || id.Meta.Revisions[0].Note != "edited" {
+		t.Fatalf("revision: %+v", id.Meta.Revisions)
+	}
+	if _, code := runIdea(t, "edit", "brewshift"); code != 2 {
+		t.Fatalf("no --from: %d", code)
+	}
+	empty := filepath.Join(t.TempDir(), "empty.md")
+	_ = os.WriteFile(empty, []byte("  \n"), 0o600)
+	if _, code := runIdea(t, "edit", "brewshift", "--from", empty); code != 2 {
+		t.Fatalf("empty file: %d", code)
+	}
+	if _, code := runIdea(t, "edit", "nope", "--from", file); code != 1 {
+		t.Fatalf("no such page: %d", code)
+	}
+}
