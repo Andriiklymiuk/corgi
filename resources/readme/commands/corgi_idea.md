@@ -62,6 +62,7 @@ notifyUrl (Telegram): corgi idea notify off keeps them quiet.
 * [corgi idea answer](corgi_idea_answer)	 - One pass of the agent over the comments waiting on it: replies, and the page amended where asked
 * [corgi idea build](corgi_idea_build)	 - Hand the page to the agents: tasks on the board, a plan through them, the daemon starts building
 * [corgi idea comment](corgi_idea_comment)	 - Comment on the page - on highlighted words with --quote, or on the whole page
+* [corgi idea edit](corgi_idea_edit)	 - Replace the page's text with a file's, keeping the version before as a revision
 * [corgi idea history](corgi_idea_history)	 - The page's earlier versions - who changed it and why - or one of them in full
 * [corgi idea list](corgi_idea_list)	 - Every idea page, newest change first, with what waits on whom
 * [corgi idea new](corgi_idea_new)	 - The agent writes the page for a sentence: a name, tags, the spec, first tasks, proposals

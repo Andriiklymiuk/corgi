@@ -1450,6 +1450,52 @@ var ideaHistoryCmd = &cobra.Command{
 	},
 }
 
+var ideaEditCmd = &cobra.Command{
+	Use:   "edit <slug> --from <file>",
+	Short: "Replace the page's text with a file's, keeping the version before as a revision",
+	Long: `  corgi idea edit brewshift --from ./brewshift.md
+  corgi idea edit brewshift --from ./brewshift.md --by andrii
+
+The version before is filed under corgi idea history with who edited it and
+"edited" - the same as an edit in the browser or from a paired device. Writing
+idea.md by hand keeps no such record.`,
+	Args: cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		dir := mustAgentDir()
+		fromPath, _ := cmd.Flags().GetString("from")
+		by, _ := cmd.Flags().GetString("by")
+		if fromPath == "" {
+			exitWithError("idea", fmt.Errorf("--from names the file with the new text"), 2)
+		}
+		data, err := os.ReadFile(fromPath)
+		if err != nil {
+			exitWithError("idea", err, 2)
+		}
+		if strings.TrimSpace(string(data)) == "" {
+			exitWithError("idea", fmt.Errorf("%s is empty", fromPath), 2)
+		}
+		if by == "" {
+			by = osUserName()
+		}
+		if by == idea.Agent {
+			by = "someone"
+		}
+		now := time.Now()
+		id, err := idea.Update(dir, args[0], func(id *idea.Idea) error {
+			id.ChangeBy, id.ChangeNote = by, "edited"
+			return id.SetDoc(string(data), now)
+		})
+		if err != nil {
+			exitWithError("idea", err, 1)
+		}
+		if utils.JSONOutput {
+			utils.PrintJSON(ideaDocument(dir, id, true, true))
+			return
+		}
+		fmt.Printf("%s edited by %s · %d revision(s) kept\n", args[0], by, len(id.Meta.Revisions))
+	},
+}
+
 var ideaShareCmd = &cobra.Command{
 	Use:   "share <slug> [--off] [--rotate]",
 	Short: "The open link (anyone with it reads and comments); --off closes the page, --rotate gives it a new key",
@@ -1558,6 +1604,8 @@ func init() {
 	ideaSetCmd.Flags().String("type", "", "idea, spec, hld or rfc")
 	ideaSetCmd.Flags().String("auto", "", "on or off: whether the agent answers comments on its own")
 	ideaHistoryCmd.Flags().Int("rev", 0, "print this earlier version of the page")
+	ideaEditCmd.Flags().String("from", "", "the file whose text becomes the page")
+	ideaEditCmd.Flags().String("by", "", "who edited it, on the revision (default: $USER)")
 	ideaCommentCmd.Flags().String("by", "", "your name on the comment (default: $USER)")
 	ideaCommentCmd.Flags().StringArray("link", nil, "a link to attach (repeatable)")
 	ideaCommentCmd.Flags().StringArray("file", nil, "a file to attach (repeatable)")
@@ -1578,7 +1626,7 @@ func init() {
 	ideaCmd.AddCommand(ideaNewCmd, ideaListCmd, ideaOpenCmd, ideaPathCmd, ideaShowCmd, ideaCommentCmd,
 		ideaStatusCommand("resolve", "Close a comment: it is settled", idea.StatusResolved),
 		ideaStatusCommand("reopen", "Open a comment again: the agent takes another look", idea.StatusOpen),
-		ideaAnswerCmd, ideaWatchCmd, ideaBuildCmd, ideaSendCmd, ideaTicketsCmd, ideaSetCmd, ideaHistoryCmd, ideaShareCmd, ideaNotifyCmd, ideaRmCmd)
+		ideaAnswerCmd, ideaWatchCmd, ideaBuildCmd, ideaSendCmd, ideaTicketsCmd, ideaSetCmd, ideaHistoryCmd, ideaEditCmd, ideaShareCmd, ideaNotifyCmd, ideaRmCmd)
 	rootCmd.AddCommand(ideaCmd)
 }
 
