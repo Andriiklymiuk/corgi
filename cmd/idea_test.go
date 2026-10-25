@@ -831,3 +831,48 @@ func TestSetChangesWhatAPageIsCalled(t *testing.T) {
 		t.Fatalf("fields left out stay: %+v", after.Meta)
 	}
 }
+
+func TestHistoryIsServedAndNamesWhoChangedThePage(t *testing.T) {
+	dir := phoneBoard(t, false)
+	var calls []string
+	fakeWriter(t, &calls)
+	quietIdeaNotify(t)
+	id, _, err := newIdea(dir, ideaRequest{Text: "shifts", Model: "sonnet"}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	open := ideaOpenHandler("secret", "")
+	req := httptest.NewRequest(http.MethodPost, "/idea/brewshift/edit", strings.NewReader(`{"markdown":"# Edited\n","by":"andrii"}`))
+	req.Header.Set("Authorization", "Bearer secret")
+	rec := httptest.NewRecorder()
+	open(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("edit: %d %s", rec.Code, rec.Body)
+	}
+	_, _ = idea.Update(dir, id.Meta.Slug, func(id *idea.Idea) error {
+		_, err := id.AddComment(idea.KindComment, "maria", "postgres", nil, nil, nil, time.Now())
+		return err
+	})
+	if _, err := answerIdea(dir, id.Meta.Slug, ""); err != nil {
+		t.Fatal(err)
+	}
+	after, _ := idea.Load(dir, id.Meta.Slug)
+	if n := len(after.Meta.Revisions); n != 2 || after.Meta.Revisions[0].By != "andrii" || after.Meta.Revisions[0].Note != "edited" || after.Meta.Revisions[1].By != idea.Agent || !strings.Contains(after.Meta.Revisions[1].Note, "answered comment(s) 3") {
+		t.Fatalf("two revisions, named: %+v", after.Meta.Revisions)
+	}
+	rec = ideaGet(launchIdeaHandler, "/launch/idea?slug=brewshift&rev=1")
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "# BrewShift") || !strings.Contains(rec.Body.String(), `"by":"andrii"`) {
+		t.Fatalf("revision 1 over the launcher: %d %s", rec.Code, clipTitle(rec.Body.String(), 200))
+	}
+	if rec := ideaGet(launchIdeaHandler, "/launch/idea?slug=brewshift&rev=9"); rec.Code != 404 {
+		t.Fatalf("no revision 9: %d", rec.Code)
+	}
+	rec = ideaGet(open, "/idea/brewshift/rev/2?k="+after.Meta.Key)
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), `"markdown":"# Edited\n"`) || !strings.Contains(rec.Body.String(), `"html":"`) {
+		t.Fatalf("revision 2 on the open route, rendered: %d %s", rec.Code, clipTitle(rec.Body.String(), 200))
+	}
+	doc := ideaGet(launchIdeaHandler, "/launch/idea?slug=brewshift")
+	if !strings.Contains(doc.Body.String(), `"revisions":[`) {
+		t.Fatal("the document carries the revision list")
+	}
+}

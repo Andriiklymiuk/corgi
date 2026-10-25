@@ -189,6 +189,7 @@ func registerIdeaMCPTools(s *server.MCPServer) {
 		}
 		id, err := idea.Update(dir, r.GetString("slug", ""), func(id *idea.Idea) error {
 			now := time.Now()
+			id.ChangeBy, id.ChangeNote = idea.Agent, "edited by a session"
 			if strings.TrimSpace(md) != "" {
 				if err := id.SetDoc(strings.TrimSpace(md)+"\n", now); err != nil {
 					return err

@@ -844,3 +844,40 @@ func TestTheCommentFlagsCarryContextAndSetRenames(t *testing.T) {
 		t.Fatalf("bad type: %d", code)
 	}
 }
+
+func TestHistoryFromTheTerminal(t *testing.T) {
+	dir := phoneBoard(t, false)
+	var calls []string
+	fakeWriter(t, &calls)
+	quietIdeaNotify(t)
+	if _, code := runIdea(t, "new", "shifts"); code != 0 {
+		t.Fatal("new")
+	}
+	out, code := runIdea(t, "history", "brewshift")
+	if code != 0 || !strings.Contains(out, "has not changed") {
+		t.Fatalf("history of a fresh page: %d %s", code, out)
+	}
+	_, _ = idea.Update(dir, "brewshift", func(id *idea.Idea) error {
+		id.ChangeBy, id.ChangeNote = "andrii", "edited"
+		return id.SetDoc("# Edited\n", time.Now())
+	})
+	out, code = runIdea(t, "history", "brewshift")
+	if code != 0 || !strings.Contains(out, "andrii") || !strings.Contains(out, "edited") {
+		t.Fatalf("history: %d %s", code, out)
+	}
+	out, code = runIdea(t, "history", "brewshift", "--rev", "1")
+	if code != 0 || !strings.Contains(out, "# BrewShift") {
+		t.Fatalf("revision 1: %d %s", code, out)
+	}
+	out, code = runIdea(t, "history", "brewshift", "--rev", "1", "--json")
+	if code != 0 || ideaJSONOut(t, out)["revision"] == nil {
+		t.Fatalf("revision json: %d %s", code, out)
+	}
+	out, code = runIdea(t, "history", "brewshift", "--json")
+	if code != 0 || len(ideaJSONOut(t, out)["revisions"].([]any)) != 1 {
+		t.Fatalf("history json: %d %s", code, out)
+	}
+	if _, code := runIdea(t, "history", "brewshift", "--rev", "7"); code != 2 {
+		t.Fatalf("no revision 7: %d", code)
+	}
+}
