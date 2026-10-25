@@ -479,6 +479,7 @@ func answerIdea(dir, slug, model string) (bool, error) {
 	seen := id.Doc
 	updated, err := idea.Update(dir, slug, func(id *idea.Idea) error {
 		id.Meta.Answering = false
+		id.ChangeBy, id.ChangeNote = idea.Agent, "answered comment(s) "+strings.Join(ids, ", ")
 		if ans.Page != "" && ans.Page != strings.TrimSpace(id.Doc) {
 			// The page the agent rewrote is the one it read; an edit made
 			// meanwhile (an editor, the browser, another tool) wins over it.
@@ -1402,6 +1403,44 @@ var ideaSetCmd = &cobra.Command{
 	},
 }
 
+var ideaHistoryCmd = &cobra.Command{
+	Use:   "history <slug> [--rev N]",
+	Short: "The page's earlier versions - who changed it and why - or one of them in full",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		dir := mustAgentDir()
+		id, err := idea.Load(dir, args[0])
+		if err != nil {
+			exitWithError("idea", err, 2)
+		}
+		rev, _ := cmd.Flags().GetInt("rev")
+		if rev > 0 {
+			r, doc, err := id.RevisionDoc(rev)
+			if err != nil {
+				exitWithError("idea", err, 2)
+			}
+			if utils.JSONOutput {
+				utils.PrintJSON(map[string]any{"revision": r, "markdown": doc})
+				return
+			}
+			fmt.Print(doc)
+			return
+		}
+		if utils.JSONOutput {
+			utils.PrintJSON(map[string]any{"revisions": id.Meta.Revisions, "current": map[string]any{"at": id.Meta.UpdatedAt, "bytes": len(id.Doc)}})
+			return
+		}
+		if len(id.Meta.Revisions) == 0 {
+			fmt.Println("the page has not changed since it was written")
+			return
+		}
+		for _, r := range id.Meta.Revisions {
+			fmt.Printf("%-4d %s  %-10s %s\n", r.ID, r.At.Local().Format("2006-01-02 15:04"), r.By, r.Note)
+		}
+		fmt.Printf("now  %s  (corgi idea history %s --rev N shows a version; corgi idea show the current)\n", id.Meta.UpdatedAt.Local().Format("2006-01-02 15:04"), args[0])
+	},
+}
+
 var ideaShareCmd = &cobra.Command{
 	Use:   "share <slug> [--off] [--rotate]",
 	Short: "The open link (anyone with it reads and comments); --off closes the page, --rotate gives it a new key",
@@ -1509,6 +1548,7 @@ func init() {
 	ideaSetCmd.Flags().String("workspace", "", "the workspace it belongs to and builds in")
 	ideaSetCmd.Flags().String("type", "", "idea, spec, hld or rfc")
 	ideaSetCmd.Flags().String("auto", "", "on or off: whether the agent answers comments on its own")
+	ideaHistoryCmd.Flags().Int("rev", 0, "print this earlier version of the page")
 	ideaCommentCmd.Flags().String("by", "", "your name on the comment (default: $USER)")
 	ideaCommentCmd.Flags().StringArray("link", nil, "a link to attach (repeatable)")
 	ideaCommentCmd.Flags().StringArray("file", nil, "a file to attach (repeatable)")
@@ -1529,7 +1569,7 @@ func init() {
 	ideaCmd.AddCommand(ideaNewCmd, ideaListCmd, ideaOpenCmd, ideaPathCmd, ideaShowCmd, ideaCommentCmd,
 		ideaStatusCommand("resolve", "Close a comment: it is settled", idea.StatusResolved),
 		ideaStatusCommand("reopen", "Open a comment again: the agent takes another look", idea.StatusOpen),
-		ideaAnswerCmd, ideaWatchCmd, ideaBuildCmd, ideaSendCmd, ideaTicketsCmd, ideaSetCmd, ideaShareCmd, ideaNotifyCmd, ideaRmCmd)
+		ideaAnswerCmd, ideaWatchCmd, ideaBuildCmd, ideaSendCmd, ideaTicketsCmd, ideaSetCmd, ideaHistoryCmd, ideaShareCmd, ideaNotifyCmd, ideaRmCmd)
 	rootCmd.AddCommand(ideaCmd)
 }
 
@@ -1632,7 +1672,7 @@ var ideaAutoAnswerHere = false
 
 func ideaHTTPStatus(err error) int {
 	switch {
-	case errors.Is(err, idea.ErrNotFound), errors.Is(err, idea.ErrNoComment):
+	case errors.Is(err, idea.ErrNotFound), errors.Is(err, idea.ErrNoComment), errors.Is(err, idea.ErrNoRevision):
 		return http.StatusNotFound
 	case errors.Is(err, errAlreadyAnswering):
 		return http.StatusConflict

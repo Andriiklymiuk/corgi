@@ -2,6 +2,7 @@ package idea
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -269,5 +270,52 @@ func TestTheSmallHelpersAndTheLimits(t *testing.T) {
 	}
 	if got := List(dir); len(got) != 0 {
 		t.Fatalf("a broken page is left out of the list: %+v", got)
+	}
+}
+
+func TestEveryChangeToThePageKeepsTheVersionBefore(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Now()
+	if _, err := Create(dir, "rev", "Rev", "# v1\n", Meta{}, now); err != nil {
+		t.Fatal(err)
+	}
+	// A change that leaves the text alone keeps nothing.
+	id, _ := Update(dir, "rev", func(id *Idea) error { id.Meta.Name = "x"; return nil })
+	if len(id.Meta.Revisions) != 0 {
+		t.Fatalf("no text change, no revision: %+v", id.Meta.Revisions)
+	}
+	id, err := Update(dir, "rev", func(id *Idea) error {
+		id.ChangeBy, id.ChangeNote = Agent, "answered comment(s) 3"
+		return id.SetDoc("# v2\n", now)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(id.Meta.Revisions) != 1 || id.Meta.Revisions[0].ID != 1 || id.Meta.Revisions[0].By != Agent || id.Meta.Revisions[0].Note != "answered comment(s) 3" || id.Meta.Revisions[0].Bytes != 5 {
+		t.Fatalf("the version before, named: %+v", id.Meta.Revisions)
+	}
+	r, doc, err := id.RevisionDoc(1)
+	if err != nil || doc != "# v1\n" || r.ID != 1 {
+		t.Fatalf("revision 1: %q %v", doc, err)
+	}
+	if _, _, err := id.RevisionDoc(9); !errors.Is(err, ErrNoRevision) {
+		t.Fatalf("no revision 9: %v", err)
+	}
+	// Someone with no name is someone; beyond the cap the oldest go, files too.
+	for i := 3; i <= MaxRevisions+3; i++ {
+		v := i
+		if _, err := Update(dir, "rev", func(id *Idea) error { return id.SetDoc(fmt.Sprintf("# v%d\n", v), now) }); err != nil {
+			t.Fatal(err)
+		}
+	}
+	id, _ = Load(dir, "rev")
+	if len(id.Meta.Revisions) != MaxRevisions || id.Meta.Revisions[0].ID != 3 || id.Meta.Revisions[0].By != "someone" {
+		t.Fatalf("capped at %d, oldest first gone: %d from %d", MaxRevisions, len(id.Meta.Revisions), id.Meta.Revisions[0].ID)
+	}
+	if _, err := os.Stat(filepath.Join(id.Dir, HistoryDir, "1.md")); !os.IsNotExist(err) {
+		t.Fatal("the pruned version's file is gone")
+	}
+	if _, doc, err := id.RevisionDoc(MaxRevisions + 2); err != nil || doc != fmt.Sprintf("# v%d\n", MaxRevisions+2) {
+		t.Fatalf("a kept version reads back: %q %v", doc, err)
 	}
 }

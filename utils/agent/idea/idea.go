@@ -59,7 +59,11 @@ const (
 	MetaName     = "meta.json"
 	CommentsName = "comments.json"
 	FilesDir     = "files"
+	HistoryDir   = "history"
 	ChangedName  = "changed"
+
+	// MaxRevisions is how many earlier versions of the page are kept.
+	MaxRevisions = 50
 
 	MaxDoc     = 400 << 10
 	MaxComment = 8000
@@ -70,8 +74,9 @@ const (
 )
 
 var (
-	ErrNotFound  = errors.New("no such idea page")
-	ErrNoComment = errors.New("no such comment")
+	ErrNotFound   = errors.New("no such idea page")
+	ErrNoComment  = errors.New("no such comment")
+	ErrNoRevision = errors.New("no such revision")
 )
 
 // Meta is what the page is about, in a form a board or a list can show.
@@ -89,6 +94,16 @@ type Ticket struct {
 	// Task is the board task (TASK-n) this ticket became, kept when Ref
 	// moves to the tracker's key, so the board's state still reaches it.
 	Task string `json:"task,omitempty"`
+}
+
+// Revision is an earlier version of the page: who changed it away from
+// that version, why, and when. The text sits in history/<id>.md.
+type Revision struct {
+	ID    int       `json:"id"`
+	At    time.Time `json:"at"`
+	By    string    `json:"by,omitempty"`
+	Note  string    `json:"note,omitempty"`
+	Bytes int       `json:"bytes"`
 }
 
 // Link is something the page was sent to: an epic, a tracker ticket, a
@@ -130,6 +145,8 @@ type Meta struct {
 	UpdatedAt time.Time `json:"updatedAt"`
 	// Answering is set while the agent is working through open comments.
 	Answering bool `json:"answering,omitempty"`
+	// Revisions are the page's earlier versions, oldest first.
+	Revisions []Revision `json:"revisions,omitempty"`
 }
 
 // Anchor is where on the page a comment sits: the words highlighted, with
@@ -185,6 +202,9 @@ type Idea struct {
 	Meta     Meta
 	Doc      string
 	Comments Comments
+	// ChangeBy and ChangeNote say who is changing the page in this Update
+	// and why; they name the revision kept when the text changes.
+	ChangeBy, ChangeNote string
 }
 
 var mu sync.Mutex
@@ -423,11 +443,55 @@ func Update(agentDir, slug string, fn func(*Idea) error) (*Idea, error) {
 	if err != nil {
 		return nil, err
 	}
+	before := id.Doc
 	if err := fn(id); err != nil {
 		return nil, err
 	}
 	id.Meta.UpdatedAt = time.Now()
+	if id.Doc != before {
+		if err := id.keepRevision(before, id.Meta.UpdatedAt); err != nil {
+			return nil, err
+		}
+	}
 	return id, id.saveLocked(agentDir)
+}
+
+// keepRevision files the page as it was before this change, so a reader
+// can see what moved and who moved it. Beyond MaxRevisions the oldest go.
+func (id *Idea) keepRevision(before string, now time.Time) error {
+	if err := os.MkdirAll(filepath.Join(id.Dir, HistoryDir), 0o700); err != nil {
+		return err
+	}
+	n := 1
+	for _, r := range id.Meta.Revisions {
+		if r.ID >= n {
+			n = r.ID + 1
+		}
+	}
+	if err := atomicfile.Write(filepath.Join(id.Dir, HistoryDir, fmt.Sprintf("%d.md", n)), []byte(before), 0o600); err != nil {
+		return err
+	}
+	id.Meta.Revisions = append(id.Meta.Revisions, Revision{ID: n, At: now, By: author(id.ChangeBy), Note: clip(strings.TrimSpace(id.ChangeNote), 200), Bytes: len(before)})
+	for len(id.Meta.Revisions) > MaxRevisions {
+		old := id.Meta.Revisions[0]
+		_ = os.Remove(filepath.Join(id.Dir, HistoryDir, fmt.Sprintf("%d.md", old.ID)))
+		id.Meta.Revisions = id.Meta.Revisions[1:]
+	}
+	return nil
+}
+
+// RevisionDoc is the page as it was at that revision.
+func (id *Idea) RevisionDoc(n int) (Revision, string, error) {
+	for _, r := range id.Meta.Revisions {
+		if r.ID == n {
+			data, err := os.ReadFile(filepath.Join(id.Dir, HistoryDir, fmt.Sprintf("%d.md", n)))
+			if err != nil {
+				return r, "", fmt.Errorf("revision %d is gone", n)
+			}
+			return r, string(data), nil
+		}
+	}
+	return Revision{}, "", fmt.Errorf("%w: revision %d", ErrNoRevision, n)
 }
 
 // SetDoc replaces the page; a by of Agent means the agent rewrote it.

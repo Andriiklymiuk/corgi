@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -202,6 +203,14 @@ func ideaOpenHandler(token, deviceStore string) http.HandlerFunc {
 				return
 			}
 			writeLaunchJSON(w, ideaDocument(dir, id, true, trusted))
+		case "rev":
+			n, _ := strconv.Atoi(name)
+			rv, doc, err := id.RevisionDoc(n)
+			if err != nil {
+				writeLaunchError(w, ideaHTTPStatus(err), err.Error())
+				return
+			}
+			writeLaunchJSON(w, map[string]any{"revision": rv, "markdown": doc, "html": renderIdeaHTML(doc)})
 		case "stream":
 			ideaStream(w, r, dir, id)
 		case "file":
@@ -353,7 +362,10 @@ func ideaPerform(dir string, a ideaAction, trusted bool, defaultBy string) (any,
 		if !trusted {
 			return nil, http.StatusForbidden, fmt.Errorf("only the dashboard edits the page itself; comment instead")
 		}
-		id, err := idea.Update(dir, a.Slug, func(id *idea.Idea) error { return id.SetDoc(a.Markdown, now) })
+		id, err := idea.Update(dir, a.Slug, func(id *idea.Idea) error {
+			id.ChangeBy, id.ChangeNote = by, "edited"
+			return id.SetDoc(a.Markdown, now)
+		})
 		if err != nil {
 			return nil, ideaHTTPStatus(err), err
 		}
@@ -509,6 +521,16 @@ func launchIdeaHandler(w http.ResponseWriter, r *http.Request) {
 		id, err := idea.Load(dir, strings.TrimSpace(r.URL.Query().Get("slug")))
 		if err != nil {
 			writeLaunchError(w, http.StatusNotFound, err.Error())
+			return
+		}
+		if rev := strings.TrimSpace(r.URL.Query().Get("rev")); rev != "" {
+			n, _ := strconv.Atoi(rev)
+			rv, doc, err := id.RevisionDoc(n)
+			if err != nil {
+				writeLaunchError(w, ideaHTTPStatus(err), err.Error())
+				return
+			}
+			writeLaunchJSON(w, map[string]any{"revision": rv, "markdown": doc})
 			return
 		}
 		if name := strings.TrimSpace(r.URL.Query().Get("file")); name != "" {
