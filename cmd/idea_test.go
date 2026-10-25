@@ -368,7 +368,10 @@ func TestACommentSchedulesTheAgentOnceForABurst(t *testing.T) {
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
 		after, _ := idea.Load(dir, id.Meta.Slug)
-		if len(after.ForAgent()) == 0 && !after.Meta.Answering {
+		// The run is over once the page has no one waiting and the agent
+		// has let go of the slug (it tells and nudges after saving).
+		_, running := ideaAnswering.Load(id.Meta.Slug)
+		if len(after.ForAgent()) == 0 && !after.Meta.Answering && !running {
 			break
 		}
 		time.Sleep(20 * time.Millisecond)
