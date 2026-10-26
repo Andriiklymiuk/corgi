@@ -1249,9 +1249,9 @@ const approveClause = "__APPROVE__"
 
 func withApprove(prompt string, approve bool) string {
 	if approve {
-		return strings.Replace(prompt, approveClause, ", and approve it on my behalf only when the review has no blocking finding and the risk card says auto-approve: yes - otherwise post the findings and leave it unapproved", 1)
+		return strings.Replace(prompt, approveClause, ", and approve it on my behalf only when the review has no blocking finding and the risk card says auto-approve: yes - otherwise post the findings and leave it unapproved without saying so in the comment", 1)
 	}
-	return strings.Replace(prompt, approveClause, ", and do not approve it on my behalf", 1)
+	return strings.Replace(prompt, approveClause, ", and do not approve it on my behalf and do not say so in the comment", 1)
 }
 
 func fixPrompt(e watch.Event) string {

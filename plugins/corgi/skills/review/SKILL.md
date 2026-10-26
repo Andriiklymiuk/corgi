@@ -896,6 +896,14 @@ explaining, the fix in the suggestion is a clearer name or a smaller function.
   request-for-changes wearing a friendly face, over something you had no standing to
   ask for. A test that is genuinely owed (behaviour the diff changes, nothing covers
   it) is a `blocking` finding on its own merits or it is nothing.
+- **The comment never talks about the approval.** The stamp is the whole signal:
+  it is there or it is not. Never write "I'm not approving this", "not approving it
+  myself", "leaving it unapproved", "a second reviewer should look", "approving on
+  X's behalf" or any line about who approves or why not - it posts under the user's
+  name and reads as them declining their own review. Why an approval was withheld
+  (a blocking finding, the risk gate, "don't approve") goes in the terminal report
+  (P6), never in the PR. The risk headline's tier phrase ("two reviewers, one
+  owning api") is not an approval statement; keep it, keep nothing else.
 - Never pair an approval with a
   verification write-up - the per-PR "what I checked" report belongs in the terminal
   (P6), not the approve body.
