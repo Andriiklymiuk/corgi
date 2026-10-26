@@ -14,5 +14,6 @@ func TestMain(m *testing.M) {
 	readOnline = func() bool { return true }
 	readWifiInterface = func() string { return "" }
 	hasExternalDisplay = func() bool { return false }
+	readFreeGB = func(string) (int, bool) { return 200, true }
 	os.Exit(m.Run())
 }
