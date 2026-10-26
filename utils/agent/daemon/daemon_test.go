@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -769,9 +770,11 @@ func TestStatusIsNotRewrittenWhenUnchanged(t *testing.T) {
 	done := make(chan struct{})
 	go func() { defer close(done); _ = d.Run(ctx, nil) }()
 	waitFor(t, func() bool { _, err := os.Stat(d.StatusPath()); return err == nil })
-	// The first write comes before the network loop's first look at the
-	// laptop; the file is complete once that block is in.
-	waitFor(t, func() bool { data, _ := os.ReadFile(d.StatusPath()); return strings.Contains(string(data), `"laptop"`) })
+	// On a Mac the first write comes before the network loop's first look
+	// at the laptop; the file is complete once that block is in.
+	if runtime.GOOS == "darwin" {
+		waitFor(t, func() bool { data, _ := os.ReadFile(d.StatusPath()); return strings.Contains(string(data), `"laptop"`) })
+	}
 	waitFor(t, func() bool {
 		first, _ := os.ReadFile(d.StatusPath())
 		time.Sleep(150 * time.Millisecond)
