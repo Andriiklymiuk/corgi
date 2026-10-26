@@ -91,8 +91,8 @@ func LeftFor(output string) []LeftItem {
 
 func newLeft(text string) LeftItem {
 	text = strings.TrimSpace(strings.ReplaceAll(text, "**", ""))
-	if len(text) > leftClip {
-		text = text[:leftClip-1] + "…"
+	if r := []rune(text); len(r) > leftClip {
+		text = string(r[:leftClip-1]) + "…"
 	}
 	return LeftItem{Text: text, Kind: leftKindOf(text)}
 }

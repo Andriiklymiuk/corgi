@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -999,6 +1000,32 @@ var ideaPathCmd = &cobra.Command{
 	},
 }
 
+var ideaFileCmd = &cobra.Command{
+	Use:   "file <slug> <name>",
+	Short: "One of the page's files: its bytes, or with --json its name, type and base64 data",
+	Args:  cobra.ExactArgs(2),
+	Run: func(cmd *cobra.Command, args []string) {
+		dir := mustAgentDir()
+		id, err := idea.Load(dir, args[0])
+		if err != nil {
+			exitWithError("idea", err, 2)
+		}
+		path := id.FilePath(args[1])
+		if path == "" {
+			exitWithError("idea", fmt.Errorf("no such file on this page: %s", args[1]), 2)
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			exitWithError("idea", err, 1)
+		}
+		if utils.JSONOutput {
+			utils.PrintJSON(map[string]any{"name": filepath.Base(path), "type": mimeFor(path), "data": base64.StdEncoding.EncodeToString(data), "path": path})
+			return
+		}
+		_, _ = os.Stdout.Write(data)
+	},
+}
+
 var ideaShowCmd = &cobra.Command{
 	Use:   "show <slug>",
 	Short: "The page and its comments, as JSON with --json or as text",
@@ -1623,7 +1650,7 @@ func init() {
 	ideaBuildCmd.Flags().Bool("no-run", false, "tasks and plan only; nothing starts")
 	ideaShareCmd.Flags().Bool("off", false, "close the page: the link stops working")
 	ideaShareCmd.Flags().Bool("rotate", false, "a new key: the old link stops working")
-	ideaCmd.AddCommand(ideaNewCmd, ideaListCmd, ideaOpenCmd, ideaPathCmd, ideaShowCmd, ideaCommentCmd,
+	ideaCmd.AddCommand(ideaNewCmd, ideaListCmd, ideaOpenCmd, ideaPathCmd, ideaFileCmd, ideaShowCmd, ideaCommentCmd,
 		ideaStatusCommand("resolve", "Close a comment: it is settled", idea.StatusResolved),
 		ideaStatusCommand("reopen", "Open a comment again: the agent takes another look", idea.StatusOpen),
 		ideaAnswerCmd, ideaWatchCmd, ideaBuildCmd, ideaSendCmd, ideaTicketsCmd, ideaSetCmd, ideaHistoryCmd, ideaEditCmd, ideaShareCmd, ideaNotifyCmd, ideaRmCmd)

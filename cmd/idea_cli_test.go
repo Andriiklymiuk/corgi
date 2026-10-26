@@ -797,7 +797,7 @@ func TestPrintInRunsTheHarnessInTheWorkspace(t *testing.T) {
 	}
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("CORGI_DATA_DIR", t.TempDir())
-	work := t.TempDir()
+	work, _ := filepath.EvalSymlinks(t.TempDir())
 	out, err := printIn(context.Background(), work, "haiku", "be brief", "hello")
 	if err != nil {
 		t.Fatal(err)

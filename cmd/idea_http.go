@@ -404,7 +404,7 @@ func ideaPerform(dir string, a ideaAction, trusted bool, defaultBy string) (any,
 		}
 		return map[string]any{"auto": id.Meta.Auto}, 0, nil
 	}
-	return nil, http.StatusBadRequest, fmt.Errorf("do is comment, reply, status, file, build, edit or auto")
+	return nil, http.StatusBadRequest, fmt.Errorf("do is comment, reply, status, file, build, edit, auto, send or set")
 }
 
 // ownFiles keeps only attachments that are this page's files, so a
