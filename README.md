@@ -8,6 +8,7 @@
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
   [![Homebrew](https://img.shields.io/badge/install-brew-orange.svg)](#install)
   [![Platforms](https://img.shields.io/badge/platform-macOS%20·%20Linux%20·%20Windows-blue.svg)](docs/install.md)
+  [![Corgi Agents on the App Store](https://img.shields.io/badge/App%20Store-iPhone%20·%20Mac-black.svg?logo=apple)](https://apps.apple.com/app/id6811009400)
   [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=Andriiklymiuk_corgi&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=Andriiklymiuk_corgi)
 
 </div>
@@ -32,6 +33,8 @@ A feature is rarely one repo. It's an API change, a web change, a mobile change,
 
 <p align="center"><img src="docs/media/phone.gif" width="900" alt="corgi agent up prints a QR; the phone scans it and opens on the inbox - a ticket worked on from its sheet, the board, a session's permission allowed from its row, a stack started, settings with both laptops, and the lock screen where Allow on the Live Activity answers the laptop the session is on"></p>
 <p align="center"><sub>A QR pairs the phone; from then on every session, ticket and permission is in your pocket.</sub></p>
+
+**The apps:** [**Corgi Agents** on the App Store](https://apps.apple.com/app/id6811009400) - one listing for the [iPhone app](https://apps.apple.com/app/id6811009400) (the inbox, the board, every session with Allow/Deny, the lock screen) and the [Mac app](https://apps.apple.com/app/id6811009400?platform=mac) (the menu bar and the window). Both read the board the daemon keeps; nothing to configure beyond the QR.
 
 Video: [2-minute showcase](https://youtu.be/rlMCjs4EoFs?si=o3SQaymM55zxBCUY).
 
@@ -414,7 +417,7 @@ does right now. Three clients show it:
 
 | client | what it adds |
 |---|---|
-| **Corgi Agents for Mac** (menu bar + window; on the Mac App Store soon) | a desktop chat app over the board: sessions by workspace with Allow/Deny, a composer that dictates (Apple speech, no permissions games), takes photos and files, and sends to a session, a bot, a new chat in any workspace or the chief; workspace pages, the inbox, the kanban, accounts with a forecast |
+| [**Corgi Agents for Mac**](https://apps.apple.com/app/id6811009400?platform=mac) (menu bar + window; on the Mac App Store) | a desktop chat app over the board: sessions by workspace with Allow/Deny, a composer that dictates (Apple speech, no permissions games), takes photos and files, and sends to a session, a bot, a new chat in any workspace or the chief; workspace pages, the inbox, the kanban, accounts with a forecast |
 | [VS Code extension](https://marketplace.visualstudio.com/items?itemName=Corgi.corgi) | Agent sessions view, status bar item, a toast with Go when a session in another window waits |
 | [Corgi Agent Deck](https://github.com/Andriiklymiuk/corgi-agent-deck), Stream Deck | one key per session, Talk, Prompt and Budget keys |
 | [corgi-band](plugins/corgi-band) mod, inside Claude Code | a band above the prompt with the sessions waiting on you and what this turn posted; `/corgi` opens the board in a pane |
