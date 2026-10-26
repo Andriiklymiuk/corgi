@@ -67,6 +67,11 @@ the inbox knows - the one somebody asked you to review first of all.`,
 		if err != nil {
 			exitWithError("agent_watch_pr", err, 1)
 		}
+		// Your word on the pull request: its inbox rows so far are handled.
+		markInboxDone(dir, link, "you")
+		if ref := strings.TrimSpace(args[1]); !strings.HasPrefix(ref, "http") {
+			markInboxDone(dir, ref, "you")
+		}
 		if utils.JSONOutput {
 			utils.PrintJSON(map[string]any{"url": link, "did": verb})
 			return

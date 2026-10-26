@@ -1631,11 +1631,12 @@ type watchInbox struct {
 	pulls    *watch.PullLog
 	hands    *watch.HandLog
 	moved    *watch.StateLog
+	done     *watch.DoneLog
 }
 
 func watchStatusEvents(dir string, state *watch.State, now time.Time) []watchStatusEvent {
 	inbox := watchInbox{dir: dir, now: now, state: state, onTicket: sessionsOnTickets(dir),
-		picks: watch.LoadPicks(dir), pulls: watch.LoadPullLog(dir), hands: watch.LoadHands(dir), moved: watch.LoadStateLog(dir)}
+		picks: watch.LoadPicks(dir), pulls: watch.LoadPullLog(dir), hands: watch.LoadHands(dir), moved: watch.LoadStateLog(dir), done: watch.LoadDoneLog(dir)}
 	keeper := watch.NewInboxKeeper(now)
 	events := []watchStatusEvent{}
 	for _, e := range watch.RecentEvents(dir, inboxWindow) {
@@ -1654,7 +1655,7 @@ func (in watchInbox) row(e watch.Event) (watchStatusEvent, bool) {
 	if st, ok := in.moved.Get(e.Key); ok {
 		current = st.Status
 	}
-	if watch.InboxDone(e, current, in.pulls, in.state.Fixes) != "" {
+	if watch.InboxHandled(e, current, in.pulls, in.state.Fixes, in.done) != "" {
 		return watchStatusEvent{}, false
 	}
 	er := watchStatusEvent{Key: e.Key, Ref: e.Ref, Kind: string(e.Kind),

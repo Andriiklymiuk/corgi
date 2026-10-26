@@ -3926,6 +3926,7 @@ func launchEventsHandler(w http.ResponseWriter, r *http.Request) {
 	moved := watch.LoadStateLog(dir)
 	state := watch.LoadState(dir)
 	fixLog := watch.LoadFixLog(dir)
+	doneLog := watch.LoadDoneLog(dir)
 	keeper := watch.NewInboxKeeper(time.Now())
 	for _, e := range watch.RecentEvents(dir, inboxWindow) {
 		if !keeper.Keep(e) || state.IsIgnored(e.Key) {
@@ -3935,7 +3936,7 @@ func launchEventsHandler(w http.ResponseWriter, r *http.Request) {
 		if now, ok := moved.Get(e.Key); ok {
 			current = now.Status
 		}
-		if watch.InboxDone(e, current, pulls, fixLog) != "" {
+		if watch.InboxHandled(e, current, pulls, fixLog, doneLog) != "" {
 			continue
 		}
 		r := row{Key: e.Key, Kind: string(e.Kind), Ref: e.Ref, Title: firstLineOf(e.Title),
@@ -4074,6 +4075,17 @@ func launchTicketHandler(w http.ResponseWriter, r *http.Request) {
 		from := firstNonEmptyString(r.URL.Query().Get("from"), "phone")
 		_ = watch.LoadHands(dir).Set(event.Key, watch.Hand{At: time.Now(), To: target.ID, Label: target.Label, By: from})
 		launchBoardCommand(w, command.Command{Action: command.ActionSend, SessionID: target.ID, Text: line, Enter: true, Source: from})
+		return
+	}
+	if strings.TrimSpace(req.Do) == "done" {
+		// This row is handled on this side: a reply went out, the branch was
+		// pushed, it was read. Later rows on the same ticket come in as usual.
+		from := firstNonEmptyString(r.URL.Query().Get("from"), "phone")
+		if err := watch.LoadDoneLog(dir).MarkKey(event.Key, time.Now(), from); err != nil {
+			writeLaunchError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		writeLaunchJSON(w, map[string]any{"done": event.Ref + " handled"})
 		return
 	}
 	if strings.TrimSpace(req.Do) == "unblock" {

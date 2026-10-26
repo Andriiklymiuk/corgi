@@ -648,6 +648,7 @@ corgi agent usage [--json|--watch]                   # every account: 5h and wee
 corgi agent carry <session> --profile work           # continue a limited session under another listed account
 corgi agent continue on                              # daemon types "continue" into a limited session once its window resets (off by default)
 corgi agent watch ignore <REF|key>                   # a ticket out of the inbox everywhere, for good; unignore puts it back
+corgi agent watch done <REF|link|key>...             # handled on this side (you replied, pushed, reviewed): its rows so far leave every surface; later rows still come. watch comment / watch pr mark it themselves
 corgi agent claude --profile auto                    # start under the listed account with the most budget
 corgi agent watch enable --auto-for reviews,comments # work those unattended; a fresh ticket only notifies
 corgi agent watch enable --ci                        # red builds too: the one kind with its own test for done

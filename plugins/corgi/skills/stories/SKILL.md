@@ -5,7 +5,7 @@ description: "Use when the user wants to ship work across a corgi-compose worksp
 
 # Corgi stories
 
-**Done when:** every story in the batch has, per touched repo, a pushed branch and a draft PR/MR whose checks were polled to a conclusion and whose review loop ran - or a BLOCKED line with its one question; then the report.
+**Done when:** every story in the batch has, per touched repo, a pushed branch and a draft PR/MR whose checks were polled to a conclusion and whose review loop ran - or a BLOCKED line with its one question; then the report. A story corgi tracks (it sits in `corgi agent watch status`) also gets `corgi agent watch done <KEY>` once its work is pushed, so its inbox rows close on this side; `watch comment` and `watch pr` do that on their own.
 
 Work items - tracker issues (Linear/Jira) **or** a free-text feature - → spec each
 → isolated branch(es) → tested + reviewed → **draft** PR/MR per repo → review

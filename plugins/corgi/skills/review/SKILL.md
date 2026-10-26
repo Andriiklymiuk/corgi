@@ -5,7 +5,7 @@ description: "Use when the user wants a code review of EXISTING pull/merge reque
 
 # Corgi review
 
-**Done when:** someone else's PR/MR → the review is posted (summary + inline), approved when nothing blocks it (Approve rule in Guardrails), and its link is in your reply; your own → the valid comments are applied, tests pass, the branch is pushed, and every thread has a reply (resolved where the forge allows).
+**Done when:** someone else's PR/MR → the review is posted (summary + inline), approved when nothing blocks it (Approve rule in Guardrails), and its link is in your reply; your own → the valid comments are applied, tests pass, the branch is pushed, and every thread has a reply (resolved where the forge allows). Either way, when corgi tracks the PR/MR or its ticket, end with `corgi agent watch done <link or KEY>` so the inbox row closes on this side (a review posted through `corgi agent watch pr` does it itself).
 
 Review one or more existing remote PR/MR(s) on GitHub or GitLab against each repo's own standards (CLAUDE.md/AGENTS.md, lint and format config) plus the intent from any linked Linear or Jira tracker ticket, then post a human-readable summary comment and inline line-level suggestions back onto each PR/MR. Someone else's PR is posted to without asking; your own is fixed and pushed instead. Services, dirs, and forges resolve from `corgi-compose.yml`.
 

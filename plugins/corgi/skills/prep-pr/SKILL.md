@@ -5,7 +5,7 @@ description: "Use when the user says \"prep my PR\", \"get this ready for review
 
 # Prep PR
 
-**Done when:** every gate is green and the draft PR/MR URL is printed with its risk card - or the first red gate is named with its output after you tried to fix it.
+**Done when:** every gate is green and the draft PR/MR URL is printed with its risk card - or the first red gate is named with its output after you tried to fix it. When the branch answers a tracked ticket or review (it sits in `corgi agent watch status`), also run `corgi agent watch done <KEY or link>` so its inbox rows close on this side.
 
 Read `../_shared/conventions.md` and `../_shared/forge-commands.md` first.
 

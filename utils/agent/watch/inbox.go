@@ -8,6 +8,7 @@ import "strings"
 //   - the ticket moved to a finished state, or was picked up (Settled)
 //   - every pull request the row is about is merged or closed
 //   - I reviewed every pull request a review request is about, after it came
+//   - I wrote on the pull request after a review or comment came in (answered)
 //   - a run already handled it: the review is posted, the comment answered
 func InboxDone(e Event, current string, pulls *PullLog, fixes *FixLog) string {
 	if why := Settled(e, current); why != "" {
@@ -19,8 +20,23 @@ func InboxDone(e Event, current string, pulls *PullLog, fixes *FixLog) string {
 	if reviewedByMe(e, pulls) {
 		return "reviewed"
 	}
+	if answeredByMe(e, pulls) {
+		return "answered"
+	}
 	if fixes != nil && handledByRun(e, fixes) {
 		return "handled"
+	}
+	return ""
+}
+
+// InboxHandled is InboxDone plus what a person or a session marked done by
+// hand (corgi agent watch done): replied, pushed, reviewed, outside a run.
+func InboxHandled(e Event, current string, pulls *PullLog, fixes *FixLog, done *DoneLog) string {
+	if why := InboxDone(e, current, pulls, fixes); why != "" {
+		return why
+	}
+	if done.Handled(e) {
+		return "done"
 	}
 	return ""
 }
@@ -88,6 +104,20 @@ func handledByRun(e Event, fixes *FixLog) bool {
 			return true
 		}
 		if e.Kind != KindIssueComment && e.Ref != "" && r.Ref == e.Ref && !r.StartedAt.Before(e.At) {
+			return true
+		}
+	}
+	return false
+}
+
+// answeredByMe: a review or comment on a pull request, and I reviewed or
+// replied on that pull request after it came in - my word is the answer.
+func answeredByMe(e Event, pulls *PullLog) bool {
+	if (e.Kind != KindPRReview && e.Kind != KindPRComment) || pulls == nil {
+		return false
+	}
+	for _, ref := range PullRefsOf(e) {
+		if st, ok := pulls.Get(ref); ok && !st.MyReviewAt.IsZero() && st.MyReviewAt.After(e.At) {
 			return true
 		}
 	}

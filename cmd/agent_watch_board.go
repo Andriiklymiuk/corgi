@@ -203,6 +203,7 @@ a bare !9168 or #42 is not, the tracker does not know which repo it means.`,
 				if err := w.Comment(ctx, ref, args[1]); err != nil {
 					return "", err
 				}
+				markInboxDone(mustAgentDir(), ref, "you")
 				return "commented on " + ref, nil
 			}
 			attacher, ok := w.(watch.FileCommenter)
@@ -212,6 +213,7 @@ a bare !9168 or #42 is not, the tracker does not know which repo it means.`,
 			if err := attacher.CommentWithFiles(ctx, ref, args[1], files); err != nil {
 				return "", err
 			}
+			markInboxDone(mustAgentDir(), ref, "you")
 			return fmt.Sprintf("commented on %s with %s", ref, watch.DescribeAttachments(files)), nil
 		})
 	},
