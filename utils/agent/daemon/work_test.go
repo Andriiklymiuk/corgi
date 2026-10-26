@@ -90,7 +90,7 @@ func TestForgeCallsInARunEndAfterTheLimit(t *testing.T) {
 	}
 }
 
-func TestSelfCheckRingsOnceAWeekOnMondayMorning(t *testing.T) {
+func TestTheSelfCheckIsLookedUpNeverRung(t *testing.T) {
 	d := trackingDaemon(t)
 	d.Sessions.Load()
 	d.Watches = []WatchSpec{{Workspace: "acme"}}
@@ -102,20 +102,12 @@ func TestSelfCheckRingsOnceAWeekOnMondayMorning(t *testing.T) {
 	d.watchState.Fixes.StartFor(watch.Event{Key: "k1", Workspace: "acme", Ref: "ABC-1", Kind: watch.KindIssueNew}, monday.Add(-time.Hour))
 	d.watchState.Fixes.Finish("k1", nil, "", "", monday.Add(-time.Hour))
 	d.watchState.Fixes.SetGaps("k1", []watch.Gap{watch.GapNoDatabase})
-	d.weeklySelfCheck(monday.Add(-24 * time.Hour))
-	d.weeklySelfCheck(monday)
-	d.weeklySelfCheck(monday.Add(time.Hour))
-	select {
-	case body := <-notes:
-		if !strings.Contains(body, "no database") {
-			t.Fatalf("the self-check names the gap: %q", body)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("no self-check on Monday morning")
+	if c := d.selfCheck(monday); len(c.Lines) == 0 || !strings.Contains(strings.Join(c.Lines, "\n"), "no database") {
+		t.Fatalf("the self-check names the gap when asked: %+v", c)
 	}
 	select {
 	case body := <-notes:
-		t.Fatalf("rang twice: %q", body)
+		t.Fatalf("the self-check rang: %q", body)
 	case <-time.After(200 * time.Millisecond):
 	}
 }
