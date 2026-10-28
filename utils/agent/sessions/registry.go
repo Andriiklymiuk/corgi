@@ -461,7 +461,19 @@ func (r *Registry) applyNotification(s *Session, ev Event, now time.Time) {
 		s.Tool, s.Detail, s.Pending = "", "", nil
 		s.ResumedBy = "clock"
 		r.setStatus(s, StatusWorking, now)
-	case "auth_success", "agent_completed", "elicitation_complete", "elicitation_response", "quota_auto_resume_stale", "quota_auto_resume_disabled":
+	case "quota_auto_resume_stale", "quota_auto_resume_disabled":
+		// Claude Code's own wait ended without continuing: the limit
+		// reset while the laptop slept (it wants Enter), or the setting
+		// is off or the reset moved out of reach. The session stays
+		// limited and is due now, so the daemon continues it next sweep.
+		if s.Status == StatusLimited {
+			s.ResumeAt = now
+			s.Detail = "reset while asleep - press Enter"
+			if ev.Notification == "quota_auto_resume_disabled" {
+				s.Detail = "Claude Code stopped waiting"
+			}
+		}
+	case "auth_success", "agent_completed", "elicitation_complete", "elicitation_response":
 	}
 }
 

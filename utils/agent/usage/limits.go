@@ -67,18 +67,45 @@ func parseLimits(data []byte) (Limits, bool) {
 	return l, true
 }
 
+// rawWindow is one window as Claude Code caches it. Older builds wrote
+// the utilization as a percent and the reset as an RFC 3339 string;
+// since 2.1.2xx it is a fraction of one and unix seconds. Both read.
 type rawWindow struct {
-	Utilization float64 `json:"utilization"`
-	ResetsAt    string  `json:"resets_at"`
+	Utilization *float64        `json:"utilization"`
+	ResetsAt    json.RawMessage `json:"resets_at"`
 }
 
 func (w *rawWindow) window() Window {
 	if w == nil {
 		return Window{}
 	}
-	out := Window{Percent: int(w.Utilization + 0.5)}
-	if t, err := time.Parse(time.RFC3339Nano, w.ResetsAt); err == nil {
-		out.ResetsAt = t
+	var out Window
+	if w.Utilization != nil {
+		u := *w.Utilization
+		if u <= 1 {
+			u *= 100
+		}
+		out.Percent = int(u + 0.5)
 	}
+	out.ResetsAt = resetsAtOf(w.ResetsAt)
 	return out
+}
+
+// resetsAtOf reads a reset as unix seconds (or milliseconds), or as an
+// RFC 3339 string; anything else is no reset.
+func resetsAtOf(raw json.RawMessage) time.Time {
+	var n float64
+	if json.Unmarshal(raw, &n) == nil && n > 0 {
+		if n > 1e12 {
+			return time.UnixMilli(int64(n)).UTC()
+		}
+		return time.Unix(int64(n), 0).UTC()
+	}
+	var s string
+	if json.Unmarshal(raw, &s) == nil {
+		if t, err := time.Parse(time.RFC3339Nano, s); err == nil {
+			return t
+		}
+	}
+	return time.Time{}
 }

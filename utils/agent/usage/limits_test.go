@@ -38,3 +38,22 @@ func TestReadLimitsFromClaudeCodeCache(t *testing.T) {
 		t.Fatal("an empty cache is no snapshot")
 	}
 }
+
+func TestReadLimitsInTheNewerCacheShape(t *testing.T) {
+	// Claude Code 2.1.2xx+ caches a fraction of one and unix seconds.
+	newer := `{"cachedUsageUtilization":{"fetchedAtMs":1793184000000,"accountUuid":"x","utilization":{"five_hour":{"utilization":0.97,"resets_at":1793187600},"seven_day":{"utilization":0.24,"resets_at":1793254800},"seven_day_opus":null,"overage":{"utilization":null,"resets_at":null}}}}`
+	l, ok := parseLimits([]byte(newer))
+	if !ok {
+		t.Fatal("the newer cache must read")
+	}
+	if l.FiveHour.Percent != 97 || l.SevenDay.Percent != 24 {
+		t.Fatalf("a fraction of one is a percent: %+v", l)
+	}
+	if l.FiveHour.ResetsAt.Unix() != 1793187600 || l.SevenDay.ResetsAt.Unix() != 1793254800 {
+		t.Fatalf("unix seconds are the reset: %+v", l)
+	}
+	ms := `{"cachedUsageUtilization":{"fetchedAtMs":1,"utilization":{"five_hour":{"utilization":100,"resets_at":1793187600000}}}}`
+	if l, ok := parseLimits([]byte(ms)); !ok || l.FiveHour.Percent != 100 || l.FiveHour.ResetsAt.Unix() != 1793187600 {
+		t.Fatalf("milliseconds and a whole percent read too: %+v %v", l, ok)
+	}
+}

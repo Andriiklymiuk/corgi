@@ -1152,3 +1152,38 @@ func TestATurnThatEndsWithWorkInTheBackgroundSaysSo(t *testing.T) {
 		t.Fatalf("nothing left running, nothing said: %+v", s)
 	}
 }
+
+func TestClaudeCodeGivingUpItsWaitMakesTheSessionDueNow(t *testing.T) {
+	for _, kind := range []string{"quota_auto_resume_stale", "quota_auto_resume_disabled"} {
+		r := newTestRegistry(t)
+		r.Apply(ev("SessionStart", "s1", 0))
+		r.Apply(ev("UserPromptSubmit", "s1", time.Second))
+		fail := ev("StopFailure", "s1", 2*time.Second)
+		fail.Error, fail.Message = "rate_limit", "You've hit your 5-hour limit · Your 5-hour limit resets 6:10pm"
+		r.Apply(fail)
+		s, _ := r.Lookup("s1")
+		if s.Status != StatusLimited || !s.ResumeAt.IsZero() || s.Detail != "resets 6:10pm" {
+			t.Fatalf("%s: limited with no plan yet: %+v", kind, s)
+		}
+		gaveUp := ev("Notification", "s1", 3*time.Hour)
+		gaveUp.Notification = kind
+		r.Apply(gaveUp)
+		s, _ = r.Lookup("s1")
+		if s.Status != StatusLimited || !s.ResumeAt.Equal(gaveUp.At) {
+			t.Fatalf("%s: the session is still limited and due at once: %+v", kind, s)
+		}
+		if s.Detail == "resets 6:10pm" {
+			t.Fatalf("%s: the detail says what happened: %q", kind, s.Detail)
+		}
+	}
+	// A session that is not limited ignores the notice.
+	r := newTestRegistry(t)
+	r.Apply(ev("SessionStart", "s1", 0))
+	r.Apply(ev("UserPromptSubmit", "s1", time.Second))
+	n := ev("Notification", "s1", 2*time.Second)
+	n.Notification = "quota_auto_resume_stale"
+	r.Apply(n)
+	if s, _ := r.Lookup("s1"); s.Status != StatusWorking || !s.ResumeAt.IsZero() {
+		t.Fatalf("a working session has nothing to resume: %+v", s)
+	}
+}

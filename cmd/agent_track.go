@@ -90,7 +90,7 @@ var trackedEvents = []struct {
 	{Event: "PostToolUse"},
 	{Event: "PostToolUseFailure"},
 	{Event: "PermissionRequest"},
-	{Event: "Notification", Matcher: "permission_prompt|idle_prompt|agent_needs_input|elicitation_dialog|elicitation_url_dialog", Title: true},
+	{Event: "Notification", Matcher: "permission_prompt|idle_prompt|agent_needs_input|elicitation_dialog|elicitation_url_dialog|quota_auto_resume_fired|quota_auto_resume_stale|quota_auto_resume_disabled", Title: true},
 	{Event: "Stop", Title: true, Budget: true},
 	{Event: "StopFailure", Title: true},
 	{Event: "SessionEnd"},
@@ -420,8 +420,12 @@ type hookInput struct {
 	Message          string          `json:"message"`
 	ErrorType        string          `json:"error_type"`
 	Error            json.RawMessage `json:"error"`
-	ToolInput        json.RawMessage `json:"tool_input"`
-	TranscriptPath   string          `json:"transcript_path"`
+	// ErrorDetails is StopFailure's raw API error; LastAssistantMessage
+	// is the error as the session showed it ("You've hit your 5-hour
+	// limit · resets 3pm"), where the reset time is.
+	ErrorDetails   string          `json:"error_details"`
+	ToolInput      json.RawMessage `json:"tool_input"`
+	TranscriptPath string          `json:"transcript_path"`
 	// LastAssistantMessage is codex's Stop field: the reply the turn ended on.
 	LastAssistantMessage string `json:"last_assistant_message"`
 	PermissionMode       string `json:"permission_mode"`
@@ -472,6 +476,14 @@ func (in hookInput) errorType() string {
 func (in hookInput) errorMessage() string {
 	if in.Message != "" {
 		return in.Message
+	}
+	if in.Event == "StopFailure" {
+		if m := strings.TrimSpace(in.LastAssistantMessage); m != "" {
+			return m
+		}
+		if m := strings.TrimSpace(in.ErrorDetails); m != "" {
+			return m
+		}
 	}
 	var s string
 	if json.Unmarshal(in.Error, &s) == nil {

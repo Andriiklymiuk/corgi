@@ -17,6 +17,13 @@ func TestALimitIsQuotaOrOverload(t *testing.T) {
 		{"rate_limit", "API error 529: Overloaded. Please try again later.", LimitOverload, ""},
 		{"", "The service is temporarily unavailable due to capacity", LimitOverload, ""},
 		{"rate_limit", "rate limit", LimitQuota, ""},
+		// Claude Code 2.1.312: the five-hour window is the "5-hour limit",
+		// the wait line reads "Usage limit reached · limit resets 3:45pm",
+		// and a model has a limit of its own.
+		{"rate_limit", "You've hit your 5-hour limit · Your 5-hour limit resets 3pm (Europe/Kiev)", LimitQuota, "3pm (Europe/Kiev)"},
+		{"", "Usage limit reached · limit resets 3:45pm · esc to cancel", LimitQuota, "3:45pm"},
+		{"", "You've hit your Opus limit · progress saved", LimitQuota, ""},
+		{"rate_limit", "You've hit your 5-hour limit · Your 5-hour limit resets 3pm · progress saved", LimitQuota, "3pm"},
 	}
 	for _, c := range cases {
 		kind, reset, ok := ClassifyLimit(c.errType, c.msg)
@@ -26,6 +33,11 @@ func TestALimitIsQuotaOrOverload(t *testing.T) {
 	}
 	if _, _, ok := ClassifyLimit("", "permission denied for Bash"); ok {
 		t.Fatal("an ordinary failure is not a limit")
+	}
+	for _, msg := range []string{"Context limit reached", "Budget limit reached ($5.00 of $5); stopping background agents.", "Concurrent subagent limit reached"} {
+		if _, _, ok := ClassifyLimit("", msg); ok {
+			t.Errorf("%q is not a usage limit", msg)
+		}
 	}
 }
 

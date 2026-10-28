@@ -22,11 +22,15 @@ const (
 	StatusLimited    Status = "limited"
 )
 
+// The words a limit comes with. Claude Code 2.1.312 calls the five-hour
+// window the "5-hour limit" (it was the "session limit"), says "Usage
+// limit reached · limit resets 3:45pm" while it waits, and names a
+// model's own limit ("You've hit your Opus limit").
 var (
-	limitText    = regexp.MustCompile(`(?i)\b(session|usage|rate|weekly|daily) limit\b|\brate.?limited?\b`)
-	limitReset   = regexp.MustCompile(`(?i)\bresets?\s+(?:at\s+)?([^\n"}\\]+?)\s*(?:$|["}\\])`)
+	limitText    = regexp.MustCompile(`(?i)\b(session|usage|rate|weekly|daily|monthly|\d+-hour|opus|sonnet|fable|haiku) limit\b|\brate.?limited?\b|\bhit your\b`)
+	limitReset   = regexp.MustCompile(`(?i)\bresets?\s+(?:at\s+)?([^\n"}\\·|]+?)\s*(?:$|["}\\·|])`)
 	overloadText = regexp.MustCompile(`(?i)\boverloaded?\b|\b529\b|\bcapacity\b|\btry again (later|in)\b|\btemporarily unavailable\b`)
-	quotaText    = regexp.MustCompile(`(?i)\b(session|usage|weekly|daily) limit\b|\bresets?\s`)
+	quotaText    = regexp.MustCompile(`(?i)\b(session|usage|weekly|daily|monthly|\d+-hour|opus|sonnet|fable|haiku) limit\b|\bresets?\s|\bhit your\b`)
 )
 
 type LimitKind string
