@@ -133,6 +133,7 @@ type Daemon struct {
 	AccountDirs   func() []string
 	TypeText      func(ctx context.Context, t sessions.FocusTarget, text string, enter bool) error
 	AutoContinue  bool
+	saidNoType    map[string]time.Time // limited sessions told once that nothing can type into them
 	SessionCap    int64
 	// Lid is the local HH:MM-HH:MM window in which a wake or a lid opening
 	// rings the phone; empty means no lid guard.

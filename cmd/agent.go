@@ -441,6 +441,7 @@ func remoteResolver(dir string, foreground bool) func(id, profile, name string) 
 			return supervisor.SpawnConfig{}, err
 		}
 		cfg := spawnConfigFrom(w, resolved, profile, foreground)
+		cfg.WaitOutLimits = user.AutoContinue
 		cfg.Origin = supervisor.OriginRemote
 		cfg.Profile = profile
 		if n := sanitizeSessionName(name); n != "" {
@@ -482,6 +483,7 @@ func spawnConfigForWorkspace(w workspace.Workspace, user *config.UserConfig, for
 		return supervisor.SpawnConfig{}, false
 	}
 	cfg := spawnConfigFrom(w, resolved, "", foreground)
+	cfg.WaitOutLimits = user != nil && user.AutoContinue
 	if kind, err := supervisor.KindFor(cfg); err == nil && kind.BuildsArgvFromSettings {
 		cfg.DeviceOnly = !resolved.AutostartSessionEnabled()
 	}

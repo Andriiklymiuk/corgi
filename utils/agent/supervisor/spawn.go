@@ -30,9 +30,15 @@ type SpawnConfig struct {
 	MirrorOutput      bool
 	Origin            string
 	Profile           string
-	OnSessionURL      func(url string)
-	OnSessionLink     func(id string)
-	OnActivity        func()
+	// WaitOutLimits asks Claude Code to wait out a usage limit inside
+	// the request (its unattended retry mode) instead of ending the
+	// turn: nobody can type "continue" into a session the daemon runs
+	// with no terminal, and Claude Code does not start its own wait in
+	// a Remote Control session.
+	WaitOutLimits bool
+	OnSessionURL  func(url string)
+	OnSessionLink func(id string)
+	OnActivity    func()
 }
 
 const (
@@ -277,7 +283,43 @@ func BuildEnv(c SpawnConfig, parentEnv []string) []string {
 	if prefix != "" && prefixVar != "" {
 		keep = append(keep, prefixVar+"="+prefix)
 	}
+	if c.WaitOutLimits && isClaudeKind(c.Kind) {
+		keep = withDefaults(keep, waitOutLimitsEnv)
+	}
 	return keep
+}
+
+// waitOutLimitsEnv is Claude Code's unattended retry mode: a request
+// that hits a usage limit waits for the reset (checking every five
+// minutes whether it lifted early) instead of ending the turn with an
+// error, and gives up on a reset more than six hours out - a weekly
+// limit days away ends the turn so a person hears about it. A value
+// already in the parent environment wins.
+var waitOutLimitsEnv = []string{
+	"CLAUDE_CODE_RETRY_WATCHDOG=1",
+	"CLAUDE_CODE_RETRY_WATCHDOG_USAGE_LIMIT_RECHECK_MS=300000",
+	"CLAUDE_CODE_RETRY_WATCHDOG_MAX_USAGE_LIMIT_WAIT_MS=21600000",
+}
+
+func isClaudeKind(kind string) bool {
+	k := strings.ToLower(strings.TrimSpace(kind))
+	return k == "" || k == KindClaude
+}
+
+// withDefaults adds each KEY=value whose KEY the environment does not set.
+func withDefaults(env, defaults []string) []string {
+	set := make(map[string]bool, len(env))
+	for _, entry := range env {
+		if key, _, ok := strings.Cut(entry, "="); ok {
+			set[key] = true
+		}
+	}
+	for _, d := range defaults {
+		if key, _, ok := strings.Cut(d, "="); ok && !set[key] {
+			env = append(env, d)
+		}
+	}
+	return env
 }
 
 func isStrippedCredential(kind Kind, key string, c SpawnConfig) bool {

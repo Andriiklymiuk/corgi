@@ -61,10 +61,22 @@ func (d *Daemon) resumeIsDue(s sessions.Session, now time.Time) bool {
 }
 
 func (d *Daemon) resumeSession(ctx context.Context, s sessions.Session) {
-	if target, err := d.Sessions.Focus(s.ID); err != nil || (target.Kind == sessions.HostVSCodePanel && !target.PanelInput) {
+	target, err := d.Sessions.Focus(s.ID)
+	if err != nil || target.Kind == sessions.HostUnknown || (target.Kind == sessions.HostVSCodePanel && !target.PanelInput) {
 		d.Sessions.PlanResume(s.ID, time.Time{})
-		if err == nil {
-			utils.Infof("agent: %s: limit should be over, but its Claude Code panel window has no corgi extension that can type - continue it by hand\n", s.Display)
+		if err != nil {
+			return
+		}
+		why := "its Claude Code panel window has no corgi extension that can type"
+		if target.Kind == sessions.HostUnknown {
+			why = "it runs in no terminal corgi can type into (a session the daemon starts waits out its limits itself once restarted with 2.33.9)"
+		}
+		if d.saidNoType == nil {
+			d.saidNoType = map[string]time.Time{}
+		}
+		if at, said := d.saidNoType[s.ID]; !said || !at.Equal(s.StatusSince) {
+			d.saidNoType[s.ID] = s.StatusSince
+			utils.Infof("agent: %s: limit should be over, but %s - continue it by hand\n", s.Display, why)
 		}
 		return
 	}
