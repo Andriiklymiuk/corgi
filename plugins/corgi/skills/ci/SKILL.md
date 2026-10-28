@@ -14,6 +14,12 @@ field, a new event, a template the frontend reads - leaves every pipeline green
 while the combination is broken. This skill builds the job that boots the whole
 stack from the branches under review and drives real e2e against it.
 
+**Runs cost minutes.** A hosted runner's minutes are a budget: never retrigger a run
+with an empty commit, a close-and-reopen or a repeated rerun to "see if it passes";
+rerun once, after reading the log. A job that ends in seconds with no steps run, or
+whose log says the account or organization has no minutes or a billing problem, is not
+a red build - say so, stop retriggering, and name who unblocks it.
+
 ## Setting it up from chat
 
 "Set up CI for this workspace" is the whole request. Do this, in order:

@@ -475,6 +475,7 @@ func collectAgentChecks() []agentCheck {
 	checks = append(checks, checkWorkspaceTrust()...)
 	checks = append(checks, checkSessionTracking(dir)...)
 	checks = append(checks, checkUnattended(dir)...)
+	checks = append(checks, checkWaitOutLimits(dir))
 	return checks
 }
 

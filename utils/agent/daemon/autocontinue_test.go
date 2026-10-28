@@ -202,3 +202,45 @@ func TestAPanelSessionIsContinuedThroughItsWindowsExtension(t *testing.T) {
 		t.Fatalf("reveal = %s", data)
 	}
 }
+
+func TestASessionWithNowhereToTypeIsSaidOnceNotRetried(t *testing.T) {
+	d := trackingDaemon(t)
+	d.AutoContinue = true
+	d.Sessions.Load()
+	var mu sync.Mutex
+	var typed []string
+	d.Raise = func(context.Context, sessions.FocusTarget) error { return nil }
+	d.TypeText = func(_ context.Context, target sessions.FocusTarget, text string, enter bool) error {
+		mu.Lock()
+		defer mu.Unlock()
+		typed = append(typed, target.SessionID+":"+text)
+		return nil
+	}
+	origJitter, origLimits := jitter, readLimits
+	defer func() { jitter, readLimits = origJitter, origLimits }()
+	jitter = func(time.Duration) time.Duration { return 0 }
+	now := time.Now()
+	readLimits = func(string) (usage.Limits, bool) {
+		return usage.Limits{FetchedAt: now, FiveHour: usage.Window{Percent: 100, ResetsAt: now.Add(time.Minute)}}, true
+	}
+	// No terminal program, no tty: the daemon's own remote-control child.
+	d.Sessions.Apply(sessions.Event{Name: "UserPromptSubmit", SessionID: "s1", Cwd: "/tmp/a", ClaudePID: 100, At: now})
+	d.Sessions.Apply(sessions.Event{Name: "StopFailure", SessionID: "s1", Error: "rate_limit", Message: "You've hit your 5-hour limit", At: now})
+	ctx := context.Background()
+	d.autoContinue(ctx, now)
+	for i := 0; i < 5; i++ {
+		d.autoContinue(ctx, now.Add(2*time.Minute+time.Duration(i)*time.Minute))
+	}
+	s := d.Sessions.Sessions()[0]
+	if s.Resumes != 0 || s.Status != sessions.StatusLimited {
+		t.Fatalf("nothing to type into burns no tries: %+v", s)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(typed) != 0 {
+		t.Fatalf("typed into thin air: %v", typed)
+	}
+	if n := len(d.saidNoType); n != 1 {
+		t.Fatalf("said once, got %d", n)
+	}
+}

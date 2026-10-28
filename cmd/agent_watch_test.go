@@ -779,3 +779,46 @@ func TestWatchEnableStoresHowRunsGetTheirDatabases(t *testing.T) {
 		t.Fatalf("an unknown way is refused: %v", err)
 	}
 }
+
+func TestAWorktreeCountsAsTheWorkspaceItWasCutFrom(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CORGI_DATA_DIR", dir)
+	ws := filepath.Join(dir, "ws")
+	if err := os.MkdirAll(ws, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	reg := workspace.Registry{Workspaces: []workspace.Workspace{{ID: "ws", AbsPath: ws, Status: workspace.StatusOK}}}
+	if err := workspace.Save(agentRegistryPath(dir), &reg); err != nil {
+		t.Fatal(err)
+	}
+	wt := filepath.Join(dir, "tmp", "corgi-wt", "ws")
+	if err := os.MkdirAll(wt, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	orig := mainCheckoutOf
+	mainCheckoutOf = func(d string) string {
+		if strings.HasPrefix(d, wt) {
+			return ws
+		}
+		return ""
+	}
+	t.Cleanup(func() { mainCheckoutOf = orig })
+	wd, _ := os.Getwd()
+	t.Cleanup(func() { _ = os.Chdir(wd) })
+	if err := os.Chdir(wt); err != nil {
+		t.Fatal(err)
+	}
+	if id, err := currentWorkspaceID(dir); err != nil || id != "ws" {
+		t.Fatalf("worktree resolves to its workspace: %q %v", id, err)
+	}
+	elsewhere := filepath.Join(dir, "elsewhere")
+	if err := os.MkdirAll(elsewhere, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(elsewhere); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := currentWorkspaceID(dir); err == nil || !strings.Contains(err.Error(), "--workspace") {
+		t.Fatalf("outside every workspace the error names the flag: %v", err)
+	}
+}

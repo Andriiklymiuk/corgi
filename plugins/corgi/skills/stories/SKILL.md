@@ -452,6 +452,20 @@ record, and a visual/QA defect is what a human must re-verify.
 
 ## Phase 3 - Branch + implement + verify per story
 
+**Sequential when asked, or when the machine says so.** "No agents", "one at a time",
+"don't run them in parallel" means every story on this thread, in order, no subagent
+dispatch - the same steps, one story at a time. Without such words, read the load
+(`uptime`) before fanning out: more than one full test gate at a time only while the
+load stays below the core count, and never more worktrees than stories. A subagent cut
+short by a usage limit or a 429 is resumed with the same brief once the limit is over -
+re-read the clock before calling anything "still rate-limited"; the limit message
+carries its reset time, and a reset that passed is over.
+
+**Local side effects are reported, never silent.** QA that points a service at another
+database, edits a `.env`, stops a container or kills a process says so when it does it
+and puts it back when it is done; the report lists what was changed on the machine and
+that it was restored.
+
 Branch: `feature/<issue-key>/<kebab-slug>`, same name in every affected repo.
 
 **Write the scope before the first edit.** The spec named the files or areas
@@ -753,7 +767,11 @@ tokens).
   Cap ~1 extra round; still blocked → Stop rule. Non-blocking → PR body.
 - Before the push, re-read the PR body against the head commit: every claim in it
   (what is enforced, what is tested, what the other PR does) true now, the product
-  values nobody gave you under `## Assumptions`.
+  values nobody gave you under `## Assumptions`. **Decide, don't delegate.** Where the
+  spec is silent, pick the reading the ticket, the repo's conventions and the user's
+  earlier words imply, build it, and name the pick under `## Assumptions` - never an
+  "open decisions" section for the reviewer to settle, and never a stop. Only a reading
+  that builds something materially different is a question (Phase 1 gate).
 
 ## Phase 4 - Commit, then multi-repo ordering
 
@@ -786,6 +804,10 @@ never auto-install). No `.corgi/memory/` → offer to create; declined → skip.
   code (Phase 3).
 - Consumers regenerate, commit generated output, finish their slice.
 - **Merge order:** producer PR first, consumers after. State in spec + every PR body.
+- **The consumer starts now.** Its branch is cut from the producer's branch (not from
+  `<base>`), so the schema or contract is there to build against; nothing waits for the
+  producer's merge. After the producer lands, rebase the consumer onto `<base>` and say
+  so (`../_shared/conventions.md` › Gates).
 
 ## Phase 5 - Push + draft PR/MR per repo
 
@@ -859,6 +881,11 @@ issue link.
   what could still go wrong, in one line each. Facts only, no adjectives; skip
   nothing you did, invent nothing you did not. Multi-repo → per PR, its own
   files. Before the `Deferred` list and the risk card.
+- **`## You do` in the body** - every step only a person can do (a statement on the
+  hosted database, a flag, a deployed env value, a console click), numbered, with the
+  exact value and when it runs; the same block goes on the ticket's spec comment, and
+  the final report ends with it (`../_shared/conventions.md` › Steps only a person can
+  do). None → omit the section.
 - **Run-locally line in the body** - the same one-paste
   `corgi run --service-branch <svc>=<branch> … --with-deps` (Per-story lines) so a
   reviewer spins the branch up without hunting.

@@ -152,6 +152,25 @@ func TestEmitHookReadsStopFailureErrorShapes(t *testing.T) {
 	}
 }
 
+func TestEmitHookTakesTheResetFromStopFailuresShownError(t *testing.T) {
+	// Claude Code puts the error as the session showed it in
+	// last_assistant_message and the raw API error in error_details;
+	// the reset time lives in the former.
+	fakeChain(t)
+	stdin := `{"session_id":"s","hook_event_name":"StopFailure","error":"rate_limit","error_details":"429 Too Many Requests","last_assistant_message":"You've hit your 5-hour limit · Your 5-hour limit resets 3pm (Europe/Kiev)"}`
+	ev, _ := runEmitHook(strings.NewReader(stdin), fakeEnv(nil), 50)
+	if ev.Error != "rate_limit" || !strings.Contains(ev.Message, "resets 3pm (Europe/Kiev)") {
+		t.Fatalf("error %q message %q", ev.Error, ev.Message)
+	}
+	if limited, reset := sessions.LimitReset(ev.Error, ev.Message); !limited || reset != "3pm (Europe/Kiev)" {
+		t.Fatalf("limited %v reset %q", limited, reset)
+	}
+	ev, _ = runEmitHook(strings.NewReader(`{"session_id":"s","hook_event_name":"StopFailure","error":"server_error","error_details":"500 boom"}`), fakeEnv(nil), 50)
+	if ev.Message != "500 boom" {
+		t.Fatalf("error_details stands in when nothing was shown: %q", ev.Message)
+	}
+}
+
 func TestEmitHookWithoutAProbeStillEmits(t *testing.T) {
 	orig := proc.Lookup
 	proc.Lookup = func(int) (proc.Process, bool) { return proc.Process{}, false }
@@ -184,14 +203,15 @@ func TestDeliverEventSpoolsOnlyForARunningDaemon(t *testing.T) {
 func TestTabTitleHook(t *testing.T) {
 	label := func(cwd string) string { return "acme-api" }
 	for stdin, want := range map[string]string{
-		`{"session_id":"s","hook_event_name":"UserPromptSubmit","cwd":"/x"}`:                                        "● acme-api",
-		`{"session_id":"s","hook_event_name":"Stop"}`:                                                               "✓ acme-api",
-		`{"session_id":"s","hook_event_name":"StopFailure"}`:                                                        "▲ acme-api FAILED",
-		`{"session_id":"s","hook_event_name":"Notification","notification_type":"permission_prompt"}`:               "▲ acme-api NEEDS YOU",
-		`{"session_id":"s","hook_event_name":"Notification","notification_type":"agent_needs_input"}`:               "▲ acme-api NEEDS YOU",
-		`{"session_id":"s","hook_event_name":"Notification","notification_type":"idle_prompt","message":"waiting"}`: "",
-		`{"session_id":"s","hook_event_name":"PreToolUse","tool_name":"Bash"}`:                                      "",
-		`{"session_id":"s","hook_event_name":"Stop","agent_id":"sub"}`:                                              "",
+		`{"session_id":"s","hook_event_name":"UserPromptSubmit","cwd":"/x"}`: "● acme-api",
+		`{"session_id":"s","hook_event_name":"Stop"}`:                        "✓ acme-api",
+		`{"session_id":"s","hook_event_name":"StopFailure"}`:                 "▲ acme-api FAILED",
+		`{"session_id":"s","hook_event_name":"StopFailure","error":"rate_limit","last_assistant_message":"You've hit your 5-hour limit · Your 5-hour limit resets 3pm (Europe/Kiev)"}`: "⏳ acme-api LIMIT 3pm",
+		`{"session_id":"s","hook_event_name":"Notification","notification_type":"permission_prompt"}`:                                                                                  "▲ acme-api NEEDS YOU",
+		`{"session_id":"s","hook_event_name":"Notification","notification_type":"agent_needs_input"}`:                                                                                  "▲ acme-api NEEDS YOU",
+		`{"session_id":"s","hook_event_name":"Notification","notification_type":"idle_prompt","message":"waiting"}`:                                                                    "",
+		`{"session_id":"s","hook_event_name":"PreToolUse","tool_name":"Bash"}`:                                                                                                         "",
+		`{"session_id":"s","hook_event_name":"Stop","agent_id":"sub"}`:                                                                                                                 "",
 		`nope`: "",
 	} {
 		var out bytes.Buffer

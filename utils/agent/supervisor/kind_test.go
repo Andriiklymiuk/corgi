@@ -299,3 +299,31 @@ func TestCustomArgsStillAllowLegitimatePermissionModes(t *testing.T) {
 		t.Errorf("ValidateSpawnConfig() = %v, want a normal permission mode accepted", err)
 	}
 }
+
+func TestASupervisedClaudeSessionWaitsOutItsLimitsWhenAsked(t *testing.T) {
+	c := SpawnConfig{Kind: KindClaude, Dir: "/tmp/w", WaitOutLimits: true}
+	env := BuildEnv(c, []string{"PATH=/bin"})
+	for _, want := range []string{"CLAUDE_CODE_RETRY_WATCHDOG=1", "CLAUDE_CODE_RETRY_WATCHDOG_USAGE_LIMIT_RECHECK_MS=300000", "CLAUDE_CODE_RETRY_WATCHDOG_MAX_USAGE_LIMIT_WAIT_MS=21600000"} {
+		if !slices.Contains(env, want) {
+			t.Errorf("env = %v, want %s: nobody can type continue into a session with no terminal", env, want)
+		}
+	}
+	// What the parent environment says wins.
+	env = BuildEnv(c, []string{"PATH=/bin", "CLAUDE_CODE_RETRY_WATCHDOG=0", "CLAUDE_CODE_RETRY_WATCHDOG_MAX_USAGE_LIMIT_WAIT_MS=60000"})
+	if slices.Contains(env, "CLAUDE_CODE_RETRY_WATCHDOG=1") || !slices.Contains(env, "CLAUDE_CODE_RETRY_WATCHDOG=0") || !slices.Contains(env, "CLAUDE_CODE_RETRY_WATCHDOG_MAX_USAGE_LIMIT_WAIT_MS=60000") {
+		t.Errorf("env = %v, want the parent's own values kept", env)
+	}
+	if !slices.Contains(env, "CLAUDE_CODE_RETRY_WATCHDOG_USAGE_LIMIT_RECHECK_MS=300000") {
+		t.Errorf("env = %v, want the unset default still added", env)
+	}
+	// Off when auto-continue is off, and never for another kind.
+	c.WaitOutLimits = false
+	if env := BuildEnv(c, []string{"PATH=/bin"}); slices.Contains(env, "CLAUDE_CODE_RETRY_WATCHDOG=1") {
+		t.Errorf("env = %v, want no retry mode when continue is off", env)
+	}
+	custom := customConfig()
+	custom.WaitOutLimits = true
+	if env := BuildEnv(custom, []string{"PATH=/bin"}); slices.Contains(env, "CLAUDE_CODE_RETRY_WATCHDOG=1") {
+		t.Errorf("env = %v, want Claude Code's variable kept from another agent", env)
+	}
+}

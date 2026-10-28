@@ -158,7 +158,12 @@ apply / edit / cancel
 On by default (`--yes` skips). **Preflight the MCP is connected** - if not, keep the
 plan + a paste-ready body + the new-issue URL, stop. Idempotent: match on title/key,
 update not duplicate. **Post one terse comment, not several - don't spam the ticket;
-update an existing comment in place rather than adding new ones.**
+update an existing comment in place rather than adding new ones.** A mention is
+`@Their Name` as the tracker renders it, never a profile URL (`../_shared/conventions.md`).
+**Answering a comment reconciles the ticket.** After the reply, read the ticket's state
+against its PRs: every PR merged and deployed → move it on (or say in the reply that it
+is done and who flips it); still open → leave it, and say what is left. A ticket that
+reads In Progress a week after its last PR merged is the symptom.
 
 ## Hand-offs & degrade
 

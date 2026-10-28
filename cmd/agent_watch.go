@@ -1323,8 +1323,23 @@ func currentWorkspaceID(dir string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if resolved, err := filepath.EvalSymlinks(cwd); err == nil {
-		cwd = resolved
+	if id := workspaceUnder(registry, cwd); id != "" {
+		return id, nil
+	}
+	// A worktree under /tmp belongs to the checkout it was cut from.
+	if main := mainCheckoutOf(cwd); main != "" {
+		if id := workspaceUnder(registry, main); id != "" {
+			return id, nil
+		}
+	}
+	return "", fmt.Errorf("%s is not a registered workspace - `corgi agent init` here first, or pass --workspace", cwd)
+}
+
+// workspaceUnder is the registered workspace whose path contains dir, the
+// deepest one when they nest; "" when none does.
+func workspaceUnder(registry *workspace.Registry, dir string) string {
+	if resolved, err := filepath.EvalSymlinks(dir); err == nil {
+		dir = resolved
 	}
 	best, bestLen := "", 0
 	for _, w := range registry.Sorted() {
@@ -1332,14 +1347,26 @@ func currentWorkspaceID(dir string) (string, error) {
 		if resolved, err := filepath.EvalSymlinks(path); err == nil {
 			path = resolved
 		}
-		if path != "" && (cwd == path || strings.HasPrefix(cwd, path+string(os.PathSeparator))) && len(path) > bestLen {
+		if path != "" && (dir == path || strings.HasPrefix(dir, path+string(os.PathSeparator))) && len(path) > bestLen {
 			best, bestLen = w.ID, len(path)
 		}
 	}
-	if best == "" {
-		return "", fmt.Errorf("%s is not a registered workspace - `corgi agent init` here first", cwd)
+	return best
+}
+
+// mainCheckoutOf is the working directory of the repository a worktree was
+// made from: git's common dir is <main>/.git for a worktree, and the main
+// checkout itself answers with its own .git. "" outside a repository.
+var mainCheckoutOf = func(dir string) string {
+	out, err := exec.Command("git", "-C", dir, "rev-parse", "--path-format=absolute", "--git-common-dir").Output()
+	if err != nil {
+		return ""
 	}
-	return best, nil
+	common := strings.TrimSpace(string(out))
+	if filepath.Base(common) != ".git" {
+		return ""
+	}
+	return filepath.Dir(common)
 }
 
 func describeWatch(wc *config.WatchConfig) string {
