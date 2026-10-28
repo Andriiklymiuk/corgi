@@ -39,6 +39,9 @@ a teammate, so it reads like one wrote it in chat.
   spaces before punctuation to keep a URL clean (`… /9168 :`) - the comma or
   period right after a URL stays out of the link. `corgi agent watch comment` makes
   both clickable on Jira and Linear; the Atlassian MCP comment takes markdown.
+- **A person you mention is `@Their Name`, the way the tracker renders it** - a
+  profile URL pasted as a mention is dead text and pings nobody. Never tag a bot or
+  agent account, or someone the thread does not need.
 - **A picture, video or file you mention is in the comment.** Never "see the
   screenshot I attached: `grid.jpg`" - the reader sees a file name. Jira and Linear:
   `corgi agent watch comment <KEY> "<text>" --file <file>` (repeat `--file`; `--image`
@@ -92,6 +95,8 @@ Better engineered, not more engineered. The diff is the explanation.
   not `TestLidChanged2`. One behaviour per test; fakes over mocks; no sleeps.
 - **Nothing speculative.** No TODOs, no commented-out code, no feature flags for a
   future nobody has asked for.
+- **Code is in English** - identifiers, comments, logs, commit messages - whatever
+  language the chat or the product is in, unless the repo itself is written otherwise.
 - **Written for the second reviewer.** Before the first edit, read
   `second-reviewer.md` (next to this file) and answer the kinds that apply to the
   change - two steps that should be one, the old clients still running, the quiet
@@ -136,11 +141,51 @@ then:
   I start ABC-12" and "say go for the next one" are stops nobody asked for.
 - **Long work is waited for.** A build, a CI run, a deploy runs in the background and is
   polled to its conclusion; "it's running, check later" is not an end. Before the wait,
-  one line: what runs, about how long, and the link to watch it.
+  one line: what runs, about how long, and the link to watch it. While it runs, a line
+  every few minutes with the phase it is in and what is left, so nobody has to ask
+  "so?" - and the next item in the batch gets worked in the meantime, never a foreground
+  poll that blocks the conversation.
+- **A merge is not a wait.** A story that needs another story's schema, branch or
+  contract starts now, branched off that branch, with the merge order stated in both PR
+  bodies; nothing idles for a merge that only a person can click.
 - **Evidence before "done".** The PR URL, the green check, the posted comment, the test
   output - seen, not assumed. Short is fine; unverified is not.
 - **Report once, at the end.** What was done (with its links), what is blocked (with its
   question), nothing about what you could do next if asked.
+
+## Steps only a person can do
+
+A SQL statement on a hosted database, a feature flag, an environment variable on a
+deployed service, a click in a store or cloud console, an approval - anything the run
+cannot do itself - is written down where it will be found, not only said in chat:
+
+- under `## You do` in the PR/MR body and in the spec comment on the ticket, the moment
+  the PR opens - one numbered line each, the exact statement or value, and when it
+  runs (before merge, after deploy),
+- repeated as the last lines of the final reply, and re-printed whole whenever asked,
+  after a compaction too.
+
+A person who has to ask twice what to run, or learns of a manual step at merge time,
+was not told.
+
+## Gates are not bypassed in silence
+
+- Never `--no-verify`, `LEFTHOOK=0`, `HUSKY=0` or a skipped hook, and never a commit on a
+  red test, without saying so in the same line and why. A worktree with no installed
+  dependencies runs the hook's own command through a checkout that has them, or installs
+  them once; bypassing the hook because the tree is bare is a bypass.
+- A flaky test is re-run before the commit, not explained after it.
+- Rewriting a branch other people have fetched (a rebase, a `--force-with-lease`) is
+  said first in one line with the tree diff it produces (`0 files` when it is a pure
+  rebase), and the reply notes that the forge will show stale "recently pushed" banners
+  for a while.
+
+## Ask once, grouped, for what needs a person's hand
+
+Anything that needs an admin password or `sudo`, deletes something a person can see
+(files, branches, tickets, builds), or spends money is asked for once, as one grouped
+list, then done in order after the yes; everything else proceeds without a question.
+Six separate prompts for six related steps is the failure this prevents.
 
 ## Unattended runs never ask
 

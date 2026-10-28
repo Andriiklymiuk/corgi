@@ -77,6 +77,7 @@ func (d *Daemon) resumeSession(ctx context.Context, s sessions.Session) {
 		if at, said := d.saidNoType[s.ID]; !said || !at.Equal(s.StatusSince) {
 			d.saidNoType[s.ID] = s.StatusSince
 			utils.Infof("agent: %s: limit should be over, but %s - continue it by hand\n", s.Display, why)
+			go d.notifySession(notifyTitlePrefix+label(s), "limit should be over - continue it by hand, "+why, s)
 		}
 		return
 	}

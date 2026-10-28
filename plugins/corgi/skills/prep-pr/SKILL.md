@@ -45,11 +45,15 @@ Follow `stories` Phase 5: push the branch, create the draft with `forge-commands
 §6, title `<subject> [<key>]`, body with what / how / tests / issue link - what a
 reviewer needs and nothing more (`../_shared/conventions.md` › Describing a change) -
 then stamp the risk card. Add `## Assumptions` - the `align` picks nobody overruled, ≤5 bullets; omit
-the section when there are none. Draft only; a human flips it to ready. Multi-repo → one
-PR per repo, sibling links in each body, contract lines on every side.
+the section when there are none. Add `## You do` for any step only a person can run
+(`../_shared/conventions.md` › Steps only a person can do); omit when none. Draft only;
+a human flips it to ready. Multi-repo → one PR per repo, sibling links in each body,
+contract lines on every side.
 
-Offer, don't do: watch CI to green, move the ticket to review (`tracker` skill), post
-the spec comment.
+The PR is announced the moment it is up (`corgi agent chat announce`, run from the
+workspace; the ticket moves to review through the `tracker` skill when the user asked
+for that) - never after CI, which is watched in the background and reported when it
+ends. Offer, don't do: post the spec comment.
 
 ## Output
 

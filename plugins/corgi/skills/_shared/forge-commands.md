@@ -87,8 +87,9 @@ If it can't be isolated cleanly, review the full diff and note the double-review
 
 ## 2. GitHub - post summary + inline suggestions in one review
 
-Build a JSON payload, pipe via `--input -`. Each suggestion is a fenced
-` ```suggestion ` block inside the comment body. `line` = line in the **new** file
+Build a JSON payload, pipe via `--input -`. Add `"commit_id": "<headRefOid>"` - the
+**full 40-character** sha from §1 (a short one fails with `GitObjectID`). Each
+suggestion is a fenced ` ```suggestion ` block inside the comment body. `line` = line in the **new** file
 (from the hunk header); `side: RIGHT` = added/context, `side: LEFT` = removed.
 Each inline body carries a deterministic dedup marker (§4).
 
@@ -309,6 +310,11 @@ visually unanswered and the reply floats detached. Always use the thread forms a
 ---
 
 ## 6. Open a draft PR/MR, flip ready, watch CI, merge
+
+GitLab marks a draft **either** with `--draft` **or** with a `Draft:` title prefix - never
+both, or the MR reads `Draft: Draft: …`. Pairs of values in a shell loop are split with
+`read -r a b <<< "$pair"`, not word-splitting (`set -- $pair`, `for x in $(…)`): zsh does
+not split unquoted variables, so the second form silently sees one word.
 
 Run `gh`/`glab` from inside the repo dir (they read the repo from cwd; `git -C` only
 sets git's dir, and `--body-file` paths are relative to cwd).

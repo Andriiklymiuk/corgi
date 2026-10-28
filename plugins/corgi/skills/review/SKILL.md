@@ -22,7 +22,9 @@ Read `../_shared/conventions.md` first.
   + resolve, **push the fixes.** See *Mode B* near the end.
 
 Ambiguous ("check my PR for story X") → ask which. A story-id with no link → resolve it
-to its PR the way `tracker` does. **Bare "fix this PR" / "fix them"** (no mention of
+to its PR the way `tracker` does. **Every review in a session routes from scratch**: a
+second "review these" after a Mode B run on your own PRs is Mode A on someone else's -
+re-resolve the author (P4) and re-read this routing, never carry the last run's mode. **Bare "fix this PR" / "fix them"** (no mention of
 comments) → default **Mode B** (address feedback); but if the PR has **no open human
 threads and CI is red**, the problem is the build, not comments → hand to `debug`
 (Step 5), not a comment fix.
@@ -115,6 +117,9 @@ truncates it and degrades the review; `../_shared/forge-commands.md` §0 has the
 - **Merged or closed → warn and ask** before reviewing either (usually pasted by
   mistake); skip by default if declined. Unattended (`../_shared/conventions.md`):
   skip with one line, no question.
+- **Already approved by the current user** (the approvals list names them) → review
+  only what landed after that approval (commits newer than it); nothing new → one
+  line in the report, no comment on the PR. An unattended run skips it outright.
 - Draft → review normally (reviewing drafts is the common case).
 
 **Stacked PRs.** `gh pr diff` / `glab mr diff` diff each PR against its own base.
@@ -216,7 +221,10 @@ Distill into a compact **intent note** the review uses two ways in P3:
    approach, known debt with a follow-up) is not a bug; drop the finding or
    downgrade to a soft note citing the ticket's reasoning.
 
-No ticket linked → skip; review on repo standards alone.
+No ticket linked → skip; review on repo standards alone. A key found but **no tracker
+reachable** (no MCP loaded, no credentials, `corgi agent` not watching that project) →
+review on standards alone and say so in one line of the report ("ticket ABC-123 not
+read: no tracker access"); never let a skipped intent note pass as a read one.
 
 Ticket resolves but is **clearly unrelated** to the diff (stale/recycled key in
 the branch or title) → treat as no-ticket: review on standards alone, and add a
@@ -453,7 +461,12 @@ stands between the PR and done, not to read a checklist of things that are fine.
   prompt says which files are shared and what the other reviewer covers. One line per
   prompt; the orchestrator holds the ledger, subagents cite it.
 - Big **set** → dispatch per-PR reviews to parallel subagents, each scoped to
-  its diff + the shared note.
+  its diff + the shared note. **Mind the machine**: read the load first (`uptime`,
+  `nproc`/`sysctl -n hw.ncpu`); reviewers that only read can run together, but full
+  test gates run one at a time per repo (two at most when the load is below the core
+  count) - five suites at once push the load past 50 and every one of them crawls.
+  Waiting on subagents is done by their notifications, never with a placeholder
+  `sleep` task.
 - Big **single PR** (large diff / many files) → split that one PR's diff by
   file/dir group across parallel subagents (cap group size so each fits context),
   then merge + dedupe, plus **one cross-slice reconcile pass** so a
@@ -563,6 +576,10 @@ The preview is what you print on the way to acting, not a yes/no question. The
 only overrides are the user's own words in this conversation: "don't post",
 "review only", "just comment on mine". A user who pasted someone else's PR and
 asked for a review has already asked for the review to be posted.
+
+Keep the findings in the conversation, not in a scratch file: a `/tmp` payload written
+in one turn is gone by the next when the OS or a cleanup empties it, and the post has
+to be rebuilt from memory.
 
 Print to terminal, per PR in the set:
 
@@ -688,7 +705,8 @@ LLM-generated title:**
    N nits" so it doesn't read as alarming. The approval goes **with** them - a
    nit never holds it back.
 3. **Head moved during the gate** - re-fetch metadata (head SHA) right before
-   posting. If it changed: warn, re-fetch the new diff, and **relocate each
+   posting; the review call takes the **full 40-character** `headRefOid` as its
+   `commit_id` - a short SHA is refused as an invalid git object id. If it changed: warn, re-fetch the new diff, and **relocate each
    finding by its anchored source-line text + surrounding hunk context** → take
    the new line/side. A finding whose exact line content is absent from every
    new-head hunk = vanished → fold into the summary. **Material change** = any kept
@@ -803,7 +821,9 @@ P4 order) and cross-link the two replies. Then one combined report (6).
 
 1. **Read threads** (§5, `corgi agent watch pr threads <url>...` for the whole set) -
    keep the **unresolved, human** ones; skip your own `<!-- corgi-review -->` bots +
-   resolved. Group by file; read each thread's full back-and-forth (a later reply can
+   resolved. A review the reviewer has started but not submitted shows as pending
+   with no threads: say so in one line and stop, rather than hunting for comments
+   that are not there yet. Group by file; read each thread's full back-and-forth (a later reply can
    change the ask). **Someone else on it?** `git fetch` the PR head first: commits on
    it newer than the comments, that this run did not make, mean another session is
    answering the same threads - read what it pushed and do only what it left, never
@@ -816,16 +836,21 @@ P4 order) and cross-link the two replies. Then one combined report (6).
    answer). Needs an owner
    call → ask.
 3. **Checkout the PR's OWN branch → fix → gate.** Clean tree → `gh pr checkout <n>` /
-   `glab mr checkout <n>` (its head - **not** a new branch off base). Dirty tree →
+   `glab mr checkout <n>` (its head - **not** a new branch off base); note the branch
+   that was checked out before, and return the checkout to it when the push is done. Dirty tree →
    `git worktree add` off the fetched head so the user's work is untouched (`stories`
    P3 worktree rules). **Conflicts first**: `gh pr view <n> --json mergeable,mergeStateStatus`
    (`glab mr view <n>` → `has_conflicts`) - `CONFLICTING` / `DIRTY` means the branch
    cannot land whatever the threads say. `git merge origin/<base>` on the PR's own
    branch (a merge, not a rebase: the reviewer's comment anchors survive), resolve
    keeping both sides' intent, run the gate, commit `Merge <base> into <branch>`;
-   only then the threads. A conflict you cannot resolve with confidence - two
-   sides changed the same logic differently - is a **needs you** in the report, and
-   the threads still get addressed on top of the unmerged branch.
+   only then the threads. A conflict that is only a version field, a lockfile or a
+   generated file is resolved mechanically (take the higher version, regenerate the
+   file with the repo's tool) and the typecheck runs before the push - a conflict
+   resolved by hand and pushed untested is the broken build that follows. A conflict
+   you cannot resolve with confidence - two sides changed the same logic differently -
+   is a **needs you** in the report, and the threads still get addressed on top of the
+   unmerged branch.
    Gate: `corgi test --service` / `corgi exec` + scoped self-review
    (`stories` P3.5). **Minimum diff - only what the threads ask.**
 4. **Reply + resolve per thread** (§5) - what changed (commit/line), or why you pushed
