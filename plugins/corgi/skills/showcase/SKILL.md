@@ -240,6 +240,10 @@ The mp4 is the gif's frames at the gif's pace (1.2 s a frame, 3 s on the last),
 even dimensions for H.264, playable in a store listing, a post, or a slide.
 A 30-second product video is the scenes joined in README order with
 `ffmpeg -f concat` on the per-scene mp4s, no narration, no music.
+A clip that explains a feature belongs in its spec too: one line,
+`![what it shows](media/<scene>.mp4)`, under the heading it explains (a path
+next to the spec, inside the repository). `corgi idea share <spec.md>` takes it
+along, and it plays in the browser, VS Code, the Mac and the phone.
 
 ## Procedure
 
