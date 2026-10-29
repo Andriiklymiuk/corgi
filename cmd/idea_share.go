@@ -111,8 +111,9 @@ func shareIdea(dir string, req shareRequest, now time.Time) (shareResult, error)
 	if !res.Open {
 		return res, nil
 	}
-	res.Link = ideaLink(dir, id.Meta, false)
-	res.Public = launcherURL() != "" && !strings.HasPrefix(res.Link, "http://127.")
+	local, public := ideaLinkBases()
+	res.Link = ideaLinkFrom(local, public, id.Meta, false)
+	res.Public = public != ""
 	switch {
 	case res.Link == "":
 		res.Hint = "corgi agent up first - the link appears once the dashboard runs"

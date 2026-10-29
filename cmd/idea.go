@@ -757,25 +757,37 @@ var ideaNotify = func(dir string, m idea.Meta, what, detail string) {
 // one (so a phone or a friend can open it), else on this machine. The
 // share key rides in it; a closed page has no link.
 func ideaLink(dir string, m idea.Meta, preferLocal bool) string {
+	local, public := ideaLinkBases()
+	return ideaLinkFrom(local, public, m, preferLocal)
+}
+
+// ideaLinkBases is where pages are served: on this machine (when the
+// dashboard answers) and through the tunnel. Read once per request, not
+// per page - the local one dials the port.
+func ideaLinkBases() (local, public string) {
+	if l := localLauncherURL(); l != "" {
+		local = strings.TrimSuffix(l, "/app")
+	}
+	if l := launcherURL(); l != "" {
+		public = strings.TrimSuffix(l, "/app")
+	}
+	return local, public
+}
+
+func ideaLinkFrom(local, public string, m idea.Meta, preferLocal bool) string {
 	if m.Key == "" {
 		return ""
 	}
 	path := "/idea/" + m.Slug + "?k=" + m.Key
-	local := ""
-	if l := localLauncherURL(); l != "" {
-		local = strings.TrimSuffix(l, "/app") + path
+	switch {
+	case preferLocal && local != "":
+		return local + path
+	case public != "":
+		return public + path
+	case local != "":
+		return local + path
 	}
-	public := ""
-	if l := launcherURL(); l != "" {
-		public = strings.TrimSuffix(l, "/app") + path
-	}
-	if preferLocal && local != "" {
-		return local
-	}
-	if public != "" {
-		return public
-	}
-	return local
+	return ""
 }
 
 // ---- the commands -------------------------------------------------------
@@ -935,6 +947,10 @@ type ideaRow struct {
 // that may only read.
 func ideaRows(dir string, withLinks bool) []ideaRow {
 	out := []ideaRow{}
+	local, public := "", ""
+	if withLinks {
+		local, public = ideaLinkBases()
+	}
 	for _, m := range idea.List(dir) {
 		id, err := idea.Load(dir, m.Slug)
 		if err != nil {
@@ -942,9 +958,9 @@ func ideaRows(dir string, withLinks bool) []ideaRow {
 		}
 		row := ideaRow{Meta: id.Meta, Open: id.Open(), ForAgent: len(id.ForAgent()), Counts: id.Counts()}
 		if withLinks {
-			row.File, row.Link = filepath.Join(id.Dir, idea.DocName), ideaLink(dir, id.Meta, true)
-			row.Share = ideaLink(dir, id.Meta, false)
-			row.Public = row.Share != "" && launcherURL() != ""
+			row.File, row.Link = filepath.Join(id.Dir, idea.DocName), ideaLinkFrom(local, public, id.Meta, true)
+			row.Share = ideaLinkFrom(local, public, id.Meta, false)
+			row.Public = row.Share != "" && public != ""
 		} else {
 			row.Meta.Key, row.Meta.Source = "", ""
 		}

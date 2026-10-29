@@ -113,8 +113,9 @@ func ideaDocument(dir string, id *idea.Idea, withHTML, trusted bool) map[string]
 	}
 	if trusted {
 		out["file"] = filepath.Join(id.Dir, idea.DocName)
-		out["link"] = ideaLink(dir, id.Meta, false)
-		out["public"] = id.Meta.Key != "" && launcherURL() != ""
+		local, public := ideaLinkBases()
+		out["link"] = ideaLinkFrom(local, public, id.Meta, false)
+		out["public"] = id.Meta.Key != "" && public != ""
 	}
 	if withHTML {
 		out["html"] = renderIdeaHTML(id.Doc)

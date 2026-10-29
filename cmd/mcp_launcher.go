@@ -1809,7 +1809,7 @@ const launcherPageHTML = `<!doctype html>
     }
     if (!link) { toast('no link yet - the dashboard has no address'); return; }
     const title = m.name || m.title;
-    if (navigator.share) {
+    if (navigator.share && matchMedia('(pointer:coarse)').matches) {
       try { await navigator.share({ title, text: title + ' - read it and comment', url: link }); return; }
       catch (e) { if (e && e.name === 'AbortError') return; }
     }
