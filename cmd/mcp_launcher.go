@@ -1180,6 +1180,14 @@ const launcherPageHTML = `<!doctype html>
      double-tap-zoomed instead of registering the second tap. */
   html{touch-action:manipulation}
   button,a,summary,label,input,select,textarea{touch-action:manipulation}
+  /* iOS zooms into any field under 16px and paints its own glossy picker;
+     a plain box with a chevron reads the same on every phone. */
+  select{-webkit-appearance:none;appearance:none;background-repeat:no-repeat;background-position:right .6rem center;
+      background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%238a8f98' stroke-width='1.5'/%3E%3C/svg%3E");
+      padding-right:1.8rem!important;text-overflow:ellipsis;cursor:pointer}
+  select:focus,input:focus,textarea:focus{outline:none;border-color:var(--accent-line)}
+  @media (pointer:coarse){select,textarea,input:not([type=checkbox]):not([type=radio]){font-size:16px!important}
+      select{min-height:2.4rem}}
   body{font-family:-apple-system,system-ui,sans-serif;background:var(--bg);color:var(--text);margin:0;
       padding-bottom:env(safe-area-inset-bottom);-webkit-font-smoothing:antialiased;
       overscroll-behavior-y:none}
@@ -1223,6 +1231,10 @@ const launcherPageHTML = `<!doctype html>
       border-radius:1rem;padding:.05rem .35rem}
   .tabs button[aria-selected=true] .n{color:var(--text)}
   .tabs .n:empty{display:none}
+  .ev.idea{display:block;text-decoration:none;color:inherit;border:1px solid var(--line);border-radius:.6rem;background:var(--card);padding:.65rem .75rem;margin:0 0 .45rem}
+  .ev.idea .itop{display:flex;align-items:center;gap:.6rem}
+  .ev.idea .itop b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ishare{flex:0 0 auto;font:inherit;font-size:.74rem;font-weight:600;color:#fff;background:var(--accent);border:0;border-radius:.45rem;padding:.35rem .7rem;cursor:pointer}
 
   /* A sheet, because twelve tracker columns do not fit in a row of buttons
      on a phone and a dropdown on iOS is worse than either. */
@@ -1287,7 +1299,7 @@ const launcherPageHTML = `<!doctype html>
   .newchat .nrow select{flex:1 1 7rem;min-width:6.5rem;max-width:none}
   .newchat .nrow button{margin-left:auto}
   .newchat select{font:inherit;font-size:.74rem;flex:1;min-width:0;padding:.3rem .4rem;border-radius:.45rem;border:1px solid var(--line);
-      background:var(--card);color:var(--fg)}
+      background-color:var(--card);color:var(--fg)}
   .newchat button{font:inherit;font-size:.76rem;font-weight:500;padding:.34rem .8rem;border-radius:.45rem;border:1px solid var(--accent);
       background:var(--accent);color:#fff;cursor:pointer;flex:0 0 auto}
   .newchat button:disabled{opacity:.5}
@@ -1311,7 +1323,7 @@ const launcherPageHTML = `<!doctype html>
   .ev .etitle{font-size:.78rem;opacity:.85;margin:.15rem 0 .4rem;overflow-wrap:anywhere}
   .ev .emeta,.kcard .emeta{font-size:.72rem;color:#e0a52b;margin:0 0 .4rem}
   .kbody{white-space:pre-wrap;opacity:.7;max-height:6.5rem;overflow:hidden}
-  .tin{display:block;width:calc(100% - 2rem);margin:.5rem 1rem;padding:.6rem .7rem;background:var(--bg);color:inherit;border:1px solid var(--line);border-radius:.5rem;font:inherit;font-size:.9rem}
+  .tin{display:block;width:calc(100% - 2rem);margin:.5rem 1rem;padding:.6rem .7rem;background-color:var(--bg);color:inherit;border:1px solid var(--line);border-radius:.5rem;font:inherit;font-size:.9rem}
   .sheet .primary{margin:.5rem 1rem 1rem}
   .sum button{margin-left:.4rem;font-size:.72rem;padding:.25rem .55rem}
   .eblocked{margin:6px 0 0;font-size:13px;color:#E4695B}
@@ -1369,7 +1381,7 @@ const launcherPageHTML = `<!doctype html>
   .actions{display:flex;align-items:center;gap:.4rem;margin-top:.65rem;flex-wrap:wrap}
   .startbox{flex-basis:100%;display:none;gap:.4rem;margin-top:.5rem}
   .startbox.on{display:flex}
-  .startbox select,.startbox input{flex:1 1 6rem;min-width:0;background:var(--card2);border:1px solid var(--line);
+  .startbox select,.startbox input{flex:1 1 6rem;min-width:0;background-color:var(--card2);border:1px solid var(--line);
       color:var(--text);border-radius:.5rem;padding:.4rem .55rem;font-size:.78rem;font-family:inherit}
   .evrow{display:flex;justify-content:space-between;gap:.6rem;font-size:.72rem;color:var(--dim);padding:.2rem .1rem}
   .evrow b{font-weight:600;color:#c9cfda}
@@ -1515,31 +1527,31 @@ const launcherPageHTML = `<!doctype html>
   </div>
   <p id="hostnote" class="hostnote" hidden></p>
   <div class="tabs" id="tabs" role="tablist">
-    <button role="tab" data-tab="inbox" aria-selected="true">Inbox<span class="n" id="n-inbox"></span></button>
+    <button role="tab" data-tab="ideas" aria-selected="true">Ideas<span class="n" id="n-ideas"></span></button>
+    <button role="tab" data-tab="sessions" aria-selected="false">Agents<span class="n" id="n-sessions"></span></button>
     <button role="tab" data-tab="kanban" aria-selected="false">Board<span class="n" id="n-kanban"></span></button>
-    <button role="tab" data-tab="sessions" aria-selected="false">Sessions<span class="n" id="n-sessions"></span></button>
-    <button role="tab" data-tab="stacks" aria-selected="false">Stacks<span class="n" id="n-stacks"></span></button>
-    <button role="tab" data-tab="ideas" aria-selected="false">Pages<span class="n" id="n-ideas"></span></button>
+    <button role="tab" data-tab="stacks" aria-selected="false">Repos<span class="n" id="n-stacks"></span></button>
+    <button role="tab" data-tab="inbox" aria-selected="false">Inbox<span class="n" id="n-inbox"></span></button>
     <button role="tab" data-tab="laptop" aria-selected="false">Laptop</button>
     <button role="tab" data-tab="settings" aria-selected="false">Settings</button>
   </div>
 </header>
 <main>
-  <div data-pane="inbox">
+  <div data-pane="inbox" hidden>
     <section id="inbox" class="board" hidden></section>
-    <section id="newchat" class="board" hidden></section>
   </div>
   <div data-pane="kanban" hidden>
     <section id="kanban" class="board" hidden></section>
   </div>
   <div data-pane="sessions" hidden>
+    <section id="newchat" class="board" hidden></section>
     <section id="board" class="board" hidden></section>
   </div>
   <div data-pane="stacks" hidden>
     <div id="list" class="msg">Loading…</div>
   </div>
-  <div data-pane="ideas" hidden>
-    <p class="hostnote">Ideas, specs, designs and proposals the agent keeps: one page each, commented by anyone with its link, answered live, built from. <code>corgi idea new "…"</code> adds one; <a href="/idea/" style="color:var(--accent)">all pages</a>.</p>
+  <div data-pane="ideas">
+    <p class="hostnote">Specs and ideas: share one, the team comments, the agent answers and fixes the page. Make one with <code>corgi idea share spec.md</code> or <code>corgi idea new "…"</code>.</p>
     <div id="ideas" class="msg">Loading…</div>
   </div>
   <div data-pane="laptop" hidden>
@@ -1766,10 +1778,14 @@ const launcherPageHTML = `<!doctype html>
       box.className = ''; box.innerHTML = '';
       if (!ideas.length) { box.className = 'msg'; box.textContent = 'No pages yet. corgi idea new "a scheduling app for a coffee shop"'; return; }
       for (const m of ideas) {
-        const a = document.createElement('a'); a.href = '/idea/' + encodeURIComponent(m.slug); a.className = 'ev';
-        a.style.cssText = 'display:block;text-decoration:none;color:inherit;border:1px solid var(--line);border-radius:.6rem;background:var(--card);padding:.6rem .75rem;margin:0 0 .45rem';
-        const b = document.createElement('b'); b.textContent = m.name || m.title; a.appendChild(b);
-        const s = document.createElement('div'); s.style.cssText = 'color:var(--dim);font-size:.78rem;margin-top:.1rem'; s.textContent = m.summary || m.title; a.appendChild(s);
+        const a = document.createElement('a'); a.href = '/idea/' + encodeURIComponent(m.slug); a.className = 'ev idea';
+        const top = document.createElement('div'); top.className = 'itop';
+        const b = document.createElement('b'); b.textContent = m.name || m.title; top.appendChild(b);
+        const sh = document.createElement('button'); sh.className = 'ishare'; sh.textContent = 'Share';
+        sh.onclick = ev => { ev.preventDefault(); ev.stopPropagation(); shareIdea(m, sh); };
+        top.appendChild(sh); a.appendChild(top);
+        const sub = m.summary || (m.title !== (m.name || m.title) ? m.title : '');
+        if (sub) { const s = document.createElement('div'); s.style.cssText = 'color:var(--dim);font-size:.78rem;margin-top:.1rem'; s.textContent = sub; a.appendChild(s); }
         const meta = document.createElement('div'); meta.style.cssText = 'display:flex;gap:.5rem;flex-wrap:wrap;font-size:.7rem;color:var(--dim);margin-top:.3rem';
         for (const t of [m.type || 'idea', m.status || 'draft', (m.open || 0) + ' open', m.forAgent ? m.forAgent + ' waiting on the agent' : '', m.workspace || '']) { if (!t) continue; const sp = document.createElement('span'); sp.textContent = t; meta.appendChild(sp); }
         a.appendChild(meta); box.appendChild(a);
@@ -1777,6 +1793,29 @@ const launcherPageHTML = `<!doctype html>
     } catch (e) { box.className = 'msg err'; box.textContent = '✗ ' + e.message; }
   }
   loadIdeas();
+
+  // The link for the team: the phone's own share sheet where there is one,
+  // the clipboard where not. A closed page is opened first.
+  async function shareIdea(m, btn) {
+    let link = m.share, isPublic = m.public;
+    if (!link) {
+      try {
+        const r = await fetch('/launch/idea', { method: 'POST', headers: auth, body: JSON.stringify({ do: 'share', slug: m.slug }) });
+        const j = await r.json();
+        if (!r.ok) throw new Error(j.error || 'HTTP ' + r.status);
+        link = j.link; isPublic = j.public; m.share = link; m.public = isPublic;
+        btn.textContent = 'Share';
+      } catch (e) { toast('✗ ' + e.message); return; }
+    }
+    if (!link) { toast('no link yet - the dashboard has no address'); return; }
+    const title = m.name || m.title;
+    if (navigator.share) {
+      try { await navigator.share({ title, text: title + ' - read it and comment', url: link }); return; }
+      catch (e) { if (e && e.name === 'AbortError') return; }
+    }
+    try { await navigator.clipboard.writeText(link); toast(isPublic ? 'Link copied - anyone with it reads and comments' : 'Copied - but this link works on the laptop only'); }
+    catch { prompt('the link', link); }
+  }
 
   function initSettings() {
     const s = document.getElementById('settings');

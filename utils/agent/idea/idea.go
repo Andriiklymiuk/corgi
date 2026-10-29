@@ -125,9 +125,12 @@ type Meta struct {
 	Tags      []string `json:"tags,omitempty"`
 	Summary   string   `json:"summary,omitempty"`
 	Workspace string   `json:"workspace,omitempty"`
-	Status    string   `json:"status"`
-	By        string   `json:"by,omitempty"`
-	Model     string   `json:"model,omitempty"`
+	// Source is the file the page was shared from, so sharing it again
+	// updates this page instead of making another.
+	Source string `json:"source,omitempty"`
+	Status string `json:"status"`
+	By     string `json:"by,omitempty"`
+	Model  string `json:"model,omitempty"`
 	// Key is the share key in the open link; "" means the page is not open
 	// and only a paired device or the dashboard may read it.
 	Key string `json:"key,omitempty"`
@@ -499,9 +502,29 @@ func (id *Idea) SetDoc(doc string, now time.Time) error {
 	if len(doc) > MaxDoc {
 		return fmt.Errorf("the page is too long")
 	}
+	before := id.Doc
 	id.Doc = doc
 	id.Meta.UpdatedAt = now
+	id.writeBackToSource(before)
 	return nil
+}
+
+// writeBackToSource keeps the file the page was shared from in step: the
+// new text goes there too, unless the file was changed on its own since -
+// then the person's edit wins, and sharing the file again brings it in.
+func (id *Idea) writeBackToSource(before string) {
+	if id.Meta.Source == "" || before == id.Doc {
+		return
+	}
+	info, err := os.Lstat(id.Meta.Source)
+	if err != nil || !info.Mode().IsRegular() {
+		return
+	}
+	cur, err := os.ReadFile(id.Meta.Source)
+	if err != nil || strings.TrimRight(string(cur), "\n") != strings.TrimRight(before, "\n") {
+		return
+	}
+	_ = atomicfile.Write(id.Meta.Source, []byte(id.Doc), info.Mode().Perm())
 }
 
 // AddComment adds a comment by a person (kind comment) or the agent (kind
@@ -698,6 +721,40 @@ func (id *Idea) AddFile(name string, data []byte, mime string) (Attachment, erro
 		return Attachment{}, err
 	}
 	return Attachment{Name: base, Path: filepath.ToSlash(rel), Type: mime, Size: int64(len(data))}, nil
+}
+
+// MediaName is the name a picture or video the page names is kept under:
+// its own file name, made safe, so the page finds it again by that name.
+func MediaName(name string) string {
+	base := strings.Trim(fileNamePattern.ReplaceAllString(filepath.Base(strings.TrimSpace(name)), "-"), "-.")
+	if len(base) > 80 {
+		base = base[len(base)-80:]
+	}
+	return base
+}
+
+// PutMedia keeps a picture or video the page names, under MediaName, in
+// place of the copy before it.
+func (id *Idea) PutMedia(name string, data []byte) error {
+	base := MediaName(name)
+	if base == "" || len(data) == 0 {
+		return fmt.Errorf("nothing to keep")
+	}
+	path := filepath.Join(id.Dir, FilesDir, base)
+	var before int64
+	if info, err := os.Stat(path); err == nil {
+		if old, err := os.ReadFile(path); err == nil && string(old) == string(data) {
+			return nil
+		}
+		before = info.Size()
+	}
+	if n, bytes := id.filesHeld(); n >= MaxFiles || bytes-before+int64(len(data)) > MaxFilesBytes {
+		return fmt.Errorf("the page holds enough files (%d MB)", bytes>>20)
+	}
+	if err := os.MkdirAll(filepath.Join(id.Dir, FilesDir), 0o700); err != nil {
+		return err
+	}
+	return atomicfile.Write(path, data, 0o600)
 }
 
 // filesHeld is how many files the page holds, and their size together.

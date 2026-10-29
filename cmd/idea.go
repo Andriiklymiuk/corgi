@@ -925,6 +925,9 @@ type ideaRow struct {
 	Counts   map[string]int `json:"counts"`
 	File     string         `json:"file,omitempty"`
 	Link     string         `json:"link,omitempty"`
+	// Share is the link for other people: the public address when there is one.
+	Share  string `json:"share,omitempty"`
+	Public bool   `json:"public,omitempty"`
 }
 
 // ideaRows is every page with its counts. withLinks adds the share link
@@ -940,8 +943,10 @@ func ideaRows(dir string, withLinks bool) []ideaRow {
 		row := ideaRow{Meta: id.Meta, Open: id.Open(), ForAgent: len(id.ForAgent()), Counts: id.Counts()}
 		if withLinks {
 			row.File, row.Link = filepath.Join(id.Dir, idea.DocName), ideaLink(dir, id.Meta, true)
+			row.Share = ideaLink(dir, id.Meta, false)
+			row.Public = row.Share != "" && launcherURL() != ""
 		} else {
-			row.Meta.Key = ""
+			row.Meta.Key, row.Meta.Source = "", ""
 		}
 		out = append(out, row)
 	}
@@ -949,14 +954,23 @@ func ideaRows(dir string, withLinks bool) []ideaRow {
 }
 
 var ideaOpenCmd = &cobra.Command{
-	Use:   "open <slug>",
-	Short: "The page in the browser, to read, highlight and comment",
+	Use:   "open <slug | file.md>",
+	Short: "The page in the browser, to read, highlight and comment; a markdown file becomes a page first",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		dir := mustAgentDir()
 		id, err := idea.Load(dir, args[0])
 		if err != nil {
-			exitWithError("idea", err, 2)
+			if _, statErr := os.Stat(args[0]); statErr != nil {
+				exitWithError("idea", err, 2)
+			}
+			res, shareErr := shareIdea(dir, shareRequest{Target: args[0], By: osUserName()}, time.Now())
+			if shareErr != nil {
+				exitWithError("idea", shareErr, 1)
+			}
+			if id, err = idea.Load(dir, res.Slug); err != nil {
+				exitWithError("idea", err, 1)
+			}
 		}
 		link := ideaLink(dir, id.Meta, true)
 		if link == "" {
@@ -1523,43 +1537,6 @@ idea.md by hand keeps no such record.`,
 	},
 }
 
-var ideaShareCmd = &cobra.Command{
-	Use:   "share <slug> [--off] [--rotate]",
-	Short: "The open link (anyone with it reads and comments); --off closes the page, --rotate gives it a new key",
-	Args:  cobra.ExactArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
-		dir := mustAgentDir()
-		off, _ := cmd.Flags().GetBool("off")
-		rotate, _ := cmd.Flags().GetBool("rotate")
-		id, err := idea.Update(dir, args[0], func(id *idea.Idea) error {
-			switch {
-			case off:
-				id.Meta.Key = ""
-			case rotate || id.Meta.Key == "":
-				id.Meta.Key = idea.NewKey()
-			}
-			return nil
-		})
-		if err != nil {
-			exitWithError("idea", err, 1)
-		}
-		link := ideaLink(dir, id.Meta, false)
-		if utils.JSONOutput {
-			utils.PrintJSON(map[string]any{"open": id.Meta.Key != "", "link": link})
-			return
-		}
-		if id.Meta.Key == "" {
-			fmt.Printf("%s is closed: only the dashboard and paired phones read it now\n", args[0])
-			return
-		}
-		if link == "" {
-			fmt.Println("open; corgi agent up and the link appears here")
-			return
-		}
-		fmt.Println(link)
-	},
-}
-
 var ideaNotifyCmd = &cobra.Command{
 	Use:   "notify [on|off]",
 	Short: "Whether comments, answers and page changes ring (desktop and the notifyUrl, Telegram for most)",
@@ -1650,6 +1627,9 @@ func init() {
 	ideaBuildCmd.Flags().Bool("no-run", false, "tasks and plan only; nothing starts")
 	ideaShareCmd.Flags().Bool("off", false, "close the page: the link stops working")
 	ideaShareCmd.Flags().Bool("rotate", false, "a new key: the old link stops working")
+	ideaShareCmd.Flags().String("type", "", "for a file: spec (default), idea, hld or rfc")
+	ideaShareCmd.Flags().String("workspace", "", "for a file: the workspace it belongs to (default: the one you are in)")
+	ideaShareCmd.Flags().Bool("no-copy", false, "do not put the link on the clipboard")
 	ideaCmd.AddCommand(ideaNewCmd, ideaListCmd, ideaOpenCmd, ideaPathCmd, ideaFileCmd, ideaShowCmd, ideaCommentCmd,
 		ideaStatusCommand("resolve", "Close a comment: it is settled", idea.StatusResolved),
 		ideaStatusCommand("reopen", "Open a comment again: the agent takes another look", idea.StatusOpen),

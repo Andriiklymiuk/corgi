@@ -32,9 +32,10 @@ type ideaExit struct{ code int }
 
 func runIdea(t *testing.T, args ...string) (out string, code int) {
 	t.Helper()
-	prev := osExit
+	prev, prevCopy := osExit, copyToClipboard
 	osExit = func(c int) { panic(ideaExit{c}) }
-	t.Cleanup(func() { osExit = prev })
+	copyToClipboard = func(string) bool { return true }
+	t.Cleanup(func() { osExit, copyToClipboard = prev, prevCopy })
 	rootCmd.SetArgs(append([]string{"idea"}, args...))
 	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 	t.Cleanup(resetCommandFlags)
