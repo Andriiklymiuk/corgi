@@ -1,6 +1,6 @@
 ---
 name: idea
-description: "Use when the user wants a page written and kept for something to build or decide - \"write a spec for X\", \"draft an HLD for the payments split\", \"RFC: move auth to the gateway\", \"I wanna make a scheduling app for a coffee shop\", \"turn this doc into tickets\" - or when a session is asked to read, answer or act on an existing idea page (`corgi idea …`, a /idea/<slug> link, \"the comments on the spec\"). The page is markdown kept by corgi, commented by people in the browser, VS Code and the phone, answered by the agent, split into tickets, built from or sent to Jira/Linear/Confluence. NOT for implementing the tickets (stories) or for tracker status (tracker)."
+description: "Use when the user wants a page written and kept for something to build or decide - \"write a spec for X\", \"draft an HLD for the payments split\", \"RFC: move auth to the gateway\", \"I wanna make a scheduling app for a coffee shop\", \"turn this doc into tickets\", \"we brainstormed the spec, give me a link for the team\", \"share this spec\" - or when a session is asked to read, answer or act on an existing idea page (`corgi idea …`, a /idea/<slug> link, \"the comments on the spec\"). The page is markdown kept by corgi, commented by people in the browser, VS Code and the phone, answered by the agent, split into tickets, built from or sent to Jira/Linear/Confluence. NOT for implementing the tickets (stories) or for tracker status (tracker)."
 ---
 
 # Corgi idea: one page per thing to build, kept by the agent
@@ -14,8 +14,43 @@ anchored to quoted words beside it, a split into tickets in its metadata, and a
 link anyone can read and comment on. Types: **idea** (something from nothing),
 **spec** (a feature in an existing product), **hld** (a design), **rfc** (a decision).
 Everything below works through the CLI (`--json` everywhere) or the MCP tools
-`corgi_idea_list`, `corgi_idea_read`, `corgi_idea_new`, `corgi_idea_comment`,
+`corgi_idea_list`, `corgi_idea_read`, `corgi_idea_new`, `corgi_idea_share`, `corgi_idea_comment`,
 `corgi_idea_edit`, `corgi_idea_resolve`, `corgi_idea_build`, `corgi_idea_send`.
+
+## Job 0 - A link for the team
+
+"Give me a link for the team", "share the spec": the person wants a URL to paste in a
+chat, now. No questions, no rewrite.
+
+1. Find the page. A spec written in this session (`docs/superpowers/specs/*.md`, a
+   plan, the file you just wrote) → its path. A page already here → its slug
+   (`corgi idea list --json`). Nothing on disk yet → write the agreed text to a file
+   first.
+2. `corgi idea share <file-or-slug> --json`. A file becomes a page word for word
+   (type spec; `--type` for others); sharing the same file again after an edit updates
+   that page, and the link stays. No agent run, no tasks on the board.
+3. Reply with the link alone on its own line, then one line: people open it, highlight
+   and comment; the agent answers each comment and amends the page; the comments ring
+   on the desktop and the phone.
+4. `public: false` → say the link works on this Mac only, and give `hint` (`corgi agent
+   up` gives it a public address). Never hand a `127.0.0.1` link to a team as if it
+   works.
+
+While you brainstorm, `corgi idea open <file.md>` puts the file in the browser as a page
+with comments, so the person reads and marks it up instead of scrolling the chat; the
+VS Code title bar has the same (Corgi: Preview with comments). Comments people leave
+reach you; your changes to the page are written back to the file, unless the person
+edited the file since - then their edit wins and the next share brings it in.
+
+Pictures and videos: link them from the spec with a path next to it -
+`![checkout flow](media/checkout.mp4)` - and they travel with the link (files inside the
+repository only, up to 40 MB each); a YouTube, Loom or Vimeo link plays where it is.
+A video made with the showcase skill belongs here: one line per clip, under the
+heading it explains.
+
+Closing: `corgi idea share <slug> --off`; a link that leaked: `--rotate` (a new link,
+the old one stops working). Anyone with the link reads and comments, nothing more: no
+build, no send, no share, no file paths.
 
 ## Job 1 - Write a page
 

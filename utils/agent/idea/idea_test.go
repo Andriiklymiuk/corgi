@@ -319,3 +319,62 @@ func TestEveryChangeToThePageKeepsTheVersionBefore(t *testing.T) {
 		t.Fatalf("a kept version reads back: %q %v", doc, err)
 	}
 }
+
+func TestMediaIsKeptUnderItsOwnNameAndReplaced(t *testing.T) {
+	dir := t.TempDir()
+	id, err := Create(dir, "", "Demo", "# Demo\n", Meta{}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := MediaName("media/the flow (v2).mp4"); got != "the-flow-v2-.mp4" {
+		t.Fatalf("a safe name: %q", got)
+	}
+	if MediaName(".") != "" {
+		t.Fatal("no name from a dot")
+	}
+	if err := id.PutMedia("clip.mp4", []byte("one")); err != nil {
+		t.Fatal(err)
+	}
+	if err := id.PutMedia("clip.mp4", []byte("one")); err != nil {
+		t.Fatal("the same bytes again is nothing to do")
+	}
+	if err := id.PutMedia("clip.mp4", []byte("two")); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(id.FilePath("clip.mp4")); string(got) != "two" {
+		t.Fatalf("the new copy replaces the old: %q", got)
+	}
+	if err := id.PutMedia("", []byte("x")); err == nil {
+		t.Fatal("no name, nothing kept")
+	}
+}
+
+func TestThePageFollowsBackIntoItsFile(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(t.TempDir(), "spec.md")
+	_ = os.WriteFile(src, []byte("# Spec\n"), 0o640)
+	id, err := Create(dir, "", "Spec", "# Spec\n", Meta{Source: src}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = id.SetDoc("# Spec\n\nmore\n", time.Now())
+	if got, _ := os.ReadFile(src); string(got) != "# Spec\n\nmore\n" {
+		t.Fatalf("written back: %q", got)
+	}
+	if info, _ := os.Stat(src); info.Mode().Perm() != 0o640 {
+		t.Fatalf("the file keeps its mode: %v", info.Mode())
+	}
+	_ = os.WriteFile(src, []byte("mine\n"), 0o640)
+	_ = id.SetDoc("# Spec\n\nagent\n", time.Now())
+	if got, _ := os.ReadFile(src); string(got) != "mine\n" {
+		t.Fatalf("a file edited since keeps the edit: %q", got)
+	}
+	link := filepath.Join(t.TempDir(), "link.md")
+	_ = os.Symlink(src, link)
+	id.Meta.Source = link
+	before := id.Doc
+	_ = id.SetDoc(before+"x\n", time.Now())
+	if got, _ := os.ReadFile(src); string(got) != "mine\n" {
+		t.Fatal("never through a symlink")
+	}
+}

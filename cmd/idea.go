@@ -757,25 +757,37 @@ var ideaNotify = func(dir string, m idea.Meta, what, detail string) {
 // one (so a phone or a friend can open it), else on this machine. The
 // share key rides in it; a closed page has no link.
 func ideaLink(dir string, m idea.Meta, preferLocal bool) string {
+	local, public := ideaLinkBases()
+	return ideaLinkFrom(local, public, m, preferLocal)
+}
+
+// ideaLinkBases is where pages are served: on this machine (when the
+// dashboard answers) and through the tunnel. Read once per request, not
+// per page - the local one dials the port.
+func ideaLinkBases() (local, public string) {
+	if l := localLauncherURL(); l != "" {
+		local = strings.TrimSuffix(l, "/app")
+	}
+	if l := launcherURL(); l != "" {
+		public = strings.TrimSuffix(l, "/app")
+	}
+	return local, public
+}
+
+func ideaLinkFrom(local, public string, m idea.Meta, preferLocal bool) string {
 	if m.Key == "" {
 		return ""
 	}
 	path := "/idea/" + m.Slug + "?k=" + m.Key
-	local := ""
-	if l := localLauncherURL(); l != "" {
-		local = strings.TrimSuffix(l, "/app") + path
+	switch {
+	case preferLocal && local != "":
+		return local + path
+	case public != "":
+		return public + path
+	case local != "":
+		return local + path
 	}
-	public := ""
-	if l := launcherURL(); l != "" {
-		public = strings.TrimSuffix(l, "/app") + path
-	}
-	if preferLocal && local != "" {
-		return local
-	}
-	if public != "" {
-		return public
-	}
-	return local
+	return ""
 }
 
 // ---- the commands -------------------------------------------------------
@@ -925,6 +937,9 @@ type ideaRow struct {
 	Counts   map[string]int `json:"counts"`
 	File     string         `json:"file,omitempty"`
 	Link     string         `json:"link,omitempty"`
+	// Share is the link for other people: the public address when there is one.
+	Share  string `json:"share,omitempty"`
+	Public bool   `json:"public,omitempty"`
 }
 
 // ideaRows is every page with its counts. withLinks adds the share link
@@ -932,6 +947,10 @@ type ideaRow struct {
 // that may only read.
 func ideaRows(dir string, withLinks bool) []ideaRow {
 	out := []ideaRow{}
+	local, public := "", ""
+	if withLinks {
+		local, public = ideaLinkBases()
+	}
 	for _, m := range idea.List(dir) {
 		id, err := idea.Load(dir, m.Slug)
 		if err != nil {
@@ -939,9 +958,11 @@ func ideaRows(dir string, withLinks bool) []ideaRow {
 		}
 		row := ideaRow{Meta: id.Meta, Open: id.Open(), ForAgent: len(id.ForAgent()), Counts: id.Counts()}
 		if withLinks {
-			row.File, row.Link = filepath.Join(id.Dir, idea.DocName), ideaLink(dir, id.Meta, true)
+			row.File, row.Link = filepath.Join(id.Dir, idea.DocName), ideaLinkFrom(local, public, id.Meta, true)
+			row.Share = ideaLinkFrom(local, public, id.Meta, false)
+			row.Public = row.Share != "" && public != ""
 		} else {
-			row.Meta.Key = ""
+			row.Meta.Key, row.Meta.Source = "", ""
 		}
 		out = append(out, row)
 	}
@@ -949,14 +970,23 @@ func ideaRows(dir string, withLinks bool) []ideaRow {
 }
 
 var ideaOpenCmd = &cobra.Command{
-	Use:   "open <slug>",
-	Short: "The page in the browser, to read, highlight and comment",
+	Use:   "open <slug | file.md>",
+	Short: "The page in the browser, to read, highlight and comment; a markdown file becomes a page first",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		dir := mustAgentDir()
 		id, err := idea.Load(dir, args[0])
 		if err != nil {
-			exitWithError("idea", err, 2)
+			if _, statErr := os.Stat(args[0]); statErr != nil {
+				exitWithError("idea", err, 2)
+			}
+			res, shareErr := shareIdea(dir, shareRequest{Target: args[0], By: osUserName()}, time.Now())
+			if shareErr != nil {
+				exitWithError("idea", shareErr, 1)
+			}
+			if id, err = idea.Load(dir, res.Slug); err != nil {
+				exitWithError("idea", err, 1)
+			}
 		}
 		link := ideaLink(dir, id.Meta, true)
 		if link == "" {
@@ -1523,43 +1553,6 @@ idea.md by hand keeps no such record.`,
 	},
 }
 
-var ideaShareCmd = &cobra.Command{
-	Use:   "share <slug> [--off] [--rotate]",
-	Short: "The open link (anyone with it reads and comments); --off closes the page, --rotate gives it a new key",
-	Args:  cobra.ExactArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
-		dir := mustAgentDir()
-		off, _ := cmd.Flags().GetBool("off")
-		rotate, _ := cmd.Flags().GetBool("rotate")
-		id, err := idea.Update(dir, args[0], func(id *idea.Idea) error {
-			switch {
-			case off:
-				id.Meta.Key = ""
-			case rotate || id.Meta.Key == "":
-				id.Meta.Key = idea.NewKey()
-			}
-			return nil
-		})
-		if err != nil {
-			exitWithError("idea", err, 1)
-		}
-		link := ideaLink(dir, id.Meta, false)
-		if utils.JSONOutput {
-			utils.PrintJSON(map[string]any{"open": id.Meta.Key != "", "link": link})
-			return
-		}
-		if id.Meta.Key == "" {
-			fmt.Printf("%s is closed: only the dashboard and paired phones read it now\n", args[0])
-			return
-		}
-		if link == "" {
-			fmt.Println("open; corgi agent up and the link appears here")
-			return
-		}
-		fmt.Println(link)
-	},
-}
-
 var ideaNotifyCmd = &cobra.Command{
 	Use:   "notify [on|off]",
 	Short: "Whether comments, answers and page changes ring (desktop and the notifyUrl, Telegram for most)",
@@ -1650,6 +1643,9 @@ func init() {
 	ideaBuildCmd.Flags().Bool("no-run", false, "tasks and plan only; nothing starts")
 	ideaShareCmd.Flags().Bool("off", false, "close the page: the link stops working")
 	ideaShareCmd.Flags().Bool("rotate", false, "a new key: the old link stops working")
+	ideaShareCmd.Flags().String("type", "", "for a file: spec (default), idea, hld or rfc")
+	ideaShareCmd.Flags().String("workspace", "", "for a file: the workspace it belongs to (default: the one you are in)")
+	ideaShareCmd.Flags().Bool("no-copy", false, "do not put the link on the clipboard")
 	ideaCmd.AddCommand(ideaNewCmd, ideaListCmd, ideaOpenCmd, ideaPathCmd, ideaFileCmd, ideaShowCmd, ideaCommentCmd,
 		ideaStatusCommand("resolve", "Close a comment: it is settled", idea.StatusResolved),
 		ideaStatusCommand("reopen", "Open a comment again: the agent takes another look", idea.StatusOpen),

@@ -67,7 +67,8 @@ const ideaPageHTML = `<!doctype html>
   article blockquote{margin:.6rem 0;padding:.1rem .9rem;border-left:3px solid var(--accent-line);color:var(--dim)}
   article table{border-collapse:collapse;font-size:.86rem;margin:.6rem 0}
   article th,article td{border:1px solid var(--line);padding:.3rem .5rem;text-align:left}
-  article img{max-width:100%}
+  article img,article video{max-width:100%;border-radius:var(--r)}
+  article video{display:block;width:100%;background:#000;margin:.6rem 0}
   mark.hl{background:#3d3410;color:inherit;border-bottom:2px solid var(--amber);border-radius:.15rem;cursor:pointer;padding:0 .05rem}
   mark.hl.answered{background:#1c1f3d;border-bottom-color:var(--accent)}
   mark.hl.fixed{background:#10281a;border-bottom-color:var(--green)}
@@ -126,6 +127,7 @@ const ideaPageHTML = `<!doctype html>
   .quick textarea{flex:1;min-height:2rem;max-height:9rem;font-size:.82rem;padding:.35rem .5rem;border-radius:.4rem}
   textarea,input[type=text]{width:100%;font:inherit;font-size:.86rem;color:var(--text);background:var(--card2);border:1px solid var(--line);border-radius:.45rem;padding:.5rem .6rem;resize:vertical}
   textarea:focus,input:focus{outline:none;border-color:var(--accent-line)}
+  @media (pointer:coarse){textarea,input:not([type=checkbox]):not([type=radio]),select{font-size:16px!important}}
   .compose{border:1px solid var(--accent-line);background:var(--accent-soft);border-radius:.7rem;padding:.7rem .8rem;margin-bottom:.6rem}
   .compose .q{font-size:.78rem;color:var(--dim);border-left:2px solid var(--amber);padding:.1rem .5rem;margin:0 0 .4rem;white-space:pre-wrap;max-height:5rem;overflow:auto}
   .compose .row{display:flex;gap:.4rem;align-items:center;margin-top:.45rem;flex-wrap:wrap}
@@ -269,6 +271,7 @@ const ideaPageHTML = `<!doctype html>
   function sectionOf(h) { let t = ''; for (let e = h.nextElementSibling; e && !/^H[12]$/.test(e.tagName); e = e.nextElementSibling) t += e.textContent + ' '; return t.replace(/\s+/g, ' ').trim(); }
   function renderDoc() {
     const root = $('#doc'); root.innerHTML = doc.html || '';
+    root.querySelectorAll('[data-file]').forEach(m => { m.src = base + '/file/' + encodeURIComponent(m.dataset.file) + (key ? '?k=' + encodeURIComponent(key) : ''); });
     root.querySelectorAll('a[href]').forEach(a => { a.target = '_blank'; a.rel = 'noopener'; });
     for (const c of doc.comments || []) {
       if (!c.anchor || (c.status === 'resolved' && filter !== 'resolved')) continue;
@@ -350,6 +353,9 @@ const ideaPageHTML = `<!doctype html>
   $('#fab').onclick = () => { document.querySelector('aside').scrollIntoView({ behavior: 'smooth' }); };
   $('#share').onclick = async () => {
     const link = (doc && doc.link) || location.href;
+    if (navigator.share && matchMedia('(pointer:coarse)').matches) {
+      try { await navigator.share({ title: document.title, url: link }); return; } catch (e) { if (e && e.name === 'AbortError') return; }
+    }
     try { await navigator.clipboard.writeText(link); toast('link copied - anyone with it can read and comment'); } catch { prompt('the link', link); }
   };
 
@@ -411,7 +417,8 @@ const ideaPageHTML = `<!doctype html>
   function renderHead() {
     const m = doc.idea || {};
     document.title = (m.name || m.title || 'idea') + ' · corgi';
-    $('#name').textContent = m.name || m.title || slug; $('#summary').textContent = m.summary || m.title || '';
+    const shown = m.name || m.title || slug;
+    $('#name').textContent = shown; $('#summary').textContent = m.summary || (m.title !== shown ? m.title : '') || '';
     const ty = $('#type'); ty.textContent = m.type || 'idea'; ty.hidden = !m.type;
     const t = $('#tags'); t.innerHTML = ''; (m.tags || []).forEach(x => t.appendChild(el('span', 'tag', x)));
     const st = $('#status'); st.textContent = m.status || 'draft'; st.className = 'pill ' + (m.status || '');
@@ -436,6 +443,11 @@ const ideaPageHTML = `<!doctype html>
     let why = 'The split below is the agent\'s proposal of how the page becomes work; it keeps it in step with the page. When it reads right, hand it over: the tickets go on the board, a plan works through them, a worktree and a pull request per ticket.';
     if (p) why = p.ref + ' ' + p.state + ' · ' + p.done + ' done · ' + p.doing + ' doing · ' + p.review + ' in review · ' + p.todo + ' to do';
     else if (!canBuild) why += ' Building and sending need the dashboard: open this page from corgi agent dashboard, or run corgi idea build ' + slug + '.';
+    // Someone the link was sent to only reads and comments: no build talk for them.
+    const guest = !canBuild && !p && !tickets.length && !(doc.sent || []).length;
+    $('#endcap').querySelector('h2').textContent = guest ? 'What do you think?' : 'Tickets and the build';
+    if (guest) why = 'Highlight any words to comment on them, or say something about the whole page. The agent answers here, and fixes the page when you are right.';
+    $('#tickets').hidden = guest; $('#build').hidden = !canBuild;
     $('#buildWhy').textContent = why;
     $('#editBtn').hidden = !token;
     const sb = $('#sendbtns'); sb.innerHTML = '';

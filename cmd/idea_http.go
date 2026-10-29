@@ -66,6 +66,9 @@ type ideaAction struct {
 	// set: Name, Summary, Tags, Workspace, Type, Auto.
 	Summary string   `json:"summary"`
 	Tags    []string `json:"tags"`
+	// share: Off closes the link, Rotate gives it a new key.
+	Off    bool `json:"off"`
+	Rotate bool `json:"rotate"`
 }
 
 const ideaBodyLimit = 12 << 20
@@ -93,7 +96,7 @@ func ideaDocument(dir string, id *idea.Idea, withHTML, trusted bool) map[string]
 	}
 	meta := id.Meta
 	if !trusted {
-		meta.Key = ""
+		meta.Key, meta.Source = "", ""
 	}
 	out := map[string]any{
 		"idea":     meta,
@@ -110,7 +113,9 @@ func ideaDocument(dir string, id *idea.Idea, withHTML, trusted bool) map[string]
 	}
 	if trusted {
 		out["file"] = filepath.Join(id.Dir, idea.DocName)
-		out["link"] = ideaLink(dir, id.Meta, false)
+		local, public := ideaLinkBases()
+		out["link"] = ideaLinkFrom(local, public, id.Meta, false)
+		out["public"] = id.Meta.Key != "" && public != ""
 	}
 	if withHTML {
 		out["html"] = renderIdeaHTML(id.Doc)
@@ -122,7 +127,7 @@ func ideaDocument(dir string, id *idea.Idea, withHTML, trusted bool) map[string]
 // and no smart quotes, so the words on the screen are the words in the
 // file and a highlight can be found again.
 func renderIdeaHTML(md string) string {
-	r := blackfriday.NewHTMLRenderer(blackfriday.HTMLRendererParameters{Flags: blackfriday.UseXHTML | blackfriday.SkipHTML | blackfriday.Safelink})
+	r := mediaRenderer{blackfriday.NewHTMLRenderer(blackfriday.HTMLRendererParameters{Flags: blackfriday.UseXHTML | blackfriday.SkipHTML | blackfriday.Safelink})}
 	return string(blackfriday.Run([]byte(md), blackfriday.WithRenderer(r),
 		blackfriday.WithExtensions(blackfriday.CommonExtensions&^blackfriday.Autolink|blackfriday.AutoHeadingIDs)))
 }
@@ -215,7 +220,7 @@ func ideaOpenHandler(token, deviceStore string) http.HandlerFunc {
 			ideaStream(w, r, dir, id)
 		case "file":
 			ideaFile(w, r, dir, id, name)
-		case "comment", "reply", "status", "build", "edit", "auto", "send", "set":
+		case "comment", "reply", "status", "build", "edit", "auto", "send", "set", "share":
 			if r.Method != http.MethodPost {
 				writeLaunchError(w, http.StatusMethodNotAllowed, "POST to "+what)
 				return
@@ -248,7 +253,7 @@ func ideaFile(w http.ResponseWriter, r *http.Request, dir string, id *idea.Idea,
 		}
 		mime := mimeFor(path)
 		w.Header().Set(headerContentType, mime)
-		if !strings.HasPrefix(mime, "image/") || mime == "image/svg+xml" {
+		if !(strings.HasPrefix(mime, "image/") || strings.HasPrefix(mime, "video/")) || mime == "image/svg+xml" {
 			w.Header().Set("Content-Disposition", "attachment; filename=\""+filepath.Base(path)+"\"")
 		}
 		http.ServeFile(w, r, path)
@@ -339,6 +344,18 @@ func ideaPerform(dir string, a ideaAction, trusted bool, defaultBy string) (any,
 			return nil, http.StatusBadRequest, err
 		}
 		return map[string]any{"file": att}, 0, nil
+	case "share":
+		if !trusted {
+			return nil, http.StatusForbidden, fmt.Errorf("only the page's owner opens or closes its link")
+		}
+		if _, err := idea.Load(dir, a.Slug); err != nil {
+			return nil, ideaHTTPStatus(err), err
+		}
+		res, err := shareIdea(dir, shareRequest{Target: a.Slug, By: by, Off: a.Off, Rotate: a.Rotate}, now)
+		if err != nil {
+			return nil, ideaHTTPStatus(err), err
+		}
+		return res, 0, nil
 	case "send":
 		if !trusted {
 			return nil, http.StatusForbidden, fmt.Errorf("sending needs the dashboard: open the page from corgi agent dashboard, or run corgi idea send %s", a.Slug)
@@ -404,7 +421,7 @@ func ideaPerform(dir string, a ideaAction, trusted bool, defaultBy string) (any,
 		}
 		return map[string]any{"auto": id.Meta.Auto}, 0, nil
 	}
-	return nil, http.StatusBadRequest, fmt.Errorf("do is comment, reply, status, file, build, edit, auto, send or set")
+	return nil, http.StatusBadRequest, fmt.Errorf("do is comment, reply, status, file, build, edit, auto, send, set or share")
 }
 
 // ownFiles keeps only attachments that are this page's files, so a

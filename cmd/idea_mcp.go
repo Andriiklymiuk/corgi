@@ -254,6 +254,33 @@ func registerIdeaMCPTools(s *server.MCPServer) {
 		return buildIdea(dir, r.GetString("slug", ""), r.GetString("workspace", ""), "", int(r.GetFloat("slots", 1)), r.GetBool("run", true))
 	}))
 
+	s.AddTool(newCorgiTool("corgi_idea_share",
+		mcp.WithDescription("The link for the team: anyone with it reads the page, highlights words and comments; each comment reaches the agent, which answers and amends the page. Give slug for a page already here, or markdown (and title) to make a new spec page from text kept word for word. off closes the link, rotate gives a new one. Returns link and public (false: the link works on this machine only until corgi agent up gives it a public address)."),
+		mcp.WithString("slug", mcp.Description("A page already here")),
+		mcp.WithString("markdown", mcp.Description("Or the page's text, kept word for word")),
+		mcp.WithString("title", mcp.Description("With markdown: the page's name (default: its first heading)")),
+		mcp.WithString("type", mcp.Description("With markdown: spec (default), idea, hld or rfc")),
+		mcp.WithString("workspace", mcp.Description("With markdown: the workspace it belongs to")),
+		mcp.WithBoolean("off", mcp.Description("Close the link")),
+		mcp.WithBoolean("rotate", mcp.Description("A new link; the old one stops working")),
+	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
+		dir, err := agentDir()
+		if err != nil {
+			return nil, err
+		}
+		slug, md := strings.TrimSpace(r.GetString("slug", "")), r.GetString("markdown", "")
+		if slug == "" && strings.TrimSpace(md) == "" {
+			return nil, fmt.Errorf("give slug or markdown")
+		}
+		if md == "" {
+			if _, err := idea.Load(dir, slug); err != nil {
+				return nil, err
+			}
+		}
+		return shareIdea(dir, shareRequest{Target: slug, Markdown: md, Title: r.GetString("title", ""), Type: r.GetString("type", ""),
+			Workspace: strings.TrimSpace(r.GetString("workspace", "")), By: "mcp", Off: r.GetBool("off", false), Rotate: r.GetBool("rotate", false)}, time.Now())
+	}))
+
 	s.AddTool(newCorgiTool("corgi_idea_send",
 		mcp.WithDescription("Send the page out: to Jira or Linear as an epic (a parent issue) with one ticket per line of the split, or to Confluence as a page. Uses the watch's credentials; the workspace's own tracker and project when none is given."),
 		slugOpt,
