@@ -49,10 +49,15 @@ func (m mediaRenderer) RenderNode(w io.Writer, node *blackfriday.Node, entering 
 	video, image := mediaKind(dest)
 	relative := isRelative(dest)
 	web := strings.HasPrefix(dest, "https://") || strings.HasPrefix(dest, "http://")
-	if (!relative && !web) || (!video && !image && relative) {
+	alt := html.EscapeString(nodeText(node))
+	if !relative && !web {
+		// No other scheme reaches a page someone was sent: the words alone.
+		_, _ = io.WriteString(w, alt)
+		return blackfriday.SkipChildren
+	}
+	if !video && !image && relative {
 		return m.HTMLRenderer.RenderNode(w, node, entering)
 	}
-	alt := html.EscapeString(nodeText(node))
 	src := `src="` + html.EscapeString(dest) + `"`
 	if relative {
 		name, _ := url.PathUnescape(strings.SplitN(dest, "?", 2)[0])

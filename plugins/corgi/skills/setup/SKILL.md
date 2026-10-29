@@ -370,6 +370,13 @@ corgi agent notify test # the phone buzzes
 Print, in this order: the launcher link, the pairing QR (or the `or open:`
 URL), and the manual checklist that is still open.
 
+Then one line on what to try first, because a new person does not know it is
+there: "Say *give me a link for the team* after you brainstorm a spec with your
+agent - `corgi idea share <spec.md>` turns it into a page your team comments
+on, and the agent answers. It is the Ideas tab on the phone, the Mac and the
+dashboard." Offer to make the first one now from a spec in the repo
+(`docs/**/*.md`) if there is one.
+
 ## The manual checklist (print only what is still open)
 
 - Scan the QR on the phone (single use, ten minutes; `corgi agent up`
