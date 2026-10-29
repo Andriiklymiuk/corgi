@@ -1,5 +1,5 @@
 ---
-description: Ship an Expo / React Native app to the stores via the repo's LOCAL prod build targets - clean prebuild → IPA/AAB → eas submit to TestFlight + Google Play. Handles the non-login-shell + LANG locale rule (incl. EAS's nested pod install), the no-double-bump-after-failure rule, background+poll (the build emits no completion event), ground-truth verification (new IPA/AAB + "Submitted…" line, .submit-skipped check - not the exit code), DRAFT-on-Play, and a stopShip abort. Gates on an on-device render first.
+description: Ship a mobile app (Expo / React Native, or a native Xcode project) to the stores via the repo's LOCAL prod build targets - clean prebuild → IPA/AAB → eas submit to TestFlight + Google Play. Handles the non-login-shell + LANG locale rule (incl. EAS's nested pod install), the no-double-bump-after-failure rule, background+poll (the build emits no completion event), ground-truth verification (new IPA/AAB + "Submitted…" line, .submit-skipped check - not the exit code), DRAFT-on-Play, a stopShip abort, and an upload that keeps the screen lit (a locked screen fails the Xcode-account export). Gates on an on-device render first.
 ---
 
 Run the **ship** flow for `$ARGUMENTS`.

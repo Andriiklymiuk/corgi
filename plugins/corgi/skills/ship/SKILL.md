@@ -1,6 +1,6 @@
 ---
 name: ship
-description: "Use when shipping an Expo/React Native app to the stores via the repo's LOCAL build targets: \"ship it\", \"make ship\", \"build and submit to TestFlight/Play\", \"push a release to the App Store\", \"cut a build\", \"release the app\", \"upload the binary\". Gates on the mobile skill's render first. NOT for device verification, IAP metadata (purchases), or remote EAS cloud builds."
+description: "Use when shipping a mobile app (Expo/React Native, or a native Xcode project) to the stores via the repo's LOCAL build targets: \"ship it\", \"make ship\", \"build and submit to TestFlight/Play\", \"push a release to the App Store\", \"cut a build\", \"release the app\", \"upload the binary\". Gates on the mobile skill's render first. NOT for device verification, IAP metadata (purchases), or remote EAS cloud builds."
 ---
 
 # Ship a local build to the stores
@@ -22,11 +22,15 @@ never the exit code. Long + unattended → background + poll.
 - Tests + lint/types green. A ship is no place to find a broken bundle.
 - `df -h` first - a local iOS archive writes DerivedData + archive + IPA (10 GB+); low disk
   kills `pod install` / the archive mid-run with a misleading error.
+- **Keep the screen lit for the whole run, not only the system.** An upload that signs
+  in with the Apple ID in Xcode needs the unlocked login session; a display that sleeps
+  and locks mid-run fails the export at the very end. `corgi agent awake --display on`
+  while the daemon runs, else start the build under `caffeinate -dims` (below).
 
 ## The shell + locale rule
 Run the build in a **non-login** shell that **also exports the locale**:
 ```
-nohup bash -c 'export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8; make <ship-target>' > build/ship.log 2>&1 &
+nohup caffeinate -dims bash -c 'export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8; make <ship-target>' > build/ship.log 2>&1 &
 ```
 - `bash -lc` (login) puts a broken rbenv Ruby on PATH → `pod install` dies with a
   misleading CocoaPods `visionos` error at prebuild. So: non-login.
@@ -45,12 +49,16 @@ version is bumped but unshipped - don't run `make ship` again** (it double-bumps
 the build+submit targets directly (`make localIosProd && make localAndroidProd`) - they
 don't bump - reusing the already-bumped version.
 
+A target that bumps once, then uploads several apps (staging + production), and dies on
+one: upload only the missing app through its export-only path (an archive-reuse flag, or
+the per-app upload script). Nothing uploaded at all → re-run the full target.
+
 ## Drive it
 1. **Background + poll** - there's no foreground tool for 20-40 min, and the `nohup … &`
    wrapper "completes" the instant it backgrounds (any task-runner marks that done) - so
    there is **no completion event for the real build**. Poll the log:
    ```
-   until grep -qiE "BUILD SUCCEEDED|BUILD FAILED|Submitting|successfully uploaded|Submitted your app|error:" build/ship.log; do sleep 25; done
+   until grep -qiE "BUILD SUCCEEDED|BUILD FAILED|EXPORT SUCCEEDED|EXPORT FAILED|Submitting|successfully uploaded|Submitted your app|error:" build/ship.log; do sleep 25; done
    ```
    Watch the phases: pods → archive/Gradle → IPA/AAB exported → `eas submit` → Apple/Google
    ingest ("Waiting for submission to complete" can sit minutes - normal).
@@ -61,6 +69,13 @@ don't bump - reusing the already-bumped version.
 ## Verify by ground truth (not the exit code)
 - **iOS:** a new `*.ipa` (fresh timestamp) + `✔ Submitted your app to Apple App Store
   Connect!` / `successfully uploaded to App Store Connect`. Apple processes ~5-10 min after.
+- **Native Xcode upload:** `Uploaded <App>` + `** EXPORT SUCCEEDED **` per app.
+  "Upload Symbols Failed … dSYM" warnings are noise.
+- **`exportArchive Failed to Use Accounts` / `Failed to find an account with App Store
+  Connect access`** → check the screen before the account:
+  `pmset -g log | grep "Display is turned"`. Display off at the failure time = locked
+  session, not a lost sign-in. Retry once the screen is on; send the person to Xcode →
+  Settings → Accounts only if it fails again with the screen lit.
 - **Android:** a new `*.aab` + `✔ Submitted your app to Google Play Store!`. Play submits
   land as a **draft** release by default (`changes_not_sent_for_review` / draft status) -
   you promote it in Play Console; "submitted" ≠ "released".
