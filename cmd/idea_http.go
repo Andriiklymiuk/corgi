@@ -33,6 +33,7 @@ import (
 //	POST /idea/<slug>/approve            {by, off}                  anyone with the link signs off
 //	POST /idea/<slug>/decide             {text, id, drop}           dashboard token or paired device only
 //	GET  /idea/<slug>/mock                                          the mockup, sandboxed
+//	GET  /idea/<slug>/agent                                         the page as an agent reads it: markdown, how to comment, every thread
 //	POST /idea/<slug>/mock                                          the agent draws it; dashboard or device only
 //
 // The key in the link is what lets anyone it was sent to read and comment;
@@ -194,7 +195,7 @@ func ideaOpenHandler(token, deviceStore string) http.HandlerFunc {
 		if what == "" {
 			// The page is a shell; it asks for /doc with the key, and is told there when the key is wrong.
 			w.Header().Set(headerContentType, "text/html; charset=utf-8")
-			_, _ = fmt.Fprint(w, ideaPageHTML)
+			_, _ = fmt.Fprint(w, ideaShellFor(r, slug))
 			return
 		}
 		dir, err := agentDir()
@@ -229,6 +230,10 @@ func ideaOpenHandler(token, deviceStore string) http.HandlerFunc {
 			writeLaunchJSON(w, map[string]any{"revision": rv, "markdown": doc, "html": renderIdeaHTML(doc)})
 		case "stream":
 			ideaStream(w, r, dir, id)
+		case "agent":
+			w.Header().Set(headerContentType, "text/markdown; charset=utf-8")
+			link := ideaRemote{Base: ideaRequestBase(r) + "/idea/" + slug, Slug: slug, Key: r.URL.Query().Get("k")}
+			_, _ = fmt.Fprint(w, ideaAgentText(link, id))
 		case "file":
 			ideaFile(w, r, dir, id, name)
 		case "mock":

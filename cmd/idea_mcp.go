@@ -1,7 +1,9 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
@@ -14,7 +16,7 @@ import (
 // reads a spec, answers its comments, leaves its own, and builds from it.
 
 func registerIdeaMCPTools(s *server.MCPServer) {
-	slugOpt := mcp.WithString("slug", mcp.Required(), mcp.Description("The page's slug, as corgi idea list shows it"))
+	slugOpt := mcp.WithString("slug", mcp.Required(), mcp.Description("The page's slug, as corgi idea list shows it (read and comment also take a link someone shared)"))
 
 	s.AddTool(newCorgiTool("corgi_idea_list",
 		mcp.WithDescription("Every idea page on this machine - specs, HLDs, RFCs, ideas - newest change first, with how many comments are open and how many wait on the agent. Read-only."),
@@ -27,9 +29,17 @@ func registerIdeaMCPTools(s *server.MCPServer) {
 	}))
 
 	s.AddTool(newCorgiTool("corgi_idea_read",
-		mcp.WithDescription("One page in full: its markdown, its split into tickets (with where each stands), every comment with its replies and status, and the board tasks it made. Read-only. A comment's anchor quotes the words on the page it is about. Comments with status open by a person wait on the agent: answer them with corgi_idea_comment (replyTo) and amend the page with corgi_idea_edit when they ask for a change."),
+		mcp.WithDescription("One page in full: its markdown, its split into tickets (with where each stands), every comment with its replies and status, and the board tasks it made. Read-only. A comment's anchor quotes the words on the page it is about. Comments with status open by a person wait on the agent: answer them with corgi_idea_comment (replyTo) and amend the page with corgi_idea_edit when they ask for a change. A page someone shared with you: pass its link (https://…/idea/<slug>?k=…) as slug; you read it as a guest and comment as one."),
 		slugOpt,
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
+		if link, ok := parseIdeaLink(r.GetString("slug", "")); ok {
+			data, err := link.do(http.MethodGet, "doc", nil)
+			if err != nil {
+				return nil, err
+			}
+			var out map[string]any
+			return out, json.Unmarshal(data, &out)
+		}
 		dir, err := agentDir()
 		if err != nil {
 			return nil, err
@@ -71,7 +81,7 @@ func registerIdeaMCPTools(s *server.MCPServer) {
 	}))
 
 	s.AddTool(newCorgiTool("corgi_idea_comment",
-		mcp.WithDescription("Leave a comment on a page, on the words quoted (quote must appear on the page verbatim) or on the page as a whole, or reply under a comment (replyTo). A reply as the agent answers a waiting comment: pass by \"agent\" and changed true when the page was amended for it, which marks it fixed; otherwise it is marked answered. Any other by is a person's comment, which the agent will answer."),
+		mcp.WithDescription("Leave a comment on a page, on the words quoted (quote must appear on the page verbatim) or on the page as a whole, or reply under a comment (replyTo). A reply as the agent answers a waiting comment: pass by \"agent\" and changed true when the page was amended for it, which marks it fixed; otherwise it is marked answered. Any other by is a person's comment, which the agent will answer. On a page someone shared with you, pass its link as slug and your own name as by: the page's agent answers there."),
 		slugOpt,
 		mcp.WithString("text", mcp.Required(), mcp.Description("The comment")),
 		mcp.WithString("quote", mcp.Description("The words on the page it is about")),
@@ -93,6 +103,12 @@ func registerIdeaMCPTools(s *server.MCPServer) {
 		}
 		replyTo := int(r.GetFloat("replyTo", 0))
 		changed := r.GetBool("changed", false)
+		if link, ok := parseIdeaLink(slug); ok {
+			if by == idea.Agent {
+				return nil, fmt.Errorf("on a page someone shared, comment under your own name, not as its agent")
+			}
+			return remoteIdeaComment(link, remoteComment{Text: r.GetString("text", ""), By: by, Quote: r.GetString("quote", ""), Prefix: r.GetString("prefix", ""), Suffix: r.GetString("suffix", ""), Heading: r.GetString("heading", ""), ReplyTo: replyTo})
+		}
 		var out any
 		id, err := idea.Update(dir, slug, func(id *idea.Idea) error {
 			now := time.Now()

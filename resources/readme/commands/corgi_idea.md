@@ -66,6 +66,7 @@ notifyUrl (Telegram): corgi idea notify off keeps them quiet.
 * [corgi idea decide](corgi_idea_decide)	 - The page's decisions: list them, add one, reword the one a thread left, or drop one
 * [corgi idea edit](corgi_idea_edit)	 - Replace the page's text with a file's, keeping the version before as a revision
 * [corgi idea file](corgi_idea_file)	 - One of the page's files: its bytes, or with --json its name, type and base64 data
+* [corgi idea follow](corgi_idea_follow)	 - Follow a page: every new version, comment, reply, sign-off and decision as it lands, here or on someone else's laptop
 * [corgi idea history](corgi_idea_history)	 - The page's earlier versions - who changed it and why - or one of them in full
 * [corgi idea list](corgi_idea_list)	 - Every idea page, newest change first, with what waits on whom
 * [corgi idea mock](corgi_idea_mock)	 - The agent draws the page's screens as one clickable HTML mockup, shown on the page
@@ -79,7 +80,7 @@ notifyUrl (Telegram): corgi idea notify off keeps them quiet.
 * [corgi idea send](corgi_idea_send)	 - Send the page out: an epic with its tickets in Jira or Linear, or a Confluence page
 * [corgi idea set](corgi_idea_set)	 - Change what the page is called, tagged, typed, where it builds, whether the agent answers on its own
 * [corgi idea share](corgi_idea_share)	 - The link for the team: anyone with it reads and comments, the agent answers. A markdown file becomes a page first
-* [corgi idea show](corgi_idea_show)	 - The page and its comments, as JSON with --json or as text
+* [corgi idea show](corgi_idea_show)	 - The page and its comments, as JSON with --json or as text - a page here, or one someone shared by link
 * [corgi idea templates](corgi_idea_templates)	 - The page types: idea, spec, hld, rfc, and the team's own from .corgi/idea-templates/
 * [corgi idea tickets](corgi_idea_tickets)	 - The page's split into tickets, and where each stands
 * [corgi idea watch](corgi_idea_watch)	 - Keep answering: every comment that arrives on any page (or this one) gets the agent's reply

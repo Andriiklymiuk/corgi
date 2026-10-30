@@ -1073,10 +1073,14 @@ var ideaFileCmd = &cobra.Command{
 }
 
 var ideaShowCmd = &cobra.Command{
-	Use:   "show <slug>",
-	Short: "The page and its comments, as JSON with --json or as text",
+	Use:   "show <slug | link>",
+	Short: "The page and its comments, as JSON with --json or as text - a page here, or one someone shared by link",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
+		if r, ok := parseIdeaLink(args[0]); ok {
+			remoteIdeaShow(r)
+			return
+		}
 		dir := mustAgentDir()
 		id, err := idea.Load(dir, args[0])
 		if err != nil {
@@ -1100,12 +1104,14 @@ var ideaShowCmd = &cobra.Command{
 }
 
 var ideaCommentCmd = &cobra.Command{
-	Use:   "comment <slug> \"<words>\"",
+	Use:   "comment <slug | link> \"<words>\"",
 	Short: "Comment on the page - on highlighted words with --quote, or on the whole page",
 	Long: `  corgi idea comment brewshift "use postgres" --quote "We use sqlite"
   corgi idea comment brewshift "and a waitlist?" --by maria --link https://…
   corgi idea comment brewshift "yes, do that" --reply-to 4      accept a proposal
   corgi idea comment brewshift "see the sketch" --file ./sketch.png
+  corgi idea comment "https://…/idea/brewshift?k=…" "why sqlite?" --quote "sqlite" --by maria-agent
+      a page someone shared with you: the link is enough, from any machine
 
 The agent answers on its own when the dashboard runs (corgi agent up) or
 when corgi idea watch is on; corgi idea answer <slug> does one pass now.`,
@@ -1123,6 +1129,21 @@ when corgi idea watch is on; corgi idea answer <slug> does one pass now.`,
 		replyTo, _ := cmd.Flags().GetInt("reply-to")
 		asAgent, _ := cmd.Flags().GetBool("as-agent")
 		changed, _ := cmd.Flags().GetBool("changed")
+		if r, ok := parseIdeaLink(slug); ok {
+			if asAgent || changed {
+				exitWithError("idea", fmt.Errorf("--as-agent is for the page's own agent; on a page someone shared, comment under your name (--by)"), 2)
+			}
+			res, err := remoteIdeaComment(r, remoteComment{Text: text, By: firstNonEmpty(by, osUserName()), Quote: quote, Prefix: prefix, Suffix: suffix, Heading: heading, Links: links, Files: files, ReplyTo: replyTo})
+			if err != nil {
+				exitWithError("idea", err, 1)
+			}
+			if utils.JSONOutput {
+				utils.PrintJSON(res)
+				return
+			}
+			fmt.Printf("sent to %s - its agent answers on the page; corgi idea follow \"%s\" shows the answer\n", r.Slug, r.Link())
+			return
+		}
 		if asAgent {
 			by = idea.Agent
 		}

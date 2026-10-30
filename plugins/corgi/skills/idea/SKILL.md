@@ -1,6 +1,6 @@
 ---
 name: idea
-description: "Use when the user wants a page written and kept for something to build or decide - \"write a spec for X\", \"draft an HLD for the payments split\", \"RFC: move auth to the gateway\", \"I wanna make a scheduling app for a coffee shop\", \"turn this doc into tickets\", \"we brainstormed the spec, give me a link for the team\", \"share this spec\" - or when a session is asked to read, answer or act on an existing idea page (`corgi idea …`, a /idea/<slug> link, \"the comments on the spec\"). The page is markdown kept by corgi, commented by people in the browser, VS Code and the phone, answered by the agent, split into tickets, built from or sent to Jira/Linear/Confluence. NOT for implementing the tickets (stories) or for tracker status (tracker)."
+description: "Use when the user wants a link to a doc, spec, HLD, RFC or plan from this conversation so other people can read and comment on it - \"ok, give me link to doc we created\", \"a link so my friends can comment on the hld\", \"share this hld with my team for review\", \"дай ссылку на документ, который мы сделали\" - corgi turns the markdown file into a page with a link anyone can comment on (no account), the agent answers. Also when they want a page written and kept for something to build or decide (\"write a spec for X\", \"draft an HLD\", \"RFC: move auth to the gateway\", \"turn this doc into tickets\"), or when a session is asked to read, answer or act on an idea page (`corgi idea …`, a /idea/<slug> link someone sent, \"the comments on the spec\"). NOT for implementing the tickets (stories) or for tracker status (tracker)."
 ---
 
 # Corgi idea: one page per thing to build, kept by the agent
@@ -38,7 +38,7 @@ chat, now. No questions, no rewrite.
 
 While you brainstorm, `corgi idea open <file.md>` puts the file in the browser as a page
 with comments, so the person reads and marks it up instead of scrolling the chat; the
-VS Code title bar has the same (Corgi: Preview with comments). Comments people leave
+VS Code has the same (right-click the file: Open in Corgi Preview). Comments people leave
 reach you; your changes to the page are written back to the file, unless the person
 edited the file since - then their edit wins and the next share brings it in.
 
@@ -51,6 +51,22 @@ heading it explains.
 Closing: `corgi idea share <slug> --off`; a link that leaked: `--rotate` (a new link,
 the old one stops working). Anyone with the link reads and comments, nothing more: no
 build, no send, no share, no file paths.
+
+## Job 0b - A page someone sent you, or following one
+
+A `/idea/<slug>?k=…` link from someone else is a page on their laptop. You take part
+as a guest, under your own name (never as "agent" - that is the page's own agent):
+
+- Read: `corgi idea show "<link>"` (text, with every thread and its id), `--json` for
+  the structure; MCP `corgi_idea_read` with the link as `slug`. Without corgi,
+  `GET <link path>/agent?k=…` is the same text and says how to post.
+- Comment on exact words: `corgi idea comment "<link>" "…" --quote "<words>" --by
+  <name>`, `--reply-to <id>` in a thread; MCP `corgi_idea_comment` with the link as
+  `slug`. The page's agent answers there; you do not edit their page.
+- Follow it: `corgi idea follow "<link>" --json` prints one JSON line per new version,
+  comment, reply, status, sign-off or decision, until stopped - run it in the background
+  (a monitor) and act on the lines. The same works for a page here: `corgi idea follow
+  <slug>`.
 
 ## Job 1 - Write a page
 

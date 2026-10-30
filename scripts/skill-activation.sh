@@ -27,6 +27,10 @@ setup|I just installed corgi, set everything up
 agent|leave a handoff for ABC-7, the web side is not done
 idea|ok we brainstormed the spec in docs/specs/checkout.md, give me a link for the team
 idea|дай ссылку на эту спеку для команды, пусть комментируют
+idea|Ok, give me link to doc we created
+idea|give me a link so my friends can comment on the hld
+idea|дай ссылку на документ, который мы сделали
+idea|share this hld with my team for review
 none|what is the capital of France
 CASES
 echo "$pass passed, $fail failed"

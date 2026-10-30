@@ -153,6 +153,8 @@ const ideaPageHTML = `<!doctype html>
   ol.decisions .btn{margin-left:.3rem;padding:0 .3rem}
   .mockwrap{border:1px solid var(--line);border-radius:.7rem;overflow:hidden;background:#fff;margin:.4rem 0}
   #mock{width:100%;height:46rem;max-height:80vh;border:0;display:block}
+  .agents{max-width:76rem;margin:0 auto;padding:0 max(1rem,env(safe-area-inset-right)) 2rem max(1rem,env(safe-area-inset-left));color:var(--dim2);font-size:.72rem;word-break:break-all}
+  .agents a{color:var(--dim)}
   .editor{display:none}.editing .editor{display:block}.editing #doc{display:none}
   .editor textarea{min-height:60vh;font-family:ui-monospace,Menlo,monospace;font-size:.82rem}
 </style>
