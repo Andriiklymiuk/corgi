@@ -81,7 +81,7 @@ func (d *Daemon) watchLid(ctx context.Context) {
 				d.lidClosed.Store(closed)
 				lidClosedNow.Store(closed)
 				d.setLid(closed)
-				d.lidChanged(now, closed, g.window)
+				d.lidChanged(closed)
 			}
 		}
 	}
@@ -185,8 +185,8 @@ func (d *Daemon) ringLid(body string) {
 }
 
 // What a closed lid changes, Insomnia-style, and an open one undoes: the
-// screen is let go (a lit screen in a closed laptop is heat and no lock),
-// the sound is muted, and a close on battery is said. A second display in
+// screen is let go (a lit screen in a closed laptop is heat and no lock)
+// and the sound is muted. A second display in
 // clamshell mode is a screen someone looks at, so nothing changes then.
 var hasExternalDisplay = func() bool {
 	if runtime.GOOS != "darwin" {
@@ -217,7 +217,7 @@ var setMuted = func(on bool) {
 	_ = exec.Command("osascript", "-e", fmt.Sprintf("set volume output muted %t", on)).Run()
 }
 
-func (d *Daemon) lidChanged(now time.Time, closed bool, window *QuietHours) {
+func (d *Daemon) lidChanged(closed bool) {
 	if hasExternalDisplay() {
 		utils.Info("agent: lid: a second display is on - the laptop is left as it is")
 		return
@@ -230,9 +230,6 @@ func (d *Daemon) lidChanged(now time.Time, closed bool, window *QuietHours) {
 		if !readMuted() {
 			setMuted(true)
 			d.lidMuted.Store(true)
-		}
-		if m, _ := currentMachine(now); m.Known && m.Battery >= 0 && !m.Charging && window != nil && window.Contains(now) {
-			d.ringLid(fmt.Sprintf("the lid closed on battery at %d%% - plug it in for a long run", m.Battery))
 		}
 		return
 	}

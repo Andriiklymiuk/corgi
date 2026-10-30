@@ -108,18 +108,17 @@ func TestAClosedLidLetsTheScreenSleepAndMutesUntilItOpens(t *testing.T) {
 	_ = lock.SetDisplay(true)
 	d.Awake = lock
 	d.AwakePolicy = func() (bool, bool) { return true, true }
-	now := time.Now()
-	d.lidChanged(now, true, nil)
+	d.lidChanged(true)
 	if lock.Display() || !muted {
 		t.Fatalf("closed: display=%v muted=%v", lock.Display(), muted)
 	}
-	d.lidChanged(now, false, nil)
+	d.lidChanged(false)
 	if !lock.Display() || muted {
 		t.Fatalf("opened: display=%v muted=%v", lock.Display(), muted)
 	}
 	muted = true
-	d.lidChanged(now, true, nil)
-	d.lidChanged(now, false, nil)
+	d.lidChanged(true)
+	d.lidChanged(false)
 	if !muted {
 		t.Fatal("a Mac that was muted before stays muted after")
 	}
@@ -131,7 +130,7 @@ func TestAClosedLidWithASecondDisplayChangesNothing(t *testing.T) {
 	hasExternalDisplay = func() bool { return true }
 	setMuted = func(bool) { t.Fatal("clamshell mode is someone working") }
 	d := testDaemon(t)
-	d.lidChanged(time.Now(), true, nil)
+	d.lidChanged(true)
 }
 
 func TestExternalDisplayIn(t *testing.T) {

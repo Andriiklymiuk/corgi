@@ -989,6 +989,7 @@ CLI or the phone's repo sheet, no restart:
   routines run through the night, one summary in the morning. `--quiet` must
   be set for it to mean anything. The lid guard (`corgi agent lid on`) is
   machine-wide, not a watch flag: a wake or an open lid by day rings once.
+  It is for a trip - `corgi agent away` turns it on, `lid off` when back.
 - `--hand-over`, `--auto-merge`: feedback typed into the session on
   the branch; a ready pull request merged.
 - `--after-merge "<column>"`: once **every** pull request of a run is

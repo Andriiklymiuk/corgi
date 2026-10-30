@@ -19,6 +19,12 @@ type awayStep struct {
 
 func awayPlan(user *config.UserConfig, dirs map[string]string) []awayStep {
 	var steps []awayStep
+	if strings.TrimSpace(user.Lid) == "" {
+		steps = append(steps, awayStep{What: "lid guard " + defaultLidHours, Apply: func() error {
+			user.Lid = defaultLidHours
+			return nil
+		}})
+	}
 	for _, id := range sortedWorkspaceIDs(user) {
 		id := id
 		wc := user.Workspaces[id]
@@ -61,14 +67,16 @@ func awayPlan(user *config.UserConfig, dirs map[string]string) []awayStep {
 var agentAwayCmd = &cobra.Command{
 	Use:   "away",
 	Short: "Set this machine up to work alone for weeks, and say what only you can do",
-	Long: `Runs the away doctor, applies every corgi-side fix (a digest routine per
-watched workspace; worktrees, pruning and harden where fixes run unattended)
+	Long: `Runs the away doctor, applies every corgi-side fix (the lid guard, a digest
+routine per watched workspace; worktrees, pruning and harden where fixes run unattended)
 and prints the sudo lines corgi cannot run for you. Action, quiet hours and
 caps are yours: it changes none of them.
 
   corgi agent away                       # apply, then corgi agent restart
   corgi agent away --dry-run             # only say
-  corgi agent away --pulse <url>         # save the dead-man URL too`,
+  corgi agent away --pulse <url>         # save the dead-man URL too
+
+Back home: corgi agent lid off, so opening your own laptop rings nothing.`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		dir, err := agentDir()

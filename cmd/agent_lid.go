@@ -38,8 +38,9 @@ sleep works where the Apple menu's Sleep does not: with SleepDisabled set
 With the sudoers rule from corgi agent away, corgi clears the bit, sleeps the
 machine, and sets it again at the wake.
 
-One ring per opening, never twice in ten minutes. Off by default; the
-daemon reads the setting at start (corgi agent restart).`,
+One ring per opening, never twice in ten minutes. It is for a trip: off by
+default, corgi agent away turns it on, corgi agent lid off when you are back.
+The daemon reads the setting at start (corgi agent restart).`,
 	Args: cobra.MaximumNArgs(1),
 	Run:  runAgentLid,
 }

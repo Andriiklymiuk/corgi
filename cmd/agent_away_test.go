@@ -62,7 +62,7 @@ func TestAwayPlanFillsGaps(t *testing.T) {
 	for _, s := range steps {
 		whats = append(whats, s.What)
 	}
-	want := "digest routine in a|worktrees + prune in a|harden a"
+	want := "lid guard 08:00-23:00|digest routine in a|worktrees + prune in a|harden a"
 	if got := strings.Join(whats, "|"); got != want {
 		t.Fatalf("got %s", got)
 	}
@@ -72,7 +72,7 @@ func TestAwayPlanFillsGaps(t *testing.T) {
 		}
 	}
 	a := user.Workspaces["a"]
-	if !hasRoutine(a.Routines, "digest") || !a.Watch.Isolate || a.Watch.PruneAfter != "7d" {
+	if user.Lid != defaultLidHours || !hasRoutine(a.Routines, "digest") || !a.Watch.Isolate || a.Watch.PruneAfter != "7d" {
 		t.Fatalf("applied: %+v %+v", a.Routines, a.Watch)
 	}
 	if len(awayPlan(user, map[string]string{"a": "", "b": ""})) != 0 {
