@@ -69,7 +69,9 @@ const ideaPageHTML = `<!doctype html>
   article blockquote{margin:.6rem 0;padding:.1rem .9rem;border-left:3px solid var(--accent-line);color:var(--dim)}
   article table{border-collapse:collapse;font-size:.86rem;margin:.6rem 0}
   article th,article td{border:1px solid var(--line);padding:.3rem .5rem;text-align:left}
-  article img,article video{max-width:100%;border-radius:var(--r)}
+  article img,article video{max-width:100%;height:auto;border-radius:var(--r);vertical-align:middle}
+  article p:has(> img:only-child),article p:has(> a:only-child > img){text-align:center}
+  article p:has(> img:only-child) + p:has(> em:only-child){text-align:center;color:var(--dim);font-size:.85rem;margin-top:-.4rem}
   article video{display:block;width:100%;background:#000;margin:.6rem 0}
   mark.hl{background:#3d3410;color:inherit;border-bottom:2px solid var(--amber);border-radius:.15rem;cursor:pointer;padding:0 .05rem}
   mark.hl.answered{background:#1c1f3d;border-bottom-color:var(--accent)}

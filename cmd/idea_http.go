@@ -146,7 +146,7 @@ func ideaDocument(dir string, id *idea.Idea, withHTML, trusted bool) map[string]
 // file and a highlight can be found again.
 func renderIdeaHTML(md string) string {
 	r := mediaRenderer{blackfriday.NewHTMLRenderer(blackfriday.HTMLRendererParameters{Flags: blackfriday.UseXHTML | blackfriday.SkipHTML | blackfriday.Safelink})}
-	return string(blackfriday.Run([]byte(md), blackfriday.WithRenderer(r),
+	return string(blackfriday.Run([]byte(htmlMediaToMarkdown(md)), blackfriday.WithRenderer(r),
 		blackfriday.WithExtensions(blackfriday.CommonExtensions&^blackfriday.Autolink|blackfriday.AutoHeadingIDs)))
 }
 
