@@ -547,8 +547,9 @@ defaults:
 sessions awake but sleeps between turns.
 
 For a laptop that leaves with its lid closed: `corgi agent awake on` (or
-`--for 6h`) is read live, `--display on` keeps the screen lit only while the
-lid is open; `corgi agent heat` holds new runs when warm and pauses sessions
+`--for 6h`) is read live and, with the lid closed, holds the display awake
+too (macOS pauses apps once the display counts as asleep); `--display on`
+keeps the screen lit while the lid is open; `corgi agent heat` holds new runs when warm and pauses sessions
 when hot; `corgi agent hotspot "<name>"` hops onto the phone when Wi-Fi is
 gone; `corgi agent away` lists the rest, sudoers rule included. Never ask the
 person to run `caffeinate` in a terminal.

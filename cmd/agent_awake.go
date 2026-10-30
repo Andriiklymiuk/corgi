@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -29,10 +30,10 @@ sessions the laptop sleeps, and a phone tap reaches nothing.
   corgi agent awake off    back to holding it per session (the default)
   corgi agent awake        what is set now
 
-The daemon reads the setting every half minute: no restart. The screen is
-let go the moment the lid closes (a lit screen in a closed laptop is heat and
-no lock screen) and lit again when it opens - what a caffeinate -d in a
-terminal cannot do. Off by default: a machine that never sleeps is a flat
+The daemon reads the setting every half minute: no restart. With the lid
+closed the display is held awake too: the panel is off either way, but once
+macOS counts the display as asleep it pauses the apps the agents run in -
+what a caffeinate -dimsu in a terminal was for. Off by default: a machine that never sleeps is a flat
 battery, so it is the machine owner's call. A closed lid still sleeps the
 machine unless sudo pmset -a disablesleep 1, or the sudoers rule from
 corgi agent away, which lets corgi set it while the daemon runs.`,
@@ -122,8 +123,14 @@ func printAwakeState(path string) {
 	if display {
 		utils.Info("the screen stays lit while the lid is open (keepDisplay)")
 	}
+	if hold {
+		utils.Info("lid closed: the display is held awake so the agents keep running")
+		if runtime.GOOS == "darwin" && !supervisor.SleepDisabled() {
+			utils.Info("⚠ SleepDisabled is off - closing the lid still sleeps the Mac: sudo pmset -a disablesleep 1, or the sudoers rule from corgi agent away")
+		}
+	}
 	for _, c := range strayCaffeinates(os.Getpid()) {
-		utils.Infof("⚠ %s - the daemon already holds the machine; this one only keeps the screen lit, lid closed too. corgi agent awake --display on does that until the lid closes\n", c)
+		utils.Infof("⚠ %s - the daemon already holds the machine and the display; this one can stop\n", c)
 	}
 }
 

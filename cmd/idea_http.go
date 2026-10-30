@@ -30,6 +30,10 @@ import (
 //	POST /idea/<slug>/build              {workspace, slots, run}   dashboard token or paired device only
 //	POST /idea/<slug>/edit               {markdown}                 same
 //	POST /idea/<slug>/auto               {auto}                     same
+//	POST /idea/<slug>/approve            {by, off}                  anyone with the link signs off
+//	POST /idea/<slug>/decide             {text, id, drop}           dashboard token or paired device only
+//	GET  /idea/<slug>/mock                                          the mockup, sandboxed
+//	POST /idea/<slug>/mock                                          the agent draws it; dashboard or device only
 //
 // The key in the link is what lets anyone it was sent to read and comment;
 // a page with no key answers only to the dashboard's token or a paired
@@ -66,9 +70,13 @@ type ideaAction struct {
 	// set: Name, Summary, Tags, Workspace, Type, Auto.
 	Summary string   `json:"summary"`
 	Tags    []string `json:"tags"`
-	// share: Off closes the link, Rotate gives it a new key.
+	// share: Off closes the link, Rotate gives it a new key; approve: Off
+	// takes the sign-off back.
 	Off    bool `json:"off"`
 	Rotate bool `json:"rotate"`
+	// decide: Text is the decision, ID the thread it rewords, Drop the
+	// place of one to remove.
+	Drop int `json:"drop"`
 }
 
 const ideaBodyLimit = 12 << 20
@@ -99,17 +107,20 @@ func ideaDocument(dir string, id *idea.Idea, withHTML, trusted bool) map[string]
 		meta.Key, meta.Source = "", ""
 	}
 	out := map[string]any{
-		"idea":     meta,
-		"markdown": id.Doc,
-		"comments": id.Comments.Comments,
-		"tasks":    tasks,
-		"tickets":  liveTickets(dir, id.Meta),
-		"sent":     id.Meta.Sent,
-		"send":     ideaSendOptions(dir, id.Meta),
-		"plan":     plan,
-		"counts":   id.Counts(),
-		"open":     id.Open(),
-		"forAgent": len(id.ForAgent()),
+		"idea":      meta,
+		"markdown":  id.Doc,
+		"comments":  id.Comments.Comments,
+		"tasks":     tasks,
+		"tickets":   liveTickets(dir, id.Meta),
+		"sent":      id.Meta.Sent,
+		"send":      ideaSendOptions(dir, id.Meta),
+		"plan":      plan,
+		"counts":    id.Counts(),
+		"open":      id.Open(),
+		"forAgent":  len(id.ForAgent()),
+		"approvers": id.Meta.Approvers(),
+		"needed":    id.Meta.NeededApprovals(),
+		"approved":  id.Meta.IsApproved(),
 	}
 	if trusted {
 		out["file"] = filepath.Join(id.Dir, idea.DocName)
@@ -220,7 +231,22 @@ func ideaOpenHandler(token, deviceStore string) http.HandlerFunc {
 			ideaStream(w, r, dir, id)
 		case "file":
 			ideaFile(w, r, dir, id, name)
-		case "comment", "reply", "status", "build", "edit", "auto", "send", "set", "share":
+		case "mock":
+			if r.Method == http.MethodGet {
+				ideaMock(w, r, id)
+				return
+			}
+			if r.Method != http.MethodPost {
+				writeLaunchError(w, http.StatusMethodNotAllowed, "GET the mockup, or POST to draw it")
+				return
+			}
+			out, status, err := ideaPerform(dir, ideaAction{Do: "mock", Slug: slug}, trusted, "someone")
+			if err != nil {
+				writeLaunchError(w, status, err.Error())
+				return
+			}
+			writeLaunchJSON(w, out)
+		case "comment", "reply", "status", "build", "edit", "auto", "send", "set", "share", "approve", "decide":
 			if r.Method != http.MethodPost {
 				writeLaunchError(w, http.StatusMethodNotAllowed, "POST to "+what)
 				return
@@ -241,6 +267,21 @@ func ideaOpenHandler(token, deviceStore string) http.HandlerFunc {
 			writeLaunchError(w, http.StatusNotFound, "no such part of an idea page")
 		}
 	}
+}
+
+// ideaMock serves the mockup the agent drew. It is the agent's HTML with its
+// own scripts, so it runs sandboxed in an origin of its own: it cannot read
+// the page, the key or the dashboard's token, and it cannot call out.
+func ideaMock(w http.ResponseWriter, r *http.Request, id *idea.Idea) {
+	path := id.FilePath(idea.MockName)
+	if path == "" || id.Meta.Mock == "" {
+		writeLaunchError(w, http.StatusNotFound, "no mockup yet - corgi idea mock "+id.Meta.Slug)
+		return
+	}
+	w.Header().Set(headerContentType, "text/html; charset=utf-8")
+	w.Header().Set("Content-Security-Policy", "sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	http.ServeFile(w, r, path)
 }
 
 func ideaFile(w http.ResponseWriter, r *http.Request, dir string, id *idea.Idea, name string) {
@@ -420,8 +461,49 @@ func ideaPerform(dir string, a ideaAction, trusted bool, defaultBy string) (any,
 			scheduleIdeaAnswer(dir, a.Slug)
 		}
 		return map[string]any{"auto": id.Meta.Auto}, 0, nil
+	case "approve":
+		res, err := approveIdea(dir, a.Slug, by, a.Off, false)
+		if err != nil {
+			return nil, ideaHTTPStatus(err), err
+		}
+		if res.JustApproved && res.Idea.BuildWhenApproved {
+			go func() {
+				if _, err := buildIdea(dir, a.Slug, "", "", 1, true); err != nil {
+					ideaNotify(dir, res.Idea, "approved, but not built", err.Error())
+				}
+			}()
+		}
+		return res, 0, nil
+	case "decide":
+		if !trusted {
+			return nil, http.StatusForbidden, fmt.Errorf("resolving a thread writes its decision; rewording them is for the page's owner")
+		}
+		id, err := idea.Update(dir, a.Slug, func(id *idea.Idea) error {
+			if a.Drop > 0 {
+				return id.Undecide(a.Drop)
+			}
+			_, err := id.Decide(a.Text, by, a.ID, now)
+			return err
+		})
+		if err != nil {
+			return nil, ideaHTTPStatus(err), err
+		}
+		return map[string]any{"decisions": id.Meta.Decisions}, 0, nil
+	case "mock":
+		if !trusted {
+			return nil, http.StatusForbidden, fmt.Errorf("drawing the mockup needs the dashboard: open the page from corgi agent dashboard, or run corgi idea mock %s", a.Slug)
+		}
+		id, err := idea.Load(dir, a.Slug)
+		if err != nil {
+			return nil, ideaHTTPStatus(err), err
+		}
+		if id.Meta.Mocking {
+			return map[string]any{"mocking": true}, 0, nil
+		}
+		scheduleMock(dir, a.Slug, mockNotes(id.Comments.Comments))
+		return map[string]any{"mocking": true}, 0, nil
 	}
-	return nil, http.StatusBadRequest, fmt.Errorf("do is comment, reply, status, file, build, edit, auto, send, set or share")
+	return nil, http.StatusBadRequest, fmt.Errorf("do is comment, reply, status, file, build, edit, auto, send, set, share, approve, decide or mock")
 }
 
 // ownFiles keeps only attachments that are this page's files, so a

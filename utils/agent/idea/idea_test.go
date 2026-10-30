@@ -186,11 +186,11 @@ func indexOf(s, sub string) int {
 func TestTheSmallHelpersAndTheLimits(t *testing.T) {
 	dir := t.TempDir()
 	now := time.Now()
-	id, err := Create(dir, "", "Limits", "# L\n", Meta{Type: "poem", Tickets: []Ticket{{Title: "a"}, {Title: "b"}}}, now)
+	id, err := Create(dir, "", "Limits", "# L\n", Meta{Type: "Not a type!", Tickets: []Ticket{{Title: "a"}, {Title: "b"}}}, now)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if id.Meta.Type != TypeIdea || !ValidType(TypeHLD) || ValidType("poem") {
+	if id.Meta.Type != TypeIdea || !ValidType(TypeHLD) || ValidType("prd") || !ValidTypeName("prd") {
 		t.Fatalf("types: %+v", id.Meta)
 	}
 	if tk, ok := id.Meta.FindTicket(2); !ok || tk.Title != "b" {
@@ -376,5 +376,63 @@ func TestThePageFollowsBackIntoItsFile(t *testing.T) {
 	_ = id.SetDoc(before+"x\n", time.Now())
 	if got, _ := os.ReadFile(src); string(got) != "mine\n" {
 		t.Fatal("never through a symlink")
+	}
+}
+
+func TestASignOffMakesThePageApprovedUntilItsTextChanges(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Now()
+	id, err := Create(dir, "", "Checkout", "# Checkout\n", Meta{Needed: 2}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	slug := id.Meta.Slug
+	var made bool
+	id, _ = Update(dir, slug, func(id *Idea) error { made, err = id.Approve("max", now); return err })
+	if made || id.Meta.Status != Draft {
+		t.Fatalf("one of two: %v %s", made, id.Meta.Status)
+	}
+	id, _ = Update(dir, slug, func(id *Idea) error { made, err = id.Approve("ana", now); return err })
+	if !made || id.Meta.Status != Approved {
+		t.Fatalf("two of two: %v %s", made, id.Meta.Status)
+	}
+	id, _ = Update(dir, slug, func(id *Idea) error { made, _ = id.Approve("ana", now); return nil })
+	if made || id.Meta.Status != Approved {
+		t.Fatal("signing again is not a second approval")
+	}
+	id, _ = Update(dir, slug, func(id *Idea) error { return id.SetDoc("# Checkout\nnew\n", now) })
+	if id.Meta.Status != Draft || len(id.Meta.Approvers()) != 0 {
+		t.Fatalf("a changed page is signed off again: %s %v", id.Meta.Status, id.Meta.Approvers())
+	}
+	if _, err := id.Approve(Agent, now); err == nil {
+		t.Fatal("the agent does not sign off its own page")
+	}
+}
+
+func TestAResolvedThreadLeavesADecisionAndReopeningTakesItBack(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Now()
+	id, _ := Create(dir, "", "Checkout", "# Checkout\nCard first.\n", Meta{}, now)
+	slug := id.Meta.Slug
+	id, _ = Update(dir, slug, func(id *Idea) error {
+		c, _ := id.AddComment(KindComment, "max", "Apple Pay first?", nil, nil, nil, now)
+		_, _ = id.Reply(c.ID, Agent, "Moved Apple Pay ahead of the card form, since most returning shoppers are on iPhone. Updated Flows.", true, nil, nil, now)
+		p, _ := id.AddComment(KindProposal, Agent, "Drop the receipt email for now. It needs a mail provider.", nil, nil, nil, now)
+		_, _ = id.SetStatus(c.ID, StatusResolved, now)
+		_, _ = id.SetStatus(p.ID, StatusResolved, now)
+		return nil
+	})
+	if len(id.Meta.Decisions) != 2 {
+		t.Fatalf("decisions: %+v", id.Meta.Decisions)
+	}
+	if got := id.Meta.Decisions[0].Text; got != "Moved Apple Pay ahead of the card form, since most returning shoppers are on iPhone." {
+		t.Fatalf("the agent's answer, first sentence: %q", got)
+	}
+	if got := id.Meta.Decisions[1].Text; got != "Not doing: Drop the receipt email for now." {
+		t.Fatalf("a dismissed proposal: %q", got)
+	}
+	id, _ = Update(dir, slug, func(id *Idea) error { _, err := id.SetStatus(1, StatusOpen, now); return err })
+	if len(id.Meta.Decisions) != 1 {
+		t.Fatalf("reopened: %+v", id.Meta.Decisions)
 	}
 }

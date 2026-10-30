@@ -153,6 +153,42 @@ func registerIdeaMCPTools(s *server.MCPServer) {
 		return map[string]any{"comment": c, "open": id.Open()}, nil
 	}))
 
+	s.AddTool(newCorgiTool("corgi_idea_decide",
+		mcp.WithDescription("Write a page's decision: one plain line saying what was settled and why (\"Apple Pay ships first: most returning shoppers are on iPhone\"). Resolving a thread already leaves a rough line; give thread to reword that one, or leave it out to add a decision of your own. drop removes the decision at that place in the list."),
+		slugOpt,
+		mcp.WithString("text", mcp.Description("The decision, one sentence")),
+		mcp.WithNumber("thread", mcp.Description("The comment id the decision settles")),
+		mcp.WithNumber("drop", mcp.Description("Remove the decision at this 1-based place instead")),
+	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
+		dir, err := agentDir()
+		if err != nil {
+			return nil, err
+		}
+		id, err := idea.Update(dir, r.GetString("slug", ""), func(id *idea.Idea) error {
+			if n := int(r.GetFloat("drop", 0)); n > 0 {
+				return id.Undecide(n)
+			}
+			_, err := id.Decide(r.GetString("text", ""), idea.Agent, int(r.GetFloat("thread", 0)), time.Now())
+			return err
+		})
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"decisions": id.Meta.Decisions}, nil
+	}))
+
+	s.AddTool(newCorgiTool("corgi_idea_mock",
+		mcp.WithDescription("Have the agent draw the page's screens as one clickable HTML mockup, shown under the page in the browser (sandboxed). Runs in the background for a minute or two; comments on the mockup go into the next drawing. Returns at once."),
+		slugOpt,
+	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
+		dir, err := agentDir()
+		if err != nil {
+			return nil, err
+		}
+		out, _, err := ideaPerform(dir, ideaAction{Do: "mock", Slug: r.GetString("slug", "")}, true, idea.Agent)
+		return out, err
+	}))
+
 	s.AddTool(newCorgiTool("corgi_idea_edit",
 		mcp.WithDescription("Replace the page's markdown (the whole page), or its split into tickets, or both. Use it after reading the page, when a comment asks for a change; then reply to the comment with corgi_idea_comment (by agent, changed true)."),
 		slugOpt,
@@ -213,8 +249,10 @@ func registerIdeaMCPTools(s *server.MCPServer) {
 		mcp.WithString("summary", mcp.Description("The one-line summary")),
 		mcp.WithArray("tags", mcp.Description("The tags (replaces them)"), mcp.Items(map[string]any{"type": "string"})),
 		mcp.WithString("workspace", mcp.Description("Workspace id")),
-		mcp.WithString("type", mcp.Description("idea, spec, hld or rfc")),
+		mcp.WithString("type", mcp.Description("idea, spec, hld or rfc, or a team's own type from .corgi/idea-templates/")),
 		mcp.WithBoolean("auto", mcp.Description("Whether the agent answers on its own")),
+		mcp.WithNumber("approvals", mcp.Description("How many sign-offs make the page approved (1-20)")),
+		mcp.WithBoolean("buildWhenApproved", mcp.Description("Hand the page to the agents the moment it is approved")),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
 		dir, err := agentDir()
 		if err != nil {
@@ -223,6 +261,13 @@ func registerIdeaMCPTools(s *server.MCPServer) {
 		ch := ideaChanges{Name: r.GetString("name", ""), Summary: r.GetString("summary", ""), Workspace: r.GetString("workspace", ""), Type: r.GetString("type", "")}
 		if raw, ok := r.GetArguments()["auto"].(bool); ok {
 			ch.Auto = map[bool]string{true: "on", false: "off"}[raw]
+		}
+		if raw, ok := r.GetArguments()["buildWhenApproved"].(bool); ok {
+			ch.BuildWhenApproved = map[bool]string{true: "on", false: "off"}[raw]
+		}
+		if raw, ok := r.GetArguments()["approvals"].(float64); ok {
+			n := int(raw)
+			ch.Needed = &n
 		}
 		if raw, ok := r.GetArguments()["tags"].([]any); ok {
 			var tags []string

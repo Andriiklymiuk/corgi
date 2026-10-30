@@ -40,7 +40,7 @@ about every comment on the desktop and the phone.`,
 		typ, _ := cmd.Flags().GetString("type")
 		ws, _ := cmd.Flags().GetString("workspace")
 		noCopy, _ := cmd.Flags().GetBool("no-copy")
-		if typ != "" && !idea.ValidType(typ) {
+		if typ != "" && !idea.ValidTypeName(typ) {
 			exitWithError("idea", fmt.Errorf("--type is one of %s", strings.Join(idea.Types, ", ")), 2)
 		}
 		res, err := shareIdea(dir, shareRequest{Target: args[0], Type: typ, Workspace: ws, By: osUserName(), Off: off, Rotate: rotate}, time.Now())
@@ -176,7 +176,7 @@ func pageToShare(dir string, req shareRequest, now time.Time) (slug string, crea
 		title = "page"
 	}
 	typ := req.Type
-	if !idea.ValidType(typ) {
+	if !idea.ValidTypeName(typ) {
 		typ = idea.TypeSpec
 	}
 	ws := req.Workspace

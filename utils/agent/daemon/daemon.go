@@ -1175,7 +1175,9 @@ func (d *Daemon) HoldAwakeWhileWorking(ctx context.Context, lock *supervisor.Wak
 				utils.Info("agent: back to a wake lock per session")
 			}
 		}
-		if !d.lidIsClosed() {
+		if d.lidIsClosed() {
+			_ = lock.SetDisplay(hold || busy)
+		} else {
 			_ = lock.SetDisplay(display)
 		}
 		if hold || busy {

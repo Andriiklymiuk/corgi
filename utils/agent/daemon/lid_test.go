@@ -95,7 +95,7 @@ func TestNightShiftHoldsTheWordUntilMorning(t *testing.T) {
 	}
 }
 
-func TestAClosedLidLetsTheScreenSleepAndMutesUntilItOpens(t *testing.T) {
+func TestAClosedLidHoldsTheDisplayAwakeAndMutesUntilItOpens(t *testing.T) {
 	oldExt, oldRead, oldSet := hasExternalDisplay, readMuted, setMuted
 	defer func() { hasExternalDisplay, readMuted, setMuted = oldExt, oldRead, oldSet }()
 	hasExternalDisplay = func() bool { return false }
@@ -105,15 +105,14 @@ func TestAClosedLidLetsTheScreenSleepAndMutesUntilItOpens(t *testing.T) {
 	d := testDaemon(t)
 	lock := supervisor.FakeWakeLock(supervisor.WakeLockAlways)
 	t.Cleanup(lock.Release)
-	_ = lock.SetDisplay(true)
 	d.Awake = lock
-	d.AwakePolicy = func() (bool, bool) { return true, true }
+	d.AwakePolicy = func() (bool, bool) { return true, false }
 	d.lidChanged(true)
-	if lock.Display() || !muted {
+	if !lock.Display() || !muted {
 		t.Fatalf("closed: display=%v muted=%v", lock.Display(), muted)
 	}
 	d.lidChanged(false)
-	if !lock.Display() || muted {
+	if lock.Display() || muted {
 		t.Fatalf("opened: display=%v muted=%v", lock.Display(), muted)
 	}
 	muted = true
@@ -121,6 +120,23 @@ func TestAClosedLidLetsTheScreenSleepAndMutesUntilItOpens(t *testing.T) {
 	d.lidChanged(false)
 	if !muted {
 		t.Fatal("a Mac that was muted before stays muted after")
+	}
+}
+
+func TestAClosedLidWithNothingToKeepAwakeLeavesTheDisplay(t *testing.T) {
+	oldExt, oldRead, oldSet := hasExternalDisplay, readMuted, setMuted
+	defer func() { hasExternalDisplay, readMuted, setMuted = oldExt, oldRead, oldSet }()
+	hasExternalDisplay = func() bool { return false }
+	readMuted = func() bool { return true }
+	setMuted = func(bool) {}
+	d := testDaemon(t)
+	lock := supervisor.FakeWakeLock(supervisor.WakeLockSession)
+	t.Cleanup(lock.Release)
+	d.Awake = lock
+	d.AwakePolicy = func() (bool, bool) { return false, false }
+	d.lidChanged(true)
+	if lock.Display() {
+		t.Fatal("no stayAwake and no session working: the screen may sleep")
 	}
 }
 

@@ -332,10 +332,16 @@ func newIdea(dir string, req ideaRequest, now time.Time) (*idea.Idea, []watch.Ta
 		runIn = mustCwd()
 	}
 	typ := req.Type
+	template := ""
 	if !idea.ValidType(typ) {
-		typ = idea.TypeIdea
+		if template, _ = ideaTemplate(typ, ideaTemplateRoots(ws)); template == "" {
+			typ = idea.TypeIdea
+		}
 	}
 	soul, prompt := ideaPrompt(typ, text, req.From, root)
+	if template != "" && strings.TrimSpace(req.From) == "" {
+		soul = templateSoul(template)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), ideaTimeout)
 	defer cancel()
 	out, err := runIdeaPrint(ctx, runIn, req.Model, soul, prompt)
@@ -397,8 +403,10 @@ func ideaPrompt(typ, text, from, root string) (soul, prompt string) {
 		prompt = "The system or change to design: " + text + "\n"
 	case idea.TypeRFC:
 		prompt = "The proposal: " + text + "\n"
-	default:
+	case idea.TypeIdea, "":
 		prompt = "Build this: " + text + "\n"
+	default:
+		prompt = "Write the " + typ + " for: " + text + "\n"
 	}
 	if from = strings.TrimSpace(from); from != "" {
 		soul = importSoul
@@ -471,6 +479,9 @@ func answerIdea(dir, slug, model string) (bool, error) {
 	if others := otherComments(id, waiting); others != "" {
 		prompt += "# Earlier comments, for context (do not answer these)\n\n" + others
 	}
+	if len(id.Meta.Decisions) > 0 {
+		prompt += "# Decided already (keep the page true to these unless a comment reopens one)\n\n" + decisionsText(id.Meta.Decisions)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), ideaTimeout)
 	defer cancel()
 	out, err := runIdeaPrint(ctx, runIn, model, ideaAnswerSoul, prompt)
@@ -536,6 +547,9 @@ func answerIdea(dir, slug, model string) (bool, error) {
 		what = "updated the page and answered"
 	}
 	ideaNotify(dir, updated.Meta, fmt.Sprintf("%s %d comment(s)", what, len(told)), firstReplyLine(updated, ans.Answers))
+	if notes := mockNotes(waiting); notes != "" && updated.Meta.Mock != "" {
+		scheduleMock(dir, slug, notes)
+	}
 	nudgeDaemon(dir)
 	return true, nil
 }
@@ -841,7 +855,9 @@ var ideaNewCmd = &cobra.Command{
 		typ, _ := cmd.Flags().GetString("type")
 		fromPath, _ := cmd.Flags().GetString("from")
 		if typ != "" && !idea.ValidType(typ) {
-			exitWithError("idea", fmt.Errorf("--type is one of %s", strings.Join(idea.Types, ", ")), 2)
+			if tpl, _ := ideaTemplate(typ, ideaTemplateRoots(ws)); tpl == "" {
+				exitWithError("idea", fmt.Errorf("--type is one of %s, or a team's own in %s/<type>.md (corgi idea templates)", strings.Join(idea.Types, ", "), ideaTemplatesDir), 2)
+			}
 		}
 		from := ""
 		if fromPath != "" {
@@ -1071,6 +1087,12 @@ var ideaShowCmd = &cobra.Command{
 			return
 		}
 		fmt.Print(id.Doc)
+		if len(id.Meta.Decisions) > 0 {
+			fmt.Printf("\n---\n\nDecisions\n%s", decisionsText(id.Meta.Decisions))
+		}
+		if len(id.Meta.Approvals) > 0 {
+			fmt.Printf("\nSigned off by %s (%d of %d)\n", firstNonEmpty(strings.Join(id.Meta.Approvers(), ", "), "nobody since the last change"), len(id.Meta.Approvers()), id.Meta.NeededApprovals())
+		}
 		if len(id.Comments.Comments) > 0 {
 			fmt.Printf("\n---\n\n%s", idea.Transcript(id.Comments.Comments))
 		}
@@ -1397,6 +1419,8 @@ Confluence gets the page itself. The credentials are the watch's
 type ideaChanges struct {
 	Name, Summary, Workspace, Type, Auto string
 	Tags                                 *[]string
+	Needed                               *int
+	BuildWhenApproved                    string
 }
 
 // setIdea applies the changes, checking each.
@@ -1407,7 +1431,25 @@ func setIdea(dir, slug string, ch ideaChanges) (*idea.Idea, error) {
 		}
 	}
 	if ch.Type != "" && !idea.ValidType(ch.Type) {
-		return nil, fmt.Errorf("--type is one of %s", strings.Join(idea.Types, ", "))
+		ws := ch.Workspace
+		if ws == "" {
+			if id, err := idea.Load(dir, slug); err == nil {
+				ws = id.Meta.Workspace
+			}
+		}
+		if tpl, _ := ideaTemplate(ch.Type, ideaTemplateRoots(ws)); tpl == "" {
+			return nil, fmt.Errorf("--type is one of %s, or a team's own (corgi idea templates)", strings.Join(idea.Types, ", "))
+		}
+	}
+	if ch.Needed != nil && (*ch.Needed < 1 || *ch.Needed > 20) {
+		return nil, fmt.Errorf("--approvals is 1 to 20")
+	}
+	build := false
+	if ch.BuildWhenApproved != "" {
+		var err error
+		if build, err = parseOnOff(ch.BuildWhenApproved); err != nil {
+			return nil, fmt.Errorf("--build-when-approved: %v", err)
+		}
 	}
 	switch strings.ToLower(ch.Auto) {
 	case "", "on", "off", "true", "false":
@@ -1436,12 +1478,24 @@ func setIdea(dir, slug string, ch ideaChanges) (*idea.Idea, error) {
 		case "off", "false":
 			id.Meta.Auto = false
 		}
+		if ch.Needed != nil {
+			id.Meta.Needed = *ch.Needed
+			switch {
+			case id.Meta.Status == idea.Draft && len(id.Meta.Approvals) > 0 && id.Meta.IsApproved():
+				id.Meta.Status = idea.Approved
+			case id.Meta.Status == idea.Approved && !id.Meta.IsApproved():
+				id.Meta.Status = idea.Draft
+			}
+		}
+		if ch.BuildWhenApproved != "" {
+			id.Meta.BuildWhenApproved = build
+		}
 		return nil
 	})
 }
 
 var ideaSetCmd = &cobra.Command{
-	Use:   "set <slug> [--name …] [--tags a,b] [--workspace X] [--type spec] [--auto off]",
+	Use:   "set <slug> [--name …] [--tags a,b] [--workspace X] [--type spec] [--auto off] [--approvals 2] [--build-when-approved on]",
 	Short: "Change what the page is called, tagged, typed, where it builds, whether the agent answers on its own",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
@@ -1452,6 +1506,11 @@ var ideaSetCmd = &cobra.Command{
 		ch.Workspace, _ = cmd.Flags().GetString("workspace")
 		ch.Type, _ = cmd.Flags().GetString("type")
 		ch.Auto, _ = cmd.Flags().GetString("auto")
+		ch.BuildWhenApproved, _ = cmd.Flags().GetString("build-when-approved")
+		if cmd.Flags().Changed("approvals") {
+			n, _ := cmd.Flags().GetInt("approvals")
+			ch.Needed = &n
+		}
 		if cmd.Flags().Changed("tags") {
 			raw, _ := cmd.Flags().GetString("tags")
 			tags := strings.Split(raw, ",")
@@ -1465,7 +1524,11 @@ var ideaSetCmd = &cobra.Command{
 			utils.PrintJSON(map[string]any{"idea": id.Meta})
 			return
 		}
-		fmt.Printf("%s: %s (%s) · tags %s · workspace %s · auto %v\n", id.Meta.Slug, firstNonEmpty(id.Meta.Name, id.Meta.Title), id.Meta.Type, strings.Join(id.Meta.Tags, ","), firstNonEmpty(id.Meta.Workspace, "-"), id.Meta.Auto)
+		fmt.Printf("%s: %s (%s) · tags %s · workspace %s · auto %v · sign-offs %d of %d", id.Meta.Slug, firstNonEmpty(id.Meta.Name, id.Meta.Title), id.Meta.Type, strings.Join(id.Meta.Tags, ","), firstNonEmpty(id.Meta.Workspace, "-"), id.Meta.Auto, len(id.Meta.Approvers()), id.Meta.NeededApprovals())
+		if id.Meta.BuildWhenApproved {
+			fmt.Print(" · builds when approved")
+		}
+		fmt.Println()
 	},
 }
 
@@ -1607,7 +1670,7 @@ func init() {
 	ideaNewCmd.Flags().String("by", "", "who asked (default: cli)")
 	ideaNewCmd.Flags().Bool("no-tasks", false, "write the page only; no tasks on the board yet")
 	ideaNewCmd.Flags().Bool("open", false, "open the page in the browser when the dashboard runs")
-	ideaNewCmd.Flags().String("type", "", "what kind of page: idea (default), spec, hld, rfc")
+	ideaNewCmd.Flags().String("type", "", "what kind of page: idea (default), spec, hld, rfc, or the team's own (corgi idea templates)")
 	ideaNewCmd.Flags().String("from", "", "a markdown file you already wrote: kept as is; the agent names, tags and splits it")
 	ideaSendCmd.Flags().String("to", "", "jira, linear or confluence")
 	ideaSendCmd.Flags().String("project", "", "the Jira project key or Linear team key (default: the workspace's watch)")
@@ -1623,6 +1686,8 @@ func init() {
 	ideaSetCmd.Flags().String("workspace", "", "the workspace it belongs to and builds in")
 	ideaSetCmd.Flags().String("type", "", "idea, spec, hld or rfc")
 	ideaSetCmd.Flags().String("auto", "", "on or off: whether the agent answers comments on its own")
+	ideaSetCmd.Flags().Int("approvals", 1, "how many sign-offs make the page approved")
+	ideaSetCmd.Flags().String("build-when-approved", "", "on or off: hand the page to the agents the moment it is approved")
 	ideaHistoryCmd.Flags().Int("rev", 0, "print this earlier version of the page")
 	ideaEditCmd.Flags().String("from", "", "the file whose text becomes the page")
 	ideaEditCmd.Flags().String("by", "", "who edited it, on the revision (default: $USER)")

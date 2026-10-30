@@ -223,9 +223,9 @@ func (d *Daemon) lidChanged(closed bool) {
 		return
 	}
 	if closed {
-		if d.Awake != nil && d.Awake.Display() {
-			_ = d.Awake.SetDisplay(false)
-			utils.Info("agent: lid: closed - the screen may sleep and lock until it opens")
+		if d.Awake != nil && d.keepAwakeNow() && !d.Awake.Display() {
+			_ = d.Awake.SetDisplay(true)
+			utils.Info("agent: lid: closed - the display is held awake, or macOS pauses the agents once it goes dark")
 		}
 		if !readMuted() {
 			setMuted(true)
@@ -237,10 +237,18 @@ func (d *Daemon) lidChanged(closed bool) {
 		setMuted(false)
 	}
 	if d.Awake != nil && d.AwakePolicy != nil {
-		if _, display := d.AwakePolicy(); display {
-			_ = d.Awake.SetDisplay(true)
+		_, display := d.AwakePolicy()
+		_ = d.Awake.SetDisplay(display)
+	}
+}
+
+func (d *Daemon) keepAwakeNow() bool {
+	if d.AwakePolicy != nil {
+		if hold, _ := d.AwakePolicy(); hold {
+			return true
 		}
 	}
+	return d.anyoneWorking()
 }
 
 // The phone's answer to a lid ring, when the one who opened the laptop was

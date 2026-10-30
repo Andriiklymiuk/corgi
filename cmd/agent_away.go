@@ -139,7 +139,7 @@ func checkCaffeinate() agentCheck {
 	if len(strays) == 0 {
 		return agentCheck{Name: name, OK: true, Detail: "no caffeinate of yours beside the daemon's"}
 	}
-	return agentCheck{Name: name, Detail: strings.Join(strays, ", ") + " keeps the screen lit with the lid closed", Fix: "stop it; corgi agent awake on (--display on for a lit screen while the lid is open)"}
+	return agentCheck{Name: name, Detail: strings.Join(strays, ", ") + " does what corgi agent awake on does", Fix: "stop it; corgi agent awake on holds the display awake while the lid is closed"}
 }
 
 func checkHotspot(dir string) agentCheck {

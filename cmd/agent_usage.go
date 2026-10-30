@@ -238,6 +238,7 @@ func digestText(dir string, now time.Time) string {
 		}
 		lines = append(lines, fmt.Sprintf("%s: 5h %d%%, week %d%%", a.Profile, a.Limits.FiveHour.Percent, a.Limits.SevenDay.Percent))
 	}
+	lines = append(lines, ideaDigestLines(dir)...)
 	if len(lines) == 0 {
 		return ""
 	}

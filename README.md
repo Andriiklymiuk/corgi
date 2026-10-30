@@ -265,7 +265,11 @@ spec.md / a sentence ──► the page ◄── comments from the browser, VS 
 - **Open → answered → fixed → resolved.** The agent's reply says what it changed and where.
 - **Proposals.** The agent leaves its own ideas on the page: *accept* and it does them.
 - **Pictures and videos** next to the spec travel with the link and play everywhere.
-- **Types:** `--type spec`, `hld`, `rfc`, or `idea` (the default).
+- **Sign-off.** *Looks good* signs the page off. Once enough people have (`corgi idea set <slug> --approvals 2`), it is **approved** - and with `--build-when-approved on`, the agents start building. A change to the text asks for the sign-offs again.
+- **Decisions.** Resolving a thread writes one line under *Decisions*: what was settled. The agent keeps the page true to them.
+- **Show me.** The agent draws the page's screens as a clickable mockup, under the page. Comment on it and the next drawing takes the comment in. `corgi idea mock <slug>`.
+- **Types:** `--type spec`, `hld`, `rfc`, `idea` (the default), or your team's own: `.corgi/idea-templates/prd.md` is `--type prd`.
+- **The morning message** lists the pages that wait on you: answers to close, proposals to take, sign-offs missing.
 
 [Everything a page does →](docs/ideas.md)
 
@@ -620,7 +624,7 @@ Beyond the ones above, these are the ones that come up in a normal week:
 | `corgi mc` | one pane: each service's run state with its branch, PR and CI |
 | `corgi open web` | opens the localhost URLs in the browser |
 | `corgi doctor --fix` | missing tools, busy ports, Docker not running |
-| `corgi idea new "…" [--type spec\|hld\|rfc] [--from doc.md]` · `idea open\|comment\|tickets\|build\|send\|history` | one page per thing to build or decide: written by the agent, commented by anyone with the link, answered live, split into tickets, built from or sent to Jira/Linear/Confluence ([above](#from-a-sentence-to-a-page-everyone-can-mark-up)) |
+| `corgi idea new "…" [--type spec\|hld\|rfc\|<yours>] [--from doc.md]` · `idea open\|comment\|approve\|decide\|mock\|tickets\|build\|send\|history` | one page per thing to build or decide: written by the agent, commented by anyone with the link, answered live, split into tickets, built from or sent to Jira/Linear/Confluence ([above](#specs-your-team-comments-on-corgi-idea)) |
 | `corgi memory list` | decisions and incidents the team commits next to the code |
 
 38 database drivers ([list](docs/databases.md)), and all of this behaves the same whether the

@@ -43,6 +43,7 @@ const (
 
 	// Idea statuses.
 	Draft    = "draft"
+	Approved = "approved"
 	Building = "building"
 	Built    = "built"
 
@@ -54,6 +55,9 @@ const (
 
 	// Agent is the author name the agent's replies and proposals carry.
 	Agent = "agent"
+
+	// MockName is the clickable mockup the agent draws from the page.
+	MockName = "mock.html"
 
 	DocName      = "idea.md"
 	MetaName     = "meta.json"
@@ -117,6 +121,23 @@ type Link struct {
 	At    time.Time `json:"at"`
 }
 
+// Approval is one person's sign-off on the page as it read at revision Rev;
+// a change to the page after it leaves it standing for the older text only.
+type Approval struct {
+	By  string    `json:"by"`
+	At  time.Time `json:"at"`
+	Rev int       `json:"rev"`
+}
+
+// Decision is one settled thing: a thread resolved, or a line someone wrote.
+// Comment is the thread it came from, 0 when written by hand.
+type Decision struct {
+	Comment int       `json:"comment,omitempty"`
+	Text    string    `json:"text"`
+	By      string    `json:"by,omitempty"`
+	At      time.Time `json:"at"`
+}
+
 type Meta struct {
 	Type      string   `json:"type,omitempty"`
 	Slug      string   `json:"slug"`
@@ -150,6 +171,16 @@ type Meta struct {
 	Answering bool `json:"answering,omitempty"`
 	// Revisions are the page's earlier versions, oldest first.
 	Revisions []Revision `json:"revisions,omitempty"`
+	// Approvals are sign-offs; Needed of them on the current text make the
+	// page approved, and BuildWhenApproved hands it to the agents then.
+	Approvals         []Approval `json:"approvals,omitempty"`
+	Needed            int        `json:"needed,omitempty"`
+	BuildWhenApproved bool       `json:"buildWhenApproved,omitempty"`
+	Decisions         []Decision `json:"decisions,omitempty"`
+	// Mock is the mockup file under files/, once drawn; Mocking while it is.
+	Mock    string    `json:"mock,omitempty"`
+	MockAt  time.Time `json:"mockAt,omitempty"`
+	Mocking bool      `json:"mocking,omitempty"`
 }
 
 // Anchor is where on the page a comment sits: the words highlighted, with
@@ -231,6 +262,12 @@ func ValidType(t string) bool {
 	return false
 }
 
+// ValidTypeName says whether t can name a page type: a built-in one, or a
+// team's own template (prd, postmortem).
+func ValidTypeName(t string) bool {
+	return ValidType(t) || (t != "" && len(t) <= 32 && slugPattern.MatchString(t))
+}
+
 // FindTicket is the ticket with that id.
 func (m Meta) FindTicket(id int) (Ticket, bool) {
 	for _, t := range m.Tickets {
@@ -307,7 +344,7 @@ func Create(agentDir, slug, title, doc string, meta Meta, now time.Time) (*Idea,
 	if meta.Status == "" {
 		meta.Status = Draft
 	}
-	if !ValidType(meta.Type) {
+	if !ValidTypeName(meta.Type) {
 		meta.Type = TypeIdea
 	}
 	for i := range meta.Tickets {
@@ -454,6 +491,9 @@ func Update(agentDir, slug string, fn func(*Idea) error) (*Idea, error) {
 	if id.Doc != before {
 		if err := id.keepRevision(before, id.Meta.UpdatedAt); err != nil {
 			return nil, err
+		}
+		if id.Meta.Status == Approved && !id.Meta.IsApproved() {
+			id.Meta.Status = Draft
 		}
 	}
 	return id, id.saveLocked(agentDir)
@@ -603,10 +643,151 @@ func (id *Idea) SetStatus(commentID int, status string, now time.Time) (Comment,
 	if c == nil {
 		return Comment{}, fmt.Errorf("%w %d", ErrNoComment, commentID)
 	}
+	was := c.Status
 	c.Status = status
 	c.Updated = now
 	id.Meta.UpdatedAt = now
+	switch {
+	case status == StatusResolved && was != StatusResolved:
+		if text := decisionFor(*c); text != "" {
+			id.Meta.Decisions = append(id.Meta.Decisions, Decision{Comment: c.ID, Text: text, By: c.By, At: now})
+		}
+	case status != StatusResolved && was == StatusResolved:
+		id.dropDecision(c.ID)
+	}
 	return *c, nil
+}
+
+// decisionFor is the line a resolved thread leaves: what the agent said it
+// did, or for a proposal nobody took, that it was not taken.
+func decisionFor(c Comment) string {
+	accepted := false
+	last := ""
+	for _, r := range c.Replies {
+		if r.By == Agent {
+			last = r.Text
+		} else {
+			accepted = true
+		}
+	}
+	switch {
+	case c.Kind == KindProposal && !accepted:
+		return "Not doing: " + firstSentence(c.Text)
+	case last != "":
+		return firstSentence(last)
+	}
+	return firstSentence(c.Text)
+}
+
+func firstSentence(s string) string {
+	s = strings.Join(strings.Fields(s), " ")
+	for i, r := range s {
+		if (r == '.' || r == '!' || r == '?') && (i+1 == len(s) || s[i+1] == ' ') && i > 20 {
+			return clip(s[:i+1], 240)
+		}
+	}
+	return clip(s, 240)
+}
+
+func (id *Idea) dropDecision(commentID int) {
+	kept := id.Meta.Decisions[:0]
+	for _, d := range id.Meta.Decisions {
+		if d.Comment != commentID {
+			kept = append(kept, d)
+		}
+	}
+	id.Meta.Decisions = kept
+}
+
+// Decide adds a decision written by hand, or replaces the one a thread left.
+func (id *Idea) Decide(text, by string, commentID int, now time.Time) (Decision, error) {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return Decision{}, fmt.Errorf("a decision needs some words")
+	}
+	if commentID > 0 {
+		if id.find(commentID) == nil {
+			return Decision{}, fmt.Errorf("%w %d", ErrNoComment, commentID)
+		}
+		id.dropDecision(commentID)
+	}
+	d := Decision{Comment: commentID, Text: clip(text, 400), By: author(by), At: now}
+	id.Meta.Decisions = append(id.Meta.Decisions, d)
+	id.Meta.UpdatedAt = now
+	return d, nil
+}
+
+// Undecide drops the decision at that 1-based place in the list.
+func (id *Idea) Undecide(n int) error {
+	if n < 1 || n > len(id.Meta.Decisions) {
+		return fmt.Errorf("no decision %d", n)
+	}
+	id.Meta.Decisions = append(id.Meta.Decisions[:n-1], id.Meta.Decisions[n:]...)
+	return nil
+}
+
+// CurrentRev names the page's text as it stands: the newest revision kept
+// before it, 0 while it never changed.
+func (m Meta) CurrentRev() int {
+	n := 0
+	for _, r := range m.Revisions {
+		if r.ID > n {
+			n = r.ID
+		}
+	}
+	return n
+}
+
+// NeededApprovals is how many sign-offs make the page approved; one unless set.
+func (m Meta) NeededApprovals() int {
+	if m.Needed < 1 {
+		return 1
+	}
+	return m.Needed
+}
+
+// Approvers are the people whose sign-off stands for the text as it is now.
+func (m Meta) Approvers() []string {
+	var out []string
+	rev := m.CurrentRev()
+	for _, a := range m.Approvals {
+		if a.Rev == rev {
+			out = append(out, a.By)
+		}
+	}
+	return out
+}
+
+func (m Meta) IsApproved() bool { return len(m.Approvers()) >= m.NeededApprovals() }
+
+// Approve signs the page off for by; true when this sign-off made it approved.
+func (id *Idea) Approve(by string, now time.Time) (bool, error) {
+	by = author(by)
+	if by == Agent || by == "someone" {
+		return false, fmt.Errorf("a sign-off needs your name")
+	}
+	was := id.Meta.Status == Approved
+	id.Unapprove(by)
+	id.Meta.Approvals = append(id.Meta.Approvals, Approval{By: by, At: now, Rev: id.Meta.CurrentRev()})
+	id.Meta.UpdatedAt = now
+	if id.Meta.Status == Draft && id.Meta.IsApproved() {
+		id.Meta.Status = Approved
+	}
+	return !was && id.Meta.Status == Approved, nil
+}
+
+// Unapprove takes by's sign-off back.
+func (id *Idea) Unapprove(by string) {
+	kept := id.Meta.Approvals[:0]
+	for _, a := range id.Meta.Approvals {
+		if !strings.EqualFold(a.By, strings.TrimSpace(by)) {
+			kept = append(kept, a)
+		}
+	}
+	id.Meta.Approvals = kept
+	if id.Meta.Status == Approved && !id.Meta.IsApproved() {
+		id.Meta.Status = Draft
+	}
 }
 
 func (id *Idea) find(commentID int) *Comment {

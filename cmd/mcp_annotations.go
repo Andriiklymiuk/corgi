@@ -46,6 +46,8 @@ var mcpToolMeta = map[string]toolMeta{
 	"corgi_idea_new":              {Title: "Write an idea page", Kind: toolWrite},
 	"corgi_idea_read":             {Title: "Read an idea page", Kind: toolReadOnly},
 	"corgi_idea_resolve":          {Title: "Resolve a page comment", Kind: toolWrite},
+	"corgi_idea_decide":           {Title: "Write a page's decision", Kind: toolWrite},
+	"corgi_idea_mock":             {Title: "Draw a page's clickable mockup", Kind: toolWrite},
 	"corgi_idea_send":             {Title: "Send a page to the tracker", Kind: toolWrite, OpenWorld: true},
 	"corgi_idea_set":              {Title: "Change a page's name, tags or workspace", Kind: toolWrite},
 	"corgi_idea_share":            {Title: "Share a page with the team", Kind: toolWrite},

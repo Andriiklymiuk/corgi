@@ -88,7 +88,20 @@ to) is work to do the same way. Never resolve a person's comment yourself; they 
 `corgi idea answer <slug>` does one unattended pass of all of this; the dashboard
 does it on its own when it runs.
 
+When a thread is settled and its decision line (written on resolve) is rough, reword
+it with `corgi_idea_decide` (`thread`, `text`): one plain sentence, what and why. Keep
+the page true to the decisions; a comment that reopens one is the only way to undo it.
+A comment under the heading "Mockup" is about the drawn mockup, not the text: answer
+it, and the mockup is drawn again with it.
+
 ## Job 3 - Split into tickets, build, send
+
+- Sign-off: `corgi idea approve <slug>` (people do this, not you); `corgi idea set
+  <slug> --approvals 2 --build-when-approved on` makes the last sign-off start the build.
+- `corgi idea mock <slug>` draws the page's screens as a clickable HTML mockup under the
+  page (a minute or two). Offer it for an idea or spec with screens.
+- A team's own page type: `.corgi/idea-templates/<type>.md` in the repo, then
+  `--type <type>`; `corgi idea templates` lists them.
 
 - `corgi idea tickets <slug>` shows the split with where each stands. The person
   edits it by commenting; you keep it true.

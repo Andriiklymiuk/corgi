@@ -41,7 +41,7 @@ const ideaPageHTML = `<!doctype html>
   .pill.fixed{color:var(--green);border-color:#1f4a2a;background:#0d1f12}
   .pill.resolved{color:var(--dim2)}
   .pill.proposal{color:var(--purple);border-color:#3b2a5c;background:#17102a}
-  .pill.building,.pill.Done,.pill.Review{color:var(--green);border-color:#1f4a2a;background:#0d1f12}
+  .pill.building,.pill.approved,.pill.Done,.pill.Review{color:var(--green);border-color:#1f4a2a;background:#0d1f12}
   .pill.Doing{color:var(--amber);border-color:#4a3a12;background:#1d1708}
   .pill.type{color:var(--accent);border-color:var(--accent-line)}
   .btn{border:1px solid var(--line);background:var(--card2);color:var(--text);border-radius:.45rem;padding:.4rem .7rem;font-size:.8rem;font-weight:500}
@@ -144,6 +144,15 @@ const ideaPageHTML = `<!doctype html>
   @media (min-width:60.01rem){.fab{display:none}}
   .toast{position:fixed;left:50%;bottom:calc(4rem + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--card2);border:1px solid var(--line);
       border-radius:.6rem;padding:.5rem .8rem;font-size:.8rem;z-index:50;box-shadow:0 6px 20px rgba(0,0,0,.5);max-width:90vw}
+  .signed{font-size:.72rem;color:var(--dim);white-space:nowrap}
+  .btn.ok{border-color:#1f4a2a;color:var(--green);background:#0d1f12}
+  ol.decisions{margin:.3rem 0 .2rem;padding-left:1.3rem;font-size:.88rem}
+  ol.decisions li{margin:.3rem 0;color:#d5d8dd}
+  ol.decisions li[data-c]{cursor:pointer}
+  ol.decisions .dby{color:var(--dim2);font-size:.72rem;margin-left:.4rem}
+  ol.decisions .btn{margin-left:.3rem;padding:0 .3rem}
+  .mockwrap{border:1px solid var(--line);border-radius:.7rem;overflow:hidden;background:#fff;margin:.4rem 0}
+  #mock{width:100%;height:46rem;max-height:80vh;border:0;display:block}
   .editor{display:none}.editing .editor{display:block}.editing #doc{display:none}
   .editor textarea{min-height:60vh;font-family:ui-monospace,Menlo,monospace;font-size:.82rem}
 </style>
@@ -157,6 +166,8 @@ const ideaPageHTML = `<!doctype html>
     <span class="pill" id="status"></span>
     <span class="live" id="live"><i></i><span>live</span></span>
     <span class="you">you: <b id="you">someone</b></span>
+    <span class="signed" id="signed"></span>
+    <button class="btn small" id="approve" title="sign the page off as it reads now">Looks good</button>
     <button class="btn ghost small" id="share">share link</button>
     <button class="btn ghost small" id="editBtn" hidden>edit page</button>
     <button class="btn primary" id="buildTop">Build it</button>
@@ -166,6 +177,17 @@ const ideaPageHTML = `<!doctype html>
   <article>
     <div id="doc"></div>
     <div class="editor"><textarea id="md" spellcheck="false"></textarea><div class="acts"><button class="btn primary" id="saveMd">save</button><button class="btn" id="cancelMd">cancel</button></div></div>
+    <div class="endcap" id="decisions" hidden>
+      <h2>Decisions</h2>
+      <p>What the threads settled. Resolving a thread writes its line here.</p>
+      <ol class="decisions" id="declist"></ol>
+    </div>
+    <div class="endcap" id="mockbox" hidden>
+      <h2>Mockup</h2>
+      <p id="mocknote"></p>
+      <div class="mockwrap" id="mockwrap" hidden><iframe id="mock" sandbox="allow-scripts" title="mockup" loading="lazy"></iframe></div>
+      <div class="acts"><button class="btn" id="mockBtn">Show me</button><button class="btn" id="mockComment" hidden>Comment on the mockup</button></div>
+    </div>
     <div class="endcap" id="endcap">
       <h2>Tickets and the build</h2>
       <p id="buildWhy">The split below is the agent's proposal of how the page becomes work; it keeps it in step with the page. When it reads right, hand it over: the tickets go on the board, a plan works through them, a worktree and a pull request per ticket.</p>
@@ -450,9 +472,49 @@ const ideaPageHTML = `<!doctype html>
     $('#tickets').hidden = guest; $('#build').hidden = !canBuild;
     $('#buildWhy').textContent = why;
     $('#editBtn').hidden = !token;
+    renderSignoff(); renderDecisions(); renderMock();
     const sb = $('#sendbtns'); sb.innerHTML = '';
     if (token) for (const to of ['linear', 'jira', 'confluence']) { const opt = (doc.send || {})[to]; if (!opt) continue; const b = el('button', 'btn', 'send to ' + to); b.onclick = () => send(to, opt); sb.appendChild(b); }
   }
+  const mine = () => (doc.approvers || []).some(x => x.toLowerCase() === (you() || '').toLowerCase());
+  function renderSignoff() {
+    const who = doc.approvers || [], need = doc.needed || 1, b = $('#approve');
+    b.textContent = mine() ? '✓ signed off' : 'Looks good'; b.classList.toggle('ok', mine());
+    b.title = mine() ? 'take your sign-off back' : 'sign the page off as it reads now';
+    $('#signed').textContent = who.length || need > 1 ? who.length + '/' + need + ' signed' : '';
+    $('#signed').title = who.join(', ');
+  }
+  $('#approve').onclick = async () => {
+    const undo = mine(); const by = me(); if (!by || by === 'someone') { toast('say your name first'); return; }
+    try {
+      const r = await api('/approve', { by, off: undo });
+      toast(undo ? 'sign-off taken back' : r.justApproved ? (r.idea.buildWhenApproved ? 'approved - the agents start building' : 'approved') : 'signed off · ' + r.approvers.length + ' of ' + r.needed, 4000);
+      await load();
+    } catch (e) { toast(e.message); }
+  };
+  function renderDecisions() {
+    const ds = (doc.idea || {}).decisions || [], ol = $('#declist'); ol.innerHTML = '';
+    ds.forEach((d, i) => {
+      const li = el('li'); li.appendChild(el('span', '', d.text));
+      li.appendChild(el('span', 'dby', (d.by && d.by !== 'agent' ? d.by + ' · ' : '') + ago(d.at)));
+      if (d.comment) { li.dataset.c = d.comment; li.title = 'the thread it came from'; li.onclick = () => { filter = 'resolved'; renderList(); renderDoc(); focusOn(d.comment); }; }
+      if (token) { const x = el('button', 'btn small ghost', 'drop'); x.onclick = ev => { ev.stopPropagation(); act('/decide', { drop: i + 1 }); }; li.appendChild(x); }
+      ol.appendChild(li);
+    });
+    $('#decisions').hidden = !ds.length;
+  }
+  function renderMock() {
+    const m = doc.idea || {}, has = !!m.mock;
+    $('#mockbox').hidden = !has && !token;
+    const b = $('#mockBtn'); b.hidden = !token; b.disabled = !!m.mocking;
+    b.textContent = m.mocking ? 'drawing…' : has ? 'Draw it again' : 'Show me';
+    $('#mockComment').hidden = !has;
+    $('#mocknote').textContent = m.mocking ? 'The agent is drawing the screens. A minute or two.' : has ? 'Press the screens: it is clickable. Comments on it go into the next drawing.' : 'The agent draws the page\'s screens as a clickable mockup, here under the page.';
+    $('#mockwrap').hidden = !has;
+    if (has) { const src = base + '/mock?' + (key ? 'k=' + encodeURIComponent(key) + '&' : '') + 'v=' + encodeURIComponent(m.mockAt || ''); const f = $('#mock'); if (f.dataset.src !== src) { f.dataset.src = src; f.src = src; } }
+  }
+  $('#mockBtn').onclick = async () => { try { await api('/mock', {}); toast('drawing the screens - a minute or two', 5000); await load(); } catch (e) { toast(e.message); } };
+  $('#mockComment').onclick = () => openCompose({ quote: 'Mockup', prefix: '', suffix: '', heading: 'Mockup' });
   async function build() {
     const m = doc.idea || {}; let ws = m.workspace || '';
     if (!ws) { ws = prompt('which workspace builds it? (a folder corgi agent init ran in)', ''); if (!ws) return; }
