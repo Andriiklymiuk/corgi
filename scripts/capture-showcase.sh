@@ -8,14 +8,14 @@ node scripts/showcase.mjs
 M=docs/media
 F=$M/frames
 GROUND="#0a0e2a"
-shot() { perl -e 'alarm 90; exec @ARGV' "$CHROME" --headless=new --hide-scrollbars --disable-gpu --force-device-scale-factor=2 --window-size="$3" --screenshot="$PWD/$2" "file://$PWD/$1" >/dev/null 2>&1 || shot_retry "$@"; }
-shot_retry() { pkill -f "Google Chrome --headless" 2>/dev/null; sleep 1; "$CHROME" --headless=new --hide-scrollbars --disable-gpu --force-device-scale-factor=2 --window-size="$3" --screenshot="$PWD/$2" "file://$PWD/$1" >/dev/null 2>&1; }
+shot() { perl -e 'alarm 90; exec @ARGV' "$CHROME" --headless=new --virtual-time-budget=3000 --hide-scrollbars --disable-gpu --force-device-scale-factor=2 --window-size="$3" --screenshot="$PWD/$2" "file://$PWD/$1" >/dev/null 2>&1 || shot_retry "$@"; }
+shot_retry() { pkill -f "Google Chrome --headless" 2>/dev/null; sleep 1; "$CHROME" --headless=new --virtual-time-budget=3000 --hide-scrollbars --disable-gpu --force-device-scale-factor=2 --window-size="$3" --screenshot="$PWD/$2" "file://$PWD/$1" >/dev/null 2>&1; }
 trim() { magick "$1" -fuzz 1% -trim +repage -bordercolor "$GROUND" -border 28 "$1"; }
 
 scenes=${*:-$(node -e 'const s=require("./docs/media/frames/scenes.json");console.log(Object.keys(s).join(" "))')}
 for scene in $scenes; do
   n=$(node -e "console.log(require('./docs/media/frames/scenes.json')['$scene'].frames)")
-  size=960,1000; case "$scene" in phone|dashboard) size=1300,1000;; telegram) size=420,700;; esac
+  size=960,1000; case "$scene" in phone|dashboard|idea) size=1300,1000;; telegram) size=420,700;; esac
   i=0; files=""
   while [ $i -lt $n ]; do
     shot $F/$scene-$i.html $F/$scene-$i.png $size

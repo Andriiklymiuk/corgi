@@ -44,6 +44,7 @@ const captions = {
 	kanban: "One card per ticket, its column worked out from runs, sessions and checks",
 	peers: "Two laptops on one tracker: one leads, the other stays quiet and takes over",
 	codex: "Claude first, Codex when it cannot: the same board, another agent",
+	idea: "A spec becomes a link: people comment on the words, the agent answers and fixes the page",
 };
 const strip = (caption) => `<div class="cap"><img src="${brand.logo}" width="28" height="28">${esc(caption)}</div>`;
 
@@ -1069,6 +1070,87 @@ const scene = (name, frames) => {
 	scene("codex", grow(s, [1, 5, 7, 10, 13, 14, 16, 19, 20, 22, s.length]).map((l, i) => page(term("corgi agent - claude first, codex when it cannot", l, { rows: s.length, cursor: i < 10 }))));
 }
 
+// ---- corgi idea: a spec shared as a link, commented, fixed by the agent ----
+// The browser frames are the real page (cmd/idea_page.go) in an iframe, fed
+// a made-up /doc by a stub fetch, so the gif is the page as it ships.
+{
+	const go = readFileSync("cmd/idea_page.go", "utf8");
+	const ideaPage = go.slice(go.indexOf("const ideaPageHTML = `") + 22, go.indexOf("`", go.indexOf("const ideaPageHTML = `") + 22));
+	const link = "https://blue-fox-42.trycloudflare.com/idea/checkout-in-one-tap?k=3f9c2a7be41d08c5a6";
+	const payment = (fixed) => fixed
+		? "<p>Apple Pay or Google Pay first where the device has them - most returning shoppers are on a phone. The saved card second.</p>"
+		: "<p>The saved card is the default. Card first, then Apple Pay and Google Pay where the device has them.</p>";
+	const html = (fixed) => `<h1>Checkout in one tap</h1>
+<p>Returning shoppers pay with what they used last time, in one tap, on web and mobile.</p>
+<h2>Who uses it</h2>
+<ul><li>Shoppers who bought before and saved a card</li><li>Guests: unchanged, the full form</li></ul>
+<h2>Payment</h2>
+${payment(fixed)}
+<h2>Flow</h2>
+<ol><li>Cart: <code>Pay with •••• 4242</code></li><li>Confirm with Face ID or the card's CVC</li><li>The order page, and a receipt by email</li></ol>
+<h2>Open questions</h2>
+<ul><li>Does "change card" sit on the button or under it?</li></ul>`;
+	const proposal = { id: 1, kind: "proposal", by: "agent", status: "open", at: 3600, updatedAt: 3600,
+		text: "Cut the receipt email from the first version: the order page already shows the receipt.",
+		anchor: { quote: "a receipt by email", heading: "Flow" } };
+	const comment = (state) => ({ id: 2, kind: "comment", by: "max", status: state === "fixed" ? "fixed" : "open", at: 40, updatedAt: state === "fixed" ? 5 : 40,
+		text: "Apple Pay first - most of our returning shoppers are on iPhone.",
+		anchor: { quote: "Card first, then Apple Pay and Google Pay", prefix: "The saved card is the default. ", heading: "Payment" },
+		replies: state === "fixed" ? [{ id: 1, by: "agent", at: 5, changed: true, text: "Done: Apple Pay and Google Pay come first where the phone has them, the saved card second. Payment says why." }] : [] });
+	const doc = ({ fixed = false, comments = [proposal], answering = false } = {}) => ({
+		idea: { type: "spec", slug: "checkout-in-one-tap", title: "Checkout in one tap", name: "Checkout in one tap", tags: ["checkout", "payments"],
+			summary: "Returning shoppers pay in one tap, on web and mobile", status: "draft", answering },
+		markdown: "", html: html(fixed), comments, tasks: [], tickets: [], sent: [], send: {}, plan: null, open: comments.filter((c) => c.status === "open").length, forAgent: 0,
+	});
+	const stub = (d, act = {}) => (act.select ? "<style>::selection{background:#2f4a7a}</style>" : "") + `<script>
+(() => {
+	const DOC = ${JSON.stringify(d)}, ACT = ${JSON.stringify(act)};
+	const when = (k, v) => (k === "at" || k === "updatedAt") && typeof v === "number" ? new Date(Date.now() - v * 1000).toISOString() : v;
+	try { localStorage.setItem("corgi_idea_name", "max"); localStorage.removeItem("corgi_token"); } catch {}
+	window.fetch = async () => new Response(JSON.stringify(JSON.parse(JSON.stringify(DOC), when)), { status: 200, headers: { "Content-Type": "application/json" } });
+	window.EventSource = class { constructor() { setTimeout(() => this.onopen && this.onopen(), 0); } addEventListener() {} close() {} };
+	addEventListener("load", () => setTimeout(() => {
+		if (!ACT.select) return;
+		const w = document.createTreeWalker(document.getElementById("doc"), NodeFilter.SHOW_TEXT);
+		for (let n; (n = w.nextNode());) {
+			const at = n.nodeValue.indexOf(ACT.select); if (at < 0) continue;
+			const r = document.createRange(); r.setStart(n, at); r.setEnd(n, at + ACT.select.length);
+			getSelection().removeAllRanges(); getSelection().addRange(r); break;
+		}
+		if (ACT.compose) setTimeout(() => { document.getElementById("float").click(); document.getElementById("ct").value = ACT.compose; }, 400);
+	}, 300));
+})();
+</script>`;
+	const frameFile = (i, d, act) => {
+		writeFileSync(`${out}/idea-page-${i}.html`, ideaPage.replace("<title>idea · corgi</title>", "<title>idea · corgi</title>" + stub(d, act)));
+		return `idea-page-${i}.html`;
+	};
+	const browser = (src) => `<div style="width:1180px;background:#202124;border:1px solid #3c4043;border-radius:12px;box-shadow:0 24px 70px rgba(0,0,0,.6);overflow:hidden">
+		<div style="height:42px;display:flex;align-items:center;gap:8px;padding:0 14px;border-bottom:1px solid #3c4043">
+			<i style="width:12px;height:12px;border-radius:50%;background:#ff5f57"></i><i style="width:12px;height:12px;border-radius:50%;background:#febc2e"></i><i style="width:12px;height:12px;border-radius:50%;background:#28c840"></i>
+			<div style="margin-left:18px;flex:1;height:28px;border-radius:14px;background:#35363a;color:#bdc1c6;font:13px/28px -apple-system,system-ui,sans-serif;padding:0 14px;white-space:nowrap;overflow:hidden">🔒 ${esc(link.replace("https://", ""))}</div>
+		</div>
+		<iframe src="${src}" width="1180" height="720" style="display:block;border:0;background:#08090a"></iframe></div>`;
+	const s = [
+		"{g}${/} {B}corgi idea share docs/specs/checkout.md{/}",
+		"Checkout in one tap - a new page from the file",
+		"{H}  " + link,
+		"  copied",
+		"  anyone with the link reads and comments; the agent answers each comment and amends the page",
+		"",
+		"{d}# max opens the link: no account, no install{/}",
+	];
+	const t = grow(s, [1, 5, 7]).map((l, i) => page(term("corgi idea share", l, { rows: s.length, cursor: i < 2 }), 1240));
+	const quote = "Card first, then Apple Pay and Google Pay";
+	const b = [
+		frameFile(0, doc()),
+		frameFile(1, doc(), { select: quote }),
+		frameFile(2, doc(), { select: quote, compose: "Apple Pay first - most of our returning shoppers are on iPhone." }),
+		frameFile(3, doc({ comments: [proposal, comment("open")], answering: true })),
+		frameFile(4, doc({ fixed: true, comments: [proposal, comment("fixed")] })),
+	].map((src) => page(browser(src), 1240));
+	scene("idea", [...t, ...b]);
+}
 
 writeFileSync(`${out}/scenes.json`, JSON.stringify(scenes));
 console.log("wrote", Object.entries(scenes).map(([k, v]) => `${k}:${v.frames}`).join(" "));
