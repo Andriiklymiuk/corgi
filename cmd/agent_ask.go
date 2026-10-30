@@ -33,6 +33,23 @@ var runClaudePrint = func(ctx context.Context, model, system, prompt string) (st
 // first installed agent - claude or codex - and account), the final
 // message back as text.
 func printIn(ctx context.Context, dir, model, system, prompt string) (string, error) {
+	return printRun(ctx, dir, dir, harness.Print{Prompt: prompt, System: system, Model: model, Text: true})
+}
+
+// printTextOnly is printIn for prompts that carry other people's words (an
+// idea page's comments, from anyone with its link): the agent and account
+// are the workspace's, but it runs with no tools in an empty folder, so the
+// words can make it write, never read, run or change anything.
+func printTextOnly(ctx context.Context, dir, model, system, prompt string) (string, error) {
+	empty, err := os.MkdirTemp("", "corgi-text-")
+	if err != nil {
+		return "", err
+	}
+	defer os.RemoveAll(empty)
+	return printRun(ctx, dir, empty, harness.Print{Prompt: prompt, System: system, Model: model, Text: true, NoTools: true})
+}
+
+func printRun(ctx context.Context, dir, runIn string, p harness.Print) (string, error) {
 	launch, err := resolveClaudeLaunch(dir, "", nil)
 	if err != nil {
 		return "", err
@@ -40,12 +57,12 @@ func printIn(ctx context.Context, dir, model, system, prompt string) (string, er
 	h := harness.For(launch.Kind, launch.Bin)
 	if h.Name != harness.Claude {
 		// Codex has no haiku; its default model answers.
-		model = ""
+		p.Model = ""
 	}
-	cmd := exec.CommandContext(ctx, h.Bin, h.PrintArgs(harness.Print{Prompt: prompt, System: system, Model: model, Text: true})...)
+	cmd := exec.CommandContext(ctx, h.Bin, h.PrintArgs(p)...)
 	cmd.Stdin = nil
-	if dir != "" {
-		cmd.Dir = dir
+	if runIn != "" {
+		cmd.Dir = runIn
 	}
 	for _, kv := range os.Environ() {
 		if !strings.HasPrefix(kv, "CLAUDECODE=") {

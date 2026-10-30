@@ -37,6 +37,9 @@ func TestLinkHoldersSignThePageOffAndTheLastOneApprovesIt(t *testing.T) {
 	if !res.JustApproved || res.Idea.Status != idea.Approved {
 		t.Fatalf("two of two: %s", rec.Body)
 	}
+	if strings.Contains(rec.Body.String(), `"key"`) || strings.Contains(rec.Body.String(), `"source"`) {
+		t.Fatalf("a link holder never sees the key field or a path: %s", rec.Body)
+	}
 	if rec := post(open, base+"/approve"+k, `{}`); rec.Code == 200 {
 		t.Fatal("a sign-off needs a name")
 	}
@@ -148,7 +151,7 @@ func TestTheDigestNamesPagesThatWaitOnAPerson(t *testing.T) {
 		c, _ := id.AddComment(idea.KindComment, "max", "why?", nil, nil, nil, now)
 		_, _ = id.Reply(c.ID, idea.Agent, "because", false, nil, nil, now)
 		_, _ = id.AddComment(idea.KindProposal, idea.Agent, "add a receipt", nil, nil, nil, now)
-		_, err := id.Approve("max", now)
+		_, err := id.Approve("max", false, now)
 		return err
 	})
 	_, _ = idea.Create(dir, "", "Quiet", "# Quiet\n", idea.Meta{}, now)

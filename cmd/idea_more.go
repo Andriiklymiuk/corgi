@@ -29,8 +29,10 @@ type approveResult struct {
 }
 
 // approveIdea signs the page off for by (or takes it back). The sign-off that
-// makes the page approved hands it to the agents when the page asks for it.
-func approveIdea(dir, slug, by string, undo, build bool) (approveResult, error) {
+// makes the page approved hands it to the agents when the page asks for it -
+// and only with the owner's own sign-off among them, so a leaked link cannot
+// start a build. owner says it comes from this machine or a paired device.
+func approveIdea(dir, slug, by string, undo, build, owner bool) (approveResult, error) {
 	var made bool
 	now := time.Now()
 	id, err := idea.Update(dir, slug, func(id *idea.Idea) error {
@@ -39,13 +41,18 @@ func approveIdea(dir, slug, by string, undo, build bool) (approveResult, error) 
 			return nil
 		}
 		var err error
-		made, err = id.Approve(by, now)
+		made, err = id.Approve(by, owner, now)
 		return err
 	})
 	if err != nil {
 		return approveResult{}, err
 	}
 	res := approveResult{Idea: id.Meta, Approvers: id.Meta.Approvers(), Needed: id.Meta.NeededApprovals(), Approved: id.Meta.IsApproved(), JustApproved: made}
+	if made && id.Meta.BuildWhenApproved && !id.Meta.OwnerApproved() {
+		res.Why = "approved, but not built: the build starts with your own sign-off among them (corgi idea approve " + slug + ")"
+		made = false
+		res.JustApproved = false
+	}
 	switch {
 	case undo:
 		ideaNotify(dir, id.Meta, "sign-off taken back by "+by, "")
@@ -339,7 +346,7 @@ asks for the sign-offs again. The browser page has the same button.`,
 		if by == "" {
 			by = osUserName()
 		}
-		res, err := approveIdea(dir, args[0], by, undo, true)
+		res, err := approveIdea(dir, args[0], by, undo, true, true)
 		if err != nil {
 			exitWithError("idea", err, 1)
 		}

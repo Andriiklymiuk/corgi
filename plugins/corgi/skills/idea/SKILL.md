@@ -32,7 +32,9 @@ chat, now. No questions, no rewrite.
 3. Reply with the link alone on its own line, then one line: people open it, highlight
    and comment; the agent answers each comment and amends the page; the comments ring
    on the desktop and the phone.
-4. `public: false` → say the link works on this Mac only, and give `hint` (`corgi agent
+4. For people outside the team, offer `--for 7d` (the link expires) or `--read-only`
+   (no comments) in one line; never by default.
+5. `public: false` → say the link works on this Mac only, and give `hint` (`corgi agent
    up` gives it a public address). Never hand a `127.0.0.1` link to a team as if it
    works.
 

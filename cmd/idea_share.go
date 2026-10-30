@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -28,6 +29,10 @@ var ideaShareCmd = &cobra.Command{
       close it: the link stops working
   corgi idea share checkout --rotate
       a new link: the old one stops working
+  corgi idea share checkout --for 7d
+      the link stops working in a week (--for 0 keeps it open)
+  corgi idea share checkout --read-only
+      people read, nobody writes (--read-only=false opens comments again)
 
 People who open the link read the page, highlight words and comment. Each
 comment reaches the agent, which answers it and amends the page; you hear
@@ -43,7 +48,20 @@ about every comment on the desktop and the phone.`,
 		if typ != "" && !idea.ValidTypeName(typ) {
 			exitWithError("idea", fmt.Errorf("--type is one of %s", strings.Join(idea.Types, ", ")), 2)
 		}
-		res, err := shareIdea(dir, shareRequest{Target: args[0], Type: typ, Workspace: ws, By: osUserName(), Off: off, Rotate: rotate}, time.Now())
+		req := shareRequest{Target: args[0], Type: typ, Workspace: ws, By: osUserName(), Off: off, Rotate: rotate}
+		if cmd.Flags().Changed("for") {
+			raw, _ := cmd.Flags().GetString("for")
+			d, err := parseLinkFor(raw)
+			if err != nil {
+				exitWithError("idea", err, 2)
+			}
+			req.For = &d
+		}
+		if cmd.Flags().Changed("read-only") {
+			ro, _ := cmd.Flags().GetBool("read-only")
+			req.ReadOnly = &ro
+		}
+		res, err := shareIdea(dir, req, time.Now())
 		if err != nil {
 			exitWithError("idea", err, 1)
 		}
@@ -68,20 +86,26 @@ type shareRequest struct {
 	By        string
 	Off       bool
 	Rotate    bool
+	// For, when set, is how long the link works from now; 0 lifts a limit.
+	For *time.Duration
+	// ReadOnly, when set, makes the link read-only or opens it to comments.
+	ReadOnly *bool
 }
 
 type shareResult struct {
-	Media   []string `json:"media,omitempty"`
-	Skipped []string `json:"skipped,omitempty"`
-	Slug    string   `json:"slug"`
-	Name    string   `json:"name"`
-	Open    bool     `json:"open"`
-	Link    string   `json:"link"`
-	Public  bool     `json:"public"`
-	Created bool     `json:"created,omitempty"`
-	Updated bool     `json:"updated,omitempty"`
-	File    string   `json:"file"`
-	Hint    string   `json:"hint,omitempty"`
+	Media    []string  `json:"media,omitempty"`
+	Skipped  []string  `json:"skipped,omitempty"`
+	Slug     string    `json:"slug"`
+	Name     string    `json:"name"`
+	Open     bool      `json:"open"`
+	Link     string    `json:"link"`
+	Public   bool      `json:"public"`
+	Created  bool      `json:"created,omitempty"`
+	Updated  bool      `json:"updated,omitempty"`
+	File     string    `json:"file"`
+	Hint     string    `json:"hint,omitempty"`
+	Until    time.Time `json:"until,omitempty"`
+	ReadOnly bool      `json:"readOnly,omitempty"`
 }
 
 func shareIdea(dir string, req shareRequest, now time.Time) (shareResult, error) {
@@ -98,8 +122,18 @@ func shareIdea(dir string, req shareRequest, now time.Time) (shareResult, error)
 		switch {
 		case req.Off:
 			id.Meta.Key = ""
-		case req.Rotate || id.Meta.Key == "":
+		case req.Rotate || id.Meta.Key == "" || !id.Meta.LinkOpen(now):
 			id.Meta.Key = idea.NewKey()
+			id.Meta.KeyUntil = time.Time{}
+		}
+		if req.For != nil {
+			id.Meta.KeyUntil = time.Time{}
+			if *req.For > 0 {
+				id.Meta.KeyUntil = now.Add(*req.For)
+			}
+		}
+		if req.ReadOnly != nil {
+			id.Meta.ReadOnly = *req.ReadOnly
 		}
 		return nil
 	})
@@ -107,7 +141,8 @@ func shareIdea(dir string, req shareRequest, now time.Time) (shareResult, error)
 		return shareResult{}, err
 	}
 	res := shareResult{Slug: id.Meta.Slug, Name: firstNonEmpty(id.Meta.Name, id.Meta.Title), Open: id.Meta.Key != "",
-		Created: created, Updated: updated, File: filepath.Join(id.Dir, idea.DocName), Media: media, Skipped: skipped}
+		Created: created, Updated: updated, File: filepath.Join(id.Dir, idea.DocName), Media: media, Skipped: skipped,
+		Until: id.Meta.KeyUntil, ReadOnly: id.Meta.ReadOnly}
 	if !res.Open {
 		return res, nil
 	}
@@ -234,8 +269,15 @@ func (r shareResult) print(copied bool) {
 	if copied {
 		fmt.Println("  copied")
 	}
+	if !r.Until.IsZero() {
+		fmt.Printf("  works until %s\n", r.Until.Local().Format("Mon 2 Jan 15:04"))
+	}
 	if r.Hint != "" {
 		fmt.Println("  " + r.Hint)
+		return
+	}
+	if r.ReadOnly {
+		fmt.Println("  anyone with the link reads it; nobody can comment (--read-only=false opens comments)")
 		return
 	}
 	fmt.Println("  anyone with the link reads and comments; the agent answers each comment and amends the page")
@@ -248,4 +290,20 @@ var copyToClipboard = func(text string) bool {
 	c := exec.Command("pbcopy")
 	c.Stdin = strings.NewReader(text)
 	return c.Run() == nil
+}
+
+// parseLinkFor reads how long a link works: 30m, 12h, 7d; 0 for no limit.
+func parseLinkFor(s string) (time.Duration, error) {
+	s = strings.TrimSpace(s)
+	if s == "0" || s == "" {
+		return 0, nil
+	}
+	if n, err := strconv.Atoi(strings.TrimSuffix(s, "d")); err == nil && strings.HasSuffix(s, "d") && n > 0 {
+		return time.Duration(n) * 24 * time.Hour, nil
+	}
+	d, err := time.ParseDuration(s)
+	if err != nil || d < 0 {
+		return 0, fmt.Errorf("--for is like 30m, 12h or 7d")
+	}
+	return d, nil
 }

@@ -5,11 +5,13 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"andriiklymiuk/corgi/utils/agent/idea"
@@ -75,6 +77,10 @@ type ideaAction struct {
 	// takes the sign-off back.
 	Off    bool `json:"off"`
 	Rotate bool `json:"rotate"`
+	// share: For is how long the link works (7d, 12h; "0" lifts it),
+	// ReadOnly makes it read-only or opens comments again.
+	For      string `json:"for"`
+	ReadOnly *bool  `json:"readOnly"`
 	// decide: Text is the decision, ID the thread it rewords, Drop the
 	// place of one to remove.
 	Drop int `json:"drop"`
@@ -162,6 +168,9 @@ func ideaTrusted(r *http.Request, token, deviceStore string) bool {
 func ideaOpenHandler(token, deviceStore string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		setLaunchHeaders(w)
+		// The link carries its key: never into a search index, never in a Referer to another site.
+		w.Header().Set("X-Robots-Tag", "noindex, nofollow")
+		w.Header().Set("Referrer-Policy", "no-referrer")
 		rest := strings.TrimPrefix(r.URL.Path, "/idea/")
 		parts := strings.SplitN(rest, "/", 3)
 		slug := parts[0]
@@ -195,7 +204,8 @@ func ideaOpenHandler(token, deviceStore string) http.HandlerFunc {
 		if what == "" {
 			// The page is a shell; it asks for /doc with the key, and is told there when the key is wrong.
 			w.Header().Set(headerContentType, "text/html; charset=utf-8")
-			_, _ = fmt.Fprint(w, ideaShellFor(r, slug))
+			w.Header().Set("Content-Security-Policy", ideaPageCSP)
+			_, _ = fmt.Fprint(w, ideaShellFor(r, slug, ideaTrusted(r, token, deviceStore)))
 			return
 		}
 		dir, err := agentDir()
@@ -209,9 +219,24 @@ func ideaOpenHandler(token, deviceStore string) http.HandlerFunc {
 			return
 		}
 		trusted := ideaTrusted(r, token, deviceStore)
-		if !trusted && (id.Meta.Key == "" || subtle.ConstantTimeCompare([]byte(r.URL.Query().Get("k")), []byte(id.Meta.Key)) != 1) {
-			writeLaunchError(w, http.StatusForbidden, "this page is closed - ask for a fresh link")
-			return
+		if !trusted {
+			if id.Meta.Key == "" || subtle.ConstantTimeCompare([]byte(r.URL.Query().Get("k")), []byte(id.Meta.Key)) != 1 {
+				writeLaunchError(w, http.StatusForbidden, "this page is closed - ask for a fresh link")
+				return
+			}
+			if !id.Meta.LinkOpen(time.Now()) {
+				writeLaunchError(w, http.StatusForbidden, "this link has expired - ask for a fresh one")
+				return
+			}
+			if r.Method != http.MethodGet && id.Meta.ReadOnly {
+				writeLaunchError(w, http.StatusForbidden, "this link is for reading only")
+				return
+			}
+			if r.Method != http.MethodGet && !ideaGuestWrites.allow(slug, guestAddress(r), time.Now()) {
+				w.Header().Set("Retry-After", "60")
+				writeLaunchError(w, http.StatusTooManyRequests, "too many comments at once - wait a minute")
+				return
+			}
 		}
 		switch what {
 		case "doc":
@@ -251,7 +276,7 @@ func ideaOpenHandler(token, deviceStore string) http.HandlerFunc {
 				return
 			}
 			writeLaunchJSON(w, out)
-		case "comment", "reply", "status", "build", "edit", "auto", "send", "set", "share", "approve", "decide":
+		case "comment", "reply", "status", "build", "edit", "auto", "send", "set", "share", "approve", "decide", "delete":
 			if r.Method != http.MethodPost {
 				writeLaunchError(w, http.StatusMethodNotAllowed, "POST to "+what)
 				return
@@ -284,7 +309,7 @@ func ideaMock(w http.ResponseWriter, r *http.Request, id *idea.Idea) {
 		return
 	}
 	w.Header().Set(headerContentType, "text/html; charset=utf-8")
-	w.Header().Set("Content-Security-Policy", "sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:")
+	w.Header().Set("Content-Security-Policy", "sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:; frame-ancestors 'self'")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	http.ServeFile(w, r, path)
 }
@@ -299,6 +324,8 @@ func ideaFile(w http.ResponseWriter, r *http.Request, dir string, id *idea.Idea,
 		}
 		mime := mimeFor(path)
 		w.Header().Set(headerContentType, mime)
+		// Anyone with the link may attach a file: whatever it is, it runs nothing here.
+		w.Header().Set("Content-Security-Policy", "default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'; sandbox")
 		if !(strings.HasPrefix(mime, "image/") || strings.HasPrefix(mime, "video/")) || mime == "image/svg+xml" {
 			w.Header().Set("Content-Disposition", "attachment; filename=\""+filepath.Base(path)+"\"")
 		}
@@ -340,6 +367,10 @@ func ideaPerform(dir string, a ideaAction, trusted bool, defaultBy string) (any,
 			anchor := anchorOrGiven(id.Doc, a.Quote, a.Prefix, a.Suffix, a.Heading)
 			var err error
 			c, err = id.AddComment(idea.KindComment, by, a.Text, anchor, ownFiles(id, a.Files), a.Links, now)
+			if err == nil && !trusted {
+				id.MarkGuest(c.ID, 0)
+				c.Guest = true
+			}
 			return err
 		})
 		if err != nil {
@@ -353,6 +384,10 @@ func ideaPerform(dir string, a ideaAction, trusted bool, defaultBy string) (any,
 		id, err := idea.Update(dir, a.Slug, func(id *idea.Idea) error {
 			var err error
 			r, err = id.Reply(a.ID, by, a.Text, false, ownFiles(id, a.Files), a.Links, now)
+			if err == nil && !trusted {
+				id.MarkGuest(a.ID, r.ID)
+				r.Guest = true
+			}
 			return err
 		})
 		if err != nil {
@@ -397,7 +432,15 @@ func ideaPerform(dir string, a ideaAction, trusted bool, defaultBy string) (any,
 		if _, err := idea.Load(dir, a.Slug); err != nil {
 			return nil, ideaHTTPStatus(err), err
 		}
-		res, err := shareIdea(dir, shareRequest{Target: a.Slug, By: by, Off: a.Off, Rotate: a.Rotate}, now)
+		req := shareRequest{Target: a.Slug, By: by, Off: a.Off, Rotate: a.Rotate, ReadOnly: a.ReadOnly}
+		if strings.TrimSpace(a.For) != "" {
+			d, err := parseLinkFor(a.For)
+			if err != nil {
+				return nil, http.StatusBadRequest, err
+			}
+			req.For = &d
+		}
+		res, err := shareIdea(dir, req, now)
 		if err != nil {
 			return nil, ideaHTTPStatus(err), err
 		}
@@ -467,18 +510,31 @@ func ideaPerform(dir string, a ideaAction, trusted bool, defaultBy string) (any,
 		}
 		return map[string]any{"auto": id.Meta.Auto}, 0, nil
 	case "approve":
-		res, err := approveIdea(dir, a.Slug, by, a.Off, false)
+		res, err := approveIdea(dir, a.Slug, by, a.Off, false, trusted)
 		if err != nil {
 			return nil, ideaHTTPStatus(err), err
 		}
 		if res.JustApproved && res.Idea.BuildWhenApproved {
+			meta := res.Idea
 			go func() {
 				if _, err := buildIdea(dir, a.Slug, "", "", 1, true); err != nil {
-					ideaNotify(dir, res.Idea, "approved, but not built", err.Error())
+					ideaNotify(dir, meta, "approved, but not built", err.Error())
 				}
 			}()
 		}
+		if !trusted {
+			res.Idea.Key, res.Idea.Source = "", ""
+		}
 		return res, 0, nil
+	case "delete":
+		if !trusted {
+			return nil, http.StatusForbidden, fmt.Errorf("only the page's owner removes comments")
+		}
+		id, err := idea.Update(dir, a.Slug, func(id *idea.Idea) error { return id.DeleteComment(a.ID) })
+		if err != nil {
+			return nil, ideaHTTPStatus(err), err
+		}
+		return map[string]any{"open": id.Open(), "forAgent": len(id.ForAgent())}, 0, nil
 	case "decide":
 		if !trusted {
 			return nil, http.StatusForbidden, fmt.Errorf("resolving a thread writes its decision; rewording them is for the page's owner")
@@ -610,7 +666,8 @@ func launchIdeasHandler(w http.ResponseWriter, r *http.Request) {
 		writeLaunchError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeLaunchJSON(w, map[string]any{"ideas": ideaRows(dir, !isViewer(r)), "notify": ideaNotifyOn(dir)})
+	mode, every := ideaNotifyMode(dir)
+	writeLaunchJSON(w, map[string]any{"ideas": ideaRows(dir, !isViewer(r)), "notify": mode != ideaNotifyOff, "notifyMode": mode, "notifyEvery": every.String()})
 }
 
 func launchIdeaHandler(w http.ResponseWriter, r *http.Request) {
@@ -690,17 +747,39 @@ func launchIdeaFile(w http.ResponseWriter, id *idea.Idea, name string) {
 	writeLaunchJSON(w, map[string]any{"name": filepath.Base(path), "type": mimeFor(path), "data": base64.StdEncoding.EncodeToString(data)})
 }
 
-// launchIdeaNotify turns the machine-wide ring on comments and answers on or off.
+// launchIdeaNotify sets the machine-wide ring on comments and answers: auto
+// true or false (on or off, as older phones send it), or status on, batch
+// or off with for as the batch's interval.
 func launchIdeaNotify(w http.ResponseWriter, dir string, a ideaAction) {
-	want := "on"
+	want := ideaNotifyOnEach
 	if a.Auto != nil && !*a.Auto {
-		want = "off"
+		want = ideaNotifyOff
 	}
-	if err := writeUserConfigLine(agentUserConfigPath(dir), ideaNotifyLine, ideaNotifyKey+": "+want); err != nil {
+	switch s := strings.ToLower(strings.TrimSpace(a.Status)); s {
+	case "":
+	case ideaNotifyOnEach, ideaNotifyBatch, ideaNotifyOff:
+		want = s
+	default:
+		writeLaunchError(w, http.StatusBadRequest, "notify is on, batch or off")
+		return
+	}
+	path := agentUserConfigPath(dir)
+	if every := strings.TrimSpace(a.For); every != "" {
+		if d, err := parseLinkFor(every); err != nil || d < time.Minute {
+			writeLaunchError(w, http.StatusBadRequest, "every is a minute or more, like 5m")
+			return
+		}
+		if err := writeUserConfigLine(path, ideaNotifyEveryLine, "ideaNotifyEvery: "+every); err != nil {
+			writeLaunchError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+	}
+	if err := writeUserConfigLine(path, ideaNotifyLine, "ideaNotify: "+want); err != nil {
 		writeLaunchError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeLaunchJSON(w, map[string]any{"notify": want == "on"})
+	mode, every := ideaNotifyMode(dir)
+	writeLaunchJSON(w, map[string]any{"notify": mode != ideaNotifyOff, "mode": mode, "every": every.String()})
 }
 
 // launchIdeaNew writes a page from the phone: the agent run takes a
@@ -725,4 +804,61 @@ func launchIdeaNew(w http.ResponseWriter, dir string, a ideaAction) {
 	out := ideaDocument(dir, id, false, true)
 	out["made"] = len(tasks)
 	writeLaunchJSON(w, out)
+}
+
+// guestLimiter keeps a link holder from flooding a page: so many writes a
+// minute from one address, and so many a minute on one page from everyone.
+type guestLimiter struct {
+	mu   sync.Mutex
+	seen map[string][]time.Time
+}
+
+const (
+	guestWritesPerAddress = 20
+	guestWritesPerPage    = 60
+)
+
+var ideaGuestWrites = &guestLimiter{seen: map[string][]time.Time{}}
+
+func (g *guestLimiter) allow(slug, addr string, now time.Time) bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	recent := func(k string) []time.Time {
+		var keep []time.Time
+		for _, t := range g.seen[k] {
+			if now.Sub(t) < time.Minute {
+				keep = append(keep, t)
+			}
+		}
+		g.seen[k] = keep
+		return keep
+	}
+	byAddr, byPage := slug+"|"+addr, slug
+	if len(recent(byAddr)) >= guestWritesPerAddress || len(recent(byPage)) >= guestWritesPerPage {
+		return false
+	}
+	g.seen[byAddr] = append(g.seen[byAddr], now)
+	g.seen[byPage] = append(g.seen[byPage], now)
+	if len(g.seen) > 4096 {
+		for k, v := range g.seen {
+			if len(v) == 0 || now.Sub(v[len(v)-1]) > time.Minute {
+				delete(g.seen, k)
+			}
+		}
+	}
+	return true
+}
+
+// guestAddress is who is writing, as well as a tunnel lets us know it.
+func guestAddress(r *http.Request) string {
+	for _, h := range []string{"CF-Connecting-IP", "X-Forwarded-For", "X-Real-IP"} {
+		if v := strings.TrimSpace(strings.Split(r.Header.Get(h), ",")[0]); v != "" {
+			return v
+		}
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
 }

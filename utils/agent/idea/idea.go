@@ -127,6 +127,8 @@ type Approval struct {
 	By  string    `json:"by"`
 	At  time.Time `json:"at"`
 	Rev int       `json:"rev"`
+	// Owner is a sign-off from this machine or a paired device, not the link.
+	Owner bool `json:"owner,omitempty"`
 }
 
 // Decision is one settled thing: a thread resolved, or a line someone wrote.
@@ -153,8 +155,11 @@ type Meta struct {
 	By     string `json:"by,omitempty"`
 	Model  string `json:"model,omitempty"`
 	// Key is the share key in the open link; "" means the page is not open
-	// and only a paired device or the dashboard may read it.
-	Key string `json:"key,omitempty"`
+	// and only a paired device or the dashboard may read it. KeyUntil, when
+	// set, is when the link stops working; ReadOnly links read, never write.
+	Key      string    `json:"key,omitempty"`
+	KeyUntil time.Time `json:"keyUntil,omitempty"`
+	ReadOnly bool      `json:"readOnly,omitempty"`
 	// Auto lets the agent answer new comments on its own.
 	Auto bool `json:"auto"`
 	// Tasks are the board tasks made from this page, in order.
@@ -209,6 +214,8 @@ type Reply struct {
 	Links []string     `json:"links,omitempty"`
 	// Changed says this reply came with a change to the page.
 	Changed bool `json:"changed,omitempty"`
+	// Guest says it came through the shared link, so By is what they typed.
+	Guest bool `json:"guest,omitempty"`
 }
 
 type Comment struct {
@@ -223,6 +230,7 @@ type Comment struct {
 	Files   []Attachment `json:"files,omitempty"`
 	Links   []string     `json:"links,omitempty"`
 	Replies []Reply      `json:"replies,omitempty"`
+	Guest   bool         `json:"guest,omitempty"`
 }
 
 type Comments struct {
@@ -308,7 +316,7 @@ func Slugify(title string) string {
 
 // NewKey is a share key: what the open link carries.
 func NewKey() string {
-	b := make([]byte, 9)
+	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
 		return fmt.Sprintf("%x", time.Now().UnixNano())
 	}
@@ -760,15 +768,49 @@ func (m Meta) Approvers() []string {
 
 func (m Meta) IsApproved() bool { return len(m.Approvers()) >= m.NeededApprovals() }
 
+// OwnerApproved says a standing sign-off came from the owner's side.
+func (m Meta) OwnerApproved() bool {
+	rev := m.CurrentRev()
+	for _, a := range m.Approvals {
+		if a.Rev == rev && a.Owner {
+			return true
+		}
+	}
+	return false
+}
+
+// LinkOpen says the shared link works at now.
+func (m Meta) LinkOpen(now time.Time) bool {
+	return m.Key != "" && (m.KeyUntil.IsZero() || now.Before(m.KeyUntil))
+}
+
+// MarkGuest marks a comment, or one reply under it, as written through the link.
+func (id *Idea) MarkGuest(commentID, replyID int) {
+	c := id.find(commentID)
+	if c == nil {
+		return
+	}
+	if replyID == 0 {
+		c.Guest = true
+		return
+	}
+	for i := range c.Replies {
+		if c.Replies[i].ID == replyID {
+			c.Replies[i].Guest = true
+		}
+	}
+}
+
 // Approve signs the page off for by; true when this sign-off made it approved.
-func (id *Idea) Approve(by string, now time.Time) (bool, error) {
+// owner says it came from this machine or a paired device, not the link.
+func (id *Idea) Approve(by string, owner bool, now time.Time) (bool, error) {
 	by = author(by)
 	if by == Agent || by == "someone" {
 		return false, fmt.Errorf("a sign-off needs your name")
 	}
 	was := id.Meta.Status == Approved
 	id.Unapprove(by)
-	id.Meta.Approvals = append(id.Meta.Approvals, Approval{By: by, At: now, Rev: id.Meta.CurrentRev()})
+	id.Meta.Approvals = append(id.Meta.Approvals, Approval{By: by, At: now, Rev: id.Meta.CurrentRev(), Owner: owner})
 	id.Meta.UpdatedAt = now
 	if id.Meta.Status == Draft && id.Meta.IsApproved() {
 		id.Meta.Status = Approved
@@ -797,6 +839,18 @@ func (id *Idea) find(commentID int) *Comment {
 		}
 	}
 	return nil
+}
+
+// DeleteComment removes a comment with its replies, and the decision it left.
+func (id *Idea) DeleteComment(commentID int) error {
+	for i, c := range id.Comments.Comments {
+		if c.ID == commentID {
+			id.Comments.Comments = append(id.Comments.Comments[:i], id.Comments.Comments[i+1:]...)
+			id.dropDecision(commentID)
+			return nil
+		}
+	}
+	return fmt.Errorf("%w %d", ErrNoComment, commentID)
 }
 
 // Find is the comment with that id.

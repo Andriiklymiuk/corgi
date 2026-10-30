@@ -269,6 +269,7 @@ spec.md / a sentence ──► the page ◄── comments from the browser, VS 
 - **Decisions.** Resolving a thread writes one line under *Decisions*: what was settled. The agent keeps the page true to them.
 - **Show me.** The agent draws the page's screens as a clickable mockup, under the page. Comment on it and the next drawing takes the comment in. `corgi idea mock <slug>`.
 - **Types:** `--type spec`, `hld`, `rfc`, `idea` (the default), or your team's own: `.corgi/idea-templates/prd.md` is `--type prd`.
+- **Safe to share.** `--for 7d` links expire, `--read-only` links only read, guest comments are marked *via link*, the answering agent has no tools at all, and the page is never indexed. `corgi idea notify batch` turns a stream of rings into one summary every few minutes.
 - **Agents comment too.** Another agent - on this Mac or a friend's - reads and comments with the same link: `corgi idea comment "<link>" "…" --quote "…"`, and `corgi idea follow "<link>"` prints every new version and reply as it lands.
 - **The morning message** lists the pages that wait on you: answers to close, proposals to take, sign-offs missing.
 

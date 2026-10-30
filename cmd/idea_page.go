@@ -12,6 +12,8 @@ const ideaPageHTML = `<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#08090a">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
 <title>idea · corgi</title>
 <style>
   :root{--bg:#08090a;--card:#101113;--card2:#16181b;--line:#212327;--hair:#1a1c1f;
@@ -75,7 +77,25 @@ const ideaPageHTML = `<!doctype html>
   mark.hl.resolved{background:none;border-bottom:1px dotted var(--dim2)}
   mark.hl.proposal{background:#241a3a;border-bottom-color:var(--purple)}
   mark.hl.on{outline:2px solid var(--accent);outline-offset:1px}
-  .float{position:fixed;z-index:40;transform:translate(-50%,-115%);background:var(--accent);color:#fff;border:0;border-radius:.5rem;padding:.4rem .7rem;font-size:.8rem;font-weight:600;box-shadow:0 6px 20px rgba(0,0,0,.5)}
+  .pop{position:absolute;z-index:45;width:min(26rem,calc(100vw - 2rem));background:var(--card2);border:1px solid var(--accent-line);border-radius:.7rem;box-shadow:0 12px 40px rgba(0,0,0,.55);padding:.6rem}
+  .pop .q{font-size:.74rem;color:var(--dim);border-left:2px solid var(--amber);padding:.05rem .45rem;margin-bottom:.45rem;max-height:3.2rem;overflow:hidden;white-space:pre-wrap}
+  .pop textarea{min-height:4.4rem}
+  .pop input.name{margin-top:.4rem}
+  .pop .row{display:flex;gap:.4rem;align-items:center;margin-top:.45rem}
+  .pop .row .sp{flex:1}
+  .pop .kbd{font-size:.68rem;color:var(--dim2)}
+  @media (pointer:coarse){.pop{position:fixed;left:0!important;right:0;top:auto!important;bottom:0;width:auto;border-radius:1rem 1rem 0 0;border-bottom:0;padding:.8rem max(1rem,env(safe-area-inset-left)) calc(.8rem + env(safe-area-inset-bottom))}}
+  .popping .fab{display:none}
+  .card.new{box-shadow:inset 3px 0 var(--accent)}
+  .card .del{margin-left:auto;border:0;background:none;color:var(--dim2);font-size:.72rem;padding:0 .2rem}
+  .card .del:hover{color:var(--red)}
+  .card .when{cursor:pointer}
+  mark.pending{background:#1c2a4a;color:inherit;border-bottom:2px solid var(--accent);border-radius:.15rem}
+  .att{cursor:pointer;color:var(--dim);font-size:.95rem;padding:0 .15rem;user-select:none}
+  .chips{display:flex;flex-wrap:wrap;gap:.3rem}
+  .chips:not(:empty){margin-top:.35rem}
+  .guest{font-size:.6rem;letter-spacing:.03em;color:var(--dim2);border:1px solid var(--line);border-radius:.3rem;padding:0 .3rem}
+  .ro{font-size:.78rem;color:var(--dim);border:1px dashed var(--line);border-radius:.5rem;padding:.5rem .7rem;margin-bottom:.6rem}
   .endcap{margin-top:2.5rem;padding:1rem;border:1px solid var(--line);border-radius:.7rem;background:var(--card)}
   .endcap h2{margin:0 0 .3rem;border:0;padding:0;font-size:1rem}
   .endcap p{margin:.2rem 0 .7rem;color:var(--dim);font-size:.84rem}
@@ -222,7 +242,6 @@ const ideaPageHTML = `<!doctype html>
   </aside>
 </main>
 <button class="btn primary fab" id="fab">comments</button>
-<button class="float" id="float" hidden>Comment</button>
 <script>
 (() => {
   const $ = s => document.querySelector(s);
@@ -253,6 +272,9 @@ const ideaPageHTML = `<!doctype html>
   const toast = (t, ms = 2600) => { const d = document.createElement('div'); d.className = 'toast'; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), ms); };
   const ago = s => { const d = (Date.now() - new Date(s).getTime()) / 1000; if (d < 60) return 'now'; if (d < 3600) return Math.floor(d / 60) + 'm'; if (d < 86400) return Math.floor(d / 3600) + 'h'; return Math.floor(d / 86400) + 'd'; };
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  // Words with their web links clickable: only http(s), opened apart from this page; everything else stays text.
+  const linked = (cls, text) => { const d = el('div', cls); String(text || '').split(/(https?:\/\/[^\s<>"'()]+)/g).forEach((part, i) => { if (i % 2) { const a = el('a', '', part.replace(/^https?:\/\//, '').slice(0, 60) + (part.length > 68 ? '…' : '')); a.href = part; a.target = '_blank'; a.rel = 'noopener noreferrer nofollow'; a.title = part; d.appendChild(a); } else if (part) d.appendChild(document.createTextNode(part)); }); return d; };
+  const readOnly = () => !!(doc && doc.idea && doc.idea.readOnly && !token);
 
   // ---- reading progress -----------------------------------------------------
   const onScroll = () => { const h = document.documentElement; const max = h.scrollHeight - h.clientHeight; $('#prog').style.width = (max > 0 ? Math.min(100, 100 * h.scrollTop / max) : 0) + '%'; markToc(); };
@@ -324,7 +346,6 @@ const ideaPageHTML = `<!doctype html>
   }
 
   // ---- selecting words --------------------------------------------------
-  const floatBtn = $('#float');
   function selectionInDoc() {
     const sel = window.getSelection(); if (!sel || sel.isCollapsed || !sel.rangeCount) return null;
     const r = sel.getRangeAt(0); const root = $('#doc');
@@ -341,12 +362,89 @@ const ideaPageHTML = `<!doctype html>
     for (let p = e; p; p = p.previousElementSibling) if (/^H[1-6]$/.test(p.tagName)) { heading = p.textContent.replace('+ comment', '').trim(); break; }
     return { quote: q, prefix, suffix, heading, rect: r.getBoundingClientRect() };
   }
+  // ---- a comment box where the words are -------------------------------
+  // Desktop: a box right under the highlight, focused, the moment the mouse
+  // lets go. Phone: a sheet from the bottom that follows the selection while
+  // its handles move, and holds the words once you start typing.
+  const coarse = matchMedia('(pointer:coarse)').matches;
+  const pop = el('div', 'pop'); pop.hidden = true; document.body.appendChild(pop);
+  let popAnchor = null, popRange = null, popFiles = [], popMarked = false, selecting = false, renderWaiting = false;
+  const popDrafts = {};
+  const holding = () => selecting || !pop.hidden;
+  function clearPending() { document.querySelectorAll('mark.pending').forEach(m => { const p = m.parentNode; while (m.firstChild) p.insertBefore(m.firstChild, m); p.removeChild(m); p.normalize(); }); }
+  function markPending() {
+    if (popMarked || !popRange) return; popMarked = true;
+    try { markRange(popRange, { id: -1, kind: '', status: 'pending', by: '', text: '' }); } catch { }
+    document.querySelectorAll('mark.hl[data-id="-1"]').forEach(m => { m.className = 'pending'; m.onclick = null; m.removeAttribute('title'); });
+  }
+  function clearFocus() { focus = 0; document.querySelectorAll('mark.hl.on').forEach(m => m.classList.remove('on')); document.querySelectorAll('.card.on').forEach(c => c.classList.remove('on')); }
+  function closePop(keep = true) {
+    if (pop.hidden) return;
+    const ta = pop.querySelector('textarea'); if (keep && popAnchor && ta && ta.value.trim()) popDrafts[popAnchor.quote] = ta.value;
+    pop.hidden = true; document.body.classList.remove('popping'); popAnchor = null; popRange = null; popFiles = []; popMarked = false; clearPending();
+    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+    if (renderWaiting) { renderWaiting = false; load(); }
+  }
+  function fitSheet() { const vv = window.visualViewport; if (!vv || !coarse || pop.hidden) return; pop.style.bottom = Math.max(0, window.innerHeight - vv.height - vv.offsetTop) + 'px'; }
+  if (window.visualViewport) { visualViewport.addEventListener('resize', fitSheet); visualViewport.addEventListener('scroll', fitSheet); }
+  function popQuote(a) { return (a.heading && a.heading !== a.quote ? a.heading + ' · ' : '') + '“' + a.quote + '”'; }
+  function openPop(a, range) {
+    if (readOnly()) return;
+    if (!pop.hidden && coarse && popAnchor && !popMarked) { popAnchor = a; popRange = range; pop.querySelector('.q').textContent = popQuote(a); return; }
+    closePop();
+    popAnchor = a; popRange = range; popFiles = []; popMarked = false; pop.innerHTML = '';
+    pop.appendChild(el('div', 'q', popQuote(a)));
+    const ta = el('textarea'); ta.rows = 3; ta.placeholder = 'Your comment: what should change, or what you want to know'; ta.value = popDrafts[a.quote] || '';
+    pop.appendChild(ta);
+    let nameIn = null;
+    if (!you()) { nameIn = el('input', 'name'); nameIn.type = 'text'; nameIn.placeholder = 'Your name, shown on the comment'; nameIn.autocomplete = 'name'; pop.appendChild(nameIn); }
+    const chips = el('div', 'chips'); pop.appendChild(chips);
+    const row = el('div', 'row');
+    const att = el('label', 'att', '📎'); att.title = 'attach a picture or a file (or paste one)'; const fi = el('input'); fi.type = 'file'; fi.multiple = true; fi.hidden = true; att.appendChild(fi); row.appendChild(att);
+    row.appendChild(el('span', 'kbd', coarse ? '' : '⌘↵ sends · Esc closes'));
+    row.appendChild(el('span', 'sp'));
+    const cancel = el('button', 'btn small ghost', 'cancel'); cancel.onclick = () => closePop(false); row.appendChild(cancel);
+    const send = el('button', 'btn small primary', 'Comment'); row.appendChild(send); pop.appendChild(row);
+    const addFiles = async files => { for (const f of files) { try { popFiles.push(await upload(f)); } catch (e) { toast(e.message); } } chips.innerHTML = ''; popFiles.forEach(f => chips.appendChild(el('span', 'chip', f.name))); };
+    fi.onchange = () => { addFiles([...fi.files]); fi.value = ''; };
+    ta.addEventListener('paste', ev => { const fs = [...((ev.clipboardData || {}).files || [])]; if (fs.length) { ev.preventDefault(); addFiles(fs); } });
+    ta.addEventListener('focus', markPending);
+    ta.addEventListener('keydown', ev => { if (ev.key === 'Enter' && (ev.metaKey || ev.ctrlKey)) { ev.preventDefault(); send.click(); } else if (ev.key === 'Escape') closePop(); });
+    send.onclick = async () => {
+      const text = ta.value.trim(); if (!text && !popFiles.length) { ta.focus(); return; }
+      if (nameIn && nameIn.value.trim()) setYou(nameIn.value.trim());
+      const q = popAnchor; send.disabled = true;
+      try { await api('/comment', { text, by: you() || 'someone', files: popFiles, links: [], quote: q.quote, prefix: q.prefix, suffix: q.suffix, heading: q.heading }); delete popDrafts[q.quote]; closePop(false); toast('sent - the agent answers here'); await load(); }
+      catch (e) { toast(e.message); send.disabled = false; }
+    };
+    pop.hidden = false; document.body.classList.add('popping');
+    if (coarse) { pop.style.left = ''; pop.style.top = ''; fitSheet(); return; }
+    const r = a.rect, w = pop.offsetWidth, sx = window.scrollX, sy = window.scrollY;
+    const left = Math.max(sx + 8, Math.min(sx + r.left + r.width / 2 - w / 2, sx + document.documentElement.clientWidth - w - 8));
+    let top = sy + r.bottom + 8;
+    if (r.bottom + pop.offsetHeight + 16 > window.innerHeight && r.top > pop.offsetHeight + 16) top = sy + r.top - pop.offsetHeight - 8;
+    pop.style.left = left + 'px'; pop.style.top = top + 'px';
+    markPending(); window.getSelection().removeAllRanges(); ta.focus({ preventScroll: true });
+  }
+  const fromSelection = () => { const a = selectionInDoc(); if (!a) return false; openPop(a, window.getSelection().getRangeAt(0).cloneRange()); return true; };
+  $('#doc').addEventListener('mousedown', ev => { if (!coarse && ev.button === 0) selecting = true; });
+  document.addEventListener('mouseup', () => { if (coarse || !selecting) return; selecting = false; setTimeout(() => { if (!fromSelection() && renderWaiting && pop.hidden) { renderWaiting = false; load(); } }, 0); });
+  $('#doc').addEventListener('keyup', ev => { if (!coarse && ev.shiftKey) fromSelection(); });
   let selTimer = 0;
-  document.addEventListener('selectionchange', () => { clearTimeout(selTimer); selTimer = setTimeout(() => {
-    const s = selectionInDoc(); if (!s) { floatBtn.hidden = true; return; }
-    pending = s; floatBtn.hidden = false; floatBtn.style.left = (s.rect.left + s.rect.width / 2) + 'px'; floatBtn.style.top = (s.rect.top - 6) + 'px';
-  }, 120); });
-  floatBtn.onclick = () => { if (!pending) return; openCompose(pending); floatBtn.hidden = true; window.getSelection().removeAllRanges(); };
+  document.addEventListener('selectionchange', () => {
+    if (!coarse) return;
+    clearTimeout(selTimer);
+    selTimer = setTimeout(() => { const ta = pop.querySelector('textarea'); if (ta && document.activeElement === ta) return; fromSelection(); }, 350);
+  });
+  // A click or tap anywhere else closes the box (what you typed is kept for those words) and lets go of the highlight.
+  document.addEventListener('pointerdown', ev => {
+    if (pop.contains(ev.target)) return;
+    if (!ev.target.closest || !ev.target.closest('mark.hl, .card, .compose')) clearFocus();
+    if (pop.hidden) return;
+    if (coarse && ev.target.closest && ev.target.closest('#doc') && !popMarked) return;
+    closePop();
+  }, true);
+  document.addEventListener('keydown', ev => { if (ev.key === 'Escape') { closePop(); clearFocus(); } });
 
   // ---- composing ----------------------------------------------------------
   function openCompose(anchor) {
@@ -388,16 +486,21 @@ const ideaPageHTML = `<!doctype html>
   const act = async (path, body) => { try { await api(path, body); await load(); } catch (e) { toast(e.message); } };
   function card(c) {
     const d = el('div', 'card' + (c.id === focus ? ' on' : '')); d.id = 'c' + c.id;
-    const top = el('div', 'top'); top.appendChild(el('b', '', c.by === 'agent' ? '🐕 agent' : c.by)); top.appendChild(el('span', '', ago(c.at)));
+    const top = el('div', 'top'); top.appendChild(el('b', '', c.by === 'agent' ? '🐕 agent' : c.by)); if (c.guest) { const g = el('span', 'guest', 'via link'); g.title = 'written by someone with the link: the name is what they typed'; top.appendChild(g); }
+    const when = el('span', 'when', ago(c.at)); when.title = 'copy a link to this comment'; when.onclick = async () => { const u = location.href.split('#')[0] + '#c' + c.id; try { await navigator.clipboard.writeText(u); toast('link to this comment copied'); } catch { prompt('the link', u); } }; top.appendChild(when);
     if (c.kind === 'proposal') top.appendChild(el('span', 'pill proposal', 'proposal'));
-    top.appendChild(el('span', 'pill ' + c.status, c.status)); d.appendChild(top);
+    top.appendChild(el('span', 'pill ' + c.status, c.status));
+    if (token) { const x = el('button', 'del', 'delete'); x.title = 'remove this comment and its replies'; x.onclick = () => { if (confirm('Remove this comment and its replies?')) act('/delete', { id: c.id }); }; top.appendChild(x); }
+    if (seenAt && new Date(c.updatedAt || c.at).getTime() > seenAt && lastBy(c) !== you()) d.classList.add('new');
+    d.appendChild(top);
     if (c.anchor) { const q = el('div', 'q' + (c.kind === 'proposal' ? ' proposal' : ''), (c.anchor.heading && c.anchor.heading !== c.anchor.quote ? c.anchor.heading + ' · ' : '') + '“' + c.anchor.quote + '”'); q.onclick = () => { const m = document.querySelector('mark.hl[data-id="' + c.id + '"]'); if (m) { m.scrollIntoView({ behavior: 'smooth', block: 'center' }); focusOn(c.id); } }; d.appendChild(q); }
-    d.appendChild(el('div', 't', c.text));
+    d.appendChild(linked('t', c.text));
     d.appendChild(filesRow(c.files, c.links));
     for (const r of c.replies || []) {
-      const rd = el('div', 'reply' + (r.by === 'agent' ? ' agent' : '')); const rt = el('div', 'top'); rt.appendChild(el('b', '', r.by === 'agent' ? '🐕 agent' : r.by)); rt.appendChild(el('span', '', ago(r.at)));
-      if (r.changed) rt.appendChild(el('span', 'pill fixed', 'changed the page')); rd.appendChild(rt); rd.appendChild(el('div', 't', r.text)); rd.appendChild(filesRow(r.files, r.links)); d.appendChild(rd);
+      const rd = el('div', 'reply' + (r.by === 'agent' ? ' agent' : '')); const rt = el('div', 'top'); rt.appendChild(el('b', '', r.by === 'agent' ? '🐕 agent' : r.by)); if (r.guest) rt.appendChild(el('span', 'guest', 'via link')); rt.appendChild(el('span', '', ago(r.at)));
+      if (r.changed) rt.appendChild(el('span', 'pill fixed', 'changed the page')); rd.appendChild(rt); rd.appendChild(linked('t', r.text)); rd.appendChild(filesRow(r.files, r.links)); d.appendChild(rd);
     }
+    if (readOnly()) return d;
     const acts = el('div', 'acts');
     if (c.kind === 'proposal' && c.status === 'open' && !(c.replies || []).some(r => r.by !== 'agent')) {
       const ok = el('button', 'btn small primary', 'accept'); ok.onclick = () => act('/reply', { id: c.id, text: 'Yes, do this.', by: me() }); acts.appendChild(ok);
@@ -409,11 +512,16 @@ const ideaPageHTML = `<!doctype html>
     }
     d.appendChild(acts);
     // The reply box is always there: type, Enter, done. Shift+Enter for a new line.
-    const quick = el('div', 'quick'); const ta = el('textarea'); ta.rows = 1; ta.placeholder = c.status === 'resolved' ? 'say more to reopen' : 'reply…';
-    const send = el('button', 'btn small primary', 'send'); send.onclick = () => { const t = ta.value.trim(); if (!t) return; ta.value = ''; act('/reply', { id: c.id, text: t, by: me() }); };
+    // A reply carries words, a link (pasted in the words) and pictures: 📎, or paste one in.
+    const quick = el('div', 'quick'); const ta = el('textarea'); ta.rows = 1; ta.placeholder = c.status === 'resolved' ? 'say more to reopen' : 'reply… (paste a picture or a link)';
+    let files = []; const chips = el('div', 'chips');
+    const addFiles = async list => { for (const f of list) { try { files.push(await upload(f)); } catch (e) { toast(e.message); } } chips.innerHTML = ''; files.forEach(f => chips.appendChild(el('span', 'chip', f.name))); };
+    const att = el('label', 'att', '📎'); att.title = 'attach a picture or a file'; const fi = el('input'); fi.type = 'file'; fi.multiple = true; fi.hidden = true; att.appendChild(fi); fi.onchange = () => { addFiles([...fi.files]); fi.value = ''; };
+    ta.addEventListener('paste', ev => { const fs = [...((ev.clipboardData || {}).files || [])]; if (fs.length) { ev.preventDefault(); addFiles(fs); } });
+    const send = el('button', 'btn small primary', 'send'); send.onclick = () => { const t = ta.value.trim(); if (!t && !files.length) return; const f = files; ta.value = ''; files = []; chips.innerHTML = ''; act('/reply', { id: c.id, text: t, by: me(), files: f }); };
     ta.addEventListener('keydown', ev => { if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); send.click(); } });
     ta.addEventListener('input', () => { ta.style.height = 'auto'; ta.style.height = Math.min(144, ta.scrollHeight) + 'px'; });
-    quick.appendChild(ta); quick.appendChild(send); d.appendChild(quick);
+    quick.appendChild(att); quick.appendChild(ta); quick.appendChild(send); d.appendChild(quick); d.appendChild(chips);
     return d;
   }
   function filesRow(files, links) {
@@ -422,6 +530,14 @@ const ideaPageHTML = `<!doctype html>
     for (const l of links || []) { const a = el('a', '', '🔗 ' + l.replace(/^https?:\/\//, '').slice(0, 50)); a.href = l; a.target = '_blank'; a.rel = 'noopener'; row.appendChild(a); }
     return row;
   }
+  // What came in since you last looked: a bar on the card, until you have been here a few seconds.
+  const seenKey = 'corgi_seen_' + slug;
+  let seenAt = (() => { try { return +localStorage.getItem(seenKey) || 0; } catch { return 0; } })();
+  const lastBy = c => (c.replies && c.replies.length ? c.replies[c.replies.length - 1].by : c.by);
+  let seenTimer = 0;
+  const markSeen = () => { clearTimeout(seenTimer); seenTimer = setTimeout(() => { try { localStorage.setItem(seenKey, String(Date.now())); } catch { } }, 4000); };
+  document.addEventListener('visibilitychange', () => { if (document.hidden) { try { localStorage.setItem(seenKey, String(Date.now())); } catch { } } });
+  let deepLinked = false;
   function renderList() {
     const all = doc.comments || [];
     const seen = { all: all.filter(c => c.status !== 'resolved').length, open: all.filter(c => c.status === 'open').length, proposal: all.filter(c => c.kind === 'proposal' && c.status === 'open').length, resolved: all.filter(c => c.status === 'resolved').length };
@@ -432,7 +548,10 @@ const ideaPageHTML = `<!doctype html>
     const drafts = {}; box.querySelectorAll('.card').forEach(cd => { const t = cd.querySelector('.quick textarea'); if (t && t.value) drafts[cd.id] = t.value; });
     box.innerHTML = '';
     if (!list.length) box.appendChild(el('div', 'empty', filter === 'all' ? 'no comments yet - highlight something on the page' : 'nothing here'));
-    for (const c of list) { const cd = card(c); box.appendChild(cd); if (drafts[cd.id]) cd.querySelector('.quick textarea').value = drafts[cd.id]; }
+    for (const c of list) { const cd = card(c); box.appendChild(cd); if (drafts[cd.id] && cd.querySelector('.quick textarea')) cd.querySelector('.quick textarea').value = drafts[cd.id]; }
+    markSeen();
+    const m = /^#c(\d+)$/.exec(location.hash);
+    if (m && !deepLinked) { deepLinked = true; const id = +m[1]; const c = all.find(x => x.id === id); if (c && c.status === 'resolved' && filter !== 'resolved') { filter = 'resolved'; renderList(); renderDoc(); } setTimeout(() => focusOn(id), 50); }
     void open;
   }
   document.querySelectorAll('#seg button').forEach(b => b.onclick = () => { filter = b.dataset.f; renderList(); renderDoc(); });
@@ -475,6 +594,9 @@ const ideaPageHTML = `<!doctype html>
     $('#buildWhy').textContent = why;
     $('#editBtn').hidden = !token;
     renderSignoff(); renderDecisions(); renderMock();
+    const ro = readOnly();
+    $('#approve').hidden = ro; $('#general').hidden = ro;
+    if (ro) { $('#compose').hidden = true; $('#hint').textContent = 'This link is for reading: comments are closed.'; $('#hint').className = 'ro'; }
     const sb = $('#sendbtns'); sb.innerHTML = '';
     if (token) for (const to of ['linear', 'jira', 'confluence']) { const opt = (doc.send || {})[to]; if (!opt) continue; const b = el('button', 'btn', 'send to ' + to); b.onclick = () => send(to, opt); sb.appendChild(b); }
   }
@@ -542,7 +664,7 @@ const ideaPageHTML = `<!doctype html>
   async function load() {
     if (loading) return loading;
     loading = (async () => {
-      try { const d = await api('/doc'); const y = window.scrollY; doc = d; renderHead(); if (!editing) renderDoc(); renderList(); window.scrollTo(0, y); $('#live').classList.add('on'); }
+      try { const d = await api('/doc'); const y = window.scrollY; doc = d; renderHead(); if (editing) { } else if (holding()) renderWaiting = true; else renderDoc(); renderList(); window.scrollTo(0, y); $('#live').classList.add('on'); }
       catch (e) { $('#summary').textContent = e.message; $('#live').classList.remove('on'); $('#hint').textContent = e.message; }
       finally { loading = null; }
     })();
@@ -568,6 +690,7 @@ const ideaIndexHTML = `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
+<meta name="robots" content="noindex, nofollow">
 <title>pages · corgi</title>
 <style>
   :root{--bg:#08090a;--card:#101113;--card2:#16181b;--line:#212327;--text:#eceef1;--dim:#8a8f98;--dim2:#5c6169;--accent:#5e6ad2;--amber:#d29922;--green:#3fb950}

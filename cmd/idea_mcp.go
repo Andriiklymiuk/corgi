@@ -324,6 +324,8 @@ func registerIdeaMCPTools(s *server.MCPServer) {
 		mcp.WithString("workspace", mcp.Description("With markdown: the workspace it belongs to")),
 		mcp.WithBoolean("off", mcp.Description("Close the link")),
 		mcp.WithBoolean("rotate", mcp.Description("A new link; the old one stops working")),
+		mcp.WithString("for", mcp.Description("How long the link works: 30m, 12h, 7d; \"0\" lifts a limit")),
+		mcp.WithBoolean("readOnly", mcp.Description("People with the link read but cannot comment (false opens comments again)")),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
 		dir, err := agentDir()
 		if err != nil {
@@ -338,8 +340,19 @@ func registerIdeaMCPTools(s *server.MCPServer) {
 				return nil, err
 			}
 		}
-		return shareIdea(dir, shareRequest{Target: slug, Markdown: md, Title: r.GetString("title", ""), Type: r.GetString("type", ""),
-			Workspace: strings.TrimSpace(r.GetString("workspace", "")), By: "mcp", Off: r.GetBool("off", false), Rotate: r.GetBool("rotate", false)}, time.Now())
+		req := shareRequest{Target: slug, Markdown: md, Title: r.GetString("title", ""), Type: r.GetString("type", ""),
+			Workspace: strings.TrimSpace(r.GetString("workspace", "")), By: "mcp", Off: r.GetBool("off", false), Rotate: r.GetBool("rotate", false)}
+		if raw := strings.TrimSpace(r.GetString("for", "")); raw != "" {
+			d, err := parseLinkFor(raw)
+			if err != nil {
+				return nil, err
+			}
+			req.For = &d
+		}
+		if ro, ok := r.GetArguments()["readOnly"].(bool); ok {
+			req.ReadOnly = &ro
+		}
+		return shareIdea(dir, req, time.Now())
 	}))
 
 	s.AddTool(newCorgiTool("corgi_idea_send",

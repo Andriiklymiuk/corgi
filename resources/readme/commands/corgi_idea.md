@@ -71,7 +71,7 @@ notifyUrl (Telegram): corgi idea notify off keeps them quiet.
 * [corgi idea list](corgi_idea_list)	 - Every idea page, newest change first, with what waits on whom
 * [corgi idea mock](corgi_idea_mock)	 - The agent draws the page's screens as one clickable HTML mockup, shown on the page
 * [corgi idea new](corgi_idea_new)	 - The agent writes the page for a sentence: a name, tags, the spec, first tasks, proposals
-* [corgi idea notify](corgi_idea_notify)	 - Whether comments, answers and page changes ring (desktop and the notifyUrl, Telegram for most)
+* [corgi idea notify](corgi_idea_notify)	 - How comments, answers and page changes ring: each at once, one summary every few minutes, or not at all
 * [corgi idea open](corgi_idea_open)	 - The page in the browser, to read, highlight and comment; a markdown file becomes a page first
 * [corgi idea path](corgi_idea_path)	 - Where the page's markdown is, for an editor
 * [corgi idea reopen](corgi_idea_reopen)	 - Open a comment again: the agent takes another look

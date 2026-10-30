@@ -214,7 +214,7 @@ func TestTheSmallHelpersAndTheLimits(t *testing.T) {
 	if _, err := Create(dir, "big", "x", string(make([]byte, MaxDoc+1)), Meta{}, now); err == nil {
 		t.Fatal("a page has a size at birth too")
 	}
-	if NewKey() == NewKey() || len(NewKey()) != 18 {
+	if NewKey() == NewKey() || len(NewKey()) != 32 {
 		t.Fatal("keys differ")
 	}
 	if clip("héllo", 2) != "hé" || firstNonEmpty(" ", "b") != "b" || firstNonEmpty("a", "b") != "a" {
@@ -388,15 +388,15 @@ func TestASignOffMakesThePageApprovedUntilItsTextChanges(t *testing.T) {
 	}
 	slug := id.Meta.Slug
 	var made bool
-	id, _ = Update(dir, slug, func(id *Idea) error { made, err = id.Approve("max", now); return err })
+	id, _ = Update(dir, slug, func(id *Idea) error { made, err = id.Approve("max", false, now); return err })
 	if made || id.Meta.Status != Draft {
 		t.Fatalf("one of two: %v %s", made, id.Meta.Status)
 	}
-	id, _ = Update(dir, slug, func(id *Idea) error { made, err = id.Approve("ana", now); return err })
+	id, _ = Update(dir, slug, func(id *Idea) error { made, err = id.Approve("ana", false, now); return err })
 	if !made || id.Meta.Status != Approved {
 		t.Fatalf("two of two: %v %s", made, id.Meta.Status)
 	}
-	id, _ = Update(dir, slug, func(id *Idea) error { made, _ = id.Approve("ana", now); return nil })
+	id, _ = Update(dir, slug, func(id *Idea) error { made, _ = id.Approve("ana", false, now); return nil })
 	if made || id.Meta.Status != Approved {
 		t.Fatal("signing again is not a second approval")
 	}
@@ -404,7 +404,7 @@ func TestASignOffMakesThePageApprovedUntilItsTextChanges(t *testing.T) {
 	if id.Meta.Status != Draft || len(id.Meta.Approvers()) != 0 {
 		t.Fatalf("a changed page is signed off again: %s %v", id.Meta.Status, id.Meta.Approvers())
 	}
-	if _, err := id.Approve(Agent, now); err == nil {
+	if _, err := id.Approve(Agent, false, now); err == nil {
 		t.Fatal("the agent does not sign off its own page")
 	}
 }

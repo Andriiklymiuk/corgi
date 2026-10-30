@@ -1117,7 +1117,7 @@ ${payment(fixed)}
 			const r = document.createRange(); r.setStart(n, at); r.setEnd(n, at + ACT.select.length);
 			getSelection().removeAllRanges(); getSelection().addRange(r); break;
 		}
-		if (ACT.compose) setTimeout(() => { document.getElementById("float").click(); document.getElementById("ct").value = ACT.compose; }, 400);
+		if (ACT.compose) setTimeout(() => { document.getElementById("doc").dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 })); document.dispatchEvent(new MouseEvent("mouseup", { bubbles: true })); setTimeout(() => { const t = document.querySelector(".pop textarea"); if (t) t.value = ACT.compose; }, 100); }, 400);
 	}, 300));
 })();
 </script>`;

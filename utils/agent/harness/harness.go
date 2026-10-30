@@ -36,6 +36,10 @@ type Print struct {
 	SkipPermissions bool
 	// Text asks for the plain final message instead of a JSON receipt.
 	Text bool
+	// NoTools is a run that only writes text: no tools, no MCP servers, no
+	// edits. For prompts that carry words from people outside, so the words
+	// cannot make it read, run or change anything.
+	NoTools bool
 }
 
 // Open is one interactive session for a person: how much it may do, which
@@ -205,9 +209,12 @@ func claudePrintArgs(p Print) []string {
 	if m := (Harness{Name: Claude}).Model(p.Model); m != "" {
 		args = append(args, "--model", m)
 	}
-	if p.SkipPermissions {
+	switch {
+	case p.NoTools:
+		args = append(args, "--tools", "", "--strict-mcp-config")
+	case p.SkipPermissions:
 		args = append(args, "--dangerously-skip-permissions")
-	} else {
+	default:
 		args = append(args, "--permission-mode", "acceptEdits")
 	}
 	return args
@@ -284,9 +291,12 @@ func codexPrintArgs(p Print) []string {
 	if m := (Harness{Name: Codex}).Model(p.Model); m != "" {
 		args = append(args, "-m", m)
 	}
-	if p.SkipPermissions {
+	switch {
+	case p.NoTools:
+		args = append(args, "--sandbox", "read-only")
+	case p.SkipPermissions:
 		args = append(args, "--dangerously-bypass-approvals-and-sandbox")
-	} else {
+	default:
 		args = append(args, "--full-auto")
 	}
 	prompt := codexSkillPrompt(p.Prompt)

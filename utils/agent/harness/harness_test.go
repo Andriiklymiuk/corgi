@@ -114,3 +114,14 @@ func TestAModelOfTheOtherHarnessIsDropped(t *testing.T) {
 		t.Fatalf("its own model stays: %q", got)
 	}
 }
+
+func TestATextOnlyRunHasNoToolsNoMCPAndNoEdits(t *testing.T) {
+	args := strings.Join(For("", "").PrintArgs(Print{Prompt: "x", NoTools: true, Text: true}), " ")
+	if !strings.Contains(args, "--tools  --strict-mcp-config") || strings.Contains(args, "acceptEdits") {
+		t.Fatalf("claude: %s", args)
+	}
+	args = strings.Join(For("codex", "").PrintArgs(Print{Prompt: "x", NoTools: true}), " ")
+	if !strings.Contains(args, "--sandbox read-only") || strings.Contains(args, "full-auto") {
+		t.Fatalf("codex: %s", args)
+	}
+}

@@ -50,8 +50,11 @@ type UserConfig struct {
 	TrackSlots    int                        `yaml:"trackSlots,omitempty"`
 	SessionCap    int64                      `yaml:"sessionCap,omitempty"`
 	Stream        []string                   `yaml:"stream,omitempty"`
-	// IdeaNotify "off" keeps comments and answers on idea pages from ringing.
-	IdeaNotify string `yaml:"ideaNotify,omitempty"`
+	// IdeaNotify is how comments and answers on idea pages ring: "on" (each,
+	// the default), "batch" (one summary every IdeaNotifyEvery, 5m unless
+	// set) or "off".
+	IdeaNotify      string `yaml:"ideaNotify,omitempty"`
+	IdeaNotifyEvery string `yaml:"ideaNotifyEvery,omitempty"`
 }
 
 // AwakeHeld says whether the wake lock is to be held now, and whether the
