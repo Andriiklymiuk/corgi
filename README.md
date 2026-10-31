@@ -9,6 +9,7 @@
   [![Homebrew](https://img.shields.io/badge/install-brew-orange.svg)](#install)
   [![Platforms](https://img.shields.io/badge/platform-macOS%20·%20Linux%20·%20Windows-blue.svg)](docs/install.md)
   [![Corgi Agents on the App Store](https://img.shields.io/badge/App%20Store-iPhone%20·%20Mac-black.svg?logo=apple)](https://apps.apple.com/app/id6811009400)
+  [![VS Code extension on the Visual Studio Marketplace](https://img.shields.io/badge/VS%20Code-Marketplace-007ACC.svg?logo=visualstudiocode)](https://marketplace.visualstudio.com/items?itemName=Corgi.corgi)
   [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=Andriiklymiuk_corgi&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=Andriiklymiuk_corgi)
 
 </div>
