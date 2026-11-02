@@ -917,6 +917,7 @@ func mcpUp(args upArgs) (utils.RunState, error) {
 			if overrideErr = utils.ApplyServiceWorkdirs(corgi, splitPairs(args.ServiceDir), splitPairs(args.ServiceBranch), nil); overrideErr != nil {
 				return
 			}
+			utils.ResetBeforeStartFailures()
 			runPreflight(ctx.cmd, corgi)
 			runBeforeStart(corgi)
 			CreateDatabaseServices(corgi.DatabaseServices)

@@ -13,6 +13,8 @@ import (
 
 var stopService string
 
+var stopServices []string
+
 var stopSummaryToStderr bool
 
 type stopFailure struct {
@@ -32,13 +34,33 @@ var stopCmd = &cobra.Command{
 process group, runs afterStart hooks, and brings db_service containers down.
 
 Idempotent: with no run-state or nothing running it exits 0. Use --service to
-stop a single service and leave the rest running.`,
+stop a single service, or --services a,b for several, and leave the rest running.`,
 	Run: runStop,
 }
 
 func init() {
 	rootCmd.AddCommand(stopCmd)
 	stopCmd.Flags().StringVar(&stopService, "service", "", "Stop only this service (leave others running)")
+	stopCmd.Flags().StringSliceVar(&stopServices, "services", nil, "Stop only these services, comma separated (leave others running)")
+}
+
+func stopNames() []string {
+	var names []string
+	for _, name := range append([]string{stopService}, stopServices...) {
+		if name != "" && !containsName(names, name) {
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
+func containsName(names []string, name string) bool {
+	for _, n := range names {
+		if n == name {
+			return true
+		}
+	}
+	return false
 }
 
 func stopTargets(st utils.RunState, service string) []utils.RunStateEntry {
@@ -85,18 +107,28 @@ func runStop(cmd *cobra.Command, _ []string) {
 		return
 	}
 
-	if stopService == "" && !anythingRunning(st) && !hasContainerBackedEntries(st) {
+	names := stopNames()
+	if len(names) == 0 && !anythingRunning(st) && !hasContainerBackedEntries(st) {
 		removeStateLocked(statePath)
 		emitStopSummary(stopSummary{Stopped: []string{}, Failed: []stopFailure{}})
 		return
 	}
 
-	summary := stopRunningServices(stopTargets(st, stopService), stopService == "")
-
-	if stopService == "" {
+	var summary stopSummary
+	if len(names) == 0 {
+		summary = stopRunningServices(stopTargets(st, ""), true)
 		stopEntireStack(corgi, st, statePath)
 	} else {
-		stopSingleService(corgi, st, statePath, &summary)
+		summary = stopSummary{Stopped: []string{}, Failed: []stopFailure{}}
+		for i, name := range names {
+			if i > 0 {
+				st, _ = readReconciledRunState(statePath)
+			}
+			one := stopRunningServices(stopTargets(st, name), false)
+			stopSingleService(corgi, st, statePath, name, &one)
+			summary.Stopped = append(summary.Stopped, one.Stopped...)
+			summary.Failed = append(summary.Failed, one.Failed...)
+		}
 	}
 
 	emitStopSummary(summary)
@@ -163,19 +195,19 @@ func stopEntireStack(corgi *utils.CorgiCompose, st utils.RunState, statePath str
 	removeStateLocked(statePath)
 }
 
-func stopSingleService(corgi *utils.CorgiCompose, st utils.RunState, statePath string, summary *stopSummary) {
-	if entry, ok := findStateEntry(st.Services, stopService); ok && entry.PID == 0 {
-		utils.StopDockerRunnerServices([]string{stopService})
-		summary.Stopped = append(summary.Stopped, stopService)
+func stopSingleService(corgi *utils.CorgiCompose, st utils.RunState, statePath, name string, summary *stopSummary) {
+	if entry, ok := findStateEntry(st.Services, name); ok && entry.PID == 0 {
+		utils.StopDockerRunnerServices([]string{name})
+		summary.Stopped = append(summary.Stopped, name)
 	}
-	runServiceAfterStop(corgi, stopService)
+	runServiceAfterStop(corgi, name)
 	if unlock, lerr := utils.LockRunState(utils.CorgiComposePathDir); lerr == nil {
 		defer unlock()
 	}
-	st.Services = removeStateEntry(st.Services, stopService)
-	st.DBServices = removeStateEntry(st.DBServices, stopService)
+	st.Services = removeStateEntry(st.Services, name)
+	st.DBServices = removeStateEntry(st.DBServices, name)
 	if err := utils.WriteRunState(statePath, st); err != nil {
-		summary.Failed = append(summary.Failed, stopFailure{Name: stopService, Error: err.Error()})
+		summary.Failed = append(summary.Failed, stopFailure{Name: name, Error: err.Error()})
 	}
 }
 

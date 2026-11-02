@@ -43,9 +43,11 @@ jobs:
 
       # Checksum-verified install.
       - name: Install corgi
-        uses: Andriiklymiuk/corgi@v1
+        uses: Andriiklymiuk/corgi@v2
         with:
           version: ${{ inputs.corgi-version }}
+          # The cache plan comes from corgi/cache below; skip the early one.
+          plan-cache: false
 
       # Every service repo is private: let git use the token for all of them.
       - name: Authenticate git
@@ -60,8 +62,14 @@ jobs:
       # the key never changes and the cache never re-saves - this step fails
       # instead (corgi cache paths --json --strict).
       - name: Compute the cache plan
-        uses: Andriiklymiuk/corgi/cache@v1
+        uses: Andriiklymiuk/corgi/cache@v2
         id: cache
+        # Big stack? group-by: service gives each service its own cache, so
+        # one lockfile change re-saves one service's packages, not all of them.
+        # It makes more groups than the four slots: one cache step per
+        # fromJSON(steps.cache.outputs.cache-groups)[i], guarded by `!= null`.
+        # with:
+        #   group-by: service
 
       # The plan covers each service's dependency dir + .corgi/corgi_services/.cache
       # (the beforeStart skip markers). On a polyglot stack, prefer one

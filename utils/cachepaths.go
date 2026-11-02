@@ -56,7 +56,11 @@ var ecosystems = []ecosystem{
 }
 
 func CachePathsFor(corgi *CorgiCompose) CachePlan {
-	acc := collectCacheKeys(corgi)
+	return CachePathsGrouped(corgi, false)
+}
+
+func CachePathsGrouped(corgi *CorgiCompose, byService bool) CachePlan {
+	acc := collectCacheKeys(corgi, byService)
 	aggregate := "corgi-deps-" + hex.EncodeToString(acc.aggregateHash.Sum(nil))[:16]
 	groups := acc.cacheGroups()
 
@@ -89,9 +93,10 @@ type cacheAccumulator struct {
 	groupPaths    map[string]map[string]bool
 	groupHash     map[string]hash.Hash
 	groupMissing  map[string]map[string]bool
+	byService     bool
 }
 
-func collectCacheKeys(corgi *CorgiCompose) *cacheAccumulator {
+func collectCacheKeys(corgi *CorgiCompose, byService bool) *cacheAccumulator {
 	acc := &cacheAccumulator{
 		paths:         map[string]bool{},
 		missing:       map[string]bool{},
@@ -99,6 +104,7 @@ func collectCacheKeys(corgi *CorgiCompose) *cacheAccumulator {
 		groupPaths:    map[string]map[string]bool{},
 		groupHash:     map[string]hash.Hash{},
 		groupMissing:  map[string]map[string]bool{},
+		byService:     byService,
 	}
 	for _, service := range sortedServices(corgi) {
 		for _, step := range service.BeforeStart {
@@ -124,12 +130,25 @@ func (acc *cacheAccumulator) recordCacheKey(service Service, key string) {
 	if id == "" {
 		return
 	}
+	if !acc.byService {
+		acc.addToGroup(id, line, missingRel, present, func(p map[string]bool) { addEcosystemPaths(p, service, key) })
+		return
+	}
+	if len(serviceOutputDirs(key)) > 0 {
+		acc.addToGroup(id+"-"+service.ServiceName, line, missingRel, present, func(p map[string]bool) {
+			addServiceDirs(p, service, key)
+		})
+	}
+	acc.addToGroup(id+"-home", line, missingRel, present, func(p map[string]bool) { addHomeDirs(p, key) })
+}
+
+func (acc *cacheAccumulator) addToGroup(id, line, missingRel string, present bool, addPaths func(map[string]bool)) {
 	if acc.groupPaths[id] == nil {
 		acc.groupPaths[id] = map[string]bool{}
 		acc.groupHash[id] = sha256.New()
 		acc.groupMissing[id] = map[string]bool{}
 	}
-	addEcosystemPaths(acc.groupPaths[id], service, key)
+	addPaths(acc.groupPaths[id])
 	fmt.Fprint(acc.groupHash[id], line)
 	if !present {
 		acc.groupMissing[id][missingRel] = true
@@ -182,19 +201,26 @@ func sortedGroupIDs(m map[string]map[string]bool) []string {
 }
 
 func addEcosystemPaths(paths map[string]bool, service Service, cacheKey string) {
+	addServiceDirs(paths, service, cacheKey)
+	addHomeDirs(paths, cacheKey)
+}
+
+func addServiceDirs(paths map[string]bool, service Service, cacheKey string) {
+	dir := serviceRelativeDir(service)
+	for _, d := range serviceOutputDirs(cacheKey) {
+		paths[filepath.Join(dir, d)] = true
+	}
+}
+
+func addHomeDirs(paths map[string]bool, cacheKey string) {
 	name := filepath.Base(cacheKey)
 	for _, eco := range ecosystems {
-		if name != eco.lockfile {
-			continue
+		if name == eco.lockfile {
+			for _, d := range eco.homeDirs {
+				paths[d] = true
+			}
+			return
 		}
-		dir := serviceRelativeDir(service)
-		for _, d := range eco.serviceDirs {
-			paths[filepath.Join(dir, d)] = true
-		}
-		for _, d := range eco.homeDirs {
-			paths[d] = true
-		}
-		return
 	}
 }
 

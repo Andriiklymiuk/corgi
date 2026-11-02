@@ -178,8 +178,12 @@ type probeResult struct {
 }
 
 func probeAll(rows []statusRow) (up, down []probeResult) {
+	setupFailed := setupFailuresFromRunState()
 	for _, r := range rows {
 		ok, detail := probe(r)
+		if why := setupFailed[r.Label]; ok && why != "" {
+			ok, detail = false, "port answers, but beforeStart failed: "+why
+		}
 		pr := probeResult{Row: r, Healthy: ok, Detail: detail}
 		if ok {
 			up = append(up, pr)
@@ -188,6 +192,20 @@ func probeAll(rows []statusRow) (up, down []probeResult) {
 		}
 	}
 	return
+}
+
+func setupFailuresFromRunState() map[string]string {
+	state, err := utils.ReadRunState(utils.RunStatePath(utils.CorgiComposePathDir))
+	if err != nil {
+		return nil
+	}
+	out := map[string]string{}
+	for _, entry := range state.Services {
+		if entry.SetupFailed != "" {
+			out["services."+entry.Name] = entry.SetupFailed
+		}
+	}
+	return out
 }
 
 func anyDown(up, down []probeResult) bool { return len(down) > 0 }

@@ -17,6 +17,13 @@ inputs:
     description: Directory holding corgi-compose.yml. Cache outputs are derived from it.
     required: false
     default: "."
+  plan-cache:
+    description: >-
+      "false" skips the cache outputs here. Set it when the workflow reads its
+      cache plan from Andriiklymiuk/corgi/cache after `corgi init`, which is the
+      pattern to use: a plan made here is hashed before the lockfiles exist.
+    required: false
+    default: "true"
 
 outputs:
   version:
@@ -110,6 +117,8 @@ runs:
       working-directory: ${{ inputs.working-directory }}
       env:
         REQUESTED_VERSION: ${{ inputs.version }}
+        PLAN_CACHE: ${{ inputs.plan-cache }}
+        CORGI_CACHE_BEFORE_INIT: "true"
       run: |
         set -euo pipefail
 
@@ -165,14 +174,20 @@ runs:
 
         # Only available once a compose file exists; installing corgi before
         # the checkout should still succeed here.
-        if ls ./*corgi-compose.yml >/dev/null 2>&1 || [ -f corgi-compose.yml ]; then
+        planned=false
+        if [ "$PLAN_CACHE" = "false" ]; then
+          echo "plan-cache: false, so no cache outputs here"
+        elif ls ./*corgi-compose.yml >/dev/null 2>&1 || [ -f corgi-compose.yml ]; then
           # This runs before `corgi init`, so the cacheKey files are usually
           # not cloned yet and the plan is hashed from nothing. The script
-          # warns and publishes the outputs anyway (older workflows read
-          # them); the correct pattern is Andriiklymiuk/corgi/cache after init.
+          # leaves a notice and publishes the outputs anyway (older workflows
+          # read them); the correct pattern is Andriiklymiuk/corgi/cache after init.
           bash "$GITHUB_ACTION_PATH/cache/emit-outputs.sh"
+          planned=true
         else
           echo "::notice::no corgi-compose.yml in ${{ inputs.working-directory }} yet, so no cache outputs"
+        fi
+        if [ "$planned" = "false" ]; then
           for i in 1 2 3 4; do
             echo "cache-$i-key=" >> "$GITHUB_OUTPUT"
             echo "cache-$i-paths=" >> "$GITHUB_OUTPUT"

@@ -195,6 +195,25 @@ func TestRunServiceCmdEcho(t *testing.T) {
 	}
 }
 
+func TestServiceCommandsKnowTheComposeDir(t *testing.T) {
+	compose := t.TempDir()
+	service := filepath.Join(t.TempDir(), "worktree-api")
+	if err := os.MkdirAll(service, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	prev := CorgiComposePathDir
+	CorgiComposePathDir = compose
+	t.Cleanup(func() { CorgiComposePathDir = prev })
+
+	if err := RunServiceCmd("svc", `cd "$CORGI_COMPOSE_DIR" && touch made-here`, service, false); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(filepath.Join(compose, "made-here")); err != nil {
+		t.Errorf("a step that cds into $CORGI_COMPOSE_DIR must land in the compose folder: %v", err)
+	}
+}
+
 func TestRunServiceCmdAccumulatesBackslashLines(t *testing.T) {
 	dir := t.TempDir()
 	if err := RunServiceCmd("svc", "echo \\\nhi", dir, false); err != nil {

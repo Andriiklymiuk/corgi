@@ -108,6 +108,14 @@ func TestEmitOutputsWarnsOnAnIncompletePlan(t *testing.T) {
 	}
 }
 
+func TestEmitOutputsOnlyNotesAnIncompletePlanBeforeInit(t *testing.T) {
+	plan := strings.Replace(twoGroupPlan, `"missingFiles":[],"complete":true`, `"missingFiles":["api/package-lock.json"],"complete":false`, 1)
+	_, log := runEmitOutputs(t, plan, "CORGI_CACHE_BEFORE_INIT=true")
+	if strings.Contains(log, "::warning::") || !strings.Contains(log, "::notice::") {
+		t.Errorf("the install action runs before init by design, so a notice, not a warning:\n%s", log)
+	}
+}
+
 func TestEmitOutputsTreatsAnOldPlanAsComplete(t *testing.T) {
 	plan := strings.Replace(twoGroupPlan, `,"missingFiles":[],"complete":true`, "", 1)
 	plan = strings.ReplaceAll(plan, `,"missingFiles":[]`, "")
@@ -150,5 +158,12 @@ func TestEmitOutputsStrictPassesTheFlagAndFailsWithCorgi(t *testing.T) {
 	_, log = runEmitOutputs(t, plan, "CORGI_CACHE_STRICT=true", "CORGI_FAKE_EXIT=1")
 	if !strings.Contains(log, "exit:") {
 		t.Fatalf("strict mode must fail when corgi --strict fails:\n%s", log)
+	}
+}
+
+func TestEmitOutputsGroupByServicePassesTheFlag(t *testing.T) {
+	_, log := runEmitOutputs(t, twoGroupPlan, "CORGI_CACHE_STRICT=true", "CORGI_CACHE_GROUP_BY=service")
+	if !strings.Contains(log, "corgi args: cache paths --json --strict --by-service") {
+		t.Errorf("group-by: service must run corgi cache paths --by-service:\n%s", log)
 	}
 }

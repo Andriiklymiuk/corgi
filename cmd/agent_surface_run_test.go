@@ -435,3 +435,29 @@ func TestRestoreWithDBReportsAMissingSnapshot(t *testing.T) {
 		t.Errorf("the missing snapshot must be named: %q", out)
 	}
 }
+
+func TestStopServicesStopsEachNamedServiceAndKeepsTheRest(t *testing.T) {
+	dir := surfaceWorkspace(t)
+	t.Cleanup(func() { stopServices = nil })
+	statePath := utils.RunStatePath(dir)
+	state := utils.RunState{Services: []utils.RunStateEntry{
+		{Name: "api", Kind: "service", PID: 999999, Status: "crashed"},
+		{Name: "web", Kind: "service", PID: 999998, Status: "crashed"},
+		{Name: "admin", Kind: "service", PID: 999997, Status: "crashed"},
+	}}
+	if err := utils.WriteRunState(statePath, state); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, code := runCLI(t, "stop", "--services", "api,web"); code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+
+	left, err := utils.ReadRunState(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(left.Services) != 1 || left.Services[0].Name != "admin" {
+		t.Errorf("left in run-state = %+v, want only admin", left.Services)
+	}
+}

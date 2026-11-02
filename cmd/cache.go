@@ -58,6 +58,7 @@ func init() {
 	cacheCmd.AddCommand(cachePathsCmd)
 	cachePathsCmd.Flags().Bool("key", false, "Print only the cache key")
 	cachePathsCmd.Flags().Bool("strict", false, "Exit 1 when a cacheKey file does not exist, instead of only warning")
+	cachePathsCmd.Flags().Bool("by-service", false, "One cache group per service (plus one shared <ecosystem>-home group) instead of one per ecosystem")
 	cachePathsCmd.Flags().Bool("gitlab", false, "Render a GitLab CI cache job template instead of a path list")
 	cachePathsCmd.Flags().String("out", "", "With --gitlab: write to this file instead of stdout, creating its directory")
 	cachePathsCmd.Flags().String("check", "", "With --gitlab: exit non-zero when this file differs from what would be generated")
@@ -72,7 +73,8 @@ func runCachePaths(cmd *cobra.Command, _ []string) {
 		exitWithError(utils.ErrConfig, err, 1)
 	}
 
-	plan := utils.CachePathsFor(corgi)
+	byService, _ := cmd.Flags().GetBool("by-service")
+	plan := utils.CachePathsGrouped(corgi, byService)
 	strict, _ := cmd.Flags().GetBool("strict")
 
 	if gitlab, _ := cmd.Flags().GetBool("gitlab"); gitlab {

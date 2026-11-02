@@ -75,6 +75,11 @@ func TestWhyVerdictPrefersTheEarliestCause(t *testing.T) {
 		t.Errorf("foreign port owner → %q", verdict)
 	}
 
+	setup := whyReport{Status: "running", SetupFailed: "exit status 2", Port: &whyPort{Number: 4000, Listening: true, Ours: true}}
+	if verdict, detail, _ := whyVerdict(service, setup); verdict != verdictSetupFailed || !strings.Contains(detail, "exit status 2") {
+		t.Errorf("running after a failed beforeStart → %q (%s)", verdict, detail)
+	}
+
 	ours := whyReport{Status: "running", Port: &whyPort{Number: 4000, Listening: true, Ours: true}}
 	if verdict, _, _ := whyVerdict(service, ours); verdict != verdictHealthy {
 		t.Errorf("running with its own port → %q", verdict)

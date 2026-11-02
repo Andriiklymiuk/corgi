@@ -264,3 +264,49 @@ func groupByID(plan CachePlan, id string) CacheGroup {
 	}
 	return CacheGroup{}
 }
+
+func TestCachePathsByServiceGivesEachServiceItsOwnGroup(t *testing.T) {
+	root := t.TempDir()
+	var services []Service
+	for _, name := range []string{"api", "web"} {
+		dir := filepath.Join(root, name)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "package-lock.json"), []byte(name), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		services = append(services, Service{
+			ServiceName: name, Path: "./" + name, AbsolutePath: dir,
+			BeforeStart: BeforeStartSteps{{Run: "npm ci", CacheKey: []string{"package-lock.json"}}},
+		})
+	}
+	before := CachePathsGrouped(&CorgiCompose{Services: services}, true)
+
+	byID := map[string]CacheGroup{}
+	for _, g := range before.Groups {
+		byID[g.ID] = g
+	}
+	if strings.Join(byID["node-api"].Paths, ",") != "api/node_modules" ||
+		strings.Join(byID["node-web"].Paths, ",") != "web/node_modules" ||
+		strings.Join(byID["node-home"].Paths, ",") != "~/.npm" {
+		t.Fatalf("groups = %+v", before.Groups)
+	}
+	if byID["node-api"].RestorePrefix != "corgi-deps-node-api-" {
+		t.Errorf("restore prefix = %q", byID["node-api"].RestorePrefix)
+	}
+
+	if err := os.WriteFile(filepath.Join(root, "web", "package-lock.json"), []byte("web v2"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	after := map[string]string{}
+	for _, g := range CachePathsGrouped(&CorgiCompose{Services: services}, true).Groups {
+		after[g.ID] = g.Key
+	}
+	if after["node-api"] != byID["node-api"].Key {
+		t.Error("a change to web's lockfile must not change api's key")
+	}
+	if after["node-web"] == byID["node-web"].Key {
+		t.Error("a change to web's lockfile must change web's key")
+	}
+}

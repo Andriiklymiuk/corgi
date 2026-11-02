@@ -219,6 +219,9 @@ beforeStart:  [string|object]     # Run before `start`. Entry = string, or {run,
                                   #   - run: yarn install
                                   #     cacheKey: [yarn.lock]   # skip step if these files' hash unchanged
                                   # (cacheKey steps run in their own shell; --no-cache forces run)
+                                  # Every service command gets $CORGI_COMPOSE_DIR (the folder of
+                                  # corgi-compose.yml): `cd "$CORGI_COMPOSE_DIR" && make seed`
+                                  # works from a worktree too, `cd .. && make seed` does not
 start:        [string]            # Main blocking command(s)
 afterStart:   [string]            # Run on exit (also on single-service stop/restart)
 restartPolicy:                    # Auto-heal a detached service that crashes at startup

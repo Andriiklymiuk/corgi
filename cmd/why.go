@@ -21,6 +21,7 @@ const (
 	verdictEnvMissing    = "env_missing"
 	verdictUnhealthy     = "unhealthy"
 	verdictNoStartScript = "no_start_command"
+	verdictSetupFailed   = "setup_failed"
 )
 
 type whyDependency struct {
@@ -49,6 +50,7 @@ type whyReport struct {
 	Status       string          `json:"status,omitempty"`
 	Port         *whyPort        `json:"port,omitempty"`
 	LastExitCode *int            `json:"lastExitCode,omitempty"`
+	SetupFailed  string          `json:"beforeStartFailed,omitempty"`
 	Dependencies []whyDependency `json:"dependencies,omitempty"`
 	Env          *whyEnv         `json:"env,omitempty"`
 	LogTail      []string        `json:"logTail,omitempty"`
@@ -65,9 +67,10 @@ var whyCmd = &cobra.Command{
 the port, the last exit code, missing or unresolved env, and the tail of the
 service's own log.
 
-Reports a single machine-readable verdict - healthy, crashed, not_started,
-dependency_unready, port_taken, env_missing, no_start_command or unhealthy - so a
-script or an agent can branch without reading prose.`,
+Reports a single machine-readable verdict - healthy, crashed, setup_failed,
+not_started, dependency_unready, port_taken, env_missing, no_start_command or
+unhealthy - so a script or an agent can branch without reading prose.
+setup_failed means the process runs but its beforeStart did not finish.`,
 	Example: `corgi why api
 
 corgi why api --json`,
@@ -119,7 +122,7 @@ func diagnoseService(corgi *utils.CorgiCompose, service utils.Service) whyReport
 	report.Dependencies = unreadyDependencies(corgi, service, statuses)
 	report.Port = probeServicePort(service, report.Status)
 	report.Env = checkServiceEnv(corgi, service)
-	report.LastExitCode = lastExitCodeFor(service.ServiceName)
+	report.LastExitCode, report.SetupFailed = lastRunFor(service.ServiceName)
 	report.LogTail = tailServiceLog(service.ServiceName, whyLogLines)
 
 	report.Verdict, report.Detail, report.NextStep = whyVerdict(service, report)
@@ -128,6 +131,11 @@ func diagnoseService(corgi *utils.CorgiCompose, service utils.Service) whyReport
 
 func whyVerdict(service utils.Service, report whyReport) (verdict, detail, next string) {
 	switch {
+	case report.Status == "running" && report.SetupFailed != "":
+		return verdictSetupFailed,
+			"the process runs, but its beforeStart failed (" + report.SetupFailed + "), so what that step makes is missing",
+			"run the failed beforeStart step by hand, then corgi restart --service " + service.ServiceName
+
 	case report.Status == "running" && (report.Port == nil || report.Port.Listening):
 		return verdictHealthy, "the service is running and its port answers", ""
 
@@ -273,18 +281,18 @@ func unresolvedPlaceholders(corgi *utils.CorgiCompose, service utils.Service) []
 	return out
 }
 
-func lastExitCodeFor(name string) *int {
+func lastRunFor(name string) (exitCode *int, setupFailed string) {
 	statePath := utils.RunStatePath(utils.CorgiComposePathDir)
 	state, err := utils.ReadRunState(statePath)
 	if err != nil {
-		return nil
+		return nil, ""
 	}
 	for _, entry := range append(append([]utils.RunStateEntry{}, state.Services...), state.DBServices...) {
 		if entry.Name == name {
-			return entry.ExitCode
+			return entry.ExitCode, entry.SetupFailed
 		}
 	}
-	return nil
+	return nil, ""
 }
 
 func tailServiceLog(name string, count int) []string {

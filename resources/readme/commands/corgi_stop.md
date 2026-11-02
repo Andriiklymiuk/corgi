@@ -10,7 +10,7 @@ Reads corgi_services/.state.json, terminates each detached service's
 process group, runs afterStart hooks, and brings db_service containers down.
 
 Idempotent: with no run-state or nothing running it exits 0. Use --service to
-stop a single service and leave the rest running.
+stop a single service, or --services a,b for several, and leave the rest running.
 
 ```
 corgi stop [flags]
@@ -19,8 +19,9 @@ corgi stop [flags]
 ### Options
 
 ```
-  -h, --help             help for stop
-      --service string   Stop only this service (leave others running)
+  -h, --help               help for stop
+      --service string     Stop only this service (leave others running)
+      --services strings   Stop only these services, comma separated (leave others running)
 ```
 
 ### Options inherited from parent commands

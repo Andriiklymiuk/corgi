@@ -62,6 +62,7 @@ func findRestartEntry(st utils.RunState, service string) (utils.RunStateEntry, e
 }
 
 func updateServiceEntry(st utils.RunState, name string, pid int, command string, port int) utils.RunState {
+	setupFailed := utils.BeforeStartFailureFor(name)
 	now := time.Now().UTC()
 	for i := range st.Services {
 		if st.Services[i].Name == name {
@@ -73,6 +74,7 @@ func updateServiceEntry(st utils.RunState, name string, pid int, command string,
 			st.Services[i].StartedAt = now
 			st.Services[i].StatusChangedAt = now
 			st.Services[i].ExitCode = nil
+			st.Services[i].SetupFailed = setupFailed
 		}
 	}
 	return st

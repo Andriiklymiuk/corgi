@@ -288,17 +288,17 @@ func TestProbeServicePortAndRendering(t *testing.T) {
 
 func TestLastExitCodeFor(t *testing.T) {
 	dir := workspaceDir(t)
-	if lastExitCodeFor("api") != nil {
+	if lastExitCode("api") != nil {
 		t.Error("no state file means no exit code")
 	}
 	code := 137
 	writeState(t, dir, []utils.RunStateEntry{{Name: "api", Status: "crashed", ExitCode: &code}}, nil)
 
-	got := lastExitCodeFor("api")
+	got := lastExitCode("api")
 	if got == nil || *got != 137 {
 		t.Fatalf("exit code = %v", got)
 	}
-	if lastExitCodeFor("ghost") != nil {
+	if lastExitCode("ghost") != nil {
 		t.Error("an unknown service has no exit code")
 	}
 	if exitCodeSuffix(nil) != "" || exitCodeSuffix(got) != " with code 137" {
@@ -483,4 +483,9 @@ func TestCheckpointsDirLivesUnderCorgiServices(t *testing.T) {
 	if got := utils.CheckpointsDir("/ws"); got != filepath.Join("/ws", ".corgi", "corgi_services", ".checkpoints") {
 		t.Errorf("CheckpointsDir = %q", got)
 	}
+}
+
+func lastExitCode(name string) *int {
+	code, _ := lastRunFor(name)
+	return code
 }

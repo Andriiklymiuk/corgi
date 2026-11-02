@@ -10,9 +10,10 @@ Runs the diagnosis by hand nobody wants to repeat: unmet dependencies, who owns
 the port, the last exit code, missing or unresolved env, and the tail of the
 service's own log.
 
-Reports a single machine-readable verdict - healthy, crashed, not_started,
-dependency_unready, port_taken, env_missing, no_start_command or unhealthy - so a
-script or an agent can branch without reading prose.
+Reports a single machine-readable verdict - healthy, crashed, setup_failed,
+not_started, dependency_unready, port_taken, env_missing, no_start_command or
+unhealthy - so a script or an agent can branch without reading prose.
+setup_failed means the process runs but its beforeStart did not finish.
 
 ```
 corgi why <service> [flags]

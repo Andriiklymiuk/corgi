@@ -21,6 +21,7 @@ type RunStateEntry struct {
 	StartedAt       time.Time `json:"startedAt,omitempty"`
 	StatusChangedAt time.Time `json:"statusChangedAt,omitempty"`
 	ExitCode        *int      `json:"exitCode,omitempty"`
+	SetupFailed     string    `json:"beforeStartFailed,omitempty"`
 }
 
 type RunState struct {

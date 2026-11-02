@@ -130,6 +130,25 @@ func TestPickLogRun_ReturnsExistingFile(t *testing.T) {
 	}
 }
 
+func TestPickLogRunTakesTheNewestRunWithoutATerminal(t *testing.T) {
+	dir := t.TempDir()
+	svcDir := filepath.Join(dir, ".logs", "api")
+	os.MkdirAll(svcDir, 0o755)
+	os.WriteFile(filepath.Join(svcDir, "2024-01-01T10-00-00.ok.log"), []byte("old"), 0o644)
+	os.WriteFile(filepath.Join(svcDir, "2024-01-02T10-00-00.log"), []byte("new"), 0o644)
+	prev := utils.NonInteractive
+	utils.NonInteractive = true
+	t.Cleanup(func() { utils.NonInteractive = prev })
+
+	got, err := pickLogRun(dir, "api")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filepath.Base(got) != "2024-01-02T10-00-00.log" {
+		t.Errorf("picked %s, want the newest run", filepath.Base(got))
+	}
+}
+
 func TestLabelForRun(t *testing.T) {
 	cases := []struct{ in, want string }{
 		{"/x/2024-01-01T10-00-00.crashed.log", "2024-01-01T10-00-00.log  ❌ crashed"},

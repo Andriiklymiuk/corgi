@@ -227,11 +227,20 @@ func executeShellLine(serviceName, finalCommand, path string, interactive bool, 
 	shellCommand := withEnvSource(finalCommand, resolvedEnvFile)
 	cmd := exec.Command(ServiceShell(), "-c", shellCommand)
 	cmd.Dir = path
+	cmd.Env = serviceCommandEnv()
 
 	if interactive {
 		return runInteractive(cmd)
 	}
 	return runManaged(cmd, commandSlice, serviceName, finalCommand, path, envFile)
+}
+
+func serviceCommandEnv() []string {
+	env := os.Environ()
+	if CorgiComposePathDir != "" {
+		env = append(env, "CORGI_COMPOSE_DIR="+CorgiComposePathDir)
+	}
+	return env
 }
 
 func runInteractive(cmd *exec.Cmd) error {
@@ -294,6 +303,7 @@ func RunServiceCommandExitCodeContext(
 	shellCommand := withEnvSource(command, resolvedEnvFile)
 	cmd := exec.Command(ServiceShell(), "-c", shellCommand)
 	cmd.Dir = path
+	cmd.Env = serviceCommandEnv()
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 	if interactive {
@@ -335,6 +345,7 @@ func StartDetached(serviceName, command, path string, envFile ...string) (*os.Pr
 	shellCommand := withEnvSource(command, resolvedEnvFile)
 	cmd := exec.Command(ServiceShell(), "-c", shellCommand)
 	cmd.Dir = path
+	cmd.Env = serviceCommandEnv()
 	if f := logWriterFile(getLogWriter(serviceName)); f != nil {
 		cmd.Stdout = f
 		cmd.Stderr = f

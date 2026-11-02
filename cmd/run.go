@@ -91,6 +91,7 @@ func buildDetachState(composePath string, procs []detachedProc, dbs []utils.RunS
 			Status:          status,
 			StartedAt:       now,
 			StatusChangedAt: now,
+			SetupFailed:     utils.BeforeStartFailureFor(p.name),
 		})
 	}
 	return utils.RunState{

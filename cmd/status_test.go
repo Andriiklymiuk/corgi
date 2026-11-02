@@ -152,6 +152,27 @@ func TestProbeAllSplitsUpAndDown(t *testing.T) {
 	}
 }
 
+func TestProbeAllCountsAFailedBeforeStartAsDown(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	dir := t.TempDir()
+	prev := utils.CorgiComposePathDir
+	utils.CorgiComposePathDir = dir
+	t.Cleanup(func() { utils.CorgiComposePathDir = prev })
+	state := utils.RunState{Services: []utils.RunStateEntry{{Name: "admin", Status: "running", SetupFailed: "exit status 2"}}}
+	if err := utils.WriteRunState(utils.RunStatePath(dir), state); err != nil {
+		t.Fatal(err)
+	}
+
+	up, down := probeAll([]statusRow{{Label: "services.admin", Port: 1, Kind: "http", URL: srv.URL}})
+
+	if len(up) != 0 || len(down) != 1 || !strings.Contains(down[0].Detail, "beforeStart failed") {
+		t.Errorf("up = %+v, down = %+v", up, down)
+	}
+}
+
 func TestProbeTCP(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

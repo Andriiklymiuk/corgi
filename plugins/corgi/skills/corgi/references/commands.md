@@ -152,7 +152,7 @@ The first time `corgi run` exits with notifications still disabled, a one-line h
 
 ### `corgi status` (aliases: `health`, `healthcheck`)
 
-Post-run probe - synchronous, safe to run. TCP/HTTP probe every declared port. See `healthchecks.md`. Exits 0 / 1.
+Post-run probe - synchronous, safe to run. TCP/HTTP probe every declared port. See `healthchecks.md`. Exits 0 / 1. A detached service whose `beforeStart` failed shows ❌ even when its port answers. `corgi stop --services a,b` stops several detached services and leaves the rest.
 
 Flags:
 - `-w, --watch` - re-probe continuously, alerts on transitions only (kubectl-style). Ctrl+C stops.
@@ -282,7 +282,7 @@ Browse and follow per-service logs captured by `corgi run` (capture is on by def
 Without flags: two-step interactive picker - choose a service, then a run. The chosen log is streamed to stdout and tails new writes like `tail -f`. Auto-exits after the configured `--idle` window of inactivity (default 30s) or when the producing service stops (mtime-based heuristic). Ctrl-C exits at any time.
 
 Flags:
-- `--service <name>` - skip the service picker, jump straight to the run picker for `<name>`.
+- `--service <name>` - skip the service picker, jump straight to the run picker for `<name>`. With one run, or no terminal (CI, an agent), it follows the newest run without asking.
 - `--all` - merge the newest run of every logged service into one timestamp-sorted stream. Lines are prefixed `[service]` so origin is clear. Best for crash forensics across services. Reads each file completely; for live multi-service tailing use separate terminals.
 - `--idle <duration>` - exit when the file has been idle this long (default `30s`). Pass `--idle 0` to tail forever. Useful for db_services that idle for long stretches between writes.
 - `--prune` - delete every captured log (`.corgi/corgi_services/.logs/`).
@@ -392,7 +392,7 @@ checkout is untouched: a throwaway worktree does the work. `--json` for the fiel
 
 ### `corgi why <service>` (alias: `diagnose`)
 
-Why one service is not up, in a single call. Returns `verdict` - `healthy`, `crashed`, `not_started`, `dependency_unready`, `port_taken`, `env_missing`, `no_start_command`, `unhealthy` - plus the evidence: unmet `dependencies`, `port` ownership, `lastExitCode`, `env` findings (absent env file, missing keys, unfilled `envPlaceholdersToCheck`), `logTail`, and a `nextStep`.
+Why one service is not up, in a single call. Returns `verdict` - `healthy`, `crashed`, `setup_failed` (running, but its `beforeStart` failed), `not_started`, `dependency_unready`, `port_taken`, `env_missing`, `no_start_command`, `unhealthy` - plus the evidence: unmet `dependencies`, `port` ownership, `lastExitCode`, `env` findings (absent env file, missing keys, unfilled `envPlaceholdersToCheck`), `logTail`, and a `nextStep`.
 
 Exit is **1** for any verdict but `healthy`. `--log-lines N` sets the tail size. See the `debug` skill, Step 0a.
 

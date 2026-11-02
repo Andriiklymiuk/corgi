@@ -347,6 +347,9 @@ func pickLogRun(base, serviceName string) (string, error) {
 	if err != nil || len(runs) == 0 {
 		return "", fmt.Errorf("no log files found for %s", serviceName)
 	}
+	if len(runs) == 1 || utils.NonInteractive {
+		return runs[0], nil
+	}
 
 	labels := make([]string, len(runs))
 	labelToPath := make(map[string]string, len(runs))

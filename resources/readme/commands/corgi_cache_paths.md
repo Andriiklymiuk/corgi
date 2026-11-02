@@ -45,6 +45,7 @@ corgi cache paths [flags]
 ### Options
 
 ```
+      --by-service           One cache group per service (plus one shared <ecosystem>-home group) instead of one per ecosystem
       --check string         With --gitlab: exit non-zero when this file differs from what would be generated
       --gitlab               Render a GitLab CI cache job template instead of a path list
   -h, --help                 help for paths

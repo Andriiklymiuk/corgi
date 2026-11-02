@@ -32,6 +32,15 @@ func BeforeStartFailed() []string {
 	return names
 }
 
+func BeforeStartFailureFor(serviceName string) string {
+	beforeStartMu.Lock()
+	defer beforeStartMu.Unlock()
+	if err := beforeStartFailures[serviceName]; err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
 func BeforeStartFailureError() error {
 	names := BeforeStartFailed()
 	if len(names) == 0 {

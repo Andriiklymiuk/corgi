@@ -8,7 +8,14 @@ import (
 var WithDepsFromFlag bool
 
 func applyWithDeps(servicesMap map[string]Service) {
-	if !WithDepsFromFlag || len(ServicesItemsFromFlag) == 0 {
+	if len(ServicesItemsFromFlag) == 0 {
+		return
+	}
+	if !WithDepsFromFlag {
+		if left := depsLeftOut(servicesMap); len(left) > 0 {
+			Infof("ℹ️  --services leaves out %s, which the named services depend on - add --with-deps to start them too\n",
+				strings.Join(left, ", "))
+		}
 		return
 	}
 	svcs, dbs := expandWithDeps(servicesMap, ServicesItemsFromFlag)
@@ -29,6 +36,18 @@ func applyWithDeps(servicesMap map[string]Service) {
 	if len(set) > 0 {
 		DbServicesItemsFromFlag = sortedSetKeys(set)
 	}
+}
+
+func depsLeftOut(servicesMap map[string]Service) []string {
+	svcs, _ := expandWithDeps(servicesMap, ServicesItemsFromFlag)
+	var left []string
+	for name := range svcs {
+		if !containsString(ServicesItemsFromFlag, name) {
+			left = append(left, name)
+		}
+	}
+	sort.Strings(left)
+	return left
 }
 
 func sortedSetKeys(m map[string]bool) []string {

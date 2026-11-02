@@ -88,7 +88,7 @@ jobs:
           MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
           MACOS_NOTARY_KEY: ${{ env.MACOS_NOTARY_KEY_B64 }}
 
-      # The GitHub Action is consumed as andriiklymiuk/corgi@v1, so that tag has
+      # The GitHub Action is consumed as andriiklymiuk/corgi@v<major>, so that tag has
       # to follow each release or callers would be stuck on whatever it pointed
       # at when they wrote their workflow. Moving a major tag is the convention
       # actions/checkout and friends use.

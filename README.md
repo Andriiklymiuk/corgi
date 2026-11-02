@@ -671,9 +671,9 @@ Each repo's pipeline only proves that repo works alone, so the bug that only sho
 corgi detects CI and runs non-interactive. With the official action the job is a few lines:
 
 ```yaml
-- uses: Andriiklymiuk/corgi@v1                     # install corgi
+- uses: Andriiklymiuk/corgi@v2                     # install corgi
 - run: corgi init --depth 1 --feature "$BRANCH"    # shallow-clone every repo with the change
-- uses: Andriiklymiuk/corgi/cache@v1               # cache plan hashed from the cloned lockfiles
+- uses: Andriiklymiuk/corgi/cache@v2               # cache plan hashed from the cloned lockfiles
   id: cache
 - uses: actions/cache@v4
   with:

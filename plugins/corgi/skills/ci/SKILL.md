@@ -73,9 +73,9 @@ One implementation, living in the workspace repo (the one holding
 ```
 service repo PR ──► reusable workflow in the workspace repo
                       1. checkout workspace + install corgi
-                         (GitHub: uses: Andriiklymiuk/corgi@v1 - verified install)
+                         (GitHub: uses: Andriiklymiuk/corgi@v2 - verified install)
                       2. corgi init --depth 1
-                      3. restore caches (GitHub: uses: Andriiklymiuk/corgi/cache@v1
+                      3. restore caches (GitHub: uses: Andriiklymiuk/corgi/cache@v2
                          AFTER init - its keys are hashed from the cloned lockfiles)
                       4. corgi run --feature "$BRANCH" --detach --wait --wait-timeout
                       5. corgi status --json          (gate)
@@ -193,15 +193,20 @@ the key is the same on every run, `actions/cache` never re-saves the
 dependencies, and weeks later a run boots on stale `node_modules` with
 `beforeStart skipped (cacheKey unchanged)` in the log. corgi warns when a
 `cacheKey` file is missing (`--json`: `complete: false` + `missingFiles`;
-`--strict`: exit 1). On GitHub the `Andriiklymiuk/corgi/cache@v1` action -
+`--strict`: exit 1). On GitHub the `Andriiklymiuk/corgi/cache@v2` action -
 placed after `corgi init` - runs `corgi cache paths --json --strict` and
 exposes the plan as step outputs (`cache-paths`, `cache-key`, `cache-groups`)
 ready to feed `actions/cache`, plus four fixed slots
 (`cache-1-key`/`cache-1-paths`/`cache-1-restore-keys` … `cache-4-*`) so a
 workflow writes four plain cache steps instead of `fromJSON(...)[i]` indexing.
-The install action (`Andriiklymiuk/corgi@v1`) publishes the same outputs for
-older workflows but warns when it computed them from missing files; do not
-feed `actions/cache` from it. The `restore-keys` slot is the group's
+The install action (`Andriiklymiuk/corgi@v2`) publishes the same outputs for
+older workflows, with a notice when it computed them from missing files; do not
+feed `actions/cache` from it, and give it `plan-cache: false` when the cache
+action follows. A stack whose node group is big (several services'
+`node_modules` in one save) takes `group-by: service` on the cache action: one
+group per service plus a shared `<ecosystem>-home` group, so one lockfile
+change re-saves one service. That is more than four groups - feed them from
+`cache-groups` by index. The `restore-keys` slot is the group's
 `corgi-deps-<ecosystem>-` prefix, so a lockfile change restores the previous
 packages instead of starting empty; the markers slot stays exact-match on
 purpose. GitHub also scopes caches per ref - a fresh PR restores only what its
@@ -279,7 +284,7 @@ Start there, then adapt; the references below are what it generates.
 
 Generate into the workspace repo, then a thin caller per service repo. Templates:
 `references/github-actions.md`, `references/gitlab-ci.md`. On GitHub the install
-and cache plan come from the `Andriiklymiuk/corgi@v1` action; on GitLab from
+and cache plan come from the `Andriiklymiuk/corgi@v2` action; on GitLab from
 `include: remote: .../gitlab/corgi.yml`, which provides `.corgi-setup` and
 `.corgi-stack-e2e` - extend those rather than rewriting the steps. Both are starting
 points - adapt them to the workspace's real service list, secrets source, and e2e

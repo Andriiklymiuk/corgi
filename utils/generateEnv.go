@@ -149,7 +149,7 @@ type producerSkippedError struct {
 }
 
 func (e *producerSkippedError) Error() string {
-	return fmt.Sprintf("producer %q is not in --services run; skipping ${%s.%s}", e.producer, e.producer, e.varName)
+	return fmt.Sprintf("producer %q is not in --services run; skipping ${%s.%s} - add --with-deps to start it too", e.producer, e.producer, e.varName)
 }
 
 var crossServiceRefRe = regexp.MustCompile(`\$\{([A-Za-z0-9_\-/]+)\.([A-Za-z_][A-Za-z0-9_]*)\}`)

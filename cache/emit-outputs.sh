@@ -5,12 +5,16 @@
 # `corgi init`) and cache/action.yml (runs after it, with --strict).
 #
 # Env: GITHUB_OUTPUT (required); CORGI_CACHE_STRICT=true adds --strict, so a
-# plan hashed from cacheKey files that do not exist yet fails the step.
+# plan hashed from cacheKey files that do not exist yet fails the step;
+# CORGI_CACHE_GROUP_BY=service adds --by-service.
 set -euo pipefail
 
 args=(cache paths --json)
 if [[ "${CORGI_CACHE_STRICT:-}" = "true" ]]; then
   args+=(--strict)
+fi
+if [[ "${CORGI_CACHE_GROUP_BY:-}" = "service" ]]; then
+  args+=(--by-service)
 fi
 
 # corgi's own stderr (the "using compose file" line, and the --strict failure
@@ -58,5 +62,11 @@ complete="$(jq -r 'if has("complete") then .complete else true end' <<<"$plan")"
 echo "cache-complete=$complete" >> "$GITHUB_OUTPUT"
 if [[ "$complete" != "true" ]]; then
   missing="$(jq -r '.missingFiles // [] | join(", ")' <<<"$plan")"
-  echo "::warning::corgi cache keys were computed before the cacheKey files exist (missing: $missing). The key will not change when they do, so the cache never invalidates. Add \`uses: Andriiklymiuk/corgi/cache@v1\` after \`corgi init\` and feed the cache steps from its outputs, or run \`corgi cache paths --json\` there yourself."
+  level=warning
+  # The install action runs before `corgi init` by design, so missing lockfiles
+  # there are expected; a workflow that reads these outputs still gets told.
+  if [[ "${CORGI_CACHE_BEFORE_INIT:-}" = "true" ]]; then
+    level=notice
+  fi
+  echo "::$level::corgi cache keys were computed before the cacheKey files exist (missing: $missing). The key will not change when they do, so the cache never invalidates. Add \`uses: Andriiklymiuk/corgi/cache@v2\` after \`corgi init\` and feed the cache steps from its outputs, or run \`corgi cache paths --json\` there yourself."
 fi

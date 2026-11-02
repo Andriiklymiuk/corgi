@@ -3,6 +3,7 @@ package utils
 import (
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 )
 
@@ -252,5 +253,21 @@ func TestApplyWithDeps_NoopWhenFlagOff(t *testing.T) {
 	applyWithDeps(map[string]Service{"api": {DependsOnServices: []DependsOnService{{Name: "billing"}}}})
 	if containsString(ServicesItemsFromFlag, "billing") {
 		t.Fatal("flag off must not expand")
+	}
+}
+
+func TestDepsLeftOutNamesWhatWithDepsWouldAdd(t *testing.T) {
+	ps := ServicesItemsFromFlag
+	t.Cleanup(func() { ServicesItemsFromFlag = ps })
+	ServicesItemsFromFlag = []string{"api", "web"}
+	services := map[string]Service{
+		"api":     {DependsOnServices: []DependsOnService{{Name: "billing"}}},
+		"web":     {DependsOnServices: []DependsOnService{{Name: "api"}}},
+		"billing": {DependsOnServices: []DependsOnService{{Name: "ledger"}}},
+		"ledger":  {},
+	}
+	got := depsLeftOut(services)
+	if strings.Join(got, ",") != "billing,ledger" {
+		t.Errorf("left out = %v, want billing,ledger", got)
 	}
 }

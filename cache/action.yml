@@ -13,6 +13,14 @@ inputs:
     description: Directory holding corgi-compose.yml. Cache outputs are derived from it.
     required: false
     default: "."
+  group-by:
+    description: >-
+      "ecosystem" (default): one group per language. "service": one group per
+      service plus a shared <ecosystem>-home group, so one lockfile change
+      re-saves only that service's packages. Expect more groups than the four
+      slots; read cache-groups for the rest.
+    required: false
+    default: "ecosystem"
 
 outputs:
   cache-paths:
@@ -97,10 +105,11 @@ runs:
         # invalidate. Failing here is the whole reason this action exists
         # separately from the install one.
         CORGI_CACHE_STRICT: "true"
+        CORGI_CACHE_GROUP_BY: ${{ inputs.group-by }}
       run: |
         set -euo pipefail
         if ! command -v corgi >/dev/null 2>&1; then
-          echo "::error::corgi is not installed; add \`uses: Andriiklymiuk/corgi@v1\` before this step"
+          echo "::error::corgi is not installed; add \`uses: Andriiklymiuk/corgi@v2\` before this step"
           exit 1
         fi
         bash "$GITHUB_ACTION_PATH/emit-outputs.sh"

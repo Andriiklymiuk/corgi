@@ -588,7 +588,10 @@ must be _running_ for a consumer to verify (Phase 4) can live in a worktree:
     `beforeStart failed for <svc>` - the stack keeps running without what the step
     made (seeds, generated files, policies). Treat that exit as a real failure, not
     a healthy boot: run the failed step from the compose dir by hand, and name it in
-    the report.
+    the report. `corgi status` shows that service ❌ and `corgi why <svc>` says
+    `setup_failed`. The lasting fix is in the compose file: a step that needs the
+    compose folder says `cd "$CORGI_COMPOSE_DIR"` (corgi 2.35.4+), not `cd ..` -
+    offer it as a follow-up, never fold it into the story's diff.
     `--service-dir` runs the **exact** worktree code. (corgi also has
     `--service-branch <svc>=<branch>` - its _own_ reused worktree off a branch - and
     `--service-checkout <svc>=<branch>` for an in-place checkout; handy for ad-hoc
