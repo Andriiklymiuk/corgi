@@ -310,3 +310,15 @@ func TestCachePathsByServiceGivesEachServiceItsOwnGroup(t *testing.T) {
 		t.Error("a change to web's lockfile must change web's key")
 	}
 }
+
+func TestCacheKeyIgnoresAVersionBumpInPackageLock(t *testing.T) {
+	dir := t.TempDir()
+	svc := Service{ServiceName: "api", Path: "./api", AbsolutePath: dir,
+		BeforeStart: BeforeStartSteps{{Run: "npm ci", CacheKey: []string{"package-lock.json"}}}}
+	writeLock(t, dir, "1.0.0", "1.0.0")
+	before := planFor(t, []Service{svc}).Key
+	writeLock(t, dir, "1.0.1", "1.0.0")
+	if planFor(t, []Service{svc}).Key != before {
+		t.Error("a root version bump must keep the cache key")
+	}
+}

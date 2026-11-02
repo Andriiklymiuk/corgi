@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"hash"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -232,7 +231,7 @@ func serviceRelativeDir(service Service) string {
 }
 
 func hashFileContents(baseDir, rel string) (digest string, present bool) {
-	data, err := os.ReadFile(filepath.Join(baseDir, rel))
+	data, err := readCacheKeyFile(filepath.Join(baseDir, rel))
 	if err != nil {
 		return "MISSING", false
 	}

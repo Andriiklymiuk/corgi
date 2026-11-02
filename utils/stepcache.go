@@ -13,9 +13,17 @@ import (
 const cacheDirName = ".cache"
 
 func hashCacheKeyFiles(baseDir string, files []string) string {
+	return hashCacheKeyFilesWith(baseDir, files, readCacheKeyFile)
+}
+
+func hashCacheKeyFilesRaw(baseDir string, files []string) string {
+	return hashCacheKeyFilesWith(baseDir, files, os.ReadFile)
+}
+
+func hashCacheKeyFilesWith(baseDir string, files []string, read func(string) ([]byte, error)) string {
 	h := sha256.New()
 	for _, f := range files {
-		data, err := os.ReadFile(filepath.Join(baseDir, f))
+		data, err := read(filepath.Join(baseDir, f))
 		if err != nil {
 			fmt.Fprintf(h, "%s\x00MISSING\n", f)
 			continue
@@ -94,7 +102,9 @@ func StepNeedsRun(service Service, stepIndex int, step BeforeStartStep, noCache 
 	if noCache {
 		return true, hash
 	}
-	if readStepHash(stepMarkerPath(service, stepIndex, step)) == hash && stepOutputPresent(service, step) {
+	stored := readStepHash(stepMarkerPath(service, stepIndex, step))
+	matches := stored == hash || stored == hashCacheKeyFilesRaw(service.AbsolutePath, step.CacheKey)
+	if matches && stepOutputPresent(service, step) {
 		return false, hash
 	}
 	return true, hash

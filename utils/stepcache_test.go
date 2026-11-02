@@ -317,3 +317,56 @@ func TestStepMarkerDoesNotCreateAMissingOutputDir(t *testing.T) {
 		t.Errorf("persisting a marker must not create .venv (stat err: %v)", err)
 	}
 }
+
+func writeLock(t *testing.T, dir, version, dep string) {
+	t.Helper()
+	body := `{"name":"api","version":"` + version + `","lockfileVersion":3,"packages":{"":{"name":"api","version":"` + version +
+		`"},"node_modules/left-pad":{"version":"` + dep + `"}}}`
+	if err := os.WriteFile(filepath.Join(dir, "package-lock.json"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAVersionBumpInPackageLockKeepsTheInstallCached(t *testing.T) {
+	prev := CorgiComposePathDir
+	CorgiComposePathDir = t.TempDir()
+	t.Cleanup(func() { CorgiComposePathDir = prev })
+	svcDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(svcDir, "node_modules"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	svc := Service{ServiceName: "api", AbsolutePath: svcDir + "/"}
+	step := BeforeStartStep{Run: "npm ci", CacheKey: []string{"package-lock.json"}}
+
+	writeLock(t, svcDir, "1.24.3", "1.0.0")
+	_, hash := StepNeedsRun(svc, 0, step, false)
+	PersistStepHash(svc, 0, step, hash)
+
+	writeLock(t, svcDir, "1.24.4", "1.0.0")
+	if run, _ := StepNeedsRun(svc, 0, step, false); run {
+		t.Error("a root version bump must not rerun npm ci")
+	}
+	writeLock(t, svcDir, "1.24.4", "1.0.1")
+	if run, _ := StepNeedsRun(svc, 0, step, false); !run {
+		t.Error("a dependency change must rerun npm ci")
+	}
+}
+
+func TestAMarkerWrittenBeforeLockfileNormalizingStillCounts(t *testing.T) {
+	prev := CorgiComposePathDir
+	CorgiComposePathDir = t.TempDir()
+	t.Cleanup(func() { CorgiComposePathDir = prev })
+	svcDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(svcDir, "node_modules"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	svc := Service{ServiceName: "api", AbsolutePath: svcDir + "/"}
+	step := BeforeStartStep{Run: "npm ci", CacheKey: []string{"package-lock.json"}}
+	writeLock(t, svcDir, "1.0.0", "1.0.0")
+
+	PersistStepHash(svc, 0, step, hashCacheKeyFilesRaw(svcDir, step.CacheKey))
+
+	if run, _ := StepNeedsRun(svc, 0, step, false); run {
+		t.Error("an install recorded with the old hash must not run again after an upgrade")
+	}
+}
