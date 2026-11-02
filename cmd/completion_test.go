@@ -11,15 +11,15 @@ import (
 )
 
 func TestSplitCsv(t *testing.T) {
-	prefix, current, already := splitCsv("api,broker,el")
-	if prefix != "api,broker," || current != "el" {
+	prefix, current, already := splitCsv("api,billing,el")
+	if prefix != "api,billing," || current != "el" {
 		t.Errorf("got prefix=%q current=%q", prefix, current)
 	}
 	if _, ok := already["api"]; !ok {
 		t.Errorf("api missing in already")
 	}
-	if _, ok := already["broker"]; !ok {
-		t.Errorf("broker missing in already")
+	if _, ok := already["billing"]; !ok {
+		t.Errorf("billing missing in already")
 	}
 
 	prefix, current, _ = splitCsv("api,")

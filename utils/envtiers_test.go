@@ -37,7 +37,7 @@ func TestResolveEnvSourceFile_TierTokenSubstitution(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeFile(t, filepath.Join(dir, "creds", "staging.env"), "A=1")
-	svc := Service{ServiceName: "broker", AbsolutePath: dir + "/", CopyEnvFromFilePath: "creds/${tier}.env"}
+	svc := Service{ServiceName: "billing", AbsolutePath: dir + "/", CopyEnvFromFilePath: "creds/${tier}.env"}
 
 	got := resolveEnvSourceFile(CorgiComposePathDir, svc, "", "staging", "env/staging")
 	want := filepath.Join(dir, "creds", "staging.env")

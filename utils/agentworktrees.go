@@ -260,12 +260,12 @@ func existingWorktreeDir(root, base, branch string) string {
 	dest := filepath.Join(base, worktreeDirName(root, branch))
 	info, statErr := os.Stat(dest)
 	if statErr != nil || !info.IsDir() {
-		return ""
+		return worktreeForBranch(root, branch)
 	}
 	if h, herr := gitOut(dest, gitRevParse, gitAbbrevRef, "HEAD"); herr == nil && h == branch {
 		return dest
 	}
-	return ""
+	return worktreeForBranch(root, branch)
 }
 
 func removeWorktree(dest string) bool {

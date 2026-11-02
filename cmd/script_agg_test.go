@@ -8,14 +8,14 @@ import (
 func TestSummarizeScriptResults(t *testing.T) {
 	results := []scriptResult{
 		{Service: "api", Name: "test", OK: true},
-		{Service: "broker", Name: "test", OK: false},
+		{Service: "billing", Name: "test", OK: false},
 	}
 	lines, failed := summarizeScriptResults(results)
 	if failed != 1 {
 		t.Fatalf("want 1 failed, got %d", failed)
 	}
 	joined := strings.Join(lines, "\n")
-	if !strings.Contains(joined, "broker") || !strings.Contains(joined, "api") {
+	if !strings.Contains(joined, "billing") || !strings.Contains(joined, "api") {
 		t.Fatalf("summary should list both services: %q", joined)
 	}
 }

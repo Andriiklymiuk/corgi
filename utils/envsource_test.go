@@ -81,11 +81,11 @@ func TestBuildServiceEnvBody_UsesEnvExampleFallback(t *testing.T) {
 }
 
 func TestPlaceholderWarning_TokenPresent(t *testing.T) {
-	svc := Service{ServiceName: "broker", EnvPlaceholdersToCheck: []string{"<supabase-id>", "your-anon-key"}}
+	svc := Service{ServiceName: "billing", EnvPlaceholdersToCheck: []string{"<supabase-id>", "your-anon-key"}}
 	body := "VITE_SUPABASE_URL=https://<supabase-id>.supabase.co\nVITE_KEY=real"
 
 	got := placeholderWarning(svc, body)
-	if !strings.Contains(got, "broker") || !strings.Contains(got, "<supabase-id>") {
+	if !strings.Contains(got, "billing") || !strings.Contains(got, "<supabase-id>") {
 		t.Fatalf("want warning naming service + token, got %q", got)
 	}
 	if strings.Contains(got, "your-anon-key") {
@@ -115,7 +115,7 @@ func TestGenerateEnvForService_WarnsOnPlaceholder(t *testing.T) {
 
 	writeFile(t, filepath.Join(dir, ".env-example"), "KEY=<placeholder>")
 	svc := Service{
-		ServiceName:            "broker",
+		ServiceName:            "billing",
 		AbsolutePath:           dir + "/",
 		EnvPlaceholdersToCheck: []string{"<placeholder>"},
 	}
@@ -125,7 +125,7 @@ func TestGenerateEnvForService_WarnsOnPlaceholder(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
-	if !strings.Contains(out, "broker") || !strings.Contains(out, "<placeholder>") {
+	if !strings.Contains(out, "billing") || !strings.Contains(out, "<placeholder>") {
 		t.Fatalf("want placeholder warning on stdout, got %q", out)
 	}
 }

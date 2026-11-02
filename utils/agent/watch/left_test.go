@@ -36,7 +36,7 @@ func TestLeftForReadsTheOlderHeadingsAndSaysNothingWhenNothingIsLeft(t *testing.
 	if got := LeftFor("- a list with no heading\n"); got != nil {
 		t.Fatalf("no heading, no items: %+v", got)
 	}
-	if got := LeftFor("## Left for you\n- dev-onboarding #51 (Ci.md) should be closed.\n"); got[0].Kind != LeftOther {
+	if got := LeftFor("## Left for you\n- docs #51 (Ci.md) should be closed.\n"); got[0].Kind != LeftOther {
 		t.Fatalf("a file called Ci.md is not CI: %+v", got)
 	}
 }

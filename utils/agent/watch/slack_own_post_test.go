@@ -10,7 +10,7 @@ func TestMyOwnReviewPostIsNotAReviewForMe(t *testing.T) {
 	f := newSlackFake(t)
 	f.history["C0RE"] = `{"ok":true,"messages":[
 		{"type":"message","user":"UME","ts":"1726000400.000100",
-		 "text":"[HUM-1500] Premium frequency\napi: https://github.com/acme/api/pull/519"}
+		 "text":"[ABC-1500] Login screen\napi: https://github.com/acme/api/pull/519"}
 	],"has_more":false}`
 	s := newTestSlack(f, SlackWatchConfig{ReviewChannels: []string{"#code-review"}})
 
@@ -35,7 +35,7 @@ func TestAColleaguesReplyOnMyReviewPostIsFeedbackNotAReview(t *testing.T) {
 	],"has_more":false}`
 	f.replies = `{"ok":true,"messages":[
 		{"type":"message","user":"UME","ts":"1726000400.000100",
-		 "text":"[HUM-1500] Premium frequency\napi: https://github.com/acme/api/pull/519"}
+		 "text":"[ABC-1500] Login screen\napi: https://github.com/acme/api/pull/519"}
 	]}`
 	s := newTestSlack(f, SlackWatchConfig{ReviewChannels: []string{"#code-review"}})
 

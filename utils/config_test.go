@@ -262,14 +262,14 @@ func TestParseServices_PopulatesSkippedServices(t *testing.T) {
 	})
 	parseServices(map[string]Service{
 		"api":          {},
-		"broker":       {},
+		"billing":      {},
 		"notification": {},
 	}, false)
 	if SkippedServices["api"] {
 		t.Error("api should not be in SkippedServices")
 	}
-	if !SkippedServices["broker"] || !SkippedServices["notification"] {
-		t.Errorf("expected broker+notification skipped, got %+v", SkippedServices)
+	if !SkippedServices["billing"] || !SkippedServices["notification"] {
+		t.Errorf("expected billing+notification skipped, got %+v", SkippedServices)
 	}
 }
 

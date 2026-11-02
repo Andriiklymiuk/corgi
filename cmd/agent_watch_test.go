@@ -795,9 +795,10 @@ func TestAWorktreeCountsAsTheWorkspaceItWasCutFrom(t *testing.T) {
 	if err := os.MkdirAll(wt, 0o700); err != nil {
 		t.Fatal(err)
 	}
+	realWt, _ := filepath.EvalSymlinks(wt)
 	orig := mainCheckoutOf
 	mainCheckoutOf = func(d string) string {
-		if strings.HasPrefix(d, wt) {
+		if strings.HasPrefix(d, wt) || strings.HasPrefix(d, realWt) {
 			return ws
 		}
 		return ""

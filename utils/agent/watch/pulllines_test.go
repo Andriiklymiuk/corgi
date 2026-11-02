@@ -20,11 +20,11 @@ func TestPullLinesNameEachRepository(t *testing.T) {
 
 func TestPullLinesPostsALonePullRequestAsTheBareLink(t *testing.T) {
 	got := PullLines("Mobile: bump version to v1.0.49", []string{
-		"https://github.com/acme/client-hybrid-mobile-app/pull/291",
+		"https://github.com/acme/mobile/pull/291",
 		" ",
 	})
 	want := "Mobile: bump version to v1.0.49\n" +
-		"https://github.com/acme/client-hybrid-mobile-app/pull/291"
+		"https://github.com/acme/mobile/pull/291"
 	if got != want {
 		t.Fatalf("got:\n%s", got)
 	}

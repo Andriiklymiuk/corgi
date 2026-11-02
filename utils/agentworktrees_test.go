@@ -411,6 +411,27 @@ func TestExistingWorktreesFindsAMainCheckoutOnTheBranch(t *testing.T) {
 	}
 }
 
+func TestExistingWorktreesFindsAWorktreeMadeOutsideCorgi(t *testing.T) {
+	corgi, dir := stack(t, "api")
+	repo := corgi.Services[0].AbsolutePath
+	outside := filepath.Join(t.TempDir(), "ABC-200-api")
+	gitIn(t, repo, "worktree", "add", "-q", "-b", "feature/x", outside)
+
+	found, err := ExistingBranchWorktrees(corgi, dir, "feature/x")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(found.Worktrees) != 1 {
+		t.Fatalf("worktrees = %d, want the hand-made worktree to count", len(found.Worktrees))
+	}
+	gotDir, _ := filepath.EvalSymlinks(found.Worktrees[0].Dir)
+	wantDir, _ := filepath.EvalSymlinks(outside)
+	if gotDir != wantDir {
+		t.Errorf("dir = %q, want %q", gotDir, wantDir)
+	}
+}
+
 func TestReleaseKeepsAWorktreeWithUncommittedWork(t *testing.T) {
 	corgi, dir := stack(t, "api")
 	set, err := MaterializeBranchAcrossRepos(corgi, dir, "feature/x", nil)

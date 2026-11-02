@@ -21,9 +21,9 @@ func TestReviewsOnEveryPullRequestOfAStoryAreOneRun(t *testing.T) {
 	d.startWatches(context.Background())
 	t.Cleanup(func() { d.runs.Wait() })
 
-	d.handleWatchEvent(context.Background(), watch.Event{Key: "github:acme/api#526:r1", Kind: watch.KindPRComment, Ref: "acme/api#526", URL: "https://github.com/acme/api/pull/526", Title: "Premium frequency [ABC-1500]", Body: "## Code review - ABC-1500 · api #526\n\n**Verdict: REQUEST_CHANGES - 2 blockers.**", Author: "reviewer", Mine: true})
+	d.handleWatchEvent(context.Background(), watch.Event{Key: "github:acme/api#526:r1", Kind: watch.KindPRComment, Ref: "acme/api#526", URL: "https://github.com/acme/api/pull/526", Title: "Login screen [ABC-1500]", Body: "## Code review - ABC-1500 · api #526\n\n**Verdict: REQUEST_CHANGES - 2 blockers.**", Author: "reviewer", Mine: true})
 	time.Sleep(50 * time.Millisecond)
-	d.handleWatchEvent(context.Background(), watch.Event{Key: "github:acme/web#455:r1", Kind: watch.KindPRComment, Ref: "acme/web#455", URL: "https://github.com/acme/web/pull/455", Title: "Premium frequency [ABC-1500]", Body: "## Code review - ABC-1500 · web #455\n\n**Verdict: REQUEST_CHANGES - 1 blocker.**", Author: "reviewer", Mine: true})
+	d.handleWatchEvent(context.Background(), watch.Event{Key: "github:acme/web#455:r1", Kind: watch.KindPRComment, Ref: "acme/web#455", URL: "https://github.com/acme/web/pull/455", Title: "Login screen [ABC-1500]", Body: "## Code review - ABC-1500 · web #455\n\n**Verdict: REQUEST_CHANGES - 1 blocker.**", Author: "reviewer", Mine: true})
 
 	collectNotes(t, notes, "fixed acme/api#526 + acme/web#455")
 	runs := fakeRuns(ran)
@@ -47,10 +47,10 @@ func TestFeedbackWithoutAStoryStaysPerPullRequest(t *testing.T) {
 	if got := storyOf(watch.Event{Kind: watch.KindPRComment, Ref: "acme/api#7", Title: "fix typo"}); got != "" {
 		t.Fatalf("no ticket in the title, no story: %q", got)
 	}
-	if got := storyOf(watch.Event{Kind: watch.KindPRComment, Ref: "acme/api#7", Title: "[HUM-1500] Premium frequency"}); got != "HUM-1500" {
+	if got := storyOf(watch.Event{Kind: watch.KindPRComment, Ref: "acme/api#7", Title: "[ABC-1500] Login screen"}); got != "ABC-1500" {
 		t.Fatalf("the ticket in the title is the story: %q", got)
 	}
-	if got := storyOf(watch.Event{Kind: watch.KindIssueNew, Ref: "HUM-1", Title: "[HUM-1500] x"}); got != "" {
+	if got := storyOf(watch.Event{Kind: watch.KindIssueNew, Ref: "ABC-1", Title: "[ABC-1500] x"}); got != "" {
 		t.Fatal("only review feedback rides by story")
 	}
 }

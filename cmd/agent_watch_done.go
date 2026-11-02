@@ -19,9 +19,9 @@ about it from before now leaves the inbox on every surface - the phone, the
 menu bar, the editor, watch status. A row that arrives afterwards comes in
 as usual; this is not ignore, which drops a ticket for good.
 
-  corgi agent watch done HUM-1746
+  corgi agent watch done ABC-1746
   corgi agent watch done acme/api#42 https://github.com/acme/api/pull/43
-  corgi agent watch done linear:HUM-1746:comment:…     one row, by its key
+  corgi agent watch done linear:ABC-1746:comment:…     one row, by its key
 
 corgi marks this itself when you write through it: corgi agent watch
 comment, corgi agent watch pr reply|approve|request|comment|merge|close|ready.

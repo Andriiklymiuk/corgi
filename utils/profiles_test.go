@@ -189,21 +189,21 @@ func TestSelectByProfileDbDeclaredDirectly(t *testing.T) {
 func TestExpandWithDeps_PullsTransitiveClosure(t *testing.T) {
 	services := map[string]Service{
 		"api": {
-			DependsOnServices: []DependsOnService{{Name: "broker"}},
+			DependsOnServices: []DependsOnService{{Name: "billing"}},
 			DependsOnDb:       []DependsOnDb{{Name: "api-db"}},
 		},
-		"broker": {DependsOnDb: []DependsOnDb{{Name: "broker-db"}}},
-		"web":    {},
+		"billing": {DependsOnDb: []DependsOnDb{{Name: "billing-db"}}},
+		"web":     {},
 	}
 	svcs, dbs := expandWithDeps(services, []string{"api"})
 
-	if !svcs["api"] || !svcs["broker"] {
-		t.Fatalf("want api+broker, got %v", svcs)
+	if !svcs["api"] || !svcs["billing"] {
+		t.Fatalf("want api+billing, got %v", svcs)
 	}
 	if svcs["web"] {
 		t.Fatal("web is unrelated, should not be included")
 	}
-	if !dbs["api-db"] || !dbs["broker-db"] {
+	if !dbs["api-db"] || !dbs["billing-db"] {
 		t.Fatalf("want both dbs transitively, got %v", dbs)
 	}
 }
@@ -223,9 +223,9 @@ func TestApplyWithDeps_RewritesFlags(t *testing.T) {
 	})
 
 	services := map[string]Service{
-		"api":    {DependsOnServices: []DependsOnService{{Name: "broker"}}, DependsOnDb: []DependsOnDb{{Name: "api-db"}}},
-		"broker": {},
-		"web":    {},
+		"api":     {DependsOnServices: []DependsOnService{{Name: "billing"}}, DependsOnDb: []DependsOnDb{{Name: "api-db"}}},
+		"billing": {},
+		"web":     {},
 	}
 	WithDepsFromFlag = true
 	ServicesItemsFromFlag = []string{"api"}
@@ -233,7 +233,7 @@ func TestApplyWithDeps_RewritesFlags(t *testing.T) {
 
 	applyWithDeps(services)
 
-	if !containsString(ServicesItemsFromFlag, "api") || !containsString(ServicesItemsFromFlag, "broker") {
+	if !containsString(ServicesItemsFromFlag, "api") || !containsString(ServicesItemsFromFlag, "billing") {
 		t.Fatalf("services not expanded: %v", ServicesItemsFromFlag)
 	}
 	if containsString(ServicesItemsFromFlag, "web") {
@@ -249,8 +249,8 @@ func TestApplyWithDeps_NoopWhenFlagOff(t *testing.T) {
 	t.Cleanup(func() { ServicesItemsFromFlag, WithDepsFromFlag = ps, pf })
 	WithDepsFromFlag = false
 	ServicesItemsFromFlag = []string{"api"}
-	applyWithDeps(map[string]Service{"api": {DependsOnServices: []DependsOnService{{Name: "broker"}}}})
-	if containsString(ServicesItemsFromFlag, "broker") {
+	applyWithDeps(map[string]Service{"api": {DependsOnServices: []DependsOnService{{Name: "billing"}}}})
+	if containsString(ServicesItemsFromFlag, "billing") {
 		t.Fatal("flag off must not expand")
 	}
 }

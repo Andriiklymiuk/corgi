@@ -8,16 +8,16 @@ import (
 func TestADoneMarkHandlesTheRowsBeforeItAndNotAfter(t *testing.T) {
 	dir := t.TempDir()
 	now := time.Now()
-	older := Event{Key: "linear:HUM-1:c1", Kind: KindIssueComment, Ref: "HUM-1", At: now.Add(-time.Hour)}
-	newer := Event{Key: "linear:HUM-1:c2", Kind: KindIssueComment, Ref: "HUM-1", At: now.Add(time.Hour)}
+	older := Event{Key: "linear:ABC-1:c1", Kind: KindIssueComment, Ref: "ABC-1", At: now.Add(-time.Hour)}
+	newer := Event{Key: "linear:ABC-1:c2", Kind: KindIssueComment, Ref: "ABC-1", At: now.Add(time.Hour)}
 	review := Event{Key: "github:acme/api#7:r1", Kind: KindPRReview, Ref: "acme/api#7", URL: "https://github.com/acme/api/pull/7", At: now.Add(-time.Hour)}
-	other := Event{Key: "linear:HUM-2:c1", Kind: KindIssueComment, Ref: "HUM-2", At: now.Add(-time.Hour)}
+	other := Event{Key: "linear:ABC-2:c1", Kind: KindIssueComment, Ref: "ABC-2", At: now.Add(-time.Hour)}
 
 	l := LoadDoneLog(dir)
 	if l.Handled(older) {
 		t.Fatal("nothing marked yet")
 	}
-	if err := l.MarkRef("hum-1", now, "you"); err != nil {
+	if err := l.MarkRef("abc-1", now, "you"); err != nil {
 		t.Fatal(err)
 	}
 	if err := l.MarkRef("https://github.com/acme/api/pull/7", now, "you"); err != nil {
