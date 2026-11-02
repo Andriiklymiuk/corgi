@@ -559,6 +559,13 @@ must be _running_ for a consumer to verify (Phase 4) can live in a worktree:
   `rm -rf` is denied in a hardened workspace and by auto mode, so a leftover dir is
   never deleted - the next path is taken, and `/tmp` is the OS's to clean. Use the
   path you got (`$W`) for every later step of this repo.
+  **A worktree corgi will run gets a real install, never the symlink.**
+  `--service-dir` (below) runs the service's `beforeStart` in the worktree, and an
+  install step that rebuilds the deps dir (`npm ci`, a clean reinstall) follows the
+  symlink and empties the main checkout's deps. The symlink is for gate runs you start
+  yourself; before `corgi run --service-dir`, `unlink` it and install for real. Main
+  checkout's deps dir suddenly empty → that is what happened: reinstall it there and
+  report it as a local side effect.
   The worktree dir is now this repo's **working dir** - implement, gate, review,
   commit, push, open the PR/MR from it (Phases 3.5-5).
   - **Run a worktree'd service with `--service-dir` (only services in
@@ -574,6 +581,12 @@ must be _running_ for a consumer to verify (Phase 4) can live in a worktree:
       --service-dir web=/tmp/corgi-wt/ABC-200-web
     # services not named (admin, worker, db_services) run from their compose path:
     ```
+    `beforeStart` steps run from the worktree too, so a step that leaves the service
+    dir (`cd .. && make …`, `../scripts/…`) lands in the worktree's parent and fails.
+    `corgi run --detach` then prints `beforeStart failed for <svc>` and still reports
+    the process healthy - the stack runs without what the step made (seeds, generated
+    files, policies). Read the run output for that line, run the failed step from the
+    compose dir by hand, and name it in the report.
     `--service-dir` runs the **exact** worktree code. (corgi also has
     `--service-branch <svc>=<branch>` - its _own_ reused worktree off a branch - and
     `--service-checkout <svc>=<branch>` for an in-place checkout; handy for ad-hoc
@@ -858,8 +871,13 @@ issue link.
   account and what to look at. Ticket-bound screenshots go into the `## Spec`
   comment through the tracker's own upload (§6a) - a forge link is unreadable there.
 - **Changed surface at the top of the body.** `corgi surface --branch <branch>`
-  (or `corgi_diff` with `surface: true`) prints the `## Changed surface` block:
-  exported symbols, routes, contracts, migrations and config this PR changed,
+  (or `corgi_diff` with `surface: true`) prints the `## Changed surface` block.
+  `--branch` (here and on `docs check` below) only sees worktrees corgi made
+  (`--service-branch`, `corgi_worktrees_materialize`); against this skill's own
+  `/tmp/corgi-wt` worktrees it fails with `no worktrees exist for branch` -
+  materialize the pushed branch first, or write the block from
+  `git -C <worktree> diff <base>...HEAD` per repo. The block lists
+  the exported symbols, routes, contracts, migrations and config this PR changed,
   removals and signature changes marked breaking. Paste it first - it is what a
   reviewer reads before the diff, and a breaking line with no caller updated in
   the same batch is a bug you should have caught here. Re-run after every push
