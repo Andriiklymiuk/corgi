@@ -56,7 +56,7 @@ type Laptop struct {
 	Paused  int    `json:"paused,omitempty"`
 }
 
-var batteryLine = regexp.MustCompile(`"(CurrentCapacity|MaxCapacity|Temperature|ExternalConnected)"\s*=\s*(\S+)`)
+var batteryLine = regexp.MustCompile(`(?m)^[\s|]*"(CurrentCapacity|MaxCapacity|Temperature|ExternalConnected)"\s*=\s*(\S+)\s*$`)
 
 func parseBattery(out string) (pct int, onAC bool, tempC float64, ok bool) {
 	current, max := -1, -1

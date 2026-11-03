@@ -25,6 +25,18 @@ func TestParseBatteryReadsPercentPowerAndDegrees(t *testing.T) {
 	if !ok || pct != 62 || onAC || temp != 43.12 {
 		t.Fatalf("got pct=%d ac=%v temp=%v ok=%v", pct, onAC, temp, ok)
 	}
+	nested := `+-o AppleSmartBattery  <class AppleSmartBattery>
+  |   {
+  |   "ExternalConnected" = Yes
+  |   "MaxCapacity" = 100
+  |   "CurrentCapacity" = 77
+  |   "BatteryData" = {"CurrentCapacity"=77,"Temperature"=0,"MaxCapacity"=100,"FullyCharged"=0}
+  |   "Temperature" = 3050
+  |   }
+`
+	if pct, onAC, temp, ok := parseBattery(nested); !ok || pct != 77 || !onAC || temp != 30.5 {
+		t.Fatalf("a nested BatteryData line must not override the top-level reading: pct=%d ac=%v temp=%v ok=%v", pct, onAC, temp, ok)
+	}
 	if _, _, _, ok := parseBattery("nothing here"); ok {
 		t.Fatal("no battery lines is not a reading")
 	}
