@@ -12,6 +12,14 @@ describe('corgi-guard', () => {
     expect(String(got.deny ?? got.text)).toContain('read -r repo n')
   })
 
+  test('refuses $PIPESTATUS in zsh and leaves a bash script alone', async ($, on) => {
+    on('tool.call', { tool: 'Bash' }, () => ({ result: { stdout: 'ok', stderr: '', interrupted: false }, text: 'ok' }))
+    const zsh = await $.tool.call({ tool: 'Bash', command: 'make test | tail -5; echo "exit ${PIPESTATUS[0]}"' })
+    expect(String(zsh.deny ?? zsh.text)).toContain('pipestatus')
+    const inBash = await $.tool.call({ tool: 'Bash', command: "bash -c 'make | tail; echo ${PIPESTATUS[0]}'" })
+    expect(inBash.deny).toBe(undefined)
+  })
+
   test('refuses rm -rf on a corgi worktree and leaves other rm alone', async ($, on) => {
     on('tool.call', { tool: 'Bash' }, () => ({ result: { stdout: 'ok', stderr: '', interrupted: false }, text: 'ok' }))
     const tree = await $.tool.call({ tool: 'Bash', command: 'git worktree prune && rm -rf /tmp/corgi-wt/ABC-1-api && git worktree add' })

@@ -73,6 +73,9 @@ A dead reference, then a live one:
 > missed. It's back to 3.1.8 in [!9168](https://gitlab.com/acme/core/-/merge_requests/9168),
 > nothing else moves.
 
+Before posting, read what is already in the thread. One comment that says it, not three that
+repeat each other; edit your own when it changed.
+
 ## Code you write
 
 Better engineered, not more engineered. The diff is the explanation.
@@ -150,8 +153,35 @@ then:
   bodies; nothing idles for a merge that only a person can click.
 - **Evidence before "done".** The PR URL, the green check, the posted comment, the test
   output - seen, not assumed. Short is fine; unverified is not.
+- **"Should work" is not a result.** Run it, then say what happened. Name what could not be
+  run: "not tested on a real phone" is honest, "should be fixed" is a guess in a suit.
+- **Decide, and do it.** "Deferred", "revisit when", "left for later" on something in reach is a
+  stop nobody asked for. The same defect in a sibling file gets fixed now when the change is
+  small. Deferring is for what is out of scope or bigger than the ask, with the reason.
+- **Try it before calling it manual.** A CLI, an API, a browser tool, a local run: try them
+  before handing a step over. A person who asks "why haven't you done this yourself?" was
+  handed work the run could do.
+- **Never the same call twice.** After an error change something: the path, the window, the
+  tool. The same call a second time costs a turn and returns the same error.
+- **A question about state gets a fresh check.** "Pushed?", "fixed?", "is it merged?": look at
+  git, the forge, the device, then answer yes or no in the first line, with the proof after it.
+- **Absence needs a source.** "Not supported", "not used", "not linked", "can't be done": name
+  what you read to know it. Without one, say it is a guess and go read. A wrong "we don't
+  support that" sends a person away from something that works.
+- **The target is the default branch.** A PR/MR goes to the branch the repo's last merged ones
+  went to, unless it needs another branch's code. A stacked one says so on its first line and is
+  retargeted when that branch merges. Check it after opening: the base, and that the diff holds
+  only your commits.
+- **Link only what is about this work.** Open a PR or ticket before calling it related.
 - **Report once, at the end.** What was done (with its links), what is blocked (with its
   question), nothing about what you could do next if asked.
+
+## One session by default
+
+Do the work in this session. Parallel agents only when the person asks for them in this
+conversation, or the skill's own step needs one and the load allows it. A batch of agents spends
+the usage limit in a burst and dies on it together, and each returns less than it read. "No
+agents" stands for the rest of the conversation.
 
 ## Steps only a person can do
 
@@ -166,7 +196,14 @@ cannot do itself - is written down where it will be found, not only said in chat
   after a compaction too.
 
 A person who has to ask twice what to run, or learns of a manual step at merge time,
-was not told.
+was not told. Written so it can be done without a question:
+
+- **Only what only they can do.** Merging, reviewing and waiting are not steps.
+- **Where, then what.** A direct link to the exact page, then the name of the field or key, then
+  the value or the command.
+- **A secret is a command, not a line number:** the key's name, then a one-liner that puts the
+  value on the clipboard (`pbcopy`) without printing it. Run it first and check its length: a
+  regex that stops at a quote hands over half a password.
 
 ## Gates are not bypassed in silence
 
@@ -200,7 +237,7 @@ question under `--uncertain`, and end. Never end a run on a question.
 
 ## Commands that get refused
 
-Two shapes are refused before they run, unattended or not, and each refusal costs a turn:
+These fail or get refused, unattended or not, and each one costs a turn:
 
 - `rm -rf <dir>` - a hardened workspace denies it and auto mode blocks it. A leftover
   worktree or clone dir is never deleted: take a fresh path (`[ -e "$W" ] && W="$W-$(date +%s)"`),
@@ -208,6 +245,19 @@ Two shapes are refused before they run, unattended or not, and each refusal cost
 - A leading `sleep N; <cmd>` - the harness refuses it. Wait inside the command
   (`until <check>; do sleep 10; done; <cmd>`) and run it in the background; the
   notification says when it is done.
+- **Anything touching `.env`.** `grep`, `head`, `cat`, `cp`, `sed`, even `ls` on an `.env` file is
+  denied in a hardened workspace, and one such word sinks the whole chained command. Read
+  `.env.example`, the compose file or the deploy config; let the repo's own script write a new
+  one. Keep this away from a long chain.
+- **A removal built from a variable or a glob** (`rm -rf "$DIR"/*`): the safety check stops it.
+  Name the literal path, or move it aside.
+- **The shell here is zsh, not bash.** `$var` does not split: `set -- $pair` and `for x in $list`
+  see one word; use `read -r a b <<< "$pair"` or `${=list}`. A glob with no match aborts the whole
+  command (`no matches found`): quote it, or `(N)` for "maybe none". `$PIPESTATUS` is blank:
+  use `$pipestatus[1]`. Anything longer than a few lines goes in a `bash` script file.
+- **A pasted screenshot path that is gone.** macOS deletes `TemporaryItems/NSIRD_screencaptureui_*`
+  within moments. `ls` the folder once, then ask for the picture to be saved to the Desktop. Do not
+  try the same path again.
 
 ## Stopping with work left
 

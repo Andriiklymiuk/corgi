@@ -228,7 +228,10 @@ collect scoping you can't use.
 2. **Ask before querying** - provider + which env + the time window + the
    service/request.
 3. **Query read-only**, scoped to service + env + a tight window. Summarize the
-   relevant lines; never dump raw payloads or secrets.
+   relevant lines; never dump raw payloads or secrets. Start with minutes, not days, and filter
+   before you parse. A timeout means halve the window or drop a parse step, never the same query
+   again; a provider's limit on the date range is split into pieces. A tool that says log in: say
+   so once, take the next source.
 4. **MCP not connected** → tell the user exactly what to connect, and point at the
    repo's logs/observability README section.
 

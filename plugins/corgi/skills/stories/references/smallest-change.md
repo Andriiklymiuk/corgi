@@ -37,7 +37,8 @@ Climb it only after the problem is understood end to end - the ladder is a refle
   ceiling - a limit, an unhandled scale, a case deferred - it goes in the PR/MR body
   under `Deferred`, one line each: `<what> · ceiling: <the limit> · revisit when:
   <the trigger>`. Never as a code comment (the repo rule stands) and never silently:
-  a deferral with no trigger is the one that rots into "later means never".
+  a deferral with no trigger is the one that rots into "later means never". It is not for a
+  sibling with the same old line, or a case you could test now: those get fixed or tested.
 
 ## Never trimmed
 The ladder decides how much to write, not what to skip. These stay whatever rung you

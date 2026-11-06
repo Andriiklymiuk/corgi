@@ -7,8 +7,9 @@ description: "Use when an app or site looks AI-generated, generic or too colourf
 
 Read `../_shared/conventions.md` first (finish what you start, attribution, unattended runs).
 
-**Done when:** the scan below is clean or each hit has a reason, every main screen was read as a
-screenshot in light and dark, contrast is measured, and tests that pin the palette pass.
+**Done when:** the scan below is clean or each hit has a reason, every main screen and its empty,
+loading and error states were read as screenshots in light and dark, contrast is measured, and tests
+that pin the palette pass.
 
 ## What slop is
 
@@ -91,10 +92,34 @@ features cannot be reviewed.
 - **One-sided accent borders** are the best-known tell. Use a small dot, a tint of text, or nothing.
   A quote's rule is typography, not an accent.
 
+### States
+
+A screen has more states than the full one. Design each; the empty and broken ones are what a new
+person sees first.
+
+- **Loading.** Under a second, show nothing new. Over a second, show that it is working. Over ten, show
+  progress and a way out. Keep the old content up while refreshing; a spinner over data you already
+  have is a step back. Never say "no results" while still loading.
+- **Empty.** Never a blank panel. Say what belongs here, how it gets filled, and offer the action that
+  does it. "Star a file to keep it here", not "Nothing here". An illustration is not the message.
+- **Error.** Say what happened in plain words and what to do next, next to what caused it. Keep what
+  the person typed. Offer Retry when a retry can work. No "Something went wrong", no codes unless they
+  help support, no "invalid", no blame, no jokes.
+- **Offline, slow, stale.** Say the data is old and from when, and which actions still work.
+- **Busy actions.** Respond within 100 ms, even if only by pressing in. Disable while sending so a second
+  tap cannot send twice. Confirm what cannot be undone, or better, offer Undo.
+- **Long and many.** Try the longest real name, 0, 1 and 1000 rows, the largest text size, the smallest
+  window. A layout that only works with the demo's data is not done.
+- **Never colour alone.** A state also has a word or a glyph.
+
 ### Words
 
 - **No greetings.** "Good morning, Sam" takes the best spot on the page and tells the person nothing.
 - **Buttons name the action.** "Allow", not "Continue". A heading says what is here, not "Overview".
+- **Say it short, and in the reader's words.** One idea per sentence, active voice, the same word for the
+  same thing on every screen. Cut what the screen already shows. No "Please", no "successfully", no
+  feature names a person never learned.
+- **Hints once.** Teach in context, then get out of the way. A paragraph under every control is noise.
 
 ## The scan
 
@@ -118,7 +143,7 @@ grep -rnE "StatCard|MetricCard|<Tiles?\b|StatTile|Circle\(\)\.fill\(.*Soft" src
 ## Proof
 
 - **Read the screenshots**, every one, in both appearances, including a sheet over a list and the
-  empty state. A passing build proves nothing about how it looks.
+  empty, loading and error states: cut the network to see them. A passing build proves nothing about how it looks.
 - **Check light mode for white-on-white**: an icon that used the on-accent colour on a surface that
   stopped being the accent is the usual casualty.
 - **Pin it.** Tests for palette parity between appearances, contrast of text pairs, and neutral grounds.
@@ -133,7 +158,10 @@ Linear, [how we redesigned the UI](https://linear.app/now/how-we-redesigned-the-
 theme from base, accent and contrast; limit how much the accent feeds the palette; navigation
 recedes; fewer dividers. Nielsen Norman Group,
 [visual hierarchy](https://www.nngroup.com/articles/visual-hierarchy-ux-definition/): few sizes and
-colours, containers only when space is not enough, the squint test.
+colours, containers only when space is not enough, the squint test;
+[error messages](https://www.nngroup.com/articles/error-message-guidelines/),
+[empty states](https://www.nngroup.com/articles/empty-state-interface-design/) and
+[response times](https://www.nngroup.com/articles/response-times-3-important-limits/).
 [pixelslop's catalog](https://cdn.jsdelivr.net/npm/pixelslop@0.3.8/dist/skill/resources/ai-slop-patterns.md):
 detection rules for the common patterns. Treat the tell lists as prompts, not law: a pattern is
 fine when it has a reason, and the catalog itself comes from opinion, not studies.
@@ -143,3 +171,4 @@ fine when it has a reason, and the catalog itself comes from opinion, not studie
 - **[`design-parity`](../design-parity/SKILL.md)** when there is a design to match.
 - **[`before-after`](../before-after/SKILL.md)** to attach the proof to a PR.
 - **[`mobile-screenshots`](../mobile-screenshots/SKILL.md)** and **[`showcase`](../showcase/SKILL.md)** to retake the pictures.
+- **[`quality`](../quality/SKILL.md)** for the code under the screen.

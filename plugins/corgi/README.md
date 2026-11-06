@@ -44,7 +44,8 @@ review pull requests, and keep the work moving while you are away from the desk.
 | `resume`, `standup`, `summary`, `budget` | Where you were, what you did, where a batch stands, how much usage is left |
 | `mobile`, `ship`, `purchases`, `mobile-screenshots` | Expo / React Native: verify on a device, ship to the stores, in-app purchases, store screenshots |
 | `before-after`, `design-parity`, `showcase` | Visual proof: before/after captures, design comparison, README pictures |
-| `unslop` | A design pass for a UI that looks generated: neutral surfaces, one accent, rows not cards, measured contrast |
+| `unslop` | A design pass for a UI that looks generated: neutral surfaces, one accent, rows not cards, every state designed, measured contrast |
+| `quality` | A code quality pass: a baseline, real defects hunted by kind, fixed worst first with proof |
 | `memory`, `improve-skill` | The workspace memory store; refining a skill from a session |
 
 Each skill has a slash command under `commands/` (`/corgi-run`, `/corgi-review`, ...).

@@ -452,10 +452,9 @@ record, and a visual/QA defect is what a human must re-verify.
 
 ## Phase 3 - Branch + implement + verify per story
 
-**Sequential when asked, or when the machine says so.** "No agents", "one at a time",
-"don't run them in parallel" means every story on this thread, in order, no subagent
-dispatch - the same steps, one story at a time. Without such words, read the load
-(`uptime`) before fanning out: more than one full test gate at a time only while the
+**One at a time by default.** Stories run in order on this thread, no subagent dispatch, unless
+the person asked for parallel work in this conversation. "No agents", "one at a time" stand for
+the rest of the thread. When they did ask, read the load (`uptime`) before fanning out: more than one full test gate at a time only while the
 load stays below the core count, and never more worktrees than stories. A subagent cut
 short by a usage limit or a 429 is resumed with the same brief once the limit is over -
 re-read the clock before calling anything "still rate-limited"; the limit message
