@@ -2,13 +2,17 @@ package cmd
 
 import (
 	"fmt"
-	"os"
+	"strconv"
 	"strings"
 
 	"andriiklymiuk/corgi/utils"
+	"andriiklymiuk/corgi/utils/agent/config"
 	"andriiklymiuk/corgi/utils/agent/watch"
+	"andriiklymiuk/corgi/utils/agent/workspace"
 	"github.com/spf13/cobra"
 )
+
+const factoryDefaultCap = 5
 
 type factoryRung struct {
 	Level int    `json:"level"`
@@ -89,16 +93,11 @@ func factoryReportFor(ws string, f factoryFacts) factoryReport {
 	}
 	switch level {
 	case 1:
-		r.Next = []string{fmt.Sprintf("corgi agent watch enable %s", flag), "corgi agent restart"}
+		r.Next = []string{fmt.Sprintf("corgi agent level 2 %s", flag), "corgi agent restart"}
 	case 2:
-		r.Next = []string{fmt.Sprintf("corgi agent watch enable %s --action fix --max-per-day 5", flag), "add one trigger at a time; read every pull request it opens"}
+		r.Next = []string{fmt.Sprintf("corgi agent level 3 %s", flag), "add one trigger at a time; read every pull request it opens"}
 	case 3:
-		if !f.Isolate {
-			r.Next = append(r.Next, fmt.Sprintf("corgi agent watch enable %s --isolate", flag))
-		}
-		if f.DoneWhen == 0 {
-			r.Next = append(r.Next, fmt.Sprintf(`corgi agent watch enable %s --done-when "<test command>"`, flag))
-		}
+		r.Next = []string{fmt.Sprintf(`corgi agent level 4 %s --done-when "<test command>"`, flag)}
 	case 4:
 		if f.Routines == 0 {
 			r.Next = append(r.Next, "corgi agent routine add retro", "corgi agent routine add ratchet")
@@ -107,7 +106,7 @@ func factoryReportFor(ws string, f factoryFacts) factoryReport {
 			r.Next = append(r.Next, `corgi agent scenario add <name> --text "what a person does and sees"`, "corgi agent routine add scenarios")
 		}
 		if f.Scenarios > 0 && !f.AutoMerge {
-			r.Next = append(r.Next, "when `corgi agent scorecard` and the scenarios have earned it: corgi agent watch enable "+flag+" --auto-merge")
+			r.Next = append(r.Next, "when `corgi agent scorecard` and the scenarios have earned it: corgi agent level 5 "+flag)
 		}
 	case 5:
 		r.Next = []string{"keep the loop honest: corgi agent scorecard, corgi agent selfcheck, corgi agent routine add retro"}
@@ -134,6 +133,54 @@ func factoryFactsFor(dir, ws string) (factoryFacts, error) {
 	f.Capped = wc.MaxFixesPerDay > 0 || wc.MaxFixesTotal > 0 || wc.LimitCeiling > 0
 	f.Reviewed = wc.PlanReview != ""
 	return f, nil
+}
+
+// setFactoryLevel moves one workspace's watch settings to a rung. The level is
+// not stored: it stays what these settings add up to, so `watch enable` and this
+// can never disagree. A rung whose brake is missing is refused, never half-set.
+func setFactoryLevel(ws string, wc *config.WatchConfig, level, scenarios int) (*config.WatchConfig, error) {
+	if level < 1 || level > len(factoryLadder) {
+		return nil, fmt.Errorf("level is 1 to %d", len(factoryLadder))
+	}
+	if wc == nil {
+		wc = &config.WatchConfig{}
+	}
+	next := *wc
+	if level >= 4 && len(next.DoneWhen) == 0 {
+		return nil, fmt.Errorf(`level %d needs checks a run must pass: corgi agent level %d --workspace %s --done-when "<test command>"`, level, level, ws)
+	}
+	if level == 5 && scenarios == 0 {
+		return nil, fmt.Errorf(`level 5 merges by itself, so it needs stories it cannot read: corgi agent scenario add <name> --workspace %s --text "what a person does and sees"`, ws)
+	}
+	next.Enabled = level >= 2
+	if level >= 2 {
+		next.Action = "notify"
+	}
+	if level >= 3 {
+		next.Action = "fix"
+		if next.MaxFixesPerDay == 0 && next.MaxFixesTotal == 0 && next.LimitCeiling == 0 {
+			next.MaxFixesPerDay = factoryDefaultCap
+		}
+	}
+	next.Isolate = level >= 4
+	next.AutoMerge = level == 5
+	return &next, nil
+}
+
+func factoryLevelsOfAll(dir string) ([]factoryReport, error) {
+	registry, err := workspace.Load(agentRegistryPath(dir))
+	if err != nil {
+		return nil, err
+	}
+	out := []factoryReport{}
+	for _, w := range registry.Sorted() {
+		facts, err := factoryFactsFor(dir, w.ID)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, factoryReportFor(w.ID, facts))
+	}
+	return out, nil
 }
 
 func printFactoryReport(r factoryReport) {
@@ -168,39 +215,106 @@ func printFactoryReport(r factoryReport) {
 }
 
 var agentLevelCmd = &cobra.Command{
-	Use:   "level [--workspace <id>]",
-	Short: "How much of this workspace runs without you, which brakes are on, and the next step",
+	Use:   "level [1-5] [--workspace <id>] [--all]",
+	Short: "How much of a workspace runs without you: see it, or set it for this workspace",
 	Long: `corgi works anywhere from a skill you call by hand to a factory that merges what
-passes. This reads the workspace's settings, says where it stands, and names the
-next step. It changes nothing. Every step up is one more trigger: turn on a brake
-before the trigger that needs it.
+passes, and each workspace stands on its own rung. With no number this reads the
+workspace's settings, says where it stands and names the next step. With a number
+it moves that workspace there, and only that one.
 
-  corgi agent level
-  corgi agent level --workspace api --json`,
-	Run: func(cmd *cobra.Command, _ []string) {
-		ws, _ := cmd.Flags().GetString("workspace")
-		if ws == "" {
-			if cwd, err := os.Getwd(); err == nil {
-				_, ws = workspaceRootFor(cwd)
+  corgi agent level                               this workspace
+  corgi agent level --all                         every workspace
+  corgi agent level 3                             take tickets to draft pull requests here
+  corgi agent level 4 --done-when "go test ./..."
+  corgi agent level 1 --workspace payments        stop the watch there
+
+Going up refuses a rung whose brake is missing: 4 needs --done-when, 5 needs a
+scenario. Going down turns the accelerators off and keeps your checks, caps and
+tracker settings. Restart the daemon to apply it: corgi agent restart.`,
+	Args: cobra.MaximumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		dir := mustAgentDir()
+		if all, _ := cmd.Flags().GetBool("all"); all {
+			if len(args) > 0 {
+				return fmt.Errorf("a level is set one workspace at a time: leave out --all")
 			}
+			reports, err := factoryLevelsOfAll(dir)
+			if err != nil {
+				return err
+			}
+			if utils.JSONOutput {
+				utils.PrintJSON(reports)
+				return nil
+			}
+			for _, r := range reports {
+				fmt.Printf("%d  %-24s %s\n", r.Level, r.Workspace, r.Name)
+			}
+			return nil
 		}
-		if ws == "" {
-			exitWithError("agent_level", fmt.Errorf("say which workspace: --workspace <id>, or run inside one"), 2)
-		}
-		facts, err := factoryFactsFor(mustAgentDir(), ws)
+		ws, err := watchTargetWorkspace(dir, cmd.Flags())
 		if err != nil {
-			exitWithError("agent_level", err, 2)
+			return err
+		}
+		doneWhen, _ := cmd.Flags().GetStringSlice("done-when")
+		if len(args) == 0 {
+			if len(doneWhen) > 0 {
+				return fmt.Errorf("--done-when goes with a level: corgi agent level 4 --done-when %q", strings.Join(doneWhen, ","))
+			}
+		} else if err := moveWorkspaceToLevel(dir, ws, args[0], doneWhen); err != nil {
+			return err
+		}
+		facts, err := factoryFactsFor(dir, ws)
+		if err != nil {
+			return err
 		}
 		r := factoryReportFor(ws, facts)
 		if utils.JSONOutput {
 			utils.PrintJSON(r)
-			return
+			return nil
 		}
 		printFactoryReport(r)
+		if len(args) > 0 {
+			fmt.Println("\nRestart the daemon to apply it: corgi agent restart")
+		}
+		return nil
 	},
+}
+
+func moveWorkspaceToLevel(dir, ws, arg string, doneWhen []string) error {
+	level, err := strconv.Atoi(arg)
+	if err != nil {
+		return fmt.Errorf("%q is not a level: 1 to %d", arg, len(factoryLadder))
+	}
+	path := agentUserConfigPath(dir)
+	user, err := config.LoadUser(path)
+	if err != nil {
+		return err
+	}
+	entry := user.Workspaces[ws]
+	wc := entry.Watch
+	if len(doneWhen) > 0 {
+		if wc == nil {
+			wc = &config.WatchConfig{}
+		}
+		withChecks := *wc
+		withChecks.DoneWhen = doneWhen
+		wc = &withChecks
+	}
+	next, err := setFactoryLevel(ws, wc, level, len(watch.LoadScenarios(dir, ws)))
+	if err != nil {
+		return err
+	}
+	entry.Watch = next
+	if user.Workspaces == nil {
+		user.Workspaces = map[string]config.WorkspaceConfig{}
+	}
+	user.Workspaces[ws] = entry
+	return writeUserConfig(path, user)
 }
 
 func init() {
 	agentLevelCmd.Flags().String("workspace", "", "the workspace (default: the one you are in)")
+	agentLevelCmd.Flags().Bool("all", false, "every workspace and its level")
+	agentLevelCmd.Flags().StringSlice("done-when", nil, "with a level: the commands a run must pass here, comma separated")
 	agentCmd.AddCommand(agentLevelCmd)
 }

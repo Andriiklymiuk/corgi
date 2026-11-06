@@ -2,27 +2,36 @@
 
 ## corgi agent level
 
-How much of this workspace runs without you, which brakes are on, and the next step
+How much of a workspace runs without you: see it, or set it for this workspace
 
 ### Synopsis
 
 corgi works anywhere from a skill you call by hand to a factory that merges what
-passes. This reads the workspace's settings, says where it stands, and names the
-next step. It changes nothing. Every step up is one more trigger: turn on a brake
-before the trigger that needs it.
+passes, and each workspace stands on its own rung. With no number this reads the
+workspace's settings, says where it stands and names the next step. With a number
+it moves that workspace there, and only that one.
 
-  corgi agent level
-  corgi agent level --workspace api --json
+  corgi agent level                               this workspace
+  corgi agent level --all                         every workspace
+  corgi agent level 3                             take tickets to draft pull requests here
+  corgi agent level 4 --done-when "go test ./..."
+  corgi agent level 1 --workspace payments        stop the watch there
+
+Going up refuses a rung whose brake is missing: 4 needs --done-when, 5 needs a
+scenario. Going down turns the accelerators off and keeps your checks, caps and
+tracker settings. Restart the daemon to apply it: corgi agent restart.
 
 ```
-corgi agent level [--workspace <id>] [flags]
+corgi agent level [1-5] [--workspace <id>] [--all] [flags]
 ```
 
 ### Options
 
 ```
-  -h, --help               help for level
-      --workspace string   the workspace (default: the one you are in)
+      --all                 every workspace and its level
+      --done-when strings   with a level: the commands a run must pass here, comma separated
+  -h, --help                help for level
+      --workspace string    the workspace (default: the one you are in)
 ```
 
 ### Options inherited from parent commands

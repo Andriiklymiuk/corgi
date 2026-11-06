@@ -3,6 +3,8 @@ package cmd
 import (
 	"strings"
 	"testing"
+
+	"andriiklymiuk/corgi/utils/agent/config"
 )
 
 func TestLevelClimbsOnlyWithItsBrakes(t *testing.T) {
@@ -34,7 +36,7 @@ func TestAnAcceleratorWithNoBrakeIsCalledOut(t *testing.T) {
 			t.Fatalf("missing %q in %q", want, all)
 		}
 	}
-	if len(r.Next) == 0 || !strings.Contains(strings.Join(r.Next, " "), "--isolate") {
+	if len(r.Next) == 0 || !strings.Contains(strings.Join(r.Next, " "), "corgi agent level 4") {
 		t.Fatalf("next: %v", r.Next)
 	}
 }
@@ -44,5 +46,79 @@ func TestEveryLevelSaysWhatToDoNext(t *testing.T) {
 		if r := factoryReportFor("api", f); len(r.Next) == 0 {
 			t.Fatalf("level %d has no next step", r.Level)
 		}
+	}
+}
+
+func TestSettingALevelLandsOnThatLevel(t *testing.T) {
+	checks := &config.WatchConfig{DoneWhen: []string{"go test ./..."}, Project: "ABC"}
+	for level := 1; level <= 5; level++ {
+		wc, err := setFactoryLevel("api", checks, level, 1)
+		if err != nil {
+			t.Fatalf("level %d: %v", level, err)
+		}
+		f := factoryFacts{Watched: wc.Enabled, Fix: wc.Action == "fix", Isolate: wc.Isolate, AutoMerge: wc.AutoMerge, DoneWhen: len(wc.DoneWhen), Scenarios: 1}
+		if got := factoryLevel(f); got != level {
+			t.Fatalf("asked %d, landed on %d", level, got)
+		}
+		if wc.Project != "ABC" || len(wc.DoneWhen) != 1 {
+			t.Fatalf("level %d lost a setting: %+v", level, wc)
+		}
+	}
+}
+
+func TestARungWithoutItsBrakeIsRefusedAndNothingIsTouched(t *testing.T) {
+	bare := &config.WatchConfig{Action: "notify", Enabled: true}
+	if _, err := setFactoryLevel("api", bare, 4, 1); err == nil || !strings.Contains(err.Error(), "--done-when") {
+		t.Fatalf("level 4 with no checks: %v", err)
+	}
+	withChecks := &config.WatchConfig{DoneWhen: []string{"make test"}}
+	if _, err := setFactoryLevel("api", withChecks, 5, 0); err == nil || !strings.Contains(err.Error(), "scenario add") {
+		t.Fatalf("level 5 with no scenarios: %v", err)
+	}
+	if _, err := setFactoryLevel("api", nil, 6, 1); err == nil {
+		t.Fatal("level 6 was accepted")
+	}
+	if bare.Action != "notify" || !bare.Enabled {
+		t.Fatalf("a refusal changed the settings: %+v", bare)
+	}
+}
+
+func TestGoingUpFitsACapAndGoingDownKeepsYoursAndYourChecks(t *testing.T) {
+	up, err := setFactoryLevel("api", nil, 3, 0)
+	if err != nil || up.MaxFixesPerDay != factoryDefaultCap {
+		t.Fatalf("no cap fitted: %+v %v", up, err)
+	}
+	mine, err := setFactoryLevel("api", &config.WatchConfig{LimitCeiling: 80}, 3, 0)
+	if err != nil || mine.MaxFixesPerDay != 0 || mine.LimitCeiling != 80 {
+		t.Fatalf("your cap was overridden: %+v %v", mine, err)
+	}
+	down, err := setFactoryLevel("api", &config.WatchConfig{Enabled: true, Action: "fix", AutoMerge: true, Isolate: true, DoneWhen: []string{"make test"}, MaxFixesPerDay: 9}, 2, 1)
+	if err != nil || down.Action != "notify" || down.AutoMerge || down.Isolate || len(down.DoneWhen) != 1 || down.MaxFixesPerDay != 9 {
+		t.Fatalf("down: %+v %v", down, err)
+	}
+}
+
+func TestLevelsAreSetPerWorkspaceFromTheCommandLine(t *testing.T) {
+	dir, ws := watchFixture(t, nil)
+	inWorkspace(t, ws)
+	if out, code := cli(t, "agent", "level", "4"); code == 0 {
+		t.Fatalf("level 4 with no checks went through: %s", out)
+	}
+	out, code := cli(t, "agent", "level", "4", "--done-when", "go test ./...")
+	if code != 0 || !strings.Contains(out, "level 4 of 5") || !strings.Contains(out, "corgi agent restart") {
+		t.Fatalf("set: %d %s", code, out)
+	}
+	r, err := resolveWorkspaceConfig(dir, "acme-stack")
+	if err != nil || r.Watch == nil || !r.Watch.Isolate || r.Watch.Action != "fix" {
+		t.Fatalf("saved: %+v %v", r.Watch, err)
+	}
+	if out, code := cli(t, "agent", "level", "--all"); code != 0 || !strings.Contains(out, "acme-stack") || !strings.Contains(out, "It works a shift") {
+		t.Fatalf("all: %d %s", code, out)
+	}
+	if out, code := cli(t, "agent", "level", "9"); code == 0 {
+		t.Fatalf("level 9: %s", out)
+	}
+	if out, code := cli(t, "agent", "level", "1"); code != 0 || !strings.Contains(out, "level 1 of 5") {
+		t.Fatalf("back down: %d %s", code, out)
 	}
 }

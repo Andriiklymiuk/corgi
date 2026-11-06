@@ -4,18 +4,27 @@ corgi is a ladder. You can call one skill by hand, or let agents take tickets to
 Stand wherever suits the repo. `corgi agent level` says where you are and what comes next.
 
 ```bash
-corgi agent level
+corgi agent level                                  # this workspace
+corgi agent level --all                            # every workspace
+corgi agent level 3                                # move this workspace, and only this one
+corgi agent level 4 --done-when "go test ./..."
+corgi agent level 1 --workspace payments
+corgi agent restart                                # applies it
 ```
+
+Each workspace has its own rung, so docs can run high while payments stays low. Going up refuses a rung whose
+brake is missing. Going down turns the accelerators off and keeps your checks and caps. The level is not a separate
+setting: it is what the watch settings add up to, so `watch enable` and `level` always agree.
 
 ## The ladder
 
 | Level | You | Agents | Turn it on |
 |---|---|---|---|
 | 1 You drive | start each session | do what you ask | `/corgi-review`, `/corgi-run`, any skill |
-| 2 It tells you | get rung, start the work | watch trackers and PRs | `corgi agent watch enable` |
-| 3 It drafts, you review | read every diff | take tickets to draft PRs | `--action fix` |
-| 4 It works a shift | write specs and checks, read PRs | run in worktrees, on a clock, in plans | `--isolate --done-when "..."`, `corgi agent plan`, `corgi agent routine` |
-| 5 Lights out | write specs and scenarios | merge what passes | `--auto-merge`, `corgi agent scenario` |
+| 2 It tells you | get rung, start the work | watch trackers and PRs | `corgi agent level 2` |
+| 3 It drafts, you review | read every diff | take tickets to draft PRs | `corgi agent level 3` |
+| 4 It works a shift | write specs and checks, read PRs | run in worktrees, on a clock, in plans | `corgi agent level 4 --done-when "..."`, `corgi agent plan`, `corgi agent routine` |
+| 5 Lights out | write specs and scenarios | merge what passes | `corgi agent scenario add`, then `corgi agent level 5` |
 
 Level 5 is not the goal for every repo. It needs tests you trust and scenarios it cannot read, and it is the wrong
 place for payments, auth and migrations.

@@ -18,7 +18,11 @@ take one step.
 
 ```bash
 corgi agent level        # where this workspace stands, which brakes are on, the next step
+corgi agent level --all  # every workspace; each has its own rung
+corgi agent level 4 --done-when "go test ./..."   # move this workspace, and only this one
 ```
+
+Pick the rung per workspace by what a mistake costs there. Docs can sit high while payments stay at 2.
 
 | Level | What the person does | corgi parts |
 |---|---|---|

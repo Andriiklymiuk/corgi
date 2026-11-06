@@ -87,7 +87,7 @@ Getting started:
 * [corgi agent kanban](corgi_agent_kanban)	 - One card per ticket: Inbox, Ready, Running, Blocked, Review, Done
 * [corgi agent left](corgi_agent_left)	 - What unattended runs left for a person, ticked off as CI goes green, pull requests merge or you say so
 * [corgi agent lesson](corgi_agent_lesson)	 - What this workspace learned the hard way - read by every new session
-* [corgi agent level](corgi_agent_level)	 - How much of this workspace runs without you, which brakes are on, and the next step
+* [corgi agent level](corgi_agent_level)	 - How much of a workspace runs without you: see it, or set it for this workspace
 * [corgi agent lid](corgi_agent_lid)	 - Ring the phone when this laptop wakes or its lid opens by day; lock or shut it down from there
 * [corgi agent logs](corgi_agent_logs)	 - Show a workspace's session timeline (starts, exits, why)
 * [corgi agent mute](corgi_agent_mute)	 - Nothing rings for a while - no toast, no push; the board goes on
