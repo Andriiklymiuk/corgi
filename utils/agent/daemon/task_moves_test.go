@@ -3,6 +3,8 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -19,8 +21,14 @@ func withPeer(t *testing.T, d *Daemon, p peers.Peer) {
 	}
 }
 
+// fixingDaemon is a machine that can run fixes: its agent is installed.
 func fixingDaemon(t *testing.T) *Daemon {
 	t.Helper()
+	bin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bin, "claude"), []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	d := testDaemon(t)
 	d.Watches = []WatchSpec{{Workspace: "w", Action: "fix", AgentDir: d.Dir}}
 	return d
