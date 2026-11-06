@@ -66,8 +66,8 @@ func identifyLaunch(w http.ResponseWriter, r *http.Request, token, deviceStorePa
 		writeLaunchError(w, http.StatusForbidden, "this device only reads the board")
 		return launchIdentity{}, false
 	}
-	if device.Peer() && !peerMay(r.URL.Path) {
-		writeLaunchError(w, http.StatusForbidden, "a peer laptop only pulses and joins")
+	if device.Peer() && !peerMay(r.Method, r.URL.Path) {
+		writeLaunchError(w, http.StatusForbidden, "a peer laptop only pulses, joins and hands over tasks")
 		return launchIdentity{}, false
 	}
 	if !device.Encrypted() {
@@ -191,8 +191,17 @@ func (s *sealedWriter) Write(b []byte) (int, error) { return s.body.Write(b) }
 
 // A peer laptop holds a token here, but it is not a phone: it may tell this
 // laptop what it watches and ask it to pair back, nothing else.
-func peerMay(path string) bool {
-	return path == "/launch/peers/pulse" || path == "/launch/peers/join"
+// peerMay is all a paired machine can reach. It can give this one a task, and
+// where the workspace runs fixes that task may start a run; it cannot read the
+// board or anything else here.
+func peerMay(method, path string) bool {
+	switch path {
+	case "/launch/peers/pulse", "/launch/peers/join":
+		return true
+	case "/launch/peers/tasks", "/launch/task":
+		return method == http.MethodPost
+	}
+	return false
 }
 
 func viewerMay(method, path string) bool {

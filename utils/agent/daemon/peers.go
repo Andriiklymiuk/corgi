@@ -236,6 +236,7 @@ func (d *Daemon) pulsePeersOnce(ctx context.Context) {
 			if err := peers.NewClient(p).Call(cctx, "/launch/peers/pulse", mine, &heard); err != nil {
 				return
 			}
+			d.syncTasksWith(cctx, p)
 			now := time.Now()
 			_ = peers.Update(path, func(s *peers.Store) {
 				for i := range s.Peers {
@@ -247,6 +248,7 @@ func (d *Daemon) pulsePeersOnce(ctx context.Context) {
 		}()
 	}
 	wg.Wait()
+	d.peersHeardAt.Store(time.Now().UnixMilli())
 }
 
 // ---- what a pulse carries, and what this laptop does with what it hears --

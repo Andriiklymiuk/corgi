@@ -1723,7 +1723,9 @@ func (d *Daemon) refreshInboxStates(ctx context.Context, spec WatchSpec) {
 		return
 	}
 	states := watch.LoadStateLog(d.Dir)
-	for _, e := range watch.RecentEvents(d.Dir, 25) {
+	now := time.Now()
+	catchUp := 0
+	for i, e := range watch.RecentEvents(d.Dir, 300) {
 		if e.Workspace != spec.Workspace || e.Ref == "" {
 			continue
 		}
@@ -1739,6 +1741,13 @@ func (d *Daemon) refreshInboxStates(ctx context.Context, spec WatchSpec) {
 		if known, ok := states.Get(e.Key); ok && watch.Settled(e, known.Status) != "" {
 			continue
 		}
+		// The newest are asked about every round; older rows take turns.
+		if i >= 25 {
+			if catchUp >= statesPerRound || d.askedLately("state|"+e.Key, now) {
+				continue
+			}
+			catchUp++
+		}
 		for _, src := range spec.Sources {
 			asker, ok := src.(watch.RefStater)
 			if !ok {
@@ -1753,7 +1762,27 @@ func (d *Daemon) refreshInboxStates(ctx context.Context, spec WatchSpec) {
 	d.refreshPulls(ctx, spec)
 }
 
-const pullFresh = 2 * time.Minute
+const (
+	pullFresh = 2 * time.Minute
+	// An open pull request nothing mentions any more is still asked about, or
+	// it would say "open" for ever: a few a round, the longest silent first.
+	pullQuiet      = 30 * time.Minute
+	pullsPerRound  = 6
+	askAgainAfter  = 6 * time.Hour
+	statesPerRound = 6
+	// Older news than this is put right without a word: no ring, no ticket moved.
+	pullOldNews = 7 * 24 * time.Hour
+)
+
+// askedLately says this was asked about lately and got no answer, so one that
+// can never answer (deleted, no access) does not hold up the others.
+func (d *Daemon) askedLately(key string, now time.Time) bool {
+	if at, ok := d.askedAt.Load(key); ok && now.Sub(at.(time.Time)) < askAgainAfter {
+		return true
+	}
+	d.askedAt.Store(key, now)
+	return false
+}
 
 func (d *Daemon) refreshPulls(ctx context.Context, spec WatchSpec) {
 	refs := map[string]bool{}
@@ -1794,11 +1823,29 @@ func (d *Daemon) refreshPulls(ctx context.Context, spec WatchSpec) {
 			}
 		}
 	}
+	pulls := watch.LoadPullLog(d.Dir)
+	now := time.Now()
+	for _, r := range d.fixLog().Records() {
+		if r.Workspace == spec.Workspace && r.HasOpenLeft() {
+			add(r.URL)
+			for _, link := range r.PRs {
+				add(link)
+			}
+		}
+	}
+	all := pulls.All()
+	catchUp := map[string]string{}
+	for _, ref := range watch.PullsGoneQuiet(all, spec.Workspace, pullQuiet, len(all), now) {
+		if len(catchUp) >= pullsPerRound {
+			break
+		}
+		if key := "pull|" + spec.Workspace + "|" + ref; !refs[ref] && !d.askedLately(key, now) {
+			refs[ref], catchUp[ref] = true, key
+		}
+	}
 	if len(refs) == 0 {
 		return
 	}
-	pulls := watch.LoadPullLog(d.Dir)
-	now := time.Now()
 	for ref := range refs {
 		was, known := pulls.Get(ref)
 		if known && now.Sub(was.At) < pullFresh {
@@ -1815,7 +1862,10 @@ func (d *Daemon) refreshPulls(ctx context.Context, spec WatchSpec) {
 			if st, ok := asker.PullStatus(ctx, ref); ok {
 				st.Carry(was, known, links[ref], spec.Workspace, now)
 				_ = pulls.Set(ref, st)
-				d.pullChanged(ctx, spec, ref, links[ref], was, st, known)
+				d.askedAt.Delete(catchUp[ref])
+				if !known || now.Sub(was.At) <= pullOldNews {
+					d.pullChanged(ctx, spec, ref, links[ref], was, st, known)
+				}
 				break
 			}
 		}

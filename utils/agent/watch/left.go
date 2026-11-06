@@ -30,10 +30,11 @@ type LeftItem struct {
 }
 
 const (
-	leftHeading  = "Left for you"
-	leftMax      = 6
-	leftClip     = 200
-	leftKeepOpen = 14 * 24 * time.Hour
+	leftHeading      = "Left for you"
+	leftMax          = 6
+	leftClip         = 200
+	leftKeepOpen     = 14 * 24 * time.Hour
+	leftFollowUpKeep = 7 * 24 * time.Hour
 )
 
 var (
@@ -43,6 +44,8 @@ var (
 	nothingLeft  = regexp.MustCompile(`(?i)^(?:nothing|none|no action|you do nothing|i |i'm |i've |i'll |ci (?:is|was) not watched|corgi (?:will|watches))`)
 	ciWords      = regexp.MustCompile(`\bCI\b|(?i:\bpipelines?\b|\bchecks? (?:go|goes|went|turn|pass|are green|is green))`)
 	mergeWords   = regexp.MustCompile(`(?i)\bmerge\b`)
+	// Work that only starts once the pull request is in: merging does not settle it.
+	followUpWords = regexp.MustCompile(`(?i)\bfollow[- ]?up\b|\b(?:file|open|create|raise)\b.*\b(?:ticket|issue)\b|\bafter (?:it |this |that )?(?:merges?|ships?|deploys?|releases?)\b`)
 )
 
 func LeftFor(output string) []LeftItem {
@@ -143,6 +146,76 @@ func (l *FixLog) TickLeft(workspace, link string, kinds []LeftKind, why string, 
 		_ = l.save()
 	}
 	return ticked
+}
+
+// HasOpenLeft says a person still has something to do from this run.
+func (r FixRecord) HasOpenLeft() bool {
+	for _, item := range r.Left {
+		if item.DoneAt.IsZero() {
+			return true
+		}
+	}
+	return false
+}
+
+// SweepLeft closes what a run left for a person once its pull requests are
+// all merged or closed: a "decide whether to split it" means nothing after
+// that. A follow-up stays for a week after a merge, as that is when it starts.
+func (l *FixLog) SweepLeft(pulls map[string]PullStatus, now time.Time) int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	ticked := 0
+	for i := range l.Started {
+		r := &l.Started[i]
+		if !r.HasOpenLeft() {
+			continue
+		}
+		merged, at, settled := pullsSettled(*r, pulls)
+		if !settled {
+			continue
+		}
+		why := "closed"
+		if merged {
+			why = "merged"
+		}
+		for j := range r.Left {
+			item := &r.Left[j]
+			if !item.DoneAt.IsZero() {
+				continue
+			}
+			if merged && followUpWords.MatchString(item.Text) && now.Sub(r.FinishedAt) < leftFollowUpKeep {
+				continue
+			}
+			item.DoneAt, item.DoneBy = at, why
+			ticked++
+		}
+	}
+	if ticked > 0 {
+		_ = l.save()
+	}
+	return ticked
+}
+
+// pullsSettled says every pull request a run touched is merged or closed, and
+// whether any merged. One it knows nothing about keeps the run open.
+func pullsSettled(r FixRecord, pulls map[string]PullStatus) (merged bool, at time.Time, settled bool) {
+	seen := map[string]bool{}
+	for _, link := range append([]string{r.URL}, r.PRs...) {
+		ref := PullRef(link)
+		if ref == "" || seen[ref] {
+			continue
+		}
+		seen[ref] = true
+		p, ok := pulls[ref]
+		if !ok || (p.State != "merged" && p.State != "closed") {
+			return false, time.Time{}, false
+		}
+		merged = merged || p.State == "merged"
+		if p.At.After(at) {
+			at = p.At
+		}
+	}
+	return merged, at, len(seen) > 0
 }
 
 func hasKind(kinds []LeftKind, k LeftKind) bool {

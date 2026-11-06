@@ -12,6 +12,7 @@ import (
 	"andriiklymiuk/corgi/utils/agent/daemon"
 	"andriiklymiuk/corgi/utils/agent/pairing"
 	"andriiklymiuk/corgi/utils/agent/peers"
+	"andriiklymiuk/corgi/utils/agent/watch"
 
 	"github.com/spf13/cobra"
 )
@@ -359,6 +360,38 @@ func launchPeersJoinHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	nudgeDaemon(dir)
 	writeLaunchJSON(w, map[string]any{"name": p.Name, "url": p.URL, "since": p.Since})
+}
+
+// launchPeersTasksHandler keeps a copy of a peer's waiting tasks, for the day
+// it goes quiet, and answers with which of its tasks this machine holds. They
+// travel apart from the pulse, so an older peer only answers 404 here.
+func launchPeersTasksHandler(w http.ResponseWriter, r *http.Request) {
+	setLaunchHeaders(w)
+	if r.Method != http.MethodPost {
+		writeLaunchError(w, http.StatusMethodNotAllowed, "POST only")
+		return
+	}
+	dir, err := agentDir()
+	if err != nil {
+		writeLaunchError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	device, ok := authorizedDeviceFull(pairing.StorePath(dir), r.Header.Get("Authorization"))
+	if !ok || !device.Peer() {
+		writeLaunchError(w, http.StatusForbidden, "only a peer laptop sends tasks")
+		return
+	}
+	var in watch.TaskCopies
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<20)).Decode(&in); err != nil {
+		writeLaunchError(w, http.StatusBadRequest, "could not read the tasks")
+		return
+	}
+	in.At = time.Now()
+	if err := watch.SaveTaskCopies(dir, device.Name, in); err != nil {
+		writeLaunchError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeLaunchJSON(w, map[string]any{"taken": watch.LoadTasks(dir).TakenFrom(device.Name)})
 }
 
 func launchPeersPulseHandler(w http.ResponseWriter, r *http.Request) {

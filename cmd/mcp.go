@@ -399,6 +399,7 @@ func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 		mux.Handle("/launch/peers/invite", launchAuth(token, http.HandlerFunc(launchPeersInviteHandler), deviceStore))
 		mux.Handle("/launch/peers/join", launchAuth(token, http.HandlerFunc(launchPeersJoinHandler), deviceStore))
 		mux.Handle("/launch/peers/pulse", launchAuth(token, http.HandlerFunc(launchPeersPulseHandler), deviceStore))
+		mux.Handle("/launch/peers/tasks", launchAuth(token, http.HandlerFunc(launchPeersTasksHandler), deviceStore))
 	}
 
 	for _, source := range []string{"linear", "github", "gitlab", "jira", "coralogix"} {

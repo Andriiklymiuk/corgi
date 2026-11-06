@@ -75,8 +75,8 @@ Level 3 and up. Teammates review on the pull request (`--prs` wakes the run), an
 and Coralogix land in the inbox to be picked (`--sentry-org`, `/hooks/coralogix`); `--auto-for errors` runs them
 without you, and only belongs where the service is quiet.
 
-One machine holds a corgi task. For work that must survive a closed laptop use a server (`agent container --host`), or
-tickets in the tracker, which `peers` fail over. `task add --on <peer>` sends a task to another machine.
+Tasks move between `peers`: one that has not started goes to a peer after its machine is silent for 10 minutes, and
+`task send TASK-3 --to <peer>` moves one by hand. A run in progress stays. `task add --on <peer>` adds one there.
 
 ## Scenarios: an exam the builder cannot read
 

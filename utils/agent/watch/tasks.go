@@ -34,8 +34,19 @@ type Task struct {
 	// Comments is the thread; a person's comment after AnsweredAt wakes a run.
 	Comments   []TaskComment `json:"comments,omitempty"`
 	AnsweredAt time.Time     `json:"answeredAt,omitzero"`
-	CreatedAt  time.Time     `json:"createdAt"`
-	UpdatedAt  time.Time     `json:"updatedAt"`
+	// Origin is where a task that came from another machine started; MovedTo
+	// says this copy went elsewhere ("build-1 as TASK-7").
+	Origin    *TaskOrigin `json:"origin,omitempty"`
+	MovedTo   string      `json:"movedTo,omitempty"`
+	CreatedAt time.Time   `json:"createdAt"`
+	UpdatedAt time.Time   `json:"updatedAt"`
+}
+
+// TaskOrigin names a task on the machine it started on.
+type TaskOrigin struct {
+	Peer      string    `json:"peer"`
+	ID        int       `json:"id"`
+	CreatedAt time.Time `json:"createdAt"`
 }
 
 func (t Task) Ref() string { return fmt.Sprintf("TASK-%d", t.ID) }
@@ -323,4 +334,204 @@ func (l *TaskLog) Events(now time.Time) []Event {
 
 func TaskEvents(agentDir string, now time.Time) []Event {
 	return LoadTasks(agentDir).Events(now)
+}
+
+const (
+	// taskRunSettles gives a run's own "task done" call time to land.
+	taskRunSettles = 10 * time.Minute
+	// A person who moved the task after the run knows better than the sweep.
+	taskMovedByPerson = 2 * time.Minute
+)
+
+// Settle keeps the board honest about tasks whose run is over: merged is done,
+// closed is canceled, an open pull request is in review, a run that left
+// nothing goes to review, and one that failed goes back to Todo with the
+// reason. It returns what it moved, for the log.
+func (l *TaskLog) Settle(records []FixRecord, pulls map[string]PullStatus, skip func(Task) bool, now time.Time) []string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	var moved []string
+	for i := range l.Tasks {
+		t := &l.Tasks[i]
+		if (t.State != "Doing" && t.State != "Review") || t.WantsRun() || (skip != nil && skip(*t)) {
+			continue
+		}
+		rec, ok := lastRunOfTask(records, t.Key())
+		if !ok {
+			continue
+		}
+		column, why := settledColumn(*t, rec, pulls, now)
+		if column == "" || column == t.State {
+			continue
+		}
+		t.State, t.UpdatedAt = column, now
+		t.Comments = append(t.Comments, TaskComment{By: TaskAgent, Text: why, At: now})
+		moved = append(moved, t.Ref()+" → "+column+": "+why)
+	}
+	if len(moved) > 0 {
+		_ = l.save()
+	}
+	return moved
+}
+
+func lastRunOfTask(records []FixRecord, key string) (FixRecord, bool) {
+	for i := len(records) - 1; i >= 0; i-- {
+		if records[i].Key == key {
+			return records[i], records[i].Done()
+		}
+	}
+	return FixRecord{}, false
+}
+
+func settledColumn(t Task, rec FixRecord, pulls map[string]PullStatus, now time.Time) (string, string) {
+	if len(rec.PRs) > 0 {
+		if merged, _, settled := pullsSettled(FixRecord{PRs: rec.PRs}, pulls); settled {
+			if merged {
+				return "Done", "Its pull request merged."
+			}
+			return "Canceled", "Its pull request was closed without merging."
+		}
+		if t.State == "Doing" {
+			return "Review", "The run is over and its pull request is open."
+		}
+		return "", ""
+	}
+	if t.State != "Doing" || now.Sub(rec.FinishedAt) < taskRunSettles || t.UpdatedAt.After(rec.FinishedAt.Add(taskMovedByPerson)) {
+		return "", ""
+	}
+	if why := strings.TrimSpace(rec.Error); why != "" {
+		return "Todo", "The last run failed: " + why
+	}
+	return "Review", "The run is over and opened no pull request. Read what it said above."
+}
+
+// Wanted are the tasks waiting for a run to start: what another machine can
+// pick up if this one goes quiet. One that is running stays here.
+func (l *TaskLog) Wanted() []Task {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	out := []Task{}
+	for _, t := range l.Tasks {
+		if t.WantsRun() && t.MovedTo == "" {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// HasOrigin says this board already holds that machine's task.
+func (l *TaskLog) HasOrigin(peer string, id int) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for _, t := range l.Tasks {
+		if t.Origin != nil && t.Origin.ID == id && strings.EqualFold(t.Origin.Peer, peer) {
+			return true
+		}
+	}
+	return false
+}
+
+// AddCopy puts another machine's task on this board, thread and all. It wants
+// a run if it wanted one there.
+func (l *TaskLog) AddCopy(from Task, peer string, now time.Time) (Task, error) {
+	t, err := l.Add(from.Title, from.Body, from.Workspace, peer, now)
+	if err != nil {
+		return Task{}, err
+	}
+	return l.update(t.Ref(), func(c *Task) {
+		c.Idea, c.Tags, c.Comments, c.AnsweredAt, c.Run = from.Idea, from.Tags, from.Comments, from.AnsweredAt, from.Run
+		c.Origin = &TaskOrigin{Peer: peer, ID: from.ID, CreatedAt: from.CreatedAt}
+	})
+}
+
+// WithThreadFrom gives a task sent here the thread it had. What was said
+// there was already answered there, so it wakes nothing by itself.
+func (l *TaskLog) WithThreadFrom(arg string, comments []TaskComment, now time.Time) (Task, error) {
+	return l.update(arg, func(t *Task) {
+		t.Comments = comments
+		t.AnsweredAt = now
+	})
+}
+
+// MoveAway marks a task as gone to another machine. A run already going here
+// keeps its column; the rest leave the board's work.
+func (l *TaskLog) MoveAway(id int, createdAt time.Time, to string, now time.Time) (Task, bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for i := range l.Tasks {
+		t := &l.Tasks[i]
+		if t.ID != id || t.MovedTo != "" || (!createdAt.IsZero() && !t.CreatedAt.Equal(createdAt)) {
+			continue
+		}
+		t.MovedTo, t.Run, t.UpdatedAt = to, false, now
+		if t.State == "Todo" || t.State == "Review" {
+			t.State = "Canceled"
+		}
+		t.Comments = append(t.Comments, TaskComment{By: TaskAgent, Text: "Moved to " + to + ".", At: now})
+		t.AnsweredAt = now
+		_ = l.save()
+		return *t, true
+	}
+	return Task{}, false
+}
+
+// TaskCopies is what one machine keeps of another's waiting tasks, so they
+// can be picked up when that machine is gone.
+type TaskCopies struct {
+	Fixes []string  `json:"fixes"`
+	Tasks []Task    `json:"tasks"`
+	At    time.Time `json:"at"`
+}
+
+// TakenTask tells a machine another one took its task.
+type TakenTask struct {
+	ID        int       `json:"id"`
+	CreatedAt time.Time `json:"createdAt"`
+	Ref       string    `json:"ref"`
+}
+
+// TakenFrom are the tasks here that started on that machine.
+func (l *TaskLog) TakenFrom(peer string) []TakenTask {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	out := []TakenTask{}
+	for _, t := range l.Tasks {
+		if t.Origin != nil && strings.EqualFold(t.Origin.Peer, peer) {
+			out = append(out, TakenTask{ID: t.Origin.ID, CreatedAt: t.Origin.CreatedAt, Ref: t.Ref()})
+		}
+	}
+	return out
+}
+
+func taskCopiesPath(agentDir, peer string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(peer) {
+		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-' || r == '_' {
+			b.WriteRune(r)
+		} else {
+			b.WriteRune('-')
+		}
+	}
+	return filepath.Join(agentDir, "watch", "peer-tasks", b.String()+".json")
+}
+
+func SaveTaskCopies(agentDir, peer string, c TaskCopies) error {
+	data, err := json.Marshal(c)
+	if err != nil {
+		return err
+	}
+	path := taskCopiesPath(agentDir, peer)
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	return atomicfile.Write(path, data, 0o600)
+}
+
+func LoadTaskCopies(agentDir, peer string) (TaskCopies, bool) {
+	var c TaskCopies
+	data, err := os.ReadFile(taskCopiesPath(agentDir, peer))
+	if err != nil || json.Unmarshal(data, &c) != nil {
+		return TaskCopies{}, false
+	}
+	return c, true
 }

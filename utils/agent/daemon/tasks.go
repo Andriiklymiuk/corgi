@@ -25,8 +25,12 @@ func (d *Daemon) advanceTasks(ctx context.Context) {
 	}
 	tasksMu.Lock()
 	defer tasksMu.Unlock()
-	tasks := watch.LoadTasks(d.Dir)
 	now := time.Now()
+	if !d.heardPeersLately(now) {
+		return
+	}
+	d.takeOverTasks(now)
+	tasks := watch.LoadTasks(d.Dir)
 	for _, t := range tasks.Tasks {
 		if !t.WantsRun() {
 			continue
@@ -84,4 +88,28 @@ func (d *Daemon) replyOnTask(e watch.Event, text string) {
 	tasksMu.Lock()
 	defer tasksMu.Unlock()
 	_, _ = watch.LoadTasks(d.Dir).Comment(e.Ref, watch.TaskAgent, text, time.Now())
+}
+
+// sweepBoard closes what is over: rows left for a person and tasks whose pull
+// requests are merged or closed, and tasks whose run ended.
+func (d *Daemon) sweepBoard(now time.Time) {
+	log := d.fixLog()
+	pulls := watch.LoadPullLog(d.Dir).All()
+	if n := log.SweepLeft(pulls, now); n > 0 {
+		utils.Infof("agent: closed %d row(s) left for you: their pull requests are over\n", n)
+	}
+	inPlan := map[int]bool{}
+	for _, p := range watch.LoadPlans(d.Dir).All() {
+		for _, id := range p.TaskIDs() {
+			inPlan[id] = true
+		}
+	}
+	tasksMu.Lock()
+	defer tasksMu.Unlock()
+	moved := watch.LoadTasks(d.Dir).Settle(log.Records(), pulls, func(t watch.Task) bool {
+		return inPlan[t.ID] || d.fixActiveFor(t.Workspace, t.Ref())
+	}, now)
+	for _, line := range moved {
+		utils.Infof("agent: %s\n", line)
+	}
 }

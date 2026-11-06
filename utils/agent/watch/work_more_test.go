@@ -11,7 +11,7 @@ func TestTheBoardsWorkHoldsWhatIsLeftTheStalledAndTheWeek(t *testing.T) {
 	link := "https://github.com/acme/api/pull/1"
 	recs := []FixRecord{{Key: "k1", Workspace: "acme", Ref: "ABC-1", Kind: string(KindIssueNew), StartedAt: now.Add(-time.Hour), FinishedAt: now, CostUSD: 1.5, PRs: []string{link},
 		Left: []LeftItem{{Text: "Run the migration on staging.", Kind: LeftOther}}, Gaps: []Gap{GapNoDatabase}}}
-	pulls := map[string]PullStatus{"acme/api#1": {State: "open", Checks: "passing", Review: "approved", Mine: true, Link: link, Workspace: "acme", Since: now.Add(-30 * time.Hour)}}
+	pulls := map[string]PullStatus{"acme/api#1": {State: "open", Checks: "passing", Review: "approved", Mine: true, Link: link, Workspace: "acme", At: now, Since: now.Add(-30 * time.Hour)}}
 	w := BoardWork(recs, nil, pulls, now)
 	if len(w.Left) != 1 || w.Left[0].ID != "k1#0" || w.Left[0].URL != link {
 		t.Fatalf("left: %+v", w.Left)

@@ -2455,7 +2455,8 @@ API-key authentication and refuse to start on subscription credentials.
 Every unattended run ends with a `## Left for you` list when a person has
 something to do. corgi keeps those items, ticks off the ones it sees happen
 (green checks, a merge) and lists the rest: `corgi agent left`, the board's
-`left`, the phone's `/launch/left`.
+`left`, the phone's `/launch/left`. When its pull requests are all merged or
+closed, the rest close too; a follow-up ("file a ticket") stays a week after a merge.
 
 An isolated run in a workspace with `db_services` is told how to start a stack
 of its own - `corgi --isolate run-<ticket> db -u --wait`, then

@@ -240,6 +240,10 @@ func workspaceIDForDir(agentD, cwd string) string {
 // addTaskOnPeer puts a task on another machine's board: the workspace is there,
 // and so is the run. The peer checks the workspace and whether it can run.
 func addTaskOnPeer(ctx context.Context, dir, name, title, body, ws string, run bool) (string, error) {
+	return sendTaskToPeer(ctx, dir, name, title, body, ws, run, nil)
+}
+
+func sendTaskToPeer(ctx context.Context, dir, name, title, body, ws string, run bool, comments []watch.TaskComment) (string, error) {
 	store, err := peers.Load(peers.Path(dir))
 	if err != nil {
 		return "", err
@@ -256,8 +260,60 @@ func addTaskOnPeer(ctx context.Context, dir, name, title, body, ws string, run b
 	}
 	client := peers.NewClient(peer)
 	client.HTTP = &http.Client{Timeout: 30 * time.Second}
-	err = client.Call(ctx, "/launch/task", map[string]any{"title": title, "body": body, "workspace": ws, "run": run}, &out)
+	err = client.Call(ctx, "/launch/task", map[string]any{"title": title, "body": body, "workspace": ws, "run": run, "comments": comments}, &out)
 	return out.Ref, err
+}
+
+// taskSendRefusal says why this task cannot leave: it is over, or a run has it.
+func taskSendRefusal(dir string, t watch.Task) string {
+	switch {
+	case t.State == "Done" || t.State == "Canceled":
+		return t.Ref() + " is " + t.State + ": nothing to send"
+	case t.State == "Doing":
+		return t.Ref() + " is running here: send it when the run is over"
+	case t.MovedTo != "":
+		return t.Ref() + " already moved to " + t.MovedTo
+	case t.Workspace == "":
+		return t.Ref() + " names no workspace: corgi agent task edit it first"
+	}
+	for _, p := range watch.LoadPlans(dir).All() {
+		for _, id := range p.TaskIDs() {
+			if id == t.ID {
+				return t.Ref() + " is part of " + p.Ref() + ": a plan runs on one machine"
+			}
+		}
+	}
+	return ""
+}
+
+var agentTaskSendCmd = &cobra.Command{
+	Use:   "send <TASK-n> --to <peer>",
+	Short: "Move a task to another machine, thread and all",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		dir := mustAgentDir()
+		to, _ := cmd.Flags().GetString("to")
+		run, _ := cmd.Flags().GetBool("run")
+		tasks := watch.LoadTasks(dir)
+		t, ok := tasks.Find(args[0])
+		if !ok {
+			exitWithError("agent_task", fmt.Errorf("no task %s", args[0]), 2)
+		}
+		if why := taskSendRefusal(dir, t); why != "" {
+			exitWithError("agent_task", fmt.Errorf("%s", why), 2)
+		}
+		ref, err := sendTaskToPeer(context.Background(), dir, to, t.Title, t.Body, t.Workspace, run || t.WantsRun(), t.Comments)
+		if err != nil {
+			exitWithError("agent_task", err, 1)
+		}
+		_, _ = tasks.MoveAway(t.ID, t.CreatedAt, to+" as "+ref, time.Now())
+		nudgePlans(dir)
+		if utils.JSONOutput {
+			utils.PrintJSON(map[string]any{"from": t.Ref(), "to": to, "ref": ref})
+			return
+		}
+		fmt.Printf("%s moved to %s as %s\n", t.Ref(), to, ref)
+	},
 }
 
 var agentTaskCommentCmd = &cobra.Command{
@@ -282,6 +338,9 @@ var agentTaskCommentCmd = &cobra.Command{
 
 func init() {
 	agentTaskCommentCmd.Flags().String("by", "you", "who is saying it")
+	agentTaskSendCmd.Flags().String("to", "", "the peer to move it to (corgi agent peers lists them)")
+	agentTaskSendCmd.Flags().Bool("run", false, "start it there, unattended, even if it was not waiting for a run")
+	_ = agentTaskSendCmd.MarkFlagRequired("to")
 	agentTaskAddCmd.Flags().Bool("run", false, "start it now, unattended, where the workspace runs fixes (corgi agent level 3)")
 	agentTaskAddCmd.Flags().String("on", "", "put it on this peer's board: another laptop or a server (corgi agent peers)")
 	agentTaskAddCmd.Flags().String("body", "", "the description: what to do and how you will know it is done (- reads stdin)")
@@ -290,6 +349,6 @@ func init() {
 	agentTaskEditCmd.Flags().String("body", "", "a new description")
 	agentTaskEditCmd.Flags().String("workspace", "", "a new workspace")
 	agentTaskListCmd.Flags().Bool("all", false, "finished ones too")
-	agentTaskCmd.AddCommand(agentTaskCommentCmd, agentTaskAddCmd, agentTaskListCmd, agentTaskMoveCmd, agentTaskDoneCmd, agentTaskEditCmd, agentTaskRmCmd)
+	agentTaskCmd.AddCommand(agentTaskCommentCmd, agentTaskSendCmd, agentTaskAddCmd, agentTaskListCmd, agentTaskMoveCmd, agentTaskDoneCmd, agentTaskEditCmd, agentTaskRmCmd)
 	agentCmd.AddCommand(agentTaskCmd)
 }

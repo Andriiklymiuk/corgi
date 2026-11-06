@@ -14,6 +14,7 @@ const (
 	stalledMerge     = 24 * time.Hour
 	stalledChanges   = 48 * time.Hour
 	stalledRed       = 24 * time.Hour
+	stalledTrust     = 24 * time.Hour
 	stalledShown     = 8
 	leftShown        = 20
 	leftDoneShownFor = 24 * time.Hour
@@ -42,7 +43,7 @@ func BoardWork(records []FixRecord, ticked map[string]LeftTick, pulls map[string
 func StalledPulls(pulls map[string]PullStatus, now time.Time) []sessions.StalledPull {
 	var out []sessions.StalledPull
 	for ref, p := range pulls {
-		if !p.Mine || p.State != "open" || p.Link == "" || p.Since.IsZero() {
+		if !p.Mine || p.State != "open" || p.Link == "" || p.Since.IsZero() || now.Sub(p.At) > stalledTrust {
 			continue
 		}
 		idle := now.Sub(p.Since)

@@ -13,6 +13,7 @@ func (d *Daemon) sampleWork(now time.Time) {
 	if d.Sessions == nil {
 		return
 	}
+	d.sweepBoard(now)
 	w := watch.BoardWork(d.fixLog().Records(), watch.LoadLeftTicks(d.Dir).All(), watch.LoadPullLog(d.Dir).All(), now)
 	if d.Sessions.SetWork(w) {
 		d.flushSessions()

@@ -708,6 +708,9 @@ func (r *Registry) Sweep(now time.Time) bool {
 		}
 		s.Stuck = false
 		r.setStatus(s, StatusStale, now)
+		if s.Background > 0 {
+			s.Detail = quietBackgroundWords(s.Background)
+		}
 		changed = true
 	}
 	if changed {
@@ -1852,6 +1855,14 @@ func (r *Registry) pullFactsLocked(s *Session) *PullFacts {
 		return &p
 	}
 	return nil
+}
+
+// Nobody knows what a silent session's tasks are doing now.
+func quietBackgroundWords(n int) string {
+	if n == 1 {
+		return "1 task was running when it went quiet"
+	}
+	return strconv.Itoa(n) + " tasks were running when it went quiet"
 }
 
 func backgroundWords(n int) string {

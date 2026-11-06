@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -51,6 +52,31 @@ func firstSet(a, b string) string {
 		return a
 	}
 	return b
+}
+
+// PullsGoneQuiet are this workspace's open pull requests nothing has asked
+// about for a while, the longest silent first, up to limit.
+func PullsGoneQuiet(pulls map[string]PullStatus, workspace string, quiet time.Duration, limit int, now time.Time) []string {
+	var refs []string
+	for ref, p := range pulls {
+		if (p.State != "open" && p.State != "draft") || now.Sub(p.At) < quiet {
+			continue
+		}
+		if p.Workspace == workspace || p.Workspace == "" {
+			refs = append(refs, ref)
+		}
+	}
+	sort.Slice(refs, func(i, j int) bool {
+		a, b := pulls[refs[i]].At, pulls[refs[j]].At
+		if a.Equal(b) {
+			return refs[i] < refs[j]
+		}
+		return a.Before(b)
+	})
+	if len(refs) > limit {
+		refs = refs[:limit]
+	}
+	return refs
 }
 
 func (l *PullLog) All() map[string]PullStatus {

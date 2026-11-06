@@ -59,6 +59,10 @@ type WorkspaceDiagnostic struct {
 }
 
 type Daemon struct {
+	// askedAt: what the board last asked a forge about and got no answer.
+	askedAt sync.Map
+	// peersHeardAt is when a round of pulses last finished, unix millis.
+	peersHeardAt    atomic.Int64
 	attentionMu     sync.Mutex
 	recentAttention map[string]time.Time
 	mergeMu         sync.Mutex

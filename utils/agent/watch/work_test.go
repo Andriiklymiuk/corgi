@@ -24,11 +24,11 @@ func TestCarryKeepsWhenAPullRequestLastChanged(t *testing.T) {
 func TestStalledPullsAreMineAndWaitingLongEnough(t *testing.T) {
 	now := time.Now()
 	pulls := map[string]PullStatus{
-		"a/api#1": {State: "open", Checks: "passing", Review: "approved", Mine: true, Link: "https://github.com/a/api/pull/1", Since: now.Add(-50 * time.Hour)},
-		"a/api#2": {State: "open", Checks: "passing", Review: "approved", Mine: true, Link: "https://github.com/a/api/pull/2", Since: now.Add(-2 * time.Hour)},
-		"a/api#3": {State: "open", Checks: "passing", Review: "changes", Mine: true, Link: "https://github.com/a/api/pull/3", Since: now.Add(-72 * time.Hour)},
-		"a/api#4": {State: "open", Checks: "failing", Review: "approved", Mine: false, Link: "https://github.com/a/api/pull/4", Since: now.Add(-72 * time.Hour)},
-		"a/api#5": {State: "merged", Checks: "passing", Review: "approved", Mine: true, Link: "https://github.com/a/api/pull/5", Since: now.Add(-72 * time.Hour)},
+		"a/api#1": {State: "open", Checks: "passing", Review: "approved", Mine: true, Link: "https://github.com/a/api/pull/1", At: now, Since: now.Add(-50 * time.Hour)},
+		"a/api#2": {State: "open", Checks: "passing", Review: "approved", Mine: true, Link: "https://github.com/a/api/pull/2", At: now, Since: now.Add(-2 * time.Hour)},
+		"a/api#3": {State: "open", Checks: "passing", Review: "changes", Mine: true, Link: "https://github.com/a/api/pull/3", At: now, Since: now.Add(-72 * time.Hour)},
+		"a/api#4": {State: "open", Checks: "failing", Review: "approved", Mine: false, Link: "https://github.com/a/api/pull/4", At: now, Since: now.Add(-72 * time.Hour)},
+		"a/api#5": {State: "merged", Checks: "passing", Review: "approved", Mine: true, Link: "https://github.com/a/api/pull/5", At: now, Since: now.Add(-72 * time.Hour)},
 	}
 	got := StalledPulls(pulls, now)
 	if len(got) != 2 {

@@ -71,10 +71,29 @@ corgi agent watch hooks --workspace api                           # prints the C
 | One server | Runs while your laptop sleeps, one dashboard for everyone | `corgi agent container up --host ssh://me@build-1`, or [a Linux box](agent.md), then a tunnel |
 | Laptops on one tracker | One leads per tracker, another takes over when it sleeps | `corgi agent peers invite`, then `join` |
 | Tasks on another machine | Add here, run there | `corgi agent task add "..." --workspace api --on build-1` |
+| Move a task | The task and its thread go there | `corgi agent task send TASK-3 --to build-1` |
 
-**Tracker tickets move between machines; corgi tasks do not.** A task lives on the machine that holds it. If that
-machine is off, the task waits and no other machine takes it. For a team, or for work that must not wait, use a
-server, or tickets in Linear or Jira.
+**Tasks move too.** Each machine leaves its peers a copy of the tasks waiting for a run. When a machine has been
+silent for 10 minutes, a peer that runs fixes for that workspace takes them; the first by name, so only one does. The
+machine that went away hears about it when it returns, and its copy says where the task went.
+
+- Only a task that has not started moves. A run in progress stays where it is, because a sleeping machine can still
+  finish it.
+- If both machines run but cannot reach each other, both can start the task: you get two draft PRs to pick from.
+- A paired machine can give this one a task, which can start a run where the workspace is at level 3 or up. It still
+  cannot read the board or anything else. Pair only machines you trust.
+
+## A board that stays true
+
+| What | How it stays true |
+|---|---|
+| Open pull requests | Every one is asked about at least every 30 minutes, a few each round, even if nothing mentions it |
+| "Not merged for 8 days" | Shown only if the pull request was checked in the last day |
+| Left for you | Closes when its pull requests are merged or closed. A follow-up ("file a ticket") stays a week after a merge |
+| Tasks | Merged is Done, closed is Canceled, an open pull request is Review, a failed run goes back to Todo with the reason |
+| Inbox | Older rows take turns being checked, not only the newest 25 |
+
+Catching up on old news is silent: a pull request found merged after more than a week rings nobody and moves no ticket.
 
 ## Three brakes
 

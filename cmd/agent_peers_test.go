@@ -14,6 +14,7 @@ import (
 	"andriiklymiuk/corgi/utils/agent/daemon"
 	"andriiklymiuk/corgi/utils/agent/pairing"
 	"andriiklymiuk/corgi/utils/agent/peers"
+	"andriiklymiuk/corgi/utils/agent/watch"
 )
 
 // Laptop B is this process (CORGI_DATA_DIR); laptop A is a bare /pair
@@ -185,5 +186,116 @@ func TestCodexNotifyLineIsOursOnly(t *testing.T) {
 	raw, _ = os.ReadFile(path)
 	if string(raw) != "foo = 1\n" {
 		t.Fatalf("%q", raw)
+	}
+}
+
+// Two machines over the real pairing and the real sealed calls.
+func TestAPeerCanHandOverATaskAndNothingMore(t *testing.T) {
+	t.Setenv("CORGI_DATA_DIR", t.TempDir())
+	home, err := agentDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = os.MkdirAll(home, 0o700)
+	session, code, _ := pairing.NewSession()
+	store := pairing.StorePath(home)
+	mux := http.NewServeMux()
+	mux.Handle("/pair", pairingHandlerWithRole(session, store, pairing.RolePeer))
+	mux.Handle("/launch/peers/tasks", launchAuth("", http.HandlerFunc(launchPeersTasksHandler), store))
+	mux.Handle("/launch/task", launchAuth("", http.HandlerFunc(launchTaskHandler), store))
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	other, err := peers.Join(context.Background(), t.TempDir(), srv.URL, code)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := peers.NewClient(other)
+	devices, _ := pairing.Load(store)
+	name := devices.Devices[0].Name
+
+	var added struct {
+		Ref string `json:"ref"`
+	}
+	said := []watch.TaskComment{{By: "you", Text: "the total is wrong", At: time.Now().Add(-time.Hour)}}
+	if err := client.Call(context.Background(), "/launch/task", map[string]any{"title": "Fix the export", "body": "b", "comments": said}, &added); err != nil {
+		t.Fatalf("a peer hands over a task: %v", err)
+	}
+	here := watch.LoadTasks(home)
+	task, ok := here.Find(added.Ref)
+	if !ok || task.By != name || len(task.Comments) != 1 || task.WantsRun() {
+		t.Fatalf("it arrives with its thread, and wakes nothing by itself: %+v", task)
+	}
+
+	var reply struct {
+		Taken []watch.TakenTask `json:"taken"`
+	}
+	sent := watch.TaskCopies{Fixes: []string{"api"}, Tasks: []watch.Task{{ID: 42, Title: "waiting", Workspace: "api", Run: true, State: "Todo"}}}
+	if err := client.Call(context.Background(), "/launch/peers/tasks", sent, &reply); err != nil {
+		t.Fatalf("a peer leaves a copy: %v", err)
+	}
+	if copies, ok := watch.LoadTaskCopies(home, name); !ok || len(copies.Tasks) != 1 || copies.Fixes[0] != "api" || copies.At.IsZero() {
+		t.Fatalf("%+v", copies)
+	}
+	if len(reply.Taken) != 0 {
+		t.Fatalf("nothing taken yet: %+v", reply.Taken)
+	}
+	if _, err := watch.LoadTasks(home).AddCopy(sent.Tasks[0], name, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.Call(context.Background(), "/launch/peers/tasks", sent, &reply); err != nil {
+		t.Fatal(err)
+	}
+	if len(reply.Taken) != 1 || reply.Taken[0].ID != 42 {
+		t.Fatalf("it hears this machine took it: %+v", reply.Taken)
+	}
+}
+
+func TestAPeerMayNotReadTheTasksOrReachAnythingElse(t *testing.T) {
+	for _, c := range []struct {
+		method, path string
+		may          bool
+	}{
+		{http.MethodPost, "/launch/peers/pulse", true},
+		{http.MethodPost, "/launch/peers/tasks", true},
+		{http.MethodPost, "/launch/task", true},
+		{http.MethodGet, "/launch/task", false},
+		{http.MethodGet, "/launch/peers/tasks", false},
+		{http.MethodPost, "/launch/task/comment", false},
+		{http.MethodGet, "/launch/board", false},
+		{http.MethodPost, "/launch/new", false},
+	} {
+		if got := peerMay(c.method, c.path); got != c.may {
+			t.Errorf("%s %s: %v", c.method, c.path, got)
+		}
+	}
+}
+
+func TestPeersTasksRefusesAnythingButAPeer(t *testing.T) {
+	t.Setenv("CORGI_DATA_DIR", t.TempDir())
+	rec := httptest.NewRecorder()
+	launchPeersTasksHandler(rec, httptest.NewRequest(http.MethodPost, "/launch/peers/tasks", strings.NewReader("{}")))
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("%d", rec.Code)
+	}
+}
+
+func TestATaskThatIsOverOrRunningStaysPut(t *testing.T) {
+	dir := t.TempDir()
+	for _, c := range []struct {
+		task watch.Task
+		why  string
+	}{
+		{watch.Task{ID: 1, State: "Done", Workspace: "w"}, "nothing to send"},
+		{watch.Task{ID: 2, State: "Canceled", Workspace: "w"}, "nothing to send"},
+		{watch.Task{ID: 3, State: "Doing", Workspace: "w"}, "running here"},
+		{watch.Task{ID: 4, State: "Todo", Workspace: "w", MovedTo: "b as TASK-1"}, "already moved"},
+		{watch.Task{ID: 5, State: "Todo"}, "no workspace"},
+		{watch.Task{ID: 6, State: "Todo", Workspace: "w"}, ""},
+		{watch.Task{ID: 7, State: "Review", Workspace: "w"}, ""},
+	} {
+		got := taskSendRefusal(dir, c.task)
+		if (c.why == "") != (got == "") || !strings.Contains(got, c.why) {
+			t.Errorf("%+v: %q", c.task, got)
+		}
 	}
 }

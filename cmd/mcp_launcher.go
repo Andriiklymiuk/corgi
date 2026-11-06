@@ -4667,8 +4667,10 @@ func launchTaskHandler(w http.ResponseWriter, r *http.Request) {
 			Body      string `json:"body"`
 			Workspace string `json:"workspace"`
 			Run       bool   `json:"run"`
+			// The thread of a task another machine sends here.
+			Comments []watch.TaskComment `json:"comments"`
 		}
-		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&req); err != nil {
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&req); err != nil {
 			writeLaunchError(w, http.StatusBadRequest, "could not read the request")
 			return
 		}
@@ -4688,10 +4690,17 @@ func launchTaskHandler(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		t, err := watch.LoadTasks(dir).Add(req.Title, req.Body, req.Workspace, "phone", time.Now())
+		by := "phone"
+		if device, ok := authorizedDeviceFull(pairing.StorePath(dir), r.Header.Get("Authorization")); ok && device.Peer() {
+			by = device.Name
+		}
+		t, err := watch.LoadTasks(dir).Add(req.Title, req.Body, req.Workspace, by, time.Now())
 		if err != nil {
 			writeLaunchError(w, http.StatusBadRequest, err.Error())
 			return
+		}
+		if len(req.Comments) > 0 && len(req.Comments) <= 200 {
+			t, _ = watch.LoadTasks(dir).WithThreadFrom(t.Ref(), req.Comments, time.Now())
 		}
 		if req.Run {
 			t, _ = watch.LoadTasks(dir).AskRun(t.Ref(), time.Now())
