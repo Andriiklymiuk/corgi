@@ -239,6 +239,18 @@ var agentWatchEnableCmd = &cobra.Command{
 		if flags.Changed("silent") {
 			wc.Silent, _ = flags.GetBool("silent")
 		}
+		if flags.Changed("errors") {
+			wc.Errors, _ = flags.GetBool("errors")
+		}
+		if v, _ := flags.GetString("sentry-org"); v != "" {
+			wc.SentryOrg, wc.Errors = v, true
+		}
+		if flags.Changed("sentry-project") {
+			wc.SentryProjects, _ = flags.GetStringSlice("sentry-project")
+		}
+		if v, _ := flags.GetString("sentry-level"); v != "" {
+			wc.SentryLevel = v
+		}
 		if flags.Changed("night-shift") {
 			wc.NightShift, _ = flags.GetBool("night-shift")
 		}
@@ -690,6 +702,9 @@ A webhook for a repo or project no watched workspace lists is dropped.
 		if plan.githubAny {
 			fmt.Println("  github  every repo (no --repos) - --install needs a list; set --repos, or add an org webhook by hand")
 		}
+		if wc.Errors {
+			fmt.Printf("\n  coralogix  by hand, Alerts → Webhooks → %s/hooks/coralogix?workspace=%s&token=<secret>, body {\"alert_name\", \"alert_id\", \"description\", \"severity\", \"alert_url\"}\n", base, id)
+		}
 		if !install && (len(plan.gitlab) > 0 || len(plan.github) > 0) {
 			fmt.Println("\n  --install creates or updates these (GitLab: Maintainer; GitHub: repo admin). By hand:")
 			if len(plan.gitlab) > 0 {
@@ -782,7 +797,7 @@ func hookInstallWord(r watch.HookInstall) string {
 }
 
 var agentWatchAuthCmd = &cobra.Command{
-	Use:   "auth <linear|jira|github|gitlab|slack>",
+	Use:   "auth <linear|jira|github|gitlab|slack|sentry>",
 	Short: "Store a token for a source, for the machine or for one workspace",
 	Long: `Without --local the token is the machine-wide one every watched
 workspace falls back to. With --local (run inside the workspace) or
@@ -832,6 +847,11 @@ agent directory, mode 0600, next to the machine-wide ones.
 			secrets.GitLab = token
 			if url != "" || drop {
 				secrets.GitLabURL = url
+			}
+		case "sentry":
+			secrets.Sentry = token
+			if url != "" || drop {
+				secrets.SentryURL = url
 			}
 		case "slack":
 			if drop {
@@ -1090,7 +1110,7 @@ func watchSpecOf(dir string, w workspace.Workspace, resolved config.Resolved) (d
 	}
 	secrets := watch.LoadSecretsFor(dir, w.ID)
 	spec := daemon.WatchSpec{Workspace: w.ID, Dir: w.AbsPath, ConfigDir: expandTilde(resolved.ConfigDir), Kind: resolved.Kind, Agents: resolved.AgentOrder(), Bin: expandTilde(resolved.Bin), Project: wc.Project, Repos: wc.Repos,
-		Rules:    watch.Rules{Enabled: true, Labels: wc.Labels, States: wc.States, Assignee: wc.Assignee, Comments: wc.Comments, PRs: wc.PRs, CI: wc.CI, Reviews: wc.Reviews, From: wc.From, Bots: wc.Bots},
+		Rules:    watch.Rules{Enabled: true, Labels: wc.Labels, States: wc.States, Assignee: wc.Assignee, Comments: wc.Comments, PRs: wc.PRs, CI: wc.CI, Reviews: wc.Reviews, From: wc.From, Bots: wc.Bots, Errors: wc.Errors},
 		Interval: 3 * time.Minute, Action: "notify", SkipPermissions: resolved.DangerouslySkipPermissions,
 		MaxFixesPerHour: wc.MaxFixesPerHour, MaxFixesPerDay: wc.MaxFixesPerDay, LimitCeiling: wc.LimitCeiling, MaxFixesTotal: wc.MaxFixesTotal, CapSince: wc.CapSince, Quiet: wc.Quiet, NightShift: wc.NightShift, FixKinds: wc.FixKinds, DoneWhen: wc.DoneWhen, PlanReview: wc.PlanReview, Lease: wc.Lease, Isolate: wc.Isolate, RunDB: wc.RunDB, Slots: wc.Slots, Batch: wc.Batch, RerunCI: wc.RerunCI, Silent: wc.Silent, NoRetry: wc.NoRetry, ReviewStatus: wc.ReviewStatus, Approve: wc.Approve, Models: resolved.Models, Routines: resolved.Routines}
 	if wc.Action == "fix" {
@@ -1165,6 +1185,9 @@ func watchSources(rules watch.Rules, wc *config.WatchConfig, secrets watch.Secre
 	}
 	if !rules.DeadSource("gitlab") && secrets.GitLab != "" {
 		sources = append(sources, watch.NewGitLab(secrets))
+	}
+	if wc.Errors && wc.SentryOrg != "" && secrets.Sentry != "" {
+		sources = append(sources, watch.NewSentry(secrets, wc.SentryOrg, wc.SentryProjects, wc.SentryLevel))
 	}
 	if !rules.DeadSource("slack") && wc.Chat != nil && wc.Chat.Slack != nil {
 		if sl := watch.NewSlack(secrets, watch.SlackWatchConfig{
@@ -1519,6 +1542,10 @@ func init() {
 	f.Bool("bots", false, "Comments from bot accounts count too (a review bot whose findings are to be fixed); off, a bot is not a person waiting")
 	f.Bool("approve", false, "An unattended review of a pull request I was asked to review may approve it when nothing blocks and the risk card allows")
 	f.Bool(watchFlagHandOver, false, "Type a review comment, a red build or an asked-for review into the session already on that branch")
+	f.Bool("errors", false, "Take new errors into the inbox, from Sentry and from alert webhooks; you pick which to work on (--auto-for errors runs them by itself)")
+	f.String("sentry-org", "", "Sentry organization to read new errors from (implies --errors); the token: corgi agent watch auth sentry")
+	f.StringSlice("sentry-project", nil, "Only these Sentry projects, comma separated")
+	f.String("sentry-level", "", "The quietest Sentry level that counts: info, warning, error (default) or fatal")
 	f.Bool("headless", false, "Let a message for a session whose terminal is gone run as one headless turn (claude -p --resume, or codex exec resume; acceptEdits) in its own checkout, so the phone's chat keeps working")
 	f.Bool("night-shift", false, "Work through the quiet hours: fixes and routines run as by day, nothing rings until the quiet hours end, then one 'N while you were away' says what happened (--night-shift=false to sleep through them again)")
 	f.Bool("silent", false, "Nothing about this workspace's watch rings - no toast, no phone push: fixes run, the inbox and the kanban fill, and you look when you like (--silent=false to ring again)")

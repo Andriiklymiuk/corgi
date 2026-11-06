@@ -83,6 +83,7 @@ type Rules struct {
 	Reviews  bool
 	From     []string
 	Bots     bool
+	Errors   bool
 	Mentions bool
 	Channels []string
 }
@@ -105,6 +106,8 @@ func (r Rules) Why(e Event) string {
 			return "review requests need --reviews"
 		case KindChatMention:
 			return "chat mentions need --mentions"
+		case KindErrorNew:
+			return "errors need --errors"
 		case KindChatMessage:
 			return "a channel message needs that channel in --channel"
 		}
@@ -298,6 +301,8 @@ func (r Rules) matchesKind(k Kind) bool {
 		return r.Comments
 	case KindIssueNew:
 		return true
+	case KindErrorNew:
+		return r.Errors
 	case KindChatMention:
 		return r.Mentions
 	case KindChatMessage:
@@ -729,6 +734,8 @@ type Secrets struct {
 	GitLabURL  string `json:"gitlabUrl,omitempty"`
 	SlackUser  string `json:"slackUser,omitempty"`
 	SlackBot   string `json:"slackBot,omitempty"`
+	Sentry     string `json:"sentry,omitempty"`
+	SentryURL  string `json:"sentryUrl,omitempty"`
 	HookSecret string `json:"hookSecret,omitempty"`
 	Me         string `json:"me,omitempty"`
 }
@@ -764,6 +771,8 @@ func LoadSecrets(agentDir string) Secrets {
 	pick(&s.GitLabURL, "GITLAB_URL")
 	pick(&s.SlackUser, "SLACK_USER_TOKEN")
 	pick(&s.SlackBot, "SLACK_BOT_TOKEN")
+	pick(&s.Sentry, "SENTRY_AUTH_TOKEN")
+	pick(&s.SentryURL, "SENTRY_URL")
 	return s
 }
 
@@ -796,6 +805,8 @@ func overlaySecrets(base, over Secrets) Secrets {
 	pick(&base.JiraToken, over.JiraToken)
 	pick(&base.GitHub, over.GitHub)
 	pick(&base.GitLab, over.GitLab)
+	pick(&base.Sentry, over.Sentry)
+	pick(&base.SentryURL, over.SentryURL)
 	pick(&base.GitLabURL, over.GitLabURL)
 	pick(&base.SlackUser, over.SlackUser)
 	pick(&base.SlackBot, over.SlackBot)

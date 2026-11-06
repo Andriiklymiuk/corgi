@@ -745,6 +745,7 @@ scopes still works for what it can read (public channels alone, mentions
 alone); `corgi agent watch` names the scope a failing call needs.
 
 ```bash
+corgi agent watch auth sentry --token … --local               # new Sentry errors land in the inbox to pick: watch enable --sentry-org acme
 corgi agent watch auth slack --token xoxp-… --local          # the person runs this; the token never goes through a session
 corgi agent watch enable --mentions                           # notify: @me anywhere → phone
 corgi agent watch enable --review-channel '#code-review' --reply-as me   # teammates' review posts in; chat announce out

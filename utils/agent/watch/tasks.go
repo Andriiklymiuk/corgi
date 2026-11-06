@@ -27,10 +27,15 @@ type Task struct {
 	By        string `json:"by,omitempty"`
 	// Idea is the idea page (its slug) this task was cut from; Tags are the
 	// page's tags, so the board can group what belongs together.
-	Idea      string    `json:"idea,omitempty"`
-	Tags      []string  `json:"tags,omitempty"`
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
+	Idea string   `json:"idea,omitempty"`
+	Tags []string `json:"tags,omitempty"`
+	// Run asks the daemon to start it unattended; it clears once started.
+	Run bool `json:"run,omitempty"`
+	// Comments is the thread; a person's comment after AnsweredAt wakes a run.
+	Comments   []TaskComment `json:"comments,omitempty"`
+	AnsweredAt time.Time     `json:"answeredAt,omitzero"`
+	CreatedAt  time.Time     `json:"createdAt"`
+	UpdatedAt  time.Time     `json:"updatedAt"`
 }
 
 func (t Task) Ref() string { return fmt.Sprintf("TASK-%d", t.ID) }
@@ -39,7 +44,90 @@ func (t Task) Key() string { return fmt.Sprintf("task:%d", t.ID) }
 
 func (t Task) Event() Event {
 	return Event{Key: t.Key(), Source: "task", Kind: KindTask, Workspace: t.Workspace, Ref: t.Ref(),
-		Title: t.Title, Body: t.Body, State: t.State, Mine: true, At: t.UpdatedAt, Labels: t.Tags}
+		Title: t.Title, Body: t.WithThread(), State: t.State, Mine: true, At: t.UpdatedAt, Labels: t.Tags}
+}
+
+// TaskAgent is who the runs comment as. Its own comments wake nothing.
+const TaskAgent = "agent"
+
+const maxTaskComment = 8000
+
+type TaskComment struct {
+	By   string    `json:"by"`
+	Text string    `json:"text"`
+	At   time.Time `json:"at"`
+}
+
+// WithThread is the description and the comments under it, oldest first.
+func (t Task) WithThread() string {
+	if len(t.Comments) == 0 {
+		return t.Body
+	}
+	var b strings.Builder
+	b.WriteString(t.Body)
+	b.WriteString("\n\nComments on this task, oldest first. Do what the newest ones ask:\n")
+	for _, c := range t.Comments {
+		fmt.Fprintf(&b, "- %s: %s\n", c.By, c.Text)
+	}
+	return strings.TrimSpace(b.String())
+}
+
+// WantsRun says the daemon should start a run on it: it was asked to, or a
+// person commented since the last run began.
+func (t Task) WantsRun() bool {
+	if t.State == "Done" || t.State == "Canceled" {
+		return false
+	}
+	if t.Run {
+		return true
+	}
+	for _, c := range t.Comments {
+		if c.By != TaskAgent && c.At.After(t.AnsweredAt) {
+			return true
+		}
+	}
+	return false
+}
+
+// AskRun marks a task to start unattended.
+func (l *TaskLog) AskRun(arg string, now time.Time) (Task, error) {
+	return l.update(arg, func(t *Task) { t.Run, t.UpdatedAt = true, now })
+}
+
+// Started moves a task to Doing and marks everything said so far as seen.
+func (l *TaskLog) Started(arg string, now time.Time) (Task, error) {
+	return l.update(arg, func(t *Task) { t.Run, t.State, t.AnsweredAt, t.UpdatedAt = false, "Doing", now, now })
+}
+
+// Comment adds to the thread.
+func (l *TaskLog) Comment(arg, by, text string, now time.Time) (Task, error) {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return Task{}, fmt.Errorf("a comment needs words")
+	}
+	if len(text) > maxTaskComment {
+		return Task{}, fmt.Errorf("a comment is under %d characters", maxTaskComment)
+	}
+	if by = strings.TrimSpace(by); by == "" {
+		by = "someone"
+	}
+	return l.update(arg, func(t *Task) {
+		t.Comments = append(t.Comments, TaskComment{By: by, Text: text, At: now})
+		t.UpdatedAt = now
+	})
+}
+
+func (l *TaskLog) update(arg string, change func(*Task)) (Task, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	id := TaskID(arg)
+	for i := range l.Tasks {
+		if l.Tasks[i].ID == id {
+			change(&l.Tasks[i])
+			return l.Tasks[i], l.save()
+		}
+	}
+	return Task{}, fmt.Errorf("no task %s", arg)
 }
 
 // Tag files a task under an idea page with its tags.

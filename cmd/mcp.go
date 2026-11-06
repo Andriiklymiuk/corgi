@@ -389,6 +389,7 @@ func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 		mux.Handle("/launch/stack", launchAuth(token, http.HandlerFunc(launchStackHandler), deviceStore))
 		mux.Handle("/launch/upload", launchAuth(token, http.HandlerFunc(launchUploadHandler), deviceStore))
 		mux.Handle("/launch/task", launchAuth(token, http.HandlerFunc(launchTaskHandler), deviceStore))
+		mux.Handle("/launch/task/comment", launchAuth(token, http.HandlerFunc(launchTaskCommentHandler), deviceStore))
 		mux.Handle("/launch/ticket", launchAuth(token, http.HandlerFunc(launchTicketHandler), deviceStore))
 		mux.Handle("/launch/profiles", launchAuth(token, http.HandlerFunc(launchProfilesHandler), deviceStore))
 		mux.Handle("/launch/devices", launchAuth(token, http.HandlerFunc(launchDevicesHandler), deviceStore))
@@ -400,7 +401,7 @@ func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 		mux.Handle("/launch/peers/pulse", launchAuth(token, http.HandlerFunc(launchPeersPulseHandler), deviceStore))
 	}
 
-	for _, source := range []string{"linear", "github", "gitlab", "jira"} {
+	for _, source := range []string{"linear", "github", "gitlab", "jira", "coralogix"} {
 		mux.HandleFunc("/hooks/"+source, watchHookHandler(source))
 	}
 

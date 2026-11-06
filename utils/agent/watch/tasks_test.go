@@ -1,6 +1,7 @@
 package watch
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -78,5 +79,38 @@ func TestAPickIsRememberedUntilTheSessionShows(t *testing.T) {
 	got, ok := LoadPicks(dir).Get("task:1")
 	if !ok || got.By != "phone" {
 		t.Fatalf("pick: %+v %v", got, ok)
+	}
+}
+
+func TestACommentWakesATaskAndAnAgentReplyDoesNot(t *testing.T) {
+	l := LoadTasks(t.TempDir())
+	now := time.Now()
+	task, err := l.Add("export", "make it work", "api", "phone", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if task.WantsRun() {
+		t.Fatal("a task for later started by itself")
+	}
+	if task, _ = l.AskRun(task.Ref(), now); !task.WantsRun() {
+		t.Fatal("a task asked to run does not want to")
+	}
+	if task, _ = l.Started(task.Ref(), now); task.WantsRun() || task.State != "Doing" {
+		t.Fatalf("started: %+v", task)
+	}
+	if task, _ = l.Comment(task.Ref(), TaskAgent, "PR is up", now.Add(time.Minute)); task.WantsRun() {
+		t.Fatal("the agent woke itself: that loop never ends")
+	}
+	if task, _ = l.Comment(task.Ref(), "maria", "the total is still wrong", now.Add(2*time.Minute)); !task.WantsRun() {
+		t.Fatal("a person's comment did not wake it")
+	}
+	if !strings.Contains(task.Event().Body, "- maria: the total is still wrong") || !strings.Contains(task.Event().Body, "make it work") {
+		t.Fatalf("the run would not see the thread: %q", task.Event().Body)
+	}
+	if task, _ = l.Move(task.Ref(), "Done", now.Add(3*time.Minute)); task.WantsRun() {
+		t.Fatal("a finished task woke")
+	}
+	if _, err := l.Comment(task.Ref(), "maria", "  ", now); err == nil {
+		t.Fatal("an empty comment went through")
 	}
 }

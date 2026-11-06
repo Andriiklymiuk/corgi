@@ -1,14 +1,17 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"strings"
 	"time"
 
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/agent/daemon"
+	"andriiklymiuk/corgi/utils/agent/peers"
 	"andriiklymiuk/corgi/utils/agent/watch"
 	"andriiklymiuk/corgi/utils/agent/workspace"
 	"github.com/spf13/cobra"
@@ -28,6 +31,9 @@ a tracker.
   corgi agent watch work TASK-3           a session on it: the description is the prompt
   corgi agent task move TASK-3 Review     the session runs this when a draft PR is up
   corgi agent task done TASK-3
+  corgi agent task add "Fix the export" --workspace app --run     starts by itself, at level 3 and up
+  corgi agent task comment TASK-3 "the total is still wrong"      a run picks it up
+  corgi agent task add "Fix it" --workspace app --on build-1      on a peer: a server or another laptop
 
 "Work on it" on the phone or the page is the same as watch work: the task
 moves to Doing at once, the board says a session is on its way, and from the
@@ -42,12 +48,23 @@ var agentTaskAddCmd = &cobra.Command{
 		dir := mustAgentDir()
 		body, _ := cmd.Flags().GetString("body")
 		ws, _ := cmd.Flags().GetString("workspace")
+		run, _ := cmd.Flags().GetBool("run")
+		on, _ := cmd.Flags().GetString("on")
 		if body == "-" {
 			raw, err := io.ReadAll(os.Stdin)
 			if err != nil {
 				exitWithError("agent_task", err, 1)
 			}
 			body = string(raw)
+		}
+		title := strings.Join(args, " ")
+		if on = strings.TrimSpace(on); on != "" {
+			ref, err := addTaskOnPeer(context.Background(), dir, on, title, body, strings.TrimSpace(ws), run)
+			if err != nil {
+				exitWithError("agent_task", err, 1)
+			}
+			fmt.Printf("%s on %s\n", ref, on)
+			return
 		}
 		if ws = strings.TrimSpace(ws); ws != "" {
 			if _, err := workspaceRoot(ws); err != nil {
@@ -56,9 +73,18 @@ var agentTaskAddCmd = &cobra.Command{
 		} else if cwd, err := os.Getwd(); err == nil {
 			ws = workspaceIDForDir(dir, cwd)
 		}
-		t, err := watch.LoadTasks(dir).Add(strings.Join(args, " "), body, ws, "cli", time.Now())
+		if run {
+			if why := taskRunRefusal(dir, ws); why != "" {
+				exitWithError("agent_task", fmt.Errorf("%s", why), 2)
+			}
+		}
+		t, err := watch.LoadTasks(dir).Add(title, body, ws, "cli", time.Now())
 		if err != nil {
 			exitWithError("agent_task", err, 2)
+		}
+		if run {
+			t, _ = watch.LoadTasks(dir).AskRun(t.Ref(), time.Now())
+			nudgePlans(dir)
 		}
 		if utils.JSONOutput {
 			utils.PrintJSON(map[string]any{"ref": t.Ref(), "key": t.Key(), "task": t})
@@ -211,13 +237,59 @@ func workspaceIDForDir(agentD, cwd string) string {
 	return ""
 }
 
+// addTaskOnPeer puts a task on another machine's board: the workspace is there,
+// and so is the run. The peer checks the workspace and whether it can run.
+func addTaskOnPeer(ctx context.Context, dir, name, title, body, ws string, run bool) (string, error) {
+	store, err := peers.Load(peers.Path(dir))
+	if err != nil {
+		return "", err
+	}
+	peer, ok := store.Find(name)
+	if !ok {
+		return "", fmt.Errorf("no peer %q: corgi agent peers lists them, corgi agent peers join adds one", name)
+	}
+	if ws == "" {
+		return "", fmt.Errorf("--on needs --workspace: the name it has on %s", name)
+	}
+	var out struct {
+		Ref string `json:"ref"`
+	}
+	client := peers.NewClient(peer)
+	client.HTTP = &http.Client{Timeout: 30 * time.Second}
+	err = client.Call(ctx, "/launch/task", map[string]any{"title": title, "body": body, "workspace": ws, "run": run}, &out)
+	return out.Ref, err
+}
+
+var agentTaskCommentCmd = &cobra.Command{
+	Use:   "comment <TASK-n> <text>",
+	Short: "Say something on a task; where the workspace runs fixes, a run picks it up",
+	Args:  cobra.MinimumNArgs(2),
+	Run: func(cmd *cobra.Command, args []string) {
+		dir := mustAgentDir()
+		by, _ := cmd.Flags().GetString("by")
+		t, err := watch.LoadTasks(dir).Comment(args[0], by, strings.Join(args[1:], " "), time.Now())
+		if err != nil {
+			exitWithError("agent_task", err, 2)
+		}
+		nudgePlans(dir)
+		if utils.JSONOutput {
+			utils.PrintJSON(map[string]any{"ref": t.Ref(), "comments": t.Comments})
+			return
+		}
+		fmt.Printf("%s: %d comment(s)\n", t.Ref(), len(t.Comments))
+	},
+}
+
 func init() {
+	agentTaskCommentCmd.Flags().String("by", "you", "who is saying it")
+	agentTaskAddCmd.Flags().Bool("run", false, "start it now, unattended, where the workspace runs fixes (corgi agent level 3)")
+	agentTaskAddCmd.Flags().String("on", "", "put it on this peer's board: another laptop or a server (corgi agent peers)")
 	agentTaskAddCmd.Flags().String("body", "", "the description: what to do and how you will know it is done (- reads stdin)")
 	agentTaskAddCmd.Flags().String("workspace", "", "the workspace the task is for (default: the one this folder is in)")
 	agentTaskEditCmd.Flags().String("title", "", "a new title")
 	agentTaskEditCmd.Flags().String("body", "", "a new description")
 	agentTaskEditCmd.Flags().String("workspace", "", "a new workspace")
 	agentTaskListCmd.Flags().Bool("all", false, "finished ones too")
-	agentTaskCmd.AddCommand(agentTaskAddCmd, agentTaskListCmd, agentTaskMoveCmd, agentTaskDoneCmd, agentTaskEditCmd, agentTaskRmCmd)
+	agentTaskCmd.AddCommand(agentTaskCommentCmd, agentTaskAddCmd, agentTaskListCmd, agentTaskMoveCmd, agentTaskDoneCmd, agentTaskEditCmd, agentTaskRmCmd)
 	agentCmd.AddCommand(agentTaskCmd)
 }

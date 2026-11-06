@@ -64,6 +64,20 @@ yet written. That is how the human gets out of the loop without quality falling.
 Work out what the workspace lacks before adding a trigger. A run must leave everything the next one needs
 in those memories, written down, never in a session's head.
 
+## The loop on one ticket
+
+```bash
+corgi agent task add "Fix the export" --workspace api --run   # the dashboard has "Start now, without me"
+corgi agent task comment TASK-3 "the total is still wrong"    # or the box on its card; a new run reads the thread
+```
+
+Level 3 and up. Teammates review on the pull request (`--prs` wakes the run), and need no corgi. Errors from Sentry
+and Coralogix land in the inbox to be picked (`--sentry-org`, `/hooks/coralogix`); `--auto-for errors` runs them
+without you, and only belongs where the service is quiet.
+
+One machine holds a corgi task. For work that must survive a closed laptop use a server (`agent container --host`), or
+tickets in the tracker, which `peers` fail over. `task add --on <peer>` sends a task to another machine.
+
 ## Scenarios: an exam the builder cannot read
 
 An agent that can read its tests can pass them without doing the work. Keep the proof where it does not look.

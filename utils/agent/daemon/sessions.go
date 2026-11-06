@@ -88,7 +88,7 @@ func (d *Daemon) handleSessionCommand(ctx context.Context, c command.Command) bo
 			d.handleWatchEvent(ctx, *c.WatchEvent)
 		}
 	case command.ActionPlan:
-		d.advancePlans(ctx)
+		d.advanceWork(ctx)
 	case command.ActionAnswer:
 		answerKeys := d.Sessions.PendingAnswer
 		if c.Confirmed {

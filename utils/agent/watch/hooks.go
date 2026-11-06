@@ -29,7 +29,7 @@ func VerifyHook(source string, r *http.Request, body []byte, secret string) erro
 			return nil
 		}
 		return ErrBadSignature
-	case "jira":
+	case "jira", "coralogix":
 		if hmac.Equal([]byte(r.URL.Query().Get("token")), []byte(secret)) {
 			return nil
 		}
@@ -71,6 +71,8 @@ func ParseHookAs(source string, r *http.Request, body []byte, who HookIdentity) 
 		return parseGitLabHook(body, who)
 	case "jira":
 		return parseJiraHook(body, me)
+	case "coralogix":
+		return parseAlertHook(source, r, body, time.Now())
 	}
 	return nil, fmt.Errorf("unknown webhook source %q", source)
 }

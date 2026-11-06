@@ -2245,13 +2245,16 @@ const launcherPageHTML = `<!doctype html>
       if (!title.value.trim()) { title.focus(); return; }
       add.disabled = true;
       try {
-        const r = await fetch('/launch/task', { method: 'POST', headers: auth, body: JSON.stringify({ title: title.value, body: body.value, workspace: ws.value }) });
+        const r = await fetch('/launch/task', { method: 'POST', headers: auth, body: JSON.stringify({ run: start.checked, title: title.value, body: body.value, workspace: ws.value }) });
         const j = await r.json().catch(() => ({}));
         if (!r.ok) { toast(j.error || 'that did not go through', true); add.disabled = false; return; }
         toast(j.done || 'on the board'); close(); if (after) after();
       } catch { toast('no connection', true); add.disabled = false; }
     };
-    sheet.append(grab, h, title, body, ws, add);
+    const startRow = document.createElement('label'); startRow.className = 'kmeta';
+    const start = document.createElement('input'); start.type = 'checkbox';
+    startRow.append(start, ' Start now, without me');
+    sheet.append(grab, h, title, body, ws, startRow, add);
     scrim.appendChild(sheet);
     document.body.appendChild(scrim);
     title.focus();
@@ -2414,6 +2417,20 @@ const launcherPageHTML = `<!doctype html>
           if (c.cost.runs) bits.push(c.cost.runs + (c.cost.runs === 1 ? ' run' : ' runs'));
           if (c.cost.sessions) bits.push(c.cost.sessions + (c.cost.sessions === 1 ? ' session' : ' sessions'));
           const m = document.createElement('p'); m.className = 'kmeta'; m.textContent = bits.join(' · '); card.appendChild(m);
+        }
+        if (c.kind === 'task' && c.key && col !== 'Done') {
+          const say = document.createElement('input'); say.className = 'tin'; say.placeholder = 'Comment: the agent picks it up'; say.maxLength = 8000;
+          say.onkeydown = async e => {
+            if (e.key !== 'Enter' || !say.value.trim()) return;
+            say.disabled = true;
+            try {
+              const r = await fetch('/launch/task/comment', { method: 'POST', headers: auth, body: JSON.stringify({ key: c.key, text: say.value }) });
+              const j = await r.json().catch(() => ({}));
+              if (!r.ok) { toast(j.error || 'that did not go through', true); say.disabled = false; return; }
+              toast(j.done || 'sent'); loadKanban();
+            } catch { toast('no connection', true); say.disabled = false; }
+          };
+          card.appendChild(say);
         }
         const row = document.createElement('div'); row.className = 'erow';
         const ev = { key: c.key, ref: c.ref, workspace: c.workspace, kind: c.kind, url: c.url };
@@ -4577,6 +4594,62 @@ func sessionsOnTickets(dir string) map[string]*CardSess {
 	return out
 }
 
+// taskRunRefusal says why a task cannot start by itself in this workspace.
+func taskRunRefusal(dir, ws string) string {
+	if ws == "" {
+		return "a task that starts by itself needs a workspace"
+	}
+	specs, err := loadWatchSpecs(dir)
+	if err != nil {
+		return err.Error()
+	}
+	for _, s := range specs {
+		if s.Workspace == ws && s.Action == "fix" {
+			return ""
+		}
+	}
+	return fmt.Sprintf("%s does not run tasks by itself yet: corgi agent level 3 --workspace %s", ws, ws)
+}
+
+// launchTaskCommentHandler adds to a task's thread and wakes a run where the
+// workspace runs them.
+func launchTaskCommentHandler(w http.ResponseWriter, r *http.Request) {
+	setLaunchHeaders(w)
+	if r.Method != http.MethodPost {
+		writeLaunchError(w, http.StatusMethodNotAllowed, "POST {key, text, by} to comment on a task")
+		return
+	}
+	if isViewer(r) {
+		writeLaunchError(w, http.StatusForbidden, "this device may only read")
+		return
+	}
+	var req struct {
+		Key  string `json:"key"`
+		Text string `json:"text"`
+		By   string `json:"by"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&req); err != nil {
+		writeLaunchError(w, http.StatusBadRequest, "could not read the request")
+		return
+	}
+	dir, err := agentDir()
+	if err != nil {
+		writeLaunchError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	by := strings.TrimSpace(req.By)
+	if by == "" || by == watch.TaskAgent {
+		by = "you"
+	}
+	t, err := watch.LoadTasks(dir).Comment(req.Key, by, req.Text, time.Now())
+	if err != nil {
+		writeLaunchError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	nudgePlans(dir)
+	writeLaunchJSON(w, map[string]any{"done": "comment on " + t.Ref(), "ref": t.Ref(), "comments": t.Comments})
+}
+
 func launchTaskHandler(w http.ResponseWriter, r *http.Request) {
 	setLaunchHeaders(w)
 	dir, err := agentDir()
@@ -4593,10 +4666,21 @@ func launchTaskHandler(w http.ResponseWriter, r *http.Request) {
 			Title     string `json:"title"`
 			Body      string `json:"body"`
 			Workspace string `json:"workspace"`
+			Run       bool   `json:"run"`
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&req); err != nil {
 			writeLaunchError(w, http.StatusBadRequest, "could not read the request")
 			return
+		}
+		if isViewer(r) {
+			writeLaunchError(w, http.StatusForbidden, "this device may only read")
+			return
+		}
+		if req.Run {
+			if why := taskRunRefusal(dir, strings.TrimSpace(req.Workspace)); why != "" {
+				writeLaunchError(w, http.StatusBadRequest, why)
+				return
+			}
 		}
 		if ws := strings.TrimSpace(req.Workspace); ws != "" {
 			if _, err := workspaceRoot(ws); err != nil {
@@ -4608,6 +4692,10 @@ func launchTaskHandler(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			writeLaunchError(w, http.StatusBadRequest, err.Error())
 			return
+		}
+		if req.Run {
+			t, _ = watch.LoadTasks(dir).AskRun(t.Ref(), time.Now())
+			nudgePlans(dir)
 		}
 		writeLaunchJSON(w, map[string]any{"done": t.Ref() + " on the board", "key": t.Key(), "ref": t.Ref(), "task": t})
 	default:

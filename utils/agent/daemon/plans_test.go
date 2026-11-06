@@ -113,3 +113,57 @@ func TestAFailedTaskIsTriedAgainOnlyWithinItsCap(t *testing.T) {
 		t.Fatal("never ran")
 	}
 }
+
+func TestATaskAskedToRunStartsAndACommentStartsItAgain(t *testing.T) {
+	d := testDaemon(t)
+	d.Notify = func(_, _ string) {}
+	d.Isolate = func(dir, branch string) ([]string, error) { return []string{dir}, nil }
+	slowClaude(t)
+	d.Watches = []WatchSpec{{Workspace: "acme", Dir: t.TempDir(), ConfigDir: t.TempDir(), Project: "ABC", Rules: watch.Rules{Enabled: true}, Action: "fix", Isolate: true}}
+	d.startWatches(context.Background())
+	now := time.Now()
+	tasks := watch.LoadTasks(d.Dir)
+	later, _ := tasks.Add("for later", "not now", "acme", "phone", now)
+	go1, _ := tasks.Add("go", "do it", "acme", "phone", now)
+	_, _ = tasks.AskRun(go1.Ref(), now)
+
+	d.advanceTasks(context.Background())
+	d.runs.Wait()
+	fresh := watch.LoadTasks(d.Dir)
+	if got, _ := fresh.Find(go1.Ref()); got.State != "Doing" || got.Run {
+		t.Fatalf("asked to run: %+v", got)
+	}
+	if got, _ := fresh.Find(later.Ref()); got.State != "Todo" {
+		t.Fatalf("a task for later moved: %+v", got)
+	}
+	if got, _ := fresh.Find(go1.Ref()); len(got.Comments) == 0 || got.Comments[len(got.Comments)-1].By != watch.TaskAgent {
+		t.Fatalf("the run left no word on the thread: %+v", got.Comments)
+	}
+	first := len(d.watchState.Fixes.RecentFixes("acme", 50))
+
+	_, _ = watch.LoadTasks(d.Dir).Comment(go1.Ref(), "maria", "one more thing", time.Now().Add(time.Second))
+	d.advanceTasks(context.Background())
+	d.runs.Wait()
+	if got := len(d.watchState.Fixes.RecentFixes("acme", 50)); got <= first {
+		t.Fatalf("a comment started no run: %d then %d", first, got)
+	}
+}
+
+func TestErrorsNeverRunByThemselvesUnlessListed(t *testing.T) {
+	if (WatchSpec{Action: "fix"}).FixesKind(watch.KindErrorNew) {
+		t.Fatal("an error started a run with no --auto-for errors")
+	}
+	if !(WatchSpec{Action: "fix"}).FixesKind(watch.KindIssueNew) {
+		t.Fatal("tickets stopped running")
+	}
+	if !(WatchSpec{Action: "fix", FixKinds: []string{"error.new"}}).FixesKind(watch.KindErrorNew) {
+		t.Fatal("--auto-for errors did nothing")
+	}
+}
+
+func TestAnAlertBelongsToTheWorkspaceInItsURL(t *testing.T) {
+	s := WatchSpec{Workspace: "api"}
+	if !s.owns(watch.Event{Kind: watch.KindErrorNew, Workspace: "api"}) || s.owns(watch.Event{Kind: watch.KindErrorNew, Workspace: "web"}) {
+		t.Fatal("an alert went to the wrong workspace")
+	}
+}

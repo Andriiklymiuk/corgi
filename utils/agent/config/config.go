@@ -298,6 +298,11 @@ type WatchConfig struct {
 	ReviewStatus string      `yaml:"reviewStatus,omitempty"`
 	PickupStatus string      `yaml:"pickupStatus,omitempty"`
 	AutoMerge    bool        `yaml:"autoMerge,omitempty"`
+	// Errors takes new errors from Sentry and alert webhooks into the inbox.
+	Errors         bool     `yaml:"errors,omitempty"`
+	SentryOrg      string   `yaml:"sentryOrg,omitempty"`
+	SentryProjects []string `yaml:"sentryProjects,omitempty"`
+	SentryLevel    string   `yaml:"sentryLevel,omitempty"`
 	// Where a ticket goes once every pull request of its run is merged; subtasks may go elsewhere.
 	AfterMerge         string   `yaml:"afterMerge,omitempty"`
 	AfterMergeSubtasks string   `yaml:"afterMergeSubtasks,omitempty"`
