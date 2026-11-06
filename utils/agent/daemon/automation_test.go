@@ -216,6 +216,8 @@ func TestAStopIsGatedByTheWorkspacesDoneWhen(t *testing.T) {
 	if s.Gate == nil || s.Gate.OK || s.Gate.Fails != 1 || s.Tests == nil || s.Tests.OK || s.Tests.Cmd != "echo boom; echo bang; exit 1" {
 		t.Fatalf("the row says red: gate %+v tests %+v", s.Gate, s.Tests)
 	}
+	// One gate per session at a time: a second stop before this one lets go is skipped.
+	d.runs.Wait()
 	policy = Policy{DoneWhen: []string{"true"}}
 	d.Sessions.Apply(sessions.Event{Name: "UserPromptSubmit", SessionID: "s1", At: now})
 	d.Sessions.Apply(sessions.Event{Name: "Stop", SessionID: "s1", At: now})
