@@ -754,7 +754,8 @@ tokens).
 - Fix **blocking** findings (correctness, missing test, scope creep), re-run gate.
   Cap ~1 extra round; still blocked → Stop rule. Non-blocking → PR body.
 - Before push, re-read PR body against head commit: every claim
-  (what enforced, what tested, what other PR does) true now, product
+  (what enforced, what tested, what other PR does) true now and proved
+  (conventions › Comments people read; same bar for spec comment and replies), product
   values nobody gave you under `## Assumptions`. **Decide, don't delegate.** Spec
   silent → pick reading ticket, repo's conventions, user's
   earlier words imply, build it, name pick under `## Assumptions` - never
