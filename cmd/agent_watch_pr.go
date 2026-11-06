@@ -47,6 +47,7 @@ the inbox knows - the one somebody asked you to review first of all.`,
 		words := strings.TrimSpace(strings.Join(args[2:], " "))
 		if err := watch.CorrectionRefusal(words); review && err != nil {
 			exitWithError("agent_watch_pr", err, 2)
+			return
 		}
 		dir := mustAgentDir()
 		workspace, _ := cmd.Flags().GetString("workspace")
