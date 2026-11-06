@@ -1,5 +1,5 @@
 ---
-description: Where was I. Reads corgi agent brief, corgi context, workspace memory, the session board and per-repo git state, then prints a six-line orientation and the next command. Pass a workspace name to orient in one that is not the cwd; no args = the current stack.
+description: Where was I. Reads corgi agent brief, corgi context, workspace memory, the session board and per-repo git state, then prints a six-line orientation and the next command.
 ---
 
 Run the corgi **resume** flow for `$ARGUMENTS`.

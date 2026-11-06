@@ -1,5 +1,5 @@
 ---
-description: Capture the same screen on the base branch and on yours and attach both to the PR/MR - "screenshot comparison", "before and after", "prove the UI changed", "show me the visual diff". Pass a PR/MR link or number, or nothing to use the current branch.
+description: Capture the same screen on the base branch and on yours and attach both to the PR/MR.
 ---
 
 Run the corgi **before-after** flow for `$ARGUMENTS`.

@@ -1,11 +1,13 @@
 ---
 name: resume
-description: Use when the user asks "where was I", "what was I doing", "pick up where I left off", or a session restarted. Prints a six-line orientation and the next command. NOT for "what did I do today" (standup).
+description: "Use for \"where was I\", \"pick up where I left off\", or after a session restart. Prints a six-line orientation and the next command. NOT \"what did I do today\" (standup)."
 ---
 
 # Resume: where was I
 
 Read `../_shared/conventions.md` first.
+
+**Done when:** the six lines and the next command are printed.
 
 A restarted session has no memory of the last one. Everything that survives is on disk;
 read it, don't ask the user to retell it.

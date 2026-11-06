@@ -1,6 +1,6 @@
 ---
 name: mobile-screenshots
-description: "Use when generating store screenshots for an Expo / React Native app: \"make App Store screenshots\", \"Play Market screenshots\", \"store screenshots for all languages\", \"framed marketing screenshots\", \"feature graphic\", \"upload screenshots to the stores\", \"device-frame the screenshots with headlines\". NOT a single-screen verify (mobile skill) or corgi-compose authoring (corgi skill)."
+description: "Use for store screenshots of an Expo / React Native app: \"make App Store screenshots\", \"Play Market screenshots\", \"framed marketing screenshots\", \"upload screenshots to the stores\". NOT a single-screen verify (mobile)."
 ---
 
 # Store screenshots, end to end

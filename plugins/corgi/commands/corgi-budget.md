@@ -1,5 +1,5 @@
 ---
-description: How much budget do I have. Reads corgi agent usage --json and answers per account with the 5-hour and 7-day percent, when each window lifts, and whether the current pace is safe; suggests corgi agent carry when a limit is near. Pass an account profile to narrow; no args = every account.
+description: "How much budget is left: per account, the 5-hour and 7-day percent and when each window lifts."
 ---
 
 Run the corgi **budget** flow for `$ARGUMENTS`.

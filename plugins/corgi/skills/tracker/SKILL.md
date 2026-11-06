@@ -1,6 +1,6 @@
 ---
 name: tracker
-description: "Tracker-side work for a corgi workspace (Linear or Jira): status (\"where are we\", \"what's blocked\"), triage (\"sort the new issues\", \"any duplicates\"), decompose (\"break this epic into tickets\"), and pickup via /corgi-queue (\"what's ready to build\", \"grab the agent tickets\"), handed to stories. Ties each ticket to real branch, PR, CI state. NOT for implementing, ideas, or PR review."
+description: "Use for tracker work in a corgi workspace (Linear or Jira): \"where are we\", \"what's blocked\", \"sort the new issues\", \"break this epic into tickets\", \"what's ready to build\". Ties tickets to real branch, PR and CI state. NOT implementing, ideas or PR review."
 ---
 
 # Corgi tracker

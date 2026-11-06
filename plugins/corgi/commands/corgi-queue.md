@@ -1,5 +1,5 @@
 ---
-description: Pick up build-ready tracker tickets and hand them to the stories skill to build as draft PRs. Several ways in - pass explicit Linear/Jira ticket links/keys to build exactly those, or pass a scope in plain words: nothing = the `agent` queue (tickets labelled `agent`), "in ready" = that status column, "from backlog" = the backlog, "most impactful" = highest-priority first. Any scope skips In Progress/Done/blocked and anything already merged, confirms the picks, then builds. Loop it to keep draining on a schedule (each batch still passes the one spec gate - not zero-touch).
+description: Pick up build-ready tracker tickets and hand them to the stories skill to build as draft PRs.
 ---
 
 Run the corgi **tracker** pickup flow (Job 4) for `$ARGUMENTS`.

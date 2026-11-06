@@ -1,5 +1,5 @@
 ---
-description: Drive + verify a mobile (Expo / React Native) change on a device - Android emulator for JS/Skia (hot-reload), iOS simulator for native (rebuild). Navigate via deep links + Maestro, screenshot, and actually read it. Handles the gotchas - Maestro ASCII-only input, non-login-shell pod builds, Metro `--clear` redbox, SceneKit magenta-at-runtime + square particles - and the local build → TestFlight ship.
+description: Drive + verify a mobile (Expo / React Native) change on a device - Android emulator for JS/Skia (hot-reload), iOS simulator for native (rebuild).
 ---
 
 Run the **mobile** verify flow for `$ARGUMENTS`.

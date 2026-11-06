@@ -1,9 +1,9 @@
 ---
 name: unslop
-description: "Use when an app or site looks AI-generated, generic or too colourful and needs a real design pass: \"unslop this\", \"it looks like AI slop\", \"too many colours\", \"too many cards\", \"make it look like Linear\", \"clean up the UI\", \"the design feels generic\". Audits the running screens, rewrites the tokens and shared parts, then proves the result on screen in both appearances. NOT comparing to a Figma (design-parity), NOT store marketing shots (mobile-screenshots), NOT a single-bug UI fix."
+description: "Use when a UI or a text looks AI-made, generic or too colourful: \"unslop this\", \"it looks like AI slop\", \"too many cards\", \"make it look like Linear\", \"this reads like ChatGPT\", \"make this sound human\". NOT matching a Figma (design-parity) or a one-off UI bug."
 ---
 
-# Unslop a UI
+# Unslop a UI or a text
 
 Read `../_shared/conventions.md` first (finish what you start, attribution, unattended runs).
 
@@ -16,6 +16,9 @@ that pin the palette pass.
 Slop is not ugliness. It is the same defaults with no decision behind them: every block boxed,
 every status a filled colour, every number a tile, every icon in a tinted circle. The fix is
 fewer things on the screen, not more styling. Do not swap one cliche for another.
+
+A text only (a README, a release note, a store page, a PR body, a doc): go straight to "Writing" below.
+Change the words and keep the meaning and the facts.
 
 ## Work from the shared parts down
 
@@ -121,6 +124,47 @@ person sees first.
   feature names a person never learned.
 - **Hints once.** Teach in context, then get out of the way. A paragraph under every control is noise.
 
+## Writing
+
+Copy on the screen, and anything written for people: store pages, READMEs, release notes, PR bodies.
+
+**Say what it does.**
+- Name the mechanism or a number, not a feeling. "Types that follow your schema" becomes "a renamed
+  column fails the build". Ask what the sentence tells the reader to do or know. No answer, cut it.
+- **The swap test.** If the sentence could sit unchanged in another product's docs, it says nothing about
+  this one.
+- Name the source or drop the claim: no "experts say", "many teams find".
+- End on a fact or a plan, not "the future looks bright".
+
+**Plain words.**
+- `is` and `has`, not "serves as", "stands as", "boasts", "features".
+- `use`, `help`, `many`, `if`, `to`, not "leverage", "facilitate", "numerous", "in the event that",
+  "in order to".
+- Cut the generator's words: delve, crucial, pivotal, robust, seamless, tapestry, landscape, testament,
+  underscore, foster, showcase, vibrant, additionally.
+- Cut metaphor nouns that pose as technical: substrate, wedge, north star, flywheel, paradigm, bedrock.
+  Pick the concrete word.
+- A cut adverb or a stronger verb, or the number: "significantly faster" becomes "2 s to 200 ms".
+
+**Sentences.**
+- One idea each, whole, with its verb. Active: "the compiler checks queries", not "queries are checked".
+  Passive only when the actor truly does not matter.
+- No "not just X, but Y": say Y. No trailing "-ing" clause that adds nothing: "..., ensuring quality".
+- No forced threes. Use the number you have.
+- One word for one thing. Do not rotate synonyms for variety.
+- No "from X to Y" unless X and Y are ends of a real scale.
+- No flourish: aphorisms, fragments for effect, code that "rides along". A literal phrase exists.
+- Do not over-compress either. Arrows, dropped articles and private abbreviations make the reader decode.
+
+**Marks.**
+- Few em dashes, or none. A colon before a list or example, not as a connector in a sentence.
+- Bold for the rare word that must be found, not every name. A bold label that restates its own line goes.
+- Sentence case headings, straight quotes, no decorative emoji.
+
+**Tone.**
+- No chatbot talk: "I hope this helps", "Certainly!", "Great question", "Let me know if".
+- No filler: "it is important to note that". One hedge at most: "may", not "could potentially be argued".
+
 ## The scan
 
 Adapt the globs to the repo. These find candidates: read each hit, some are fine.
@@ -138,6 +182,8 @@ grep -rnE "sparkles|textTransform: *'uppercase'|\.uppercased\(\)|design: *\.roun
 grep -rnE "borderWidth: *1.*borderRadius|borderRadius.*borderWidth: *1|strokeBorder" src | wc -l
 # stat tiles and icon discs
 grep -rnE "StatCard|MetricCard|<Tiles?\b|StatTile|Circle\(\)\.fill\(.*Soft" src
+# the generator's words, in copy and docs
+grep -rniE "\b(delve|pivotal|seamless(ly)?|tapestry|testament|underscore|leverag|facilitat|utiliz|in order to|serves as)\b" README.md docs store fastlane marketing src 2>/dev/null
 ```
 
 ## Proof

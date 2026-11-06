@@ -1,9 +1,13 @@
 ---
 name: improve-skill
-description: "Use when the user wants to refine or create an agent skill from this conversation: \"improve my <X> skill\", \"the skill should've caught Z\", \"fix the stories skill\", \"make a skill for <workflow we just did>\". Friction in this session is the evidence; a missing path scaffolds a new skill. NOT for corgi-compose (corgi skill) or normal code edits."
+description: "Use to learn from a session and fix what caused the trouble: \"improve my <X> skill\", \"the skill should've caught Z\", \"make a skill for what we just did\", \"retro\", \"what went wrong in my last 30 sessions\". NOT corgi-compose (corgi) or normal code edits."
 ---
 
 # Improve or scaffold a skill
+
+Read `../_shared/conventions.md` first.
+
+**Done when:** the diff or the new skill is previewed and written, free of workspace detail, or the conversation summary of gaps is printed.
 
 ## Overview
 Skill improves only from **real observed gap** - thing an agent (often you, just now)
@@ -16,7 +20,9 @@ rule.
 **Evidence, never imagination.** No "while I'm here" adds. No session moment (or
 explicit user ask) behind a change → don't make it.
 
-## Three modes - branch on path + whether it exists
+## Four modes - branch on the ask, the path and whether it exists
+- **Sessions named** ("retro", "the last 30 sessions") → **retro mode.** Read them, rank what
+  went wrong, fix each at the layer that stops it.
 - **No path** → **summary only, NO edit.** Dump a conversation digest of gaps + fixes,
   stop. User points at a skill later.
 - **Path to an EXISTING skill** (folder / `SKILL.md`) → **edit mode.** Close the gap in
@@ -24,12 +30,45 @@ explicit user ask) behind a change → don't make it.
 - **Path to a skill that does NOT exist yet** → **create mode.** Scaffold it from the
   session evidence + the user's intent (Create mode). Confirm it's genuinely new first.
 
+## Where a fix belongs
+
+A skill is one place a lesson can live, and rarely the strongest. Before writing a rule, pick the
+cheapest layer that stops this for good. Ask in this order:
+
+1. **Can a machine catch it?** A fixed pattern, a banned call, a file in the wrong place gets a check:
+   a lint rule, a hook, a CI job, a guard that rewrites or refuses the command. A check that exists but
+   is unwired or broken is the finding. A repo with no check at all is a finding too.
+2. **Is it a judgement call?** Cross-file consistency, "matches the style" goes to the review stage. The
+   reviewer gets a diff and has room to think; the one writing the code has the least room.
+3. **Could it not find something?** A long hunt for a file, a command or a hidden link between two files
+   wants a pointer next to where it looked, or a doc it was never shown.
+4. **Did it lack information?** Logs it could not read, a service it could not query: give it read access.
+5. **Was it slow or costly?** An expensive call, a tool with a huge answer, a skill loaded for one line:
+   shorten it, or split it into a reference loaded on demand.
+6. **Only then, a line in a skill.** Always-loaded files (CLAUDE.md, AGENTS.md, skill descriptions) stay
+   small: they cost every session, so they hold pointers, not rules.
+
+**Removing counts.** A line that changes no behaviour is a finding. So is a rule a check now enforces.
+
+## Retro mode (sessions named)
+1. **Read the primary source, not your memory of it.** Default to this session. For more, run
+   `python3 references/mine_sessions.py --last 30` (every `~/.claude*/projects`): tool errors, the same
+   failing call sent twice, skill use, where the person stepped in. Open the transcript behind any
+   line you will act on. Its output holds real project data and stays out of the skill.
+2. **Weigh what the person said over what the tools said.** A correction costs more than an error, and an
+   error the agent recovered from in one step may cost nothing. Count, and quote the count.
+3. **Group by cause, not by symptom,** and pick the layer above for each.
+4. **Rank by what it costs across sessions,** severity first. Show the table: cause, count, layer, fix.
+5. **Apply** what the person asked for, under the guardrails below. A retro may touch several skills; each
+   edit still has its evidence. Say what you did not read, and that a rule is not proven until a later
+   session behaves differently.
+
 ## Summary mode (no path)
 Edit nothing. Return:
 - **Gaps** - each thing that went wrong / slow / got worked around, one line:
   `[skill?] symptom → root cause`.
 - **Fix** - per gap, the one-line skill change that prevents it next time.
-- **Which skill** - best-guess target per gap, so the user can point you.
+- **Where** - per gap, the layer from "Where a fix belongs", and the skill or file when it is one.
 
 Pinpoint, concrete. No vague "could be tighter."
 
@@ -92,13 +131,16 @@ a skill you can already describe from lived evidence.
   one you saw it on. A reproducible bug+fix is universal; one app's rendering quirk is not.
 - **Preview before write** - never silently edit a shared skill repo.
 - **No path → summary only**, never edit.
-- **One skill at a time.**
+- **One skill at a time**, except a retro the person asked for.
+- **A check beats a rule** when the mistake has a fixed shape.
 
 ## Red flags - stop
 - "I'll also add a section on…" no session moment → imagination, drop.
 - Real service / company / ticket name about to enter the skill → de-leak first.
 - Rewrite half the skill for a one-line gap → minimum diff.
 - Edit before naming the gap → name first.
+- Writing "always remember to X" for something a linter or a hook could refuse → build the check.
+- Adding to a file every session loads → a pointer, or somewhere else.
 - Rule already there → sharpen, don't duplicate.
 - Asserting a one-stack / one-version / one-device quirk as a universal rule → conditionalize
   it ("if X on yours…") and state only the transferable fix; verify-per-app, don't assume.

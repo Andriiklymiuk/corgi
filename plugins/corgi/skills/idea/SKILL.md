@@ -1,6 +1,6 @@
 ---
 name: idea
-description: "Use when the user wants a link to a doc, spec, HLD, RFC or plan from this conversation so other people can read and comment on it - \"ok, give me link to doc we created\", \"a link so my friends can comment on the hld\", \"share this hld with my team for review\", \"дай ссылку на документ, который мы сделали\" - corgi turns the markdown file into a page with a link anyone can comment on (no account), the agent answers. Also when they want a page written and kept for something to build or decide (\"write a spec for X\", \"draft an HLD\", \"RFC: move auth to the gateway\", \"turn this doc into tickets\"), or when a session is asked to read, answer or act on an idea page (`corgi idea …`, a /idea/<slug> link someone sent, \"the comments on the spec\"). NOT for implementing the tickets (stories) or for tracker status (tracker)."
+description: "Use when the user wants a shareable link to a doc so others can comment: \"give me a link to the doc we made\", \"share this hld with my team\", \"дай ссылку на документ\"; to write a spec, HLD or RFC to keep; or to read and answer an idea page or /idea/<slug> link. NOT building the tickets (stories) or tracker status (tracker)."
 ---
 
 # Corgi idea: one page per thing to build, kept by the agent

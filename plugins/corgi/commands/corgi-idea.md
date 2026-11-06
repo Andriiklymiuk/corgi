@@ -1,5 +1,5 @@
 ---
-description: Write and keep a page for something to build or decide - an idea, a spec, an HLD, an RFC - commented by people in the browser, VS Code and the phone, answered by the agent, split into tickets, built from or sent to Jira/Linear/Confluence.
+description: Write and keep a page for something to build or decide, with a link people can comment on.
 ---
 
 Run the corgi **idea** flow for `$ARGUMENTS`.

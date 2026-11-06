@@ -1,5 +1,5 @@
 ---
-description: Build (or fix) a CI job that boots the whole corgi stack and runs cross-repo e2e against the branches under review. Pass what you want in plain words (e.g. "GitHub Actions for the full stack", "e2e across api + web on the PR branch", "why does each repo pass but the combination break"); no args = generate the pipeline for this workspace.
+description: Build (or fix) a CI job that boots the whole corgi stack and runs cross-repo e2e against the branches under review.
 ---
 
 Run the corgi **ci** flow for the request in `$ARGUMENTS`.

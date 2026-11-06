@@ -1,5 +1,5 @@
 ---
-description: Diagnose a misbehaving corgi stack, or gather runtime data while investigating a bug. Local-first (corgi ps/status/doctor/logs + targeted retries), escalating to whatever logs/analytics provider the repo uses (auto-detected from the README) only on demand and after asking. Pass a symptom or a data request (e.g. "api won't start", "everything hangs on boot", "pull the staging logs for this 500"); no args = snapshot the whole stack.
+description: Diagnose a misbehaving corgi stack, or gather runtime data while investigating a bug.
 ---
 
 Run the corgi **debug** flow for the request in `$ARGUMENTS`.

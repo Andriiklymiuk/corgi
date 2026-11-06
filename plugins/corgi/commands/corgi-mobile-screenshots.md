@@ -1,5 +1,5 @@
 ---
-description: Generate store screenshots for an Expo / React Native app end to end - capture N screens × iPhone / iPad / Android-phone+tablet × every locale, frame them (device mockup + localized headline + background) with the external app-store-screenshots editor skill, export at exact App Store / Play sizes, and upload screenshots + localized listings via fastlane deliver / supply. Honors the hard-won capture quirks (one Maestro flow per screen, in-flow takeScreenshot, /tmp staging, per-locale stabilize) and the no-env iOS auth.
+description: "Generate store screenshots for an Expo / React Native app: capture, frame, export and upload."
 ---
 
 Run the **mobile-screenshots** store pipeline for `$ARGUMENTS`.

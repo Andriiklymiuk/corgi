@@ -1,5 +1,5 @@
 ---
-description: Raise the code quality of a repo or an area - take a baseline, hunt real defects by kind, fix them worst first with proof, report what is left. Pass a folder or a feature, or nothing for the area changed most lately.
+description: Raise the code quality of a repo or an area - take a baseline, hunt real defects by kind, fix them worst first with proof, report what is left.
 ---
 
 Run the corgi **quality** flow for `$ARGUMENTS`.

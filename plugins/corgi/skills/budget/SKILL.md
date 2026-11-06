@@ -1,11 +1,13 @@
 ---
 name: budget
-description: Use when the user asks "how much budget do I have", "can I start another task", "when does the limit reset". Reads `corgi agent usage --json`, answers in numbers, suggests `corgi agent carry` when a limit is near.
+description: "Use for \"how much budget do I have\", \"can I start another task\", \"when does the limit reset\". Reads `corgi agent usage --json`, answers in numbers, suggests `corgi agent carry` near a limit."
 ---
 
 # Budget
 
 Read `../_shared/conventions.md` first.
+
+**Done when:** the numbers and the reset time are printed.
 
 Answer "can I start another task" with numbers, not a feeling.
 

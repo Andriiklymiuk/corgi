@@ -1,6 +1,6 @@
 ---
 name: showcase
-description: "Use when the user wants README pictures, animated demos or a short video of a CLI, app, or extension: \"make screenshots for the README\", \"showcase gif\", \"demo video\", \"marketplace media\", \"hero image\". Draws the UI as HTML from the product's own strings, in the project's own colours, with a caption that says what you are watching. NOT for phone store screenshots (mobile-screenshots) or a running app (mobile)."
+description: "Use for README pictures, demos or a short video of a CLI, app or extension: \"make screenshots for the README\", \"showcase gif\", \"demo video\", \"marketplace media\". Draws the UI as HTML from the product's strings. NOT store shots (mobile-screenshots)."
 ---
 
 # Showcase: README pictures, GIFs and short videos from HTML

@@ -1,9 +1,13 @@
 ---
 name: suggest-proactive
-description: "Use when corgi should push ideas on its own instead of being asked: \"suggest things automatically\", \"run suggest every week\", \"put the proactive bot on\", \"be a proactive engineer / push me work\", \"why did the proactive bot propose X\", or when a daemon routine or a scheduled job invokes /corgi-suggest-proactive. NOT for on-demand ideas (suggest) or implementing anything (stories)."
+description: "Use when corgi should push ideas by itself: \"run suggest every week\", \"put the proactive bot on\", \"why did the bot propose X\", or a routine invoking /corgi-suggest-proactive. NOT on-demand ideas (suggest)."
 ---
 
 # Corgi proactive suggest - the Proactive bot
+
+Read `../_shared/conventions.md` first.
+
+**Done when:** the routine is set, or one idea sits on the board with its reason.
 
 Once a week the Proactive bot reads the stack the way `suggest` does, picks
 **one** thing worth building, and puts it on the board as a task with its

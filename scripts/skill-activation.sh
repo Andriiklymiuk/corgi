@@ -31,6 +31,19 @@ idea|Ok, give me link to doc we created
 idea|give me a link so my friends can comment on the hld
 idea|дай ссылку на документ, который мы сделали
 idea|share this hld with my team for review
+unslop|this app looks like AI slop, too many colours and cards, clean up the UI
+unslop|this README reads like ChatGPT wrote it, make it sound human
+quality|improve the code quality of this repo, it keeps breaking
+improve-skill|retro: what went wrong in my last 30 sessions, fix what caused it
+improve-skill|the stories skill should have caught that, fix the skill
+summary|what's left, which PRs are still open
+budget|how much budget do I have left
+resume|where was I
+tracker|sort the new issues in Linear and tell me what's blocked on the sprint
+complexity|this function is a jungle, reduce the complexity
+prep-pr|prep my PR
+before-after|attach before and after screenshots to the PR
+align|let's align first, this request could mean two things
 none|what is the capital of France
 CASES
 echo "$pass passed, $fail failed"

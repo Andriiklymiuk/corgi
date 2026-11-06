@@ -1,9 +1,11 @@
 ---
 name: setup
-description: "Use when the user wants corgi set up end to end: \"set up corgi for me\", \"I just installed corgi, what now\", \"get corgi agent running\", \"connect my phone, Telegram, menu bar\", \"connect Jira, Linear, GitHub to corgi\", \"onboard me to corgi\". Runs every step a program can; lists the manual clicks. NOT for authoring compose or running the stack."
+description: "Use to set corgi up end to end: \"set up corgi for me\", \"I just installed corgi, what now\", \"connect my phone, Telegram, Jira\". Runs every step a program can, lists the manual clicks. NOT authoring compose or running the stack."
 ---
 
 # Set corgi up, end to end
+
+Read `../_shared/conventions.md` first.
 
 One pass, from nothing to a phone that can start a session on this laptop.
 Every step is idempotent: run the whole thing again and it only fixes what

@@ -1,5 +1,5 @@
 ---
-description: Give an app or site a real design pass when it looks AI-generated or too colourful - neutral surfaces, one accent, rows instead of cards, measured contrast. Pass a screen, a repo or nothing for the current app.
+description: Give an app or site a real design pass when it looks AI-generated or too colourful - neutral surfaces, one accent, rows instead of cards, measured contrast.
 ---
 
 Run the corgi **unslop** flow for `$ARGUMENTS`.

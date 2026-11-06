@@ -1,5 +1,5 @@
 ---
-description: What did I do today. Runs corgi agent standup (prompts as headlines, commits as facts, per workspace), reads it back as done / doing / next / blocked, and offers to post it. Pass a window in plain words ("yesterday", "the weekend", "this week") or "write" for prose; no args = the last 24 hours.
+description: "What did I do today: runs corgi agent standup and reads it back as done, doing, next, blocked."
 ---
 
 Run the corgi **standup** flow for `$ARGUMENTS`.

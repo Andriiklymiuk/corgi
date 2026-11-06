@@ -1,5 +1,5 @@
 ---
-description: Refine OR create an agent skill from what happened this conversation. Pass the skill folder / SKILL.md to improve (e.g. "plugins/corgi/skills/stories") + the gap in plain words ("should bring the DB up for migrations, not hand-write them"). A path that does NOT exist yet → scaffolds a new skill there from this session's evidence. NO path → just a conversation summary of gaps + fixes (no edit). Previews any diff/new file before writing; strips all workspace-specific detail.
+description: Learn from this session or the last 30 and fix what caused the trouble, in a skill or a check.
 ---
 
 Run the **improve-skill** flow for `$ARGUMENTS`.
@@ -8,11 +8,13 @@ Run the **improve-skill** flow for `$ARGUMENTS`.
 - Evidence = this conversation: the step that went wrong / slow / got worked around, or
   the user's explicit "next time do Y."
 
-Branch on path (per the `improve-skill` skill (load it with the Skill tool: `corgi:improve-skill`)):
+Branch on the ask and the path (per the `improve-skill` skill (load it with the Skill tool: `corgi:improve-skill`)):
 
+- **Sessions named ("retro", "the last 30 sessions") → retro mode.** Read them, group by cause, rank by
+  cost, and fix each at the cheapest layer that stops it: a check first, a skill line last.
 - **No path → summary mode, NO edit.** Return a digest: **Gaps** (each `[skill?] symptom
-  → root cause`), **Fix** (one-line skill change per gap), **Which skill** (best-guess
-  target per gap so the user can point you). Pinpoint and concrete. Stop there.
+  → root cause`), **Fix** (one-line skill change per gap), **Where** (the layer per gap, and the
+  skill or file when it is one). Pinpoint and concrete. Stop there.
 - **Path to an EXISTING skill → edit mode.** Name the gap in one sentence (1), read the
   target + check it isn't already covered (2), draft the **minimal** edit in the skill's
   voice (3), **de-leak** every workspace / company / service / ticket / secret token (4),
@@ -23,5 +25,5 @@ Branch on path (per the `improve-skill` skill (load it with the Skill tool: `cor
   pair a command only if the plugin does, **de-leak**, preview the new file(s) + gate.
 
 Honor every guardrail: evidence-only, minimum diff, **no leak**, preview before writing
-a shared / committed skill repo, no-path = summary only, one skill at a time. Large or
+a shared / committed skill repo, no-path = summary only, one skill at a time unless it is a retro. Large or
 discipline-enforcing skill → defer to `superpowers:writing-skills` if installed.

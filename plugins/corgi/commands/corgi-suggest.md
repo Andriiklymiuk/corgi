@@ -1,5 +1,5 @@
 ---
-description: Suggest the few things worth building next in a corgi workspace - reads the stack, the READMEs, the memory and the board once, then proposes three to six evidence-backed ideas across three lenses (magic a user would feel, friction a developer trips on, risk that will bite), each with how you will know it worked. Specs the chosen one and puts it on the board as a task or a tracker ticket, then offers to hand it to stories. Pass a focus in plain words ("performance", "the api", "retention"); no args = the whole stack.
+description: Suggest the few things worth building next in a corgi workspace, ranked, with evidence from this repo.
 ---
 
 Run the corgi **suggest** flow for the focus in `$ARGUMENTS`.

@@ -1,6 +1,6 @@
 ---
 name: quality
-description: "Use when the user wants the code quality of a repo or an area raised: \"improve quality\", \"raise the code quality\", \"harden this\", \"tech debt pass\", \"audit this repo\", \"what is wrong with this code\", \"clean up this module\". Takes a baseline, hunts real defects by kind, fixes them worst first with proof, and reports what is left. NOT a PR review (review), one tangled function (complexity), how a screen looks (unslop), scoring a diff (risk) or feature ideas (suggest)."
+description: "Use to raise the code quality of a repo or area: \"improve quality\", \"harden this\", \"tech debt pass\", \"audit this repo\", \"what is wrong with this code\". Baseline, real defects worst first, proof. NOT a PR review (review), one tangled function (complexity) or how a screen looks (unslop)."
 ---
 
 # Raise code quality

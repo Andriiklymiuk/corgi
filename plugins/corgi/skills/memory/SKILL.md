@@ -1,9 +1,13 @@
 ---
 name: memory
-description: "The memory convention: a committed `.corgi/memory/` store of decisions, incidents, and recurring fixes that suggest, debug, stories, and review read before acting and append to afterwards. Use to read prior decisions, record a decision or an incident fix, or propose a recurring fix as a skill. Read before act, confirm before write, never secrets."
+description: "Use to read or record the workspace memory in `.corgi/memory/`: prior decisions, incident fixes, recurring fixes worth a skill. Read before acting, confirm before writing, never secrets."
 ---
 
 # Corgi workspace memory
+
+Read `../_shared/conventions.md` first.
+
+**Done when:** what was asked is read back from the store, or the entry is written after a yes.
 
 A corgi workspace remembers things not in git or code: **why** a driver/port/template was chosen, how a past **incident** was fixed, **domain** facts, recurring **fixes**. Store is `.corgi/memory/` - committed, shared by the team via the repo, keyed to the `corgi-compose.yml` stack. This skill is the convention; `suggest`/`debug`/`stories`/`review` reference it.
 

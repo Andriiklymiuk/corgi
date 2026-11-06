@@ -1,6 +1,6 @@
 ---
 name: design-parity
-description: "Use when a change has a design behind it and someone must prove the build matches: \"compare it with the design\", \"does this match Figma\", \"check it against the mockup\", \"side-by-side with the design\", \"pixel check\", \"the designer says it's off\". NOT the device-driving loop (mobile skill) or store screenshots (mobile-screenshots)."
+description: "Use to prove a build matches its design: \"does this match Figma\", \"compare it with the mockup\", \"the designer says it's off\". NOT driving a device (mobile), store shots (mobile-screenshots) or a design pass with no design (unslop)."
 ---
 
 # Prove the build matches the design

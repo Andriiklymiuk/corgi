@@ -1,6 +1,6 @@
 ---
 name: autopilot
-description: "Use when the user wants a SUPERVISED background loop that drains the build-ready ticket queue into draft PRs: \"autopilot\", \"keep shipping the agent queue\", \"run the loop\", \"drain the backlog overnight\", \"babysit the queue\". One spec gate per batch, draft PRs only, never merges; has a kill switch and a heartbeat. NOT for a single batch (/corgi-queue) or auto-merging anything."
+description: "Use for a SUPERVISED loop that drains the ticket queue into draft PRs: \"autopilot\", \"keep shipping the queue\", \"drain the backlog overnight\". One spec gate per batch, never merges. NOT a single batch (/corgi-queue)."
 ---
 
 # Corgi autopilot

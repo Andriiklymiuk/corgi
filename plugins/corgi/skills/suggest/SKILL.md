@@ -1,9 +1,13 @@
 ---
 name: suggest
-description: "Use when the user wants feature or improvement ideas for a corgi workspace: \"suggest features\", \"what should we build next\", \"what would make this magic\", \"ideas to improve X\", \"how do we make this faster/safer/cheaper\", \"what's missing\", \"any new business cases\". NOT for implementing it (stories), running it on a clock (suggest-proactive), or authoring corgi-compose.yml (corgi)."
+description: "Use for feature or improvement ideas in a corgi workspace: \"suggest features\", \"what should we build next\", \"ideas to improve X\", \"what's missing\". NOT building it (stories), a clock (suggest-proactive) or fixing defects (quality)."
 ---
 
 # Corgi suggest
+
+Read `../_shared/conventions.md` first.
+
+**Done when:** a short ranked list is printed, each idea with the evidence from this repo and its first step.
 
 Find the few things worth building next in **this** stack - the way a product
 engineer who read the code and used the product would - and turn the chosen one

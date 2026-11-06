@@ -1,5 +1,5 @@
 ---
-description: Prove a screen matches its design - pull the design frames into the repo, make a flagged/unseeded feature reachable, capture the same states, compose labelled design-vs-app side-by-sides, read them, and report the deviations (fixed vs deliberate). Also covers shipping the copy from the design through the translation platform without wiping live translations.
+description: "Prove a screen matches its design: pull the frames, capture the same states, compare them side by side."
 ---
 
 Run the **design-parity** pass for `$ARGUMENTS`.

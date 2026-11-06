@@ -1,5 +1,5 @@
 ---
-description: Run one iteration of the SUPERVISED autopilot loop - drain the build-ready ticket queue into DRAFT PRs, with one spec sign-off gate per batch, a heartbeat, and a kill switch. Pass a scope in plain words (nothing = the `agent` queue; "in ready", "from backlog", "most impactful", "bugs", or explicit ABC-123 keys). It delegates pickup to the tracker skill and building to stories - never auto-merges. Schedule it with /loop or /schedule to keep draining; stop it with `corgi autopilot stop`.
+description: "Run one iteration of the supervised autopilot loop: build-ready tickets into draft PRs, with one spec gate per batch."
 ---
 
 Run the corgi **autopilot** skill for `$ARGUMENTS` (one supervised iteration).

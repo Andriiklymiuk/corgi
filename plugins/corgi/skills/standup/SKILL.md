@@ -1,6 +1,6 @@
 ---
 name: standup
-description: Use when the user asks "what did I do today", "what have you done today", "what did corgi do while I was out", "what did I do yesterday", "write my standup", "what landed this week". Runs `corgi agent today` / `corgi agent standup`, reads it back, offers to post. NOT for "what's blocked" (tracker).
+description: "Use for \"what did I do today\", \"what did corgi do while I was out\", \"write my standup\", \"what landed this week\". Runs `corgi agent today`/`standup`, reads it back, offers to post. NOT \"what's blocked\" (tracker)."
 ---
 
 # Standup

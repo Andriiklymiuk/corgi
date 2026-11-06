@@ -1,9 +1,13 @@
 ---
 name: agent
-description: "Use when working on a corgi stack from a phone or another device through Claude Code Remote Control, or setting that up: cross-repo branches and diffs, tunnels, restarts, notifications, account profiles, session tracking (\"which sessions are waiting on me\", \"answer that permission from my phone\"). Also for the daemon's tracker and PR watch: being told about ticket or review activity (\"watch the jira issues here\", \"tell me when someone comments on my MRs\"), what is or should be tracked, stopping a watch, or why it did or did not fire. Also for a handoff when a run stops part-way (\"leave a handoff for ABC-7\", \"what did the last run leave\"). NOT for compose authoring (corgi), starting (run), or debugging (debug)."
+description: "Use for corgi agent mode: Remote Control from a phone, the session board (\"who is waiting on me\"), watching trackers and PRs (\"tell me when someone comments\"), why a watch fired, and handoffs (\"leave a handoff for ABC-7\"). NOT compose authoring (corgi), starting a stack (run), debugging (debug)."
 ---
 
 # Corgi agent mode
+
+Read `../_shared/conventions.md` first.
+
+**Done when:** the change asked for is live and shows in `corgi agent doctor` or the command's own status, or the question is answered from the board, not from memory.
 
 Remote Control runs a Claude Code session on the user's own machine, driven from
 their phone. It sees **one directory**. A corgi stack is **several

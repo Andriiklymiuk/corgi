@@ -52,6 +52,18 @@ describe('corgi-guard', () => {
     expect(String((await $.tool.call({ tool: 'Bash', command: real })).deny)).toContain('read -r')
   })
 
+  test('quotes a word starting with = after echo, and nothing else', async ($, on) => {
+    const seen: string[] = []
+    on('tool.call', { tool: 'Bash' }, (_$, e) => {
+      if (e.tool === 'Bash') seen.push(e.command)
+      return { result: { stdout: '', stderr: '', interrupted: false }, text: '' }
+    })
+    await $.tool.call({ tool: 'Bash', command: 'cat a; echo =====LOG; git log; echo === done' })
+    await $.tool.call({ tool: 'Bash', command: 'echo "a = b" && [ "$a" = b ] && echo x=1' })
+    expect(seen[0]).toBe("cat a; echo '=====LOG'; git log; echo '===' done")
+    expect(seen[1]).toBe('echo "a = b" && [ "$a" = b ] && echo x=1')
+  })
+
   test('quotes a glob in a --flag= value, which zsh would refuse as no matches found', async ($, on) => {
     const seen: string[] = []
     on('tool.call', { tool: 'Bash' }, (_$, e) => {

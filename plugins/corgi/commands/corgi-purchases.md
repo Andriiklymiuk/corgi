@@ -1,5 +1,5 @@
 ---
-description: Manage In-App Purchases / store metadata / RevenueCat for an Expo / React Native app - the product-id source of truth, a version-controlled local source for per-IAP App Review notes (примечание) generated from the catalog with a drift-guard test, and pushing IAP `reviewNote` via the App Store Connect API (fastlane `deliver` can't manage IAP metadata). Dry-run before apply; the review screenshot stays manual.
+description: Manage In-App Purchases, store metadata and RevenueCat for an Expo / React Native app.
 ---
 
 Run the **purchases** flow for `$ARGUMENTS`.

@@ -1,5 +1,5 @@
 ---
-description: Code-review one or more existing PRs/MRs (GitHub or GitLab) against the repo's standards and any linked Linear/Jira ticket, then post a summary comment + inline suggestions. Someone else's PR is posted to without asking; your own is fixed and pushed instead. OR address review feedback on your own PR - apply the valid comments, reply + resolve the threads, push. Pass PR/MR URLs or numbers (or a story-id for the address mode); add --yes to skip printing the preview.
+description: Code-review existing PRs/MRs against the repo standards and the linked ticket, or address feedback on your own.
 ---
 
 Run the corgi **review** flow for the reference(s) in `$ARGUMENTS`. The skill has two

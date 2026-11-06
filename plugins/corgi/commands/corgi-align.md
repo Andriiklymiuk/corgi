@@ -1,5 +1,5 @@
 ---
-description: Agree on a request once, cheaply, then build it. Looks up facts itself, prints one "Aligned: … Going." line when the request has one reading, else one round of at most five forks with a recommended pick each. --diagram adds a flow diagram; off by default.
+description: Agree on a request once, cheaply, then build it.
 ---
 
 Run the corgi **align** flow for `$ARGUMENTS`.

@@ -1,6 +1,6 @@
 ---
 name: review
-description: "Use when the user wants a code review of EXISTING pull/merge requests: \"review this PR/MR\", \"code review <link>\", \"check the api + web MRs for ABC-123\", a bare link with \"thoughts?\". Also to address feedback on your OWN PR: \"fix the comments on this MR\", \"address the feedback for ABC-123\". A PR/MR link is still this skill when the forge is unreachable and the PR is saved on disk. NOT for creating PRs (stories) or the local diff (/code-review)."
+description: "Use to review EXISTING pull/merge requests: \"review this PR/MR\", \"code review <link>\", a bare PR link. Also to address feedback on your OWN: \"fix the comments on this MR\". Works from a saved PR when the forge is down. NOT creating PRs (stories) or the local diff (/code-review)."
 ---
 
 # Corgi review
@@ -460,8 +460,8 @@ stands between the PR and done, not to read a checklist of things that are fine.
   (a stacked pair, or siblings in one repo) each re-derive the same facts unless the
   prompt says which files are shared and what the other reviewer covers. One line per
   prompt; the orchestrator holds the ledger, subagents cite it.
-- Big **set** → dispatch per-PR reviews to parallel subagents, each scoped to
-  its diff + the shared note. **Mind the machine**: read the load first (`uptime`,
+- Big **set** → one PR at a time in this session; parallel subagents only when the person asked for
+  them here, each scoped to its diff + the shared note. **Mind the machine**: read the load first (`uptime`,
   `nproc`/`sysctl -n hw.ncpu`); reviewers that only read can run together, but full
   test gates run one at a time per repo (two at most when the load is below the core
   count) - five suites at once push the load past 50 and every one of them crawls.

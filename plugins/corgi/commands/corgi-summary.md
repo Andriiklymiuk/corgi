@@ -1,5 +1,5 @@
 ---
-description: Report where a batch of work stands - "give me a summary", "what's left", "status of all the MRs", "what did we ship", "recap". Re-reads every PR/MR and ticket live and groups them by ticket with clickable links. Pass nothing to summarise the session's own work.
+description: "Report where a batch of work stands - 'give me a summary', 'what's left', 'status of all the MRs', 'what did we ship', 'recap'."
 ---
 
 Run the corgi **summary** flow for `$ARGUMENTS`.

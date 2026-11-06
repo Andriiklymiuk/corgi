@@ -1,11 +1,13 @@
 ---
 name: align
-description: Use when the user says "align", "align on this", "let's align first", "make sure we agree", or hands over a request that can be read two ways before any code is written. Reaches a shared understanding at the lowest token cost, then codes. NOT a plan gate (stories Phase 2) and NOT a long interview.
+description: "Use when the user says \"align\", \"let's agree first\", or a request can be read two ways before any code. Reaches a shared understanding cheaply, then codes. NOT a plan gate or a long interview."
 ---
 
 # Align: agree once, then ship
 
 Read `../_shared/conventions.md` first.
+
+**Done when:** one message says what will be built and what will not, and it is agreed.
 
 A wrong reading of the request is the most expensive token spend there is: everything
 built on it is thrown away. A question that grep could have answered is the second most

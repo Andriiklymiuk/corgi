@@ -1,9 +1,13 @@
 ---
 name: corgi
-description: Author and explain corgi-compose.yml files and the corgi CLI. Use when writing or editing a corgi-compose.yml, picking db drivers, healthchecks or tunnels, or explaining corgi concepts, commands, and flags. Corgi is a Go CLI that starts databases, services, and required tools from one yml file. NOT for starting a stack (run skill) or diagnosing a broken one (debug skill).
+description: "Use to write or explain corgi-compose.yml and the corgi CLI: db drivers, healthchecks, tunnels, commands, flags. NOT starting a stack (run) or diagnosing a broken one (debug)."
 ---
 
 # Corgi
+
+Read `../_shared/conventions.md` first.
+
+**Done when:** the yml passes `corgi doctor`, or the question is answered with the exact command or field.
 
 Corgi (https://github.com/Andriiklymiuk/corgi) runs multi-service projects from a single `corgi-compose.yml`. It handles: cloning service repos, starting databases in Docker, seeding from dumps, generating `.env` files with cross-service URLs, and running all services concurrently.
 

@@ -1,5 +1,5 @@
 ---
-description: Set up or manage phone-startable Claude Code sessions on this machine - "make this repo phone-startable", "set up remote control", "pair my phone", "start a session from my phone", "give the launcher a permanent URL", "run this workspace under my work account", "track my Claude sessions on a Stream Deck", "stop the remote setup". Works in a corgi stack OR any git repository; no args = set up the current directory.
+description: Set up or manage phone-startable Claude Code sessions on this machine.
 ---
 
 Run the agent-mode remote setup for the request in `$ARGUMENTS`.

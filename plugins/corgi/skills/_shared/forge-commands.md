@@ -343,6 +343,9 @@ glab mr update <iid> --ready       # only when a human says so
 glab mr merge <iid>                # only when a human says so
 ```
 
+`gh pr checks` exits non-zero for a state, not a broken command: 8 means still pending, 1 means one
+failed. Read the state from `--json name,bucket`, do not treat the exit code as an error.
+
 Right after a push the checks are not registered yet, and a bare `gh pr checks --watch`
 exits 1 with "no checks reported". Wait for them in the same command, as a background
 command (`run_in_background`), never behind a leading `sleep N` - the harness refuses that:

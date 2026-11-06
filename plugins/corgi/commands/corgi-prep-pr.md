@@ -1,5 +1,5 @@
 ---
-description: Prep my PR. One entry point that runs the complexity gate, corgi test --changed against the base branch, and the risk score, then drafts the PR/MR the way stories does. Pass a branch, a service, or a ticket key; no args = the current branch of the cwd repo (or every compose service off base).
+description: Prep my PR. One entry point that runs the complexity gate, corgi test --changed against the base branch, and the risk score, then drafts the PR/MR the way stories does.
 ---
 
 Run the corgi **prep-pr** flow for `$ARGUMENTS`.

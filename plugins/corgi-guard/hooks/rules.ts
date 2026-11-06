@@ -28,10 +28,10 @@ export function refusal(raw: string): string | undefined {
 
 const flagGlob = /(?<=\s)(--[A-Za-z][\w-]*=)([^\s'"`$;&|(){}<>]*[*?[][^\s'"`$;&|(){}<>]*)(?=[\s;&|)]|$)/g
 
-export function quoteFlagGlobs(command: string): string {
-  if (command.includes('<<')) {
-    return command
-  }
+const echoEquals = /\b(?:echo|printf)\b[^;&|\n]*/g
+const equalsWord = /(?<=\s)=[^\s'"`$;&|(){}<>]*(?=\s|$)/g
+
+function bareMask(command: string): boolean[] {
   const bare: boolean[] = []
   let quote = ''
   for (let i = 0; i < command.length; i++) {
@@ -46,8 +46,26 @@ export function quoteFlagGlobs(command: string): string {
       quote = ''
     }
   }
+  return bare
+}
+
+export function quoteFlagGlobs(command: string): string {
+  if (command.includes('<<')) {
+    return command
+  }
+  const bare = bareMask(command)
   return command.replace(flagGlob, (word, flag: string, glob: string, at: number) =>
     bare[at] ? `${flag}'${glob}'` : word)
+}
+
+// zsh reads a word starting with `=` as a command lookup: `echo ====` dies with "==== not found".
+export function quoteEchoEquals(command: string): string {
+  if (command.includes('<<')) {
+    return command
+  }
+  const bare = bareMask(command)
+  return command.replace(echoEquals, (part, start: number) =>
+    part.replace(equalsWord, (word, at: number) => (bare[start + at] ? `'${word}'` : word)))
 }
 
 export function hint(command: string, text: string): string | undefined {

@@ -254,7 +254,10 @@ These fail or get refused, unattended or not, and each one costs a turn:
 - **The shell here is zsh, not bash.** `$var` does not split: `set -- $pair` and `for x in $list`
   see one word; use `read -r a b <<< "$pair"` or `${=list}`. A glob with no match aborts the whole
   command (`no matches found`): quote it, or `(N)` for "maybe none". `$PIPESTATUS` is blank:
-  use `$pipestatus[1]`. Anything longer than a few lines goes in a `bash` script file.
+  use `$pipestatus[1]`. A word starting with `=` is a command lookup: `echo ====` dies with `==== not
+  found` and takes the chain with it, so quote it. Anything longer than a few lines goes in a `bash` script.
+- **`sed -i` on macOS wants an argument:** `sed -i '' 's/a/b/' f`, or the file edit tool, which can't get
+  it wrong.
 - **A pasted screenshot path that is gone.** macOS deletes `TemporaryItems/NSIRD_screencaptureui_*`
   within moments. `ls` the folder once, then ask for the picture to be saved to the Desktop. Do not
   try the same path again.

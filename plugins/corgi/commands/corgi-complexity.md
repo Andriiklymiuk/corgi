@@ -1,5 +1,5 @@
 ---
-description: Measure and reduce the cyclomatic complexity of changed code. Pass a scope in plain words - a PR/MR link, a branch, files, or a service - plus an optional mode (`report` = numbers only, `gate` = pass/fail on the diff, `refactor` = fix the worst first, the default). No args = refactor mode on the current branch's diff against its base.
+description: Measure and reduce the cyclomatic complexity of changed code.
 ---
 
 Run the **complexity** skill for `$ARGUMENTS`.

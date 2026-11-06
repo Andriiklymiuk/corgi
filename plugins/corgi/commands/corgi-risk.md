@@ -1,5 +1,5 @@
 ---
-description: Score how much human review a change or a story deserves - "risk assessment for this PR/MR", "how risky is this story", "can this be auto-approved", "who should review this", "add the risk score to the description". Pass a PR/MR link or number, a branch, a tracker key, or nothing for the local diff; add "stamp" to write the card into the description.
+description: Score how much human review a change or a story deserves, and write the risk card.
 ---
 
 Run the corgi **risk** flow for `$ARGUMENTS`.
