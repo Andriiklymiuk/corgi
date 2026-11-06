@@ -125,3 +125,11 @@ func TestATextOnlyRunHasNoToolsNoMCPAndNoEdits(t *testing.T) {
 		t.Fatalf("codex: %s", args)
 	}
 }
+
+func TestAJudgeRunNamesWhatItMayAndMayNotUse(t *testing.T) {
+	h := For(Claude, "claude")
+	args := strings.Join(h.PrintArgs(Print{Prompt: "p", AllowedTools: []string{"Read", "Bash(curl:*)"}, DisallowedTools: []string{"Edit", "Write"}}), " ")
+	if !strings.Contains(args, "--allowedTools Read,Bash(curl:*)") || !strings.Contains(args, "--disallowedTools Edit,Write") {
+		t.Fatalf("args: %s", args)
+	}
+}

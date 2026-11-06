@@ -3,6 +3,9 @@ package cmd
 import (
 	"strings"
 	"testing"
+	"time"
+
+	"andriiklymiuk/corgi/utils/agent/watch"
 )
 
 func TestParsePlannerAnswer(t *testing.T) {
@@ -30,5 +33,32 @@ func TestRepoPictureIsSmall(t *testing.T) {
 	pic := repoPicture(dir)
 	if !strings.Contains(pic, "Repository root") || len(pic) > 12000 {
 		t.Fatalf("picture: %d bytes", len(pic))
+	}
+}
+
+func TestPlanGraphShowsWhatWaitsForWhat(t *testing.T) {
+	dir := t.TempDir()
+	log := watch.LoadTasks(dir)
+	now := time.Now()
+	a, _ := log.Add("groundwork", "", "acme", "plan", now)
+	b, _ := log.Add("wire it", "", "acme", "plan", now)
+	p := watch.Plan{ID: 3, Goal: "rate limits", State: watch.PlanRunning, Slots: 2, Retries: 1, Tasks: []watch.PlanTask{{ID: a.ID}, {ID: b.ID, After: []int{a.ID}}}}
+	text := planGraphText(p, log)
+	for _, want := range []string{"P-3", "1 retries", "start → TASK-1 [Todo] groundwork\n", "TASK-1 → TASK-2 [Todo] wire it → end"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("missing %q in:\n%s", want, text)
+		}
+	}
+	dot := planGraphDOT(p, log)
+	if !strings.Contains(dot, `digraph "P-3"`) || !strings.Contains(dot, "t1 -> t2;") {
+		t.Fatalf("dot:\n%s", dot)
+	}
+}
+
+func TestRetriesAreCapped(t *testing.T) {
+	for in, want := range map[int]int{-1: 0, 0: 0, 2: 2, 9: 3} {
+		if got := clampRetries(in); got != want {
+			t.Fatalf("%d: got %d", in, got)
+		}
 	}
 }

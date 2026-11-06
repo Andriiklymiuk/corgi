@@ -40,6 +40,10 @@ type Print struct {
 	// edits. For prompts that carry words from people outside, so the words
 	// cannot make it read, run or change anything.
 	NoTools bool
+	// AllowedTools and DisallowedTools narrow a run: a judge that reads and may
+	// never write. Agents without such a flag take the prompt's word for it.
+	AllowedTools    []string
+	DisallowedTools []string
 }
 
 // Open is one interactive session for a person: how much it may do, which
@@ -216,6 +220,12 @@ func claudePrintArgs(p Print) []string {
 		args = append(args, "--dangerously-skip-permissions")
 	default:
 		args = append(args, "--permission-mode", "acceptEdits")
+	}
+	if len(p.AllowedTools) > 0 {
+		args = append(args, "--allowedTools", strings.Join(p.AllowedTools, ","))
+	}
+	if len(p.DisallowedTools) > 0 {
+		args = append(args, "--disallowedTools", strings.Join(p.DisallowedTools, ","))
 	}
 	return args
 }

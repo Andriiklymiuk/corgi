@@ -44,6 +44,7 @@ complexity|this function is a jungle, reduce the complexity
 prep-pr|prep my PR
 before-after|attach before and after screenshots to the PR
 align|let's align first, this request could mean two things
+factory|how do we get to a software factory here, what is our next step to run this unattended
 none|what is the capital of France
 CASES
 echo "$pass passed, $fail failed"

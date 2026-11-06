@@ -34,11 +34,13 @@ type Plan struct {
 	Model     string     `json:"model,omitempty"`
 	Tasks     []PlanTask `json:"tasks"`
 	Slots     int        `json:"slots"`
-	State     string     `json:"state"`
-	By        string     `json:"by,omitempty"`
-	CreatedAt time.Time  `json:"createdAt"`
-	UpdatedAt time.Time  `json:"updatedAt"`
-	Notes     []string   `json:"notes,omitempty"`
+	// Retries is how many more times a task whose run failed is started again.
+	Retries   int       `json:"retries,omitempty"`
+	State     string    `json:"state"`
+	By        string    `json:"by,omitempty"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+	Notes     []string  `json:"notes,omitempty"`
 }
 
 func (p Plan) Ref() string { return fmt.Sprintf("P-%d", p.ID) }

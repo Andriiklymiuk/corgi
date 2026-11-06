@@ -102,6 +102,7 @@ a day are one command each:
 | your laptop still working while you're out | `corgi agent up`, then scan the QR |
 | which of your Claude sessions is waiting on you: menu bar, VS Code, Stream Deck | `corgi agent track enable` |
 | a new bug or a PR review handled while you are away | `corgi agent watch enable --action fix` |
+| how much runs without you, and the next step up | `corgi agent level` ([the ladder](docs/software-factory.md)) |
 | the next project tomorrow | the same commands, in its folder |
 
 The part that changes how you work is the second row. A feature that touches three repos normally

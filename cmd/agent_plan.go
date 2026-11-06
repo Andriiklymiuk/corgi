@@ -216,7 +216,8 @@ Running (corgi agent plan run P-1): the daemon starts each task when its turn
 comes - the same unattended run a ticket gets, in a worktree of its own, the
 workspace's caps, quiet hours and breaker respected - and the next when one
 ends. A task that is Review (a pull request is up) or Done lets the ones after
-it start. A run that failed leaves its task for you; the plan does not retry it.
+it start. A run that failed leaves its task for you, unless the plan has --retries: then
+it starts again with the reason, that many times.
 The kanban shows the tasks; corgi agent plan status shows the plan.
 
 The workspace must be watched (corgi agent watch enable --isolate) for the
@@ -234,6 +235,7 @@ daemon to run anything.`,
 		limit, _ := cmd.Flags().GetInt("max")
 		slots, _ := cmd.Flags().GetInt("slots")
 		run, _ := cmd.Flags().GetBool("run")
+		retries, _ := cmd.Flags().GetInt("retries")
 		if ws == "" {
 			if cwd, err := os.Getwd(); err == nil {
 				_, ws = workspaceRootFor(cwd)
@@ -304,6 +306,9 @@ daemon to run anything.`,
 		if err != nil {
 			exitWithError("agent_plan", err, 1)
 		}
+		if retries > 0 {
+			p, _ = plans.Update(p.ID, now, func(p *watch.Plan) { p.Retries = clampRetries(retries) })
+		}
 		path := writePlanFile(dir, p, made)
 		nudgeDaemon(dir)
 		if run {
@@ -365,6 +370,10 @@ var agentPlanRunCmd = &cobra.Command{
 		slots, _ := cmd.Flags().GetInt("slots")
 		if slots > 0 {
 			p, _ = plans.Update(p.ID, time.Now(), func(p *watch.Plan) { p.Slots = slots })
+		}
+		if cmd.Flags().Changed("retries") {
+			retries, _ := cmd.Flags().GetInt("retries")
+			p, _ = plans.Update(p.ID, time.Now(), func(p *watch.Plan) { p.Retries = clampRetries(retries) })
 		}
 		if why := planWatchReady(dir, p.Workspace, p.Slots); why != "" {
 			exitWithError("agent_plan", fmt.Errorf("%s", why), 2)
@@ -447,14 +456,103 @@ var agentPlanStatusCmd = &cobra.Command{
 	},
 }
 
+// A loop with no cap is how a factory burns a night: three more tries is plenty.
+func clampRetries(n int) int {
+	return max(0, min(n, 3))
+}
+
+func planGraphText(p watch.Plan, log *watch.TaskLog) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s %s · %s · %d at a time", p.Ref(), p.State, clipPlanGoal(p.Goal), p.Slots)
+	if p.Retries > 0 {
+		fmt.Fprintf(&b, " · %d retries", p.Retries)
+	}
+	b.WriteString("\n")
+	waiting := map[int]bool{}
+	for _, t := range p.Tasks {
+		for _, a := range t.After {
+			waiting[a] = true
+		}
+	}
+	for _, t := range p.Tasks {
+		title, state := planNode(t.ID, log)
+		arrow := "start"
+		if len(t.After) > 0 {
+			var refs []string
+			for _, a := range t.After {
+				refs = append(refs, fmt.Sprintf("TASK-%d", a))
+			}
+			arrow = strings.Join(refs, " + ")
+		}
+		end := ""
+		if !waiting[t.ID] {
+			end = " → end"
+		}
+		fmt.Fprintf(&b, "  %s → TASK-%d [%s] %s%s\n", arrow, t.ID, state, title, end)
+	}
+	return b.String()
+}
+
+func planGraphDOT(p watch.Plan, log *watch.TaskLog) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "digraph %q {\n  rankdir=LR;\n  node [shape=box];\n", p.Ref())
+	for _, t := range p.Tasks {
+		title, state := planNode(t.ID, log)
+		fmt.Fprintf(&b, "  t%d [label=%q];\n", t.ID, fmt.Sprintf("TASK-%d %s\n%s", t.ID, state, title))
+		for _, a := range t.After {
+			fmt.Fprintf(&b, "  t%d -> t%d;\n", a, t.ID)
+		}
+	}
+	b.WriteString("}\n")
+	return b.String()
+}
+
+func planNode(id int, log *watch.TaskLog) (string, string) {
+	t, ok := log.Find(fmt.Sprintf("task:%d", id))
+	if !ok {
+		return "(gone from the board)", "gone"
+	}
+	return t.Title, t.State
+}
+
+func clipPlanGoal(goal string) string {
+	line, _, _ := strings.Cut(strings.TrimSpace(goal), "\n")
+	if len(line) > 70 {
+		return line[:69] + "…"
+	}
+	return line
+}
+
+var agentPlanGraphCmd = &cobra.Command{
+	Use:   "graph <P-n> [--dot]",
+	Short: "Which task waits for which, and where each stands; --dot for Graphviz",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		dir := mustAgentDir()
+		p, ok := watch.LoadPlans(dir).Find(args[0])
+		if !ok {
+			exitWithError("agent_plan", fmt.Errorf("no plan %s - corgi agent plan status lists them", args[0]), 2)
+		}
+		log := watch.LoadTasks(dir)
+		if dot, _ := cmd.Flags().GetBool("dot"); dot {
+			fmt.Print(planGraphDOT(p, log))
+			return
+		}
+		fmt.Print(planGraphText(p, log))
+	},
+}
+
 func init() {
 	agentPlanCmd.Flags().String("workspace", "", "the workspace the plan is for (default: the one you are in)")
 	agentPlanCmd.Flags().String("model", "", "the planner's model: sonnet (default), opus, haiku")
 	agentPlanCmd.Flags().Int("max", 6, "at most this many tasks (2-12)")
 	agentPlanCmd.Flags().Int("slots", 1, "how many tasks run at once; more than one needs the workspace watched with --isolate")
 	agentPlanCmd.Flags().Bool("run", false, "start working through the tasks at once")
+	agentPlanCmd.Flags().Int("retries", 0, "start a failed task again this many times, at most 3")
 	agentPlanRunCmd.Flags().Int("slots", 0, "how many tasks run at once (keeps the plan's when 0)")
-	agentPlanCmd.AddCommand(agentPlanRunCmd, agentPlanStopCmd, agentPlanStatusCmd)
+	agentPlanRunCmd.Flags().Int("retries", 0, "start a failed task again this many times, at most 3")
+	agentPlanGraphCmd.Flags().Bool("dot", false, "print Graphviz DOT")
+	agentPlanCmd.AddCommand(agentPlanRunCmd, agentPlanStopCmd, agentPlanStatusCmd, agentPlanGraphCmd)
 	agentCmd.AddCommand(agentPlanCmd)
 }
 

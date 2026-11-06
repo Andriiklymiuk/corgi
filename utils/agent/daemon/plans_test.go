@@ -92,3 +92,24 @@ func waitUntil(t *testing.T, ok func() bool, what string) {
 	}
 	t.Fatalf("timed out: %s", what)
 }
+
+func TestAFailedTaskIsTriedAgainOnlyWithinItsCap(t *testing.T) {
+	now := time.Now()
+	failed := watch.FixRecord{Key: "task:1", FinishedAt: now.Add(-time.Hour), Error: "exit 1", Failure: "tests failed"}
+	notStarted := watch.FixRecord{Key: "task:1", FinishedAt: now, Error: "not started: quiet hours"}
+	clean := watch.FixRecord{Key: "task:1", FinishedAt: now}
+	other := watch.FixRecord{Key: "task:2", FinishedAt: now, Error: "exit 1"}
+
+	if why, due := retryDue([]watch.FixRecord{failed, notStarted, other}, "task:1", 1); !due || why != "tests failed" {
+		t.Fatalf("one failure, one retry: %q %v", why, due)
+	}
+	if _, due := retryDue([]watch.FixRecord{failed, failed}, "task:1", 1); due {
+		t.Fatal("the cap was passed")
+	}
+	if _, due := retryDue([]watch.FixRecord{failed, clean}, "task:1", 3); due {
+		t.Fatal("the last run was fine")
+	}
+	if _, due := retryDue(nil, "task:1", 3); due {
+		t.Fatal("never ran")
+	}
+}

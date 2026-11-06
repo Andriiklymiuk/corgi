@@ -45,6 +45,9 @@ func (d *Daemon) advancePlans(ctx context.Context) {
 				busy++
 			}
 		}
+		if p.Retries > 0 {
+			busy += d.retryFailedTasks(ctx, spec, p, tasks, busy, now)
+		}
 		for _, t := range pr.Ready {
 			if busy >= p.Slots {
 				break
@@ -69,6 +72,56 @@ func (d *Daemon) advancePlans(ctx context.Context) {
 			busy++
 		}
 	}
+}
+
+// retryFailedTasks starts again the plan's tasks whose last run failed, up to
+// the plan's cap, telling the new run why the last one stopped.
+func (d *Daemon) retryFailedTasks(ctx context.Context, spec WatchSpec, p watch.Plan, tasks *watch.TaskLog, busy int, now time.Time) int {
+	started := 0
+	records := d.watchState.Fixes.RecentFixes(p.Workspace, 200)
+	for _, id := range p.TaskIDs() {
+		if busy+started >= p.Slots {
+			break
+		}
+		t, ok := tasks.Find(fmt.Sprintf("task:%d", id))
+		if !ok || t.State != "Doing" || d.fixActiveFor(p.Workspace, t.Ref()) {
+			continue
+		}
+		why, due := retryDue(records, t.Key(), p.Retries)
+		if !due || d.deferral(spec, now) != "" || !d.claimFix(p.Workspace, t.Ref()) {
+			continue
+		}
+		e := t.Event()
+		e.Body = planTaskBody(p, t) + "\n\nAn earlier run of this task failed: " + why + "\nFind out why before you repeat it. If it left a branch, build on it."
+		d.watchState.Fixes.StartFor(e, now)
+		d.spawnFix(ctx, spec, e)
+		utils.Infof("agent: plan %s: tried %s again - %s\n", p.Ref(), t.Ref(), why)
+		started++
+	}
+	return started
+}
+
+// retryDue says whether a task's last finished run failed and it has tries left.
+func retryDue(records []watch.FixRecord, key string, retries int) (string, bool) {
+	attempts := 0
+	var last watch.FixRecord
+	for _, f := range records {
+		if f.Key != key || f.FinishedAt.IsZero() || strings.HasPrefix(f.Error, "not started") {
+			continue
+		}
+		attempts++
+		if f.FinishedAt.After(last.FinishedAt) {
+			last = f
+		}
+	}
+	if attempts == 0 || last.Error == "" || attempts > retries {
+		return "", false
+	}
+	why := last.Error
+	if last.Failure != "" {
+		why = last.Failure
+	}
+	return why, true
 }
 
 func (d *Daemon) planTaskTried(workspace string, t watch.Task) bool {
