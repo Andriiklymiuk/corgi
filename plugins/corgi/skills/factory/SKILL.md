@@ -30,7 +30,12 @@ Pick the rung per workspace by what a mistake costs there. Docs can sit high whi
 | 2 It tells you | gets rung, starts the work | `watch enable`, the board, the phone |
 | 3 It drafts, you review | reads every diff | `watch --action fix`, `stories`, `review` |
 | 4 It works a shift | writes specs and checks, reads PRs | `--isolate`, `--done-when`, `plan`, `routine`, `autopilot` |
-| 5 Lights out | writes specs and scenarios | `--auto-merge`, `scenario`, `scorecard` |
+| 5 Lights out | writes specs and scenarios; reads only what is held for them | `--merge-unread`, `scenario`, `scorecard` |
+
+At level 5 a pull request merges with nobody reading it only if a run opened it, the checks are green, the run ended
+clean, the diff is small and stays away from auth, payments, data, CI, dependencies and native code, its risk card is 2
+or below, and that exact commit satisfies the scenarios. Anything else waits for a person, who hears once why. A pull
+request a person opened never merges this way.
 
 ## Rules for climbing
 

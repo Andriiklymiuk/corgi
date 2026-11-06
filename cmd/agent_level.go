@@ -25,19 +25,20 @@ var factoryLadder = []factoryRung{
 	{2, "It tells you", "the laptop watches trackers and pull requests and rings; you start the work"},
 	{3, "It drafts, you review", "agents take tickets into draft pull requests; you read every diff"},
 	{4, "It works a shift", "you write specs and checks; agents run in worktrees, on a clock, in plans; you read pull requests"},
-	{5, "Lights out", "you write specs and scenarios; what passes merges by itself"},
+	{5, "Lights out", "you write specs and scenarios; low-risk work that passes merges with nobody reading it, the rest waits for you"},
 }
 
 type factoryFacts struct {
-	Watched   bool
-	Fix       bool
-	Isolate   bool
-	AutoMerge bool
-	Capped    bool
-	Reviewed  bool
-	DoneWhen  int
-	Routines  int
-	Scenarios int
+	Watched     bool
+	Fix         bool
+	Isolate     bool
+	AutoMerge   bool
+	MergeUnread bool
+	Capped      bool
+	Reviewed    bool
+	DoneWhen    int
+	Routines    int
+	Scenarios   int
 }
 
 type factoryBrake struct {
@@ -64,7 +65,7 @@ func factoryLevel(f factoryFacts) int {
 		return 2
 	case !f.Isolate || f.DoneWhen == 0:
 		return 3
-	case !f.AutoMerge || f.Scenarios == 0:
+	case !f.MergeUnread || f.Scenarios == 0:
 		return 4
 	}
 	return 5
@@ -80,13 +81,16 @@ func factoryReportFor(ws string, f factoryFacts) factoryReport {
 		{"a person signs off risky plans", f.Reviewed, fmt.Sprintf(`corgi agent watch enable %s --plan-review "risk>=7"`, flag)},
 		{"stories it cannot see", f.Scenarios > 0, `corgi agent scenario add <name> --text "what a person does and sees"`},
 		{"a cap on runs and spend", f.Capped, fmt.Sprintf("corgi agent watch enable %s --max-per-day 10 --limit-ceiling 80", flag)},
-		{"a person merges", !f.AutoMerge, fmt.Sprintf("corgi agent watch enable %s --auto-merge=false", flag)},
+		{"a person reads what merges", !f.MergeUnread, fmt.Sprintf("corgi agent watch enable %s --merge-unread=false", flag)},
 	}
-	if f.AutoMerge && f.DoneWhen == 0 {
+	if (f.AutoMerge || f.MergeUnread) && f.DoneWhen == 0 {
 		r.Warnings = append(r.Warnings, "it merges by itself with no checks of its own: add --done-when, or turn --auto-merge off")
 	}
-	if f.AutoMerge && f.Scenarios == 0 {
+	if f.AutoMerge && !f.MergeUnread && f.Scenarios == 0 {
 		r.Warnings = append(r.Warnings, "it merges by itself and its only exam is one it can read: add scenarios before trusting that")
+	}
+	if f.MergeUnread && f.Scenarios == 0 {
+		r.Warnings = append(r.Warnings, "with no scenarios nothing passes the gate: every pull request waits for you. corgi agent scenario add <name> --text ...")
 	}
 	if f.Fix && !f.Capped {
 		r.Warnings = append(r.Warnings, "unattended runs have no cap: one bad loop spends the whole window")
@@ -105,7 +109,7 @@ func factoryReportFor(ws string, f factoryFacts) factoryReport {
 		if f.Scenarios == 0 {
 			r.Next = append(r.Next, `corgi agent scenario add <name> --text "what a person does and sees"`, "corgi agent routine add scenarios")
 		}
-		if f.Scenarios > 0 && !f.AutoMerge {
+		if f.Scenarios > 0 && !f.MergeUnread {
 			r.Next = append(r.Next, "when `corgi agent scorecard` and the scenarios have earned it: corgi agent level 5 "+flag)
 		}
 	case 5:
@@ -129,6 +133,7 @@ func factoryFactsFor(dir, ws string) (factoryFacts, error) {
 	f.Fix = wc.Action == "fix"
 	f.Isolate = wc.Isolate
 	f.AutoMerge = wc.AutoMerge
+	f.MergeUnread = wc.MergeUnread
 	f.DoneWhen = len(wc.DoneWhen)
 	f.Capped = wc.MaxFixesPerDay > 0 || wc.MaxFixesTotal > 0 || wc.LimitCeiling > 0
 	f.Reviewed = wc.PlanReview != ""
@@ -164,6 +169,7 @@ func setFactoryLevel(ws string, wc *config.WatchConfig, level, scenarios int) (*
 	}
 	next.Isolate = level >= 4
 	next.AutoMerge = level == 5
+	next.MergeUnread = level == 5
 	return &next, nil
 }
 

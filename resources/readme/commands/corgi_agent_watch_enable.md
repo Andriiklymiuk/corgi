@@ -46,6 +46,7 @@ corgi agent watch enable [flags]
       --max-per-hour int                      With --action fix: at most this many fixes an hour (default 3); more are deferred
       --max-total int                         With --action fix: at most this many fixes in total, counted from now - a cap for a trip; run enable --max-total again to reset, 0 clears
       --mentions                              Ring when someone names you in Slack or writes to you directly (needs corgi agent watch auth slack)
+      --merge-unread                          Merge low-risk pull requests a run opened with nobody reading them: green, small, away from auth, payments, data, CI and dependencies, and they satisfy the hidden scenarios. The rest waits for you. Usually set with corgi agent level 5
       --night-shift                           Work through the quiet hours: fixes and routines run as by day, nothing rings until the quiet hours end, then one 'N while you were away' says what happened (--night-shift=false to sleep through them again)
       --no-retry watch run                    Leave deferred fixes to a manual watch run instead of starting them when the budget returns
       --pickup string                         Column a ticket moves to when it is picked up, e.g. "In Progress"; empty writes nothing

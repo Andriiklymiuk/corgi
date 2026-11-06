@@ -298,6 +298,9 @@ type WatchConfig struct {
 	ReviewStatus string      `yaml:"reviewStatus,omitempty"`
 	PickupStatus string      `yaml:"pickupStatus,omitempty"`
 	AutoMerge    bool        `yaml:"autoMerge,omitempty"`
+	// MergeUnread is level 5: low-risk pull requests a run opened merge with
+	// nobody reading them. AutoMerge alone still wants an approval.
+	MergeUnread bool `yaml:"mergeUnread,omitempty"`
 	// Errors takes new errors from Sentry and alert webhooks into the inbox.
 	Errors         bool     `yaml:"errors,omitempty"`
 	SentryOrg      string   `yaml:"sentryOrg,omitempty"`

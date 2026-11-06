@@ -49,6 +49,22 @@ func runScenarios(ctx context.Context, scenarios []watch.Scenario, dir, model, r
 	return out
 }
 
+// judgeCheckout runs every scenario once against a checkout: the share they
+// satisfied and how many there were.
+func judgeCheckout(ctx context.Context, agentDir, workspace, checkout, ref string) (int, int, error) {
+	list := watch.LoadScenarios(agentDir, workspace)
+	if len(list) == 0 {
+		return 0, 0, nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, scenarioTimeout*time.Duration(len(list)))
+	defer cancel()
+	results := runScenarios(ctx, list, checkout, "", ref, 1, nil, time.Now)
+	if err := watch.AppendScenarioResults(agentDir, workspace, results); err != nil {
+		utils.Infof("could not keep the results: %v\n", err)
+	}
+	return watch.Satisfaction(results), len(list), nil
+}
+
 func scenarioWorkspace(cmd *cobra.Command) string {
 	ws, _ := cmd.Flags().GetString("workspace")
 	if ws == "" {

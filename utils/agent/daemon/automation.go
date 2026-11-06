@@ -128,7 +128,12 @@ func (d *Daemon) pullChanged(ctx context.Context, spec WatchSpec, ref, link stri
 	if link != "" && now.Checks == "passing" && (!known || was.Checks != "passing") {
 		d.tickLeft(spec, link, "checks ✓", watch.LeftCI)
 	}
-	if autoMerge && link != "" && now.Ready() && now.Checks == "passing" && now.Mine && d.MergePull != nil && d.mergeWorthTrying(link, time.Now()) {
+	approved := autoMerge && now.Ready() && now.Checks == "passing" && now.Mine
+	if link != "" && d.MergePull != nil && d.mergeWorthTrying(link, time.Now()) && (approved || d.mayMergeUnread(ctx, spec, ref, link, now)) {
+		how := "checks ✓, approved"
+		if !approved {
+			how = "checks ✓, low risk, scenarios ✓, nobody read it"
+		}
 		if err := d.MergePull(ctx, spec.Workspace, link); err != nil {
 			utils.Infof("agent: auto-merge %s: %v\n", ref, err)
 			if body, first := d.rememberMergeFailure(link, err, time.Now()); first {
@@ -139,9 +144,9 @@ func (d *Daemon) pullChanged(ctx context.Context, spec WatchSpec, ref, link stri
 		d.forgetMergeFailure(link)
 		_ = watch.LoadPullLog(d.Dir).Set(ref, watch.PullStatus{State: "merged", Checks: now.Checks, Review: now.Review, At: time.Now()})
 		if d.Events != nil {
-			d.Events.Append(spec.Workspace, events.Event{At: time.Now().UTC(), Kind: "merged", Reason: "merged " + ref + " - checks ✓, approved", URL: link})
+			d.Events.Append(spec.Workspace, events.Event{At: time.Now().UTC(), Kind: "merged", Reason: "merged " + ref + " - " + how, URL: link})
 		}
-		go d.notifyAttentionAt(notifyTitlePrefix+spec.Workspace, "merged "+link+" - checks ✓ · approved", spec.Workspace, link)
+		go d.notifyAttentionAt(notifyTitlePrefix+spec.Workspace, "merged "+link+" - "+how, spec.Workspace, link)
 		now = watch.PullStatus{State: "merged", Checks: now.Checks, Review: now.Review, At: now.At}
 	}
 	if now.State == "merged" && (!known || was.State != "merged") {

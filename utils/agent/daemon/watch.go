@@ -31,10 +31,12 @@ type WatchSpec struct {
 	AgentDir  string
 	// Kind and Bin pick the harness (claude, codex) that runs fixes here;
 	// Agents is the order to try when it cannot (utils/agent/daemon/harnesses.go).
-	Kind            string
-	Agents          []string
-	Bin             string
-	Isolate         bool
+	Kind    string
+	Agents  []string
+	Bin     string
+	Isolate bool
+	// MergeUnread is level 5: low-risk pull requests a run opened merge with nobody reading them.
+	MergeUnread     bool
 	RunDB           string
 	PruneAfter      time.Duration
 	ReviewDelay     time.Duration
@@ -1300,6 +1302,9 @@ func unattendedSuffix(spec WatchSpec, e watch.Event) string {
 	if spec.Rules.CI {
 		s += "Do not wait for CI after you push - no polling, no background watcher: this run ends when you do. " +
 			"Run the tests your change touches before the push; corgi watches the pipeline and starts a run if it goes red.\n"
+	}
+	if spec.MergeUnread && ownPR {
+		s += "Stamp the risk card into the pull request body with /corgi:risk in stamp mode, and score it honestly: a high score sends it to a person, a low one does not get it past the checks on the diff.\n"
 	}
 	s += "Say plainly at the end what you changed and what your own review found.\n"
 	s += watch.LeftInstruction()

@@ -18,8 +18,9 @@ func TestLevelClimbsOnlyWithItsBrakes(t *testing.T) {
 		{"fixes with no checks", factoryFacts{Watched: true, Fix: true, Isolate: true}, 3},
 		{"fixes with no worktrees", factoryFacts{Watched: true, Fix: true, DoneWhen: 1}, 3},
 		{"a real shift", factoryFacts{Watched: true, Fix: true, Isolate: true, DoneWhen: 1}, 4},
-		{"merges without scenarios is not lights out", factoryFacts{Watched: true, Fix: true, Isolate: true, DoneWhen: 1, AutoMerge: true}, 4},
-		{"lights out", factoryFacts{Watched: true, Fix: true, Isolate: true, DoneWhen: 1, AutoMerge: true, Scenarios: 2}, 5},
+		{"merges without scenarios is not lights out", factoryFacts{Watched: true, Fix: true, Isolate: true, DoneWhen: 1, AutoMerge: true, MergeUnread: true}, 4},
+		{"merging only what is approved is not lights out", factoryFacts{Watched: true, Fix: true, Isolate: true, DoneWhen: 1, AutoMerge: true, Scenarios: 2}, 4},
+		{"lights out", factoryFacts{Watched: true, Fix: true, Isolate: true, DoneWhen: 1, AutoMerge: true, MergeUnread: true, Scenarios: 2}, 5},
 	}
 	for _, c := range cases {
 		if got := factoryLevel(c.f); got != c.want {
@@ -56,7 +57,7 @@ func TestSettingALevelLandsOnThatLevel(t *testing.T) {
 		if err != nil {
 			t.Fatalf("level %d: %v", level, err)
 		}
-		f := factoryFacts{Watched: wc.Enabled, Fix: wc.Action == "fix", Isolate: wc.Isolate, AutoMerge: wc.AutoMerge, DoneWhen: len(wc.DoneWhen), Scenarios: 1}
+		f := factoryFacts{Watched: wc.Enabled, Fix: wc.Action == "fix", Isolate: wc.Isolate, AutoMerge: wc.AutoMerge, MergeUnread: wc.MergeUnread, DoneWhen: len(wc.DoneWhen), Scenarios: 1}
 		if got := factoryLevel(f); got != level {
 			t.Fatalf("asked %d, landed on %d", level, got)
 		}
@@ -93,7 +94,7 @@ func TestGoingUpFitsACapAndGoingDownKeepsYoursAndYourChecks(t *testing.T) {
 		t.Fatalf("your cap was overridden: %+v %v", mine, err)
 	}
 	down, err := setFactoryLevel("api", &config.WatchConfig{Enabled: true, Action: "fix", AutoMerge: true, Isolate: true, DoneWhen: []string{"make test"}, MaxFixesPerDay: 9}, 2, 1)
-	if err != nil || down.Action != "notify" || down.AutoMerge || down.Isolate || len(down.DoneWhen) != 1 || down.MaxFixesPerDay != 9 {
+	if err != nil || down.Action != "notify" || down.AutoMerge || down.MergeUnread || down.Isolate || len(down.DoneWhen) != 1 || down.MaxFixesPerDay != 9 {
 		t.Fatalf("down: %+v %v", down, err)
 	}
 }

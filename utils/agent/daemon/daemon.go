@@ -121,24 +121,30 @@ type Daemon struct {
 	CommandTick      time.Duration
 	IdleTick         time.Duration
 
-	Sessions      *sessions.Registry
-	Ledger        *usage.Ledger
-	MergePull     func(ctx context.Context, workspace, link string) error
-	MoveTicket    func(ctx context.Context, workspace, ref, status string) error
-	RerunCI       func(ctx context.Context, workspace, repo string, since time.Time) (watch.Rerun, error)
-	Policy        func(s sessions.Session) Policy
-	Carry         func(s sessions.Session) (string, error)
-	Shell         func(ctx context.Context, dir, cmd string) ([]byte, error)
-	Raise         func(ctx context.Context, t sessions.FocusTarget) error
-	Alive         func(pid int) bool
-	ListProcesses func() ([]proc.Process, error)
-	Cwd           func(pid int) string
-	ReapTick      time.Duration
-	AccountDirs   func() []string
-	TypeText      func(ctx context.Context, t sessions.FocusTarget, text string, enter bool) error
-	AutoContinue  bool
-	saidNoType    map[string]time.Time // limited sessions told once that nothing can type into them
-	SessionCap    int64
+	Sessions  *sessions.Registry
+	Ledger    *usage.Ledger
+	MergePull func(ctx context.Context, workspace, link string) error
+	// Level 5: what a pull request changes, marking it ready, and judging a
+	// checkout against the hidden scenarios (their share in percent and how many).
+	PullChanges    func(ctx context.Context, workspace, link string) (watch.PullChanges, error)
+	ReadyPull      func(ctx context.Context, workspace, link string) error
+	JudgeScenarios func(ctx context.Context, workspace, dir, ref string) (int, int, error)
+	unreadJudged   sync.Map
+	MoveTicket     func(ctx context.Context, workspace, ref, status string) error
+	RerunCI        func(ctx context.Context, workspace, repo string, since time.Time) (watch.Rerun, error)
+	Policy         func(s sessions.Session) Policy
+	Carry          func(s sessions.Session) (string, error)
+	Shell          func(ctx context.Context, dir, cmd string) ([]byte, error)
+	Raise          func(ctx context.Context, t sessions.FocusTarget) error
+	Alive          func(pid int) bool
+	ListProcesses  func() ([]proc.Process, error)
+	Cwd            func(pid int) string
+	ReapTick       time.Duration
+	AccountDirs    func() []string
+	TypeText       func(ctx context.Context, t sessions.FocusTarget, text string, enter bool) error
+	AutoContinue   bool
+	saidNoType     map[string]time.Time // limited sessions told once that nothing can type into them
+	SessionCap     int64
 	// Lid is the local HH:MM-HH:MM window in which a wake or a lid opening
 	// rings the phone; empty means no lid guard.
 	Lid string

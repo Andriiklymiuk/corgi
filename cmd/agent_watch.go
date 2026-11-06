@@ -40,6 +40,7 @@ const (
 	watchFlagReviewStatus       = "review-status"
 	watchFlagNoRetry            = "no-retry"
 	watchFlagAutoMerge          = "auto-merge"
+	watchFlagMergeUnread        = "merge-unread"
 	watchFlagAfterMerge         = "after-merge"
 	watchFlagAfterMergeSubtasks = "after-merge-subtasks"
 	watchFlagHandOver           = "hand-over"
@@ -209,6 +210,9 @@ var agentWatchEnableCmd = &cobra.Command{
 		}
 		if flags.Changed(watchFlagAutoMerge) {
 			wc.AutoMerge, _ = flags.GetBool(watchFlagAutoMerge)
+		}
+		if flags.Changed(watchFlagMergeUnread) {
+			wc.MergeUnread, _ = flags.GetBool(watchFlagMergeUnread)
 		}
 		if flags.Changed("batch") {
 			if wc.Batch, _ = flags.GetInt("batch"); wc.Batch < 0 || wc.Batch > 5 {
@@ -1112,7 +1116,7 @@ func watchSpecOf(dir string, w workspace.Workspace, resolved config.Resolved) (d
 	spec := daemon.WatchSpec{Workspace: w.ID, Dir: w.AbsPath, ConfigDir: expandTilde(resolved.ConfigDir), Kind: resolved.Kind, Agents: resolved.AgentOrder(), Bin: expandTilde(resolved.Bin), Project: wc.Project, Repos: wc.Repos,
 		Rules:    watch.Rules{Enabled: true, Labels: wc.Labels, States: wc.States, Assignee: wc.Assignee, Comments: wc.Comments, PRs: wc.PRs, CI: wc.CI, Reviews: wc.Reviews, From: wc.From, Bots: wc.Bots, Errors: wc.Errors},
 		Interval: 3 * time.Minute, Action: "notify", SkipPermissions: resolved.DangerouslySkipPermissions,
-		MaxFixesPerHour: wc.MaxFixesPerHour, MaxFixesPerDay: wc.MaxFixesPerDay, LimitCeiling: wc.LimitCeiling, MaxFixesTotal: wc.MaxFixesTotal, CapSince: wc.CapSince, Quiet: wc.Quiet, NightShift: wc.NightShift, FixKinds: wc.FixKinds, DoneWhen: wc.DoneWhen, PlanReview: wc.PlanReview, Lease: wc.Lease, Isolate: wc.Isolate, RunDB: wc.RunDB, Slots: wc.Slots, Batch: wc.Batch, RerunCI: wc.RerunCI, Silent: wc.Silent, NoRetry: wc.NoRetry, ReviewStatus: wc.ReviewStatus, Approve: wc.Approve, Models: resolved.Models, Routines: resolved.Routines}
+		MaxFixesPerHour: wc.MaxFixesPerHour, MaxFixesPerDay: wc.MaxFixesPerDay, LimitCeiling: wc.LimitCeiling, MaxFixesTotal: wc.MaxFixesTotal, CapSince: wc.CapSince, Quiet: wc.Quiet, NightShift: wc.NightShift, FixKinds: wc.FixKinds, MergeUnread: wc.MergeUnread, DoneWhen: wc.DoneWhen, PlanReview: wc.PlanReview, Lease: wc.Lease, Isolate: wc.Isolate, RunDB: wc.RunDB, Slots: wc.Slots, Batch: wc.Batch, RerunCI: wc.RerunCI, Silent: wc.Silent, NoRetry: wc.NoRetry, ReviewStatus: wc.ReviewStatus, Approve: wc.Approve, Models: resolved.Models, Routines: resolved.Routines}
 	if wc.Action == "fix" {
 		spec.Action = "fix"
 	}
@@ -1419,6 +1423,7 @@ func describeWatchParts(wc *config.WatchConfig) []string {
 		{wc.PRs, "PR reviews and comments"},
 		{wc.HandOver, "handed to the session on the branch"},
 		{wc.AutoMerge, "merged when green and approved"},
+		{wc.MergeUnread, "low risk merges with nobody reading it, the rest waits for you"},
 		{wc.NightShift && wc.Quiet != "", "works through " + wc.Quiet + ", the phone hears in the morning"},
 		{wc.AfterMerge != "", "then the ticket goes to " + wc.AfterMerge + subtaskColumn(wc.AfterMergeSubtasks)},
 		{wc.Batch > 1, fmt.Sprintf("up to %d tickets arriving together share one run", wc.Batch)},
@@ -1535,6 +1540,7 @@ func init() {
 	f.Bool(watchFlagNoRetry, false, "Leave deferred fixes to a manual `watch run` instead of starting them when the budget returns")
 	f.Bool("reviews", false, "Also pull requests someone asked me to review - theirs, not mine")
 	f.String(watchFlagReviewDelay, "", "Hold a review someone asked for this long before it runs, e.g. 1h; it is checked again then - merged, closed or already reviewed drops it (empty or 0 reviews at once)")
+	f.Bool(watchFlagMergeUnread, false, "Merge low-risk pull requests a run opened with nobody reading them: green, small, away from auth, payments, data, CI and dependencies, and they satisfy the hidden scenarios. The rest waits for you. Usually set with corgi agent level 5")
 	f.Bool(watchFlagAutoMerge, false, "Merge a pull request of mine the moment its checks pass and it is approved (read from the forge once a round)")
 	f.Int("batch", 1, "Tickets that arrive within 90 s of each other share one run, up to this many (1 is off); one preflight and one context for the lot")
 	f.String(watchFlagAfterMerge, "", "Move the ticket to this column once every pull request of its run is merged - a name from `corgi agent watch board`; empty leaves it where it is")

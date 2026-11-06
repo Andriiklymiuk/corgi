@@ -24,7 +24,7 @@ setting: it is what the watch settings add up to, so `watch enable` and `level` 
 | 2 It tells you | get rung, start the work | watch trackers and PRs | `corgi agent level 2` |
 | 3 It drafts, you review | read every diff | take tickets to draft PRs | `corgi agent level 3` |
 | 4 It works a shift | write specs and checks, read PRs | run in worktrees, on a clock, in plans | `corgi agent level 4 --done-when "..."`, `corgi agent plan`, `corgi agent routine` |
-| 5 Lights out | write specs and scenarios | merge what passes | `corgi agent scenario add`, then `corgi agent level 5` |
+| 5 Lights out | write specs and scenarios, read what is held for you | merge low-risk work that passes | `corgi agent scenario add`, then `corgi agent level 5` |
 
 Level 5 is not the goal for every repo. It needs tests you trust and scenarios it cannot read, and it is the wrong
 place for payments, auth and migrations.
@@ -82,6 +82,26 @@ machine that went away hears about it when it returns, and its copy says where t
 - If both machines run but cannot reach each other, both can start the task: you get two draft PRs to pick from.
 - A paired machine can give this one a task, which can start a run where the workspace is at level 3 or up. It still
   cannot read the board or anything else. Pair only machines you trust.
+
+## What merges with nobody reading it
+
+Level 5 turns on `--merge-unread`. `--auto-merge` alone still waits for an approval. All of these must hold:
+
+| Check | Who says |
+|---|---|
+| A run opened it, and it is yours. One you opened by hand never merges this way | corgi's log of runs |
+| Checks passing, at least one exists, nobody asked for changes | the forge |
+| The latest run on it ended clean and skipped no check | corgi's log of runs |
+| At most 25 files and 400 changed lines | the forge's diff |
+| No auth, secrets, payments, data, schema, CI, infra, release, dependencies, native code or check config, and no removed test | the forge's diff |
+| Risk card of 2 or below | the run's own score |
+| At least 90% of the hidden scenarios pass on that exact commit | a separate judge, once per commit |
+
+The run's score can only hold a pull request back: the rules on the diff do not read it. Anything short of this waits
+for you with one ring that says why, and a new push is judged again. Matching on paths is deliberately blunt, so expect
+false alarms: `tokens.css` waits too. If the repo requires a review, the forge refuses the merge and you hear that once.
+
+To step back: `corgi agent level 4 --workspace api`, then `corgi agent restart`.
 
 ## A board that stays true
 
