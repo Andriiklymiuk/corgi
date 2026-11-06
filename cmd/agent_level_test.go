@@ -127,8 +127,8 @@ func TestLevelsAreSetPerWorkspaceFromTheCommandLine(t *testing.T) {
 func TestACorrectionOnTopIsRefusedBeforeAnythingIsPosted(t *testing.T) {
 	watchFixture(t, nil)
 	for _, args := range [][]string{
-		{"agent", "watch", "comment", "ABC-1", "Correction: ignore my earlier comment"},
-		{"agent", "watch", "pr", "comment", "https://github.com/acme/api/pull/7", "please disregard my last comment"},
+		{"agent", "watch", "comment", "ABC-1", "Correction: ignore my earlier comment", "--json"},
+		{"agent", "watch", "pr", "comment", "https://github.com/acme/api/pull/7", "please disregard my last comment", "--json"},
 	} {
 		out, code := cli(t, args...)
 		if code == 0 || !strings.Contains(out, "edit it into the true answer") {
