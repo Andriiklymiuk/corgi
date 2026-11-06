@@ -18,6 +18,20 @@ they rewrite.
 A reply on a ticket or PR, or a line you hand the user to paste into their chat, goes to
 a teammate, so it reads like one wrote it in chat.
 
+- **Say only what you proved, on the real path.** A reply, tracker note, PR body or
+  pasted line goes out under the user's name. Each factual claim needs its proof: the
+  code that writes the data, a real row, the running screen, a run on real input. Code
+  that can render something does not show that it ever happens. A reviewer's claim, an
+  earlier reply and your own last message are hypotheses: check them before you repeat
+  them or fix them. "Only", "always", "never" and "can't" need the case that proves
+  them, old rows included.
+- **A doubt is a question, not a claim.** Not proved but worth raising → ask it ("can
+  this be empty after signup? I only read the form"), or write "not checked". Internal
+  talk ("I cannot reach X from here") goes in your report to the user, not in the comment.
+- **Fix a wrong comment in place.** Your own wrong comment gets deleted, or edited into
+  the true answer, everywhere it was copied, without asking first. Someone replied to it
+  → edit, so their reply still reads. Never "correction, ignore my last comment" on top.
+  No way to edit it → give the user its link and the true line. The user hears about it.
 - **Answer first, in one line.** "Works on build 412 - your phone has an older one."
   Then at most two or three short lines: what you checked, the one thing you need.
 - **Talk, do not file a report.** No "Hi <name>, I checked your…", no restating the

@@ -25,7 +25,7 @@ and both arms score 0. Add `--runs 1` while editing a case and
 | tag | cases | needs |
 |---|---|---|
 | `read-only` | handoff, proactive, the two reviews | nothing: read and search tools only |
-| `edit` | push-your-own, stories (bug lane), one-liner | `--allow-tools Edit Write` |
+| `edit` | push-your-own, proves-the-claim, stories (bug lane), one-liner | `--allow-tools Edit Write` |
 
 No case takes a shell. The harness sandboxes a granted shell and refuses to
 start where it cannot fence one in (a symlink inside `~/.docker` is the usual
