@@ -7,6 +7,10 @@ description: "Use when generating store screenshots for an Expo / React Native a
 
 **Done when:** every screen × device × locale asked for is captured, framed, exported at the store sizes, and - when asked - uploaded, with the upload read back.
 
+**Check they are this app, today.** Open every picture before and after upload: a set on the store
+can be a real capture of an old look. iPad sets and the app preview video are the ones forgotten,
+because nobody looks at them. List what the store really holds through its API, not what is on disk.
+
 ## Overview
 Goal isn't "a screenshot" - it's **N screens × every device class × every locale**,
 **framed** (device mockup + headline + bg), at **exact store sizes**, optionally
