@@ -45,6 +45,9 @@ the inbox knows - the one somebody asked you to review first of all.`,
 		}
 		review := verb == "approve" || verb == "request" || verb == "comment"
 		words := strings.TrimSpace(strings.Join(args[2:], " "))
+		if err := watch.CorrectionRefusal(words); review && err != nil {
+			exitWithError("agent_watch_pr", err, 2)
+		}
 		dir := mustAgentDir()
 		workspace, _ := cmd.Flags().GetString("workspace")
 		link, ws, err := pullLinkFor(dir, strings.TrimSpace(args[1]), workspace, review)

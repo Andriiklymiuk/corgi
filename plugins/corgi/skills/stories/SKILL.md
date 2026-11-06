@@ -761,6 +761,7 @@ tokens).
   earlier words imply, build it, name pick under `## Assumptions` - never
   "open decisions" section for reviewer to settle, never stop. Only reading
   that builds something materially different = question (Phase 1 gate).
+  Someone already raised it as product call → theirs (`review` Mode B step 2).
 
 ## Phase 4 - Commit, then multi-repo ordering
 

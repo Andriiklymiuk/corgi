@@ -752,6 +752,17 @@ func MergePR(ctx context.Context, s Secrets, link string) error {
 	return fmt.Errorf("%s is not a GitHub pull request or a GitLab merge request", link)
 }
 
+var correctionOnTop = regexp.MustCompile(`(?i)\b(?:ignore|disregard)\s+my\s+(?:(?:last|earlier|previous|above)\s+)?(?:comment|message|reply|note)s?\b|^\s*correction\s*[:-]|\bmy\s+(?:last|earlier|previous)\s+(?:comment|message|reply|note)\s+was\s+wrong\b`)
+
+// CorrectionRefusal stops a correction posted on top of a wrong comment: the
+// wrong one stays up and everyone reads both. It gets edited or deleted instead.
+func CorrectionRefusal(text string) error {
+	if correctionOnTop.MatchString(text) {
+		return fmt.Errorf("a correction on top leaves the wrong comment standing: edit it into the true answer, or delete it")
+	}
+	return nil
+}
+
 // WriteFix names what to do about a forge refusing a write, or "" when the
 // refusal is not about the token. A token short of a scope stays short until
 // someone replaces it; retrying cannot change the answer.

@@ -20,6 +20,42 @@ describe('corgi-guard', () => {
     expect(inBash.deny).toBe(undefined)
   })
 
+  test('refuses a correction posted on top of a wrong comment, and only that', async ($, on) => {
+    let ran = 0
+    on('tool.call', { tool: 'Bash' }, () => {
+      ran += 1
+      return { result: { stdout: 'ok', stderr: '', interrupted: false }, text: 'ok' }
+    })
+    for (const command of [
+      `gh pr comment 7 --body "Correction: ignore my earlier comment, it does search both"`,
+      `glab mr note create 9 --message 'please disregard my last comment'`,
+      `corgi agent watch comment ABC-1 "my previous comment was wrong"`,
+      `gh api repos/a/b/issues/7/comments -f body='ignore my comments above'`,
+    ]) {
+      const got = await $.tool.call({ tool: 'Bash', command })
+      expect(String(got.deny ?? got.text)).toContain('true answer')
+    }
+    expect(ran).toBe(0)
+    for (const command of [
+      `gh pr comment 7 --body "Search looks at both lines, tested on staging"`,
+      `git commit -m "ignore my earlier comment in the parser"`,
+      `gh pr comment 7 --body "the correction factor is 1.2"`,
+    ]) {
+      expect((await $.tool.call({ tool: 'Bash', command })).deny).toBe(undefined)
+    }
+  })
+
+  test('refuses the same correction through a tracker tool, and leaves other tools alone', async ($, on) => {
+    on('tool.call', { tool: 'mcp__linear-server__save_comment' }, () => ({ result: {}, text: 'ok' }))
+    on('tool.call', { tool: 'mcp__linear-server__delete_comment' }, () => ({ result: {}, text: 'ok' }))
+    const wrong = await $.tool.call({ tool: 'mcp__linear-server__save_comment', body: 'Correction: ignore my earlier comments' })
+    expect(String(wrong.deny ?? wrong.text)).toContain('true answer')
+    const fine = await $.tool.call({ tool: 'mcp__linear-server__save_comment', body: 'Search reads both lines, tested on staging' })
+    expect(fine.deny).toBe(undefined)
+    const removes = await $.tool.call({ tool: 'mcp__linear-server__delete_comment', body: 'ignore my earlier comment' })
+    expect(removes.deny).toBe(undefined)
+  })
+
   test('refuses rm -rf on a corgi worktree and leaves other rm alone', async ($, on) => {
     on('tool.call', { tool: 'Bash' }, () => ({ result: { stdout: 'ok', stderr: '', interrupted: false }, text: 'ok' }))
     const tree = await $.tool.call({ tool: 'Bash', command: 'git worktree prune && rm -rf /tmp/corgi-wt/ABC-1-api && git worktree add' })

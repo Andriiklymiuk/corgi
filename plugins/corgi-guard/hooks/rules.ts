@@ -2,6 +2,9 @@ const unsplitSet = /\bset\s+--\s+"?\$(?!\{=)[A-Za-z_]\w*/
 const bashPipeStatus = /\$\{?PIPESTATUS\b/
 const rmCorgiTree = /\brm\s+-(?:[a-zA-Z]*r[a-zA-Z]*f|[a-zA-Z]*f[a-zA-Z]*r)[a-zA-Z]*\s+[^;&|]*\/tmp\/corgi-(?:wt|review)\b/
 
+const postsComment = /\b(?:gh\s+(?:pr|issue)\s+(?:comment|review)|gh\s+api\b[^\n]*comments|glab\s+(?:mr|issue)\s+note|corgi\s+agent\s+watch\s+(?:pr\s+)?comment)\b/
+const correctionOnTop = /\b(?:ignore|disregard)\s+my\s+(?:(?:last|earlier|previous|above)\s+)?(?:comment|message|reply|note)s?\b|(?:^|["'\n])\s*correction\s*[:-]|\bmy\s+(?:last|earlier|previous)\s+(?:comment|message|reply|note)\s+was\s+wrong\b/i
+
 const heredocBody = /<<-?\s*(['"]?)(\w+)\1([^\n]*)\n[\s\S]*?\n\s*\2[ \t]*(?=\n|$)/g
 const singleQuoted = /'[^']*'/g
 
@@ -9,7 +12,24 @@ export function shellOnly(command: string): string {
   return command.replace(heredocBody, '<<$2$3').replace(singleQuoted, "''")
 }
 
+const correctionFix = 'A correction on top leaves the wrong comment standing. Edit it into the true answer, or delete it: ' +
+  '`gh api -X PATCH repos/<repo>/issues/comments/<id> -f body=...`, `glab api -X PUT projects/<id>/merge_requests/<n>/notes/<note> -f body=...`, ' +
+  'or the tracker tool that updates or deletes a comment. Someone replied to it: edit, do not delete.'
+
+// A tracker's own tool posts comments too (mcp__<server>__save_comment).
+export function mcpCommentRefusal(tool: string, input: unknown): string | undefined {
+  if (!tool.startsWith('mcp__')) {
+    return undefined
+  }
+  const name = tool.split('__').pop() ?? ''
+  const writes = /save|create|add|post|reply/i.test(name) && /comment|note|reply/i.test(name) && !/list|get|delete/i.test(name)
+  return writes && correctionOnTop.test(JSON.stringify(input)) ? correctionFix : undefined
+}
+
 export function refusal(raw: string): string | undefined {
+  if (postsComment.test(raw) && correctionOnTop.test(raw)) {
+    return correctionFix
+  }
   const command = shellOnly(raw)
   if (unsplitSet.test(command)) {
     return 'zsh does not split `$var` in `set -- $var`, so the second word arrives empty. ' +

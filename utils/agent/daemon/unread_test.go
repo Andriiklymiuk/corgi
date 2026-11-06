@@ -222,3 +222,12 @@ func TestAutoMergeAloneStillWantsAnApproval(t *testing.T) {
 		t.Fatal("no approval, no switch, no merge")
 	}
 }
+
+func TestEveryRunThatCanPostIsToldToProveWhatItPosts(t *testing.T) {
+	for _, kind := range []watch.Kind{watch.KindTask, watch.KindIssueNew, watch.KindPRComment, watch.KindReviewRequested} {
+		s := unattendedSuffix(WatchSpec{Workspace: "w"}, watch.Event{Key: "k", Kind: kind, Ref: "R"})
+		if !strings.Contains(s, "not checked") || !strings.Contains(s, "never corrected by another comment") {
+			t.Errorf("%s: %s", kind, s)
+		}
+	}
+}

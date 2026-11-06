@@ -1,8 +1,12 @@
 import type { Register } from 'claude-code'
 
-import { hint, quoteEchoEquals, quoteFlagGlobs, refusal } from './rules'
+import { hint, mcpCommentRefusal, quoteEchoEquals, quoteFlagGlobs, refusal } from './rules'
 
 export const register: Register = on => {
+  on('tool.call', async ($, e, next) => {
+    const why = mcpCommentRefusal(e.tool, e)
+    return why === undefined ? next(e) : { deny: `corgi-guard: ${why}` }
+  }).catch(($, e, next) => next(e))
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
     const why = refusal(e.command)
     if (why !== undefined) {

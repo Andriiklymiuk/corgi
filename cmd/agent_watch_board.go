@@ -192,6 +192,9 @@ The text is plain text. A URL or a markdown link [label](url) is clickable;
 a bare !9168 or #42 is not, the tracker does not know which repo it means.`,
 	Args: cobra.ExactArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
+		if err := watch.CorrectionRefusal(args[1]); err != nil {
+			exitWithError("agent_watch", err, 2)
+		}
 		paths, _ := cmd.Flags().GetStringArray("file")
 		images, _ := cmd.Flags().GetStringArray("image")
 		files, err := watch.ReadAttachments(append(paths, images...))

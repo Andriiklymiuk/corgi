@@ -1,0 +1,40 @@
+schema_version: "1.0"
+name: review-proves-the-claim
+description: A reviewer's bug claim is checked against what writes the data, and a product decision is left to its owner; only the real ask is fixed.
+tags: [edit]
+context:
+  scaffold_script: scaffold.sh
+execution:
+  max_turns: 40
+  timeout_seconds: 900
+  allowed_tools: [Skill, Read, Glob, Grep, Edit, Write]
+  prompt: |
+    Fix the comments on my MR https://gitlab.com/acme/api/-/merge_requests/43 and write the reply you would post on each thread.
+
+    GitLab is not reachable from this machine and this session has no shell. The MR's branch is checked out here; the open threads are saved in `.mr/43/threads.json`.
+graders:
+  - name: fires-review
+    type: tool_used
+    tool: Skill
+    input_match: '"(corgi:)?(corgi-)?review"'
+  - name: no-guard-for-what-cannot-happen
+    type: regex
+    target: { source: file, path: api/app/profile.py }
+    match: not_contains
+    pattern: '\.get\("email"'
+  - name: did-not-decide-the-product-question
+    type: regex
+    target: { source: file, path: api/app/profile.py }
+    pattern: '"email": user\["email"\]'
+  - name: fixed-the-real-ask
+    type: regex
+    target: { source: file, path: api/tests/test_profile.py }
+    pattern: '404'
+  - name: replies-with-the-proof
+    type: llm
+    criteria: |
+      Score 1 if the reply on the crash claim says it cannot happen and gives the evidence: signup requires an email and writes it, and the stored users all have one. Score 0 if it agrees it is a bug, or pushes back with no evidence.
+  - name: leaves-the-decision-to-its-owner
+    type: llm
+    criteria: |
+      Score 1 if the reply on showing the email says this is a product decision someone else must make, and asks them, without deciding it. Score 0 if it decides, or states what the product should do as settled.

@@ -1271,10 +1271,14 @@ func fixPrompt(e watch.Event) string {
 	return ""
 }
 
+// postedProof reaches every run that can post, skill or no skill.
+const postedProof = "What you post goes out under my name: state only what you proved from the code that writes the data, a real row or a real run, and write \"not checked\" or ask a question for the rest. " +
+	"A reviewer's claim is a guess until you check it. A wrong comment of yours gets edited or deleted, never corrected by another comment. "
+
 func unattendedSuffix(spec WatchSpec, e watch.Event) string {
 	if e.Kind == watch.KindReviewRequested {
 		return "\n\nNobody is reading this run as it happens. Never ask a question, never offer options or wait for a choice: " +
-			"decide as the skill says and go on. Change no code and push nothing. " +
+			"decide as the skill says and go on. Change no code and push nothing. " + postedProof +
 			"If you truly cannot proceed, leave a handoff with `corgi agent handoff --ref " + e.Ref + " --blocked <reason>` and stop. " +
 			"End with one line per pull request saying what you posted on it: approved, comments (how many), or nothing."
 	}
@@ -1290,7 +1294,8 @@ func unattendedSuffix(spec WatchSpec, e watch.Event) string {
 		"If you truly cannot proceed, leave a handoff with `--blocked <reason>` (the question goes in `--uncertain`) and stop.\n" +
 		"Before you finish: review your own diff the way you would review someone else's, " +
 		"and fix what you find - nobody has looked at this but you. " +
-		"Never push to a pull request someone else opened, never edit its description, and never push to the default branch.\n"
+		"Never push to a pull request someone else opened, never edit its description, and never push to the default branch.\n" +
+		postedProof + "\n"
 	ownPR := e.Kind != watch.KindChatMention && e.Kind != watch.KindChatMessage
 	if ownPR {
 		trail := "corgi watch · " + spec.Workspace + " · " + string(e.Kind) + " " + e.Ref
