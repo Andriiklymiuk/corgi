@@ -117,3 +117,18 @@ func TestARunThatNeverReachedTheAgentSpendsNoCap(t *testing.T) {
 		}
 	}
 }
+
+func TestTheHourlyCapCountsWorkNotRoutines(t *testing.T) {
+	l := LoadFixLog(t.TempDir())
+	now := time.Now()
+	l.StartFor(Event{Key: "routine:api:retro:1", Ref: "routine/retro", Workspace: "api", Kind: KindRoutine, At: now}, now.Add(-10*time.Minute))
+	l.SetCost("routine:api:retro:1", 0.4, 900)
+	l.Finish("routine:api:retro:1", nil, "", "", now.Add(-9*time.Minute))
+	l.StartFor(Event{Key: "task:1", Ref: "TASK-1", Workspace: "api", Kind: KindTask, At: now}, now.Add(-5*time.Minute))
+	if n := l.WorkRunsSince("api", now.Add(-time.Hour)); n != 1 {
+		t.Fatalf("one task, the routine left out: %d", n)
+	}
+	if n := l.StartedSince("api", now.Add(-time.Hour)); n != 2 {
+		t.Fatalf("the day and total caps still count both: %d", n)
+	}
+}

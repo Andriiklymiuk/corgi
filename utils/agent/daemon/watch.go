@@ -979,7 +979,7 @@ func (d *Daemon) deferral(spec WatchSpec, now time.Time) string {
 
 func fixDeferral(spec WatchSpec, log *watch.FixLog, now time.Time) string {
 	perHour, perDay := spec.FixCaps()
-	if log.StartedSince(spec.Workspace, now.Add(-time.Hour)) >= perHour {
+	if log.WorkRunsSince(spec.Workspace, now.Add(-time.Hour)) >= perHour {
 		return fmt.Sprintf("%d/h cap", perHour)
 	}
 	if log.StartedSince(spec.Workspace, now.Add(-24*time.Hour)) >= perDay {
