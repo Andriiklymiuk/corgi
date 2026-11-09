@@ -217,3 +217,18 @@ func TestAReadOnlyRoutineMayRunItsReadsWithoutTheBypass(t *testing.T) {
 		t.Fatal("with the bypass on, the list is not needed")
 	}
 }
+
+func TestAPushNamesTheRoutineOnce(t *testing.T) {
+	cases := map[string]string{
+		"Retro: 96 runs in 7 days, 3 tasks filed.": "96 runs in 7 days, 3 tasks filed.",
+		"retro - 96 runs":                          "96 runs",
+		"Retrospective of 96 runs":                 "Retrospective of 96 runs",
+		"Retro:":                                   "Retro:",
+		"Three tasks filed.":                       "Three tasks filed.",
+	}
+	for in, want := range cases {
+		if got := withoutName(in, "retro"); got != want {
+			t.Errorf("withoutName(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

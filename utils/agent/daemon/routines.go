@@ -194,7 +194,7 @@ func (d *Daemon) routineReport(spec WatchSpec, e watch.Event, out string, failed
 	}
 	d.watchState.MarkSeen(report.Key)
 	d.appendWatchEvent(report)
-	body := e.Title + ": " + clipText(headline, 160)
+	body := e.Title + ": " + clipText(withoutName(headline, e.Title), 160)
 	if len(links) > 0 {
 		body = watch.PullLines(body, links)
 	}
@@ -214,6 +214,20 @@ func routineHeadline(out string) string {
 		return headlineLabel.ReplaceAllString(line, "")
 	}
 	return ""
+}
+
+func withoutName(headline, name string) string {
+	if name = strings.TrimSpace(name); name == "" || len(headline) <= len(name) || !strings.EqualFold(headline[:len(name)], name) {
+		return headline
+	}
+	rest := strings.TrimLeft(headline[len(name):], " ")
+	if !strings.HasPrefix(rest, ":") && !strings.HasPrefix(rest, "-") {
+		return headline
+	}
+	if rest = strings.TrimSpace(strings.TrimLeft(rest, ":-")); rest != "" {
+		return rest
+	}
+	return headline
 }
 
 func firstLine(s string) string {

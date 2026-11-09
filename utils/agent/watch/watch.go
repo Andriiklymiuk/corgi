@@ -1291,6 +1291,20 @@ func (l *FixLog) StartedSince(workspace string, since time.Time) int {
 	return n
 }
 
+// WorkRunsSince counts the runs that work on something - tickets, reviews,
+// tasks - and leaves out routines, which run on their own clock.
+func (l *FixLog) WorkRunsSince(workspace string, since time.Time) int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	n := 0
+	for _, r := range l.Started {
+		if r.Workspace == workspace && !r.StartedAt.Before(since) && !r.NeverRan() && r.Kind != string(KindRoutine) {
+			n++
+		}
+	}
+	return n
+}
+
 // NeverRan says the agent never got to work: the daemon stopped it, or it
 // failed before the first token. Such a run spends no budget, so no cap counts it.
 func (r FixRecord) NeverRan() bool {
