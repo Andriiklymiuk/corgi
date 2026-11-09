@@ -105,7 +105,7 @@ Ticket resolves but **clearly unrelated** to diff (stale/recycled key in branch 
 
 Build **one compact, distilled** standards note **per repo** - same-repo PRs share it, never rebuild. Note is orchestrator's cache (stories model): handful of bullets reviewer reads, **not** raw files dumped into context.
 
-**Orchestrator writes this note, and it is ONLY standards input subagent gets. Subagent never opens `CLAUDE.md`, `AGENTS.md` or lint config itself** - that is whole saving; N same-repo PRs otherwise re-read same file N times. Skipping P2 and putting "read the repo's CLAUDE.md" in each prompt is failure this phase prevents.
+**Orchestrator writes this note, and it is ONLY standards input the review of each PR gets. That review never reopens `CLAUDE.md`, `AGENTS.md` or lint config itself** - that is whole saving; N same-repo PRs otherwise re-read same file N times. Skipping P2 and putting "read the repo's CLAUDE.md" in each prompt is failure this phase prevents.
 
 Read canonical file (`CLAUDE.md`/`AGENTS.md`) plus one lint config matching diff's languages - nothing else, headings only above ~400 lines. No CLAUDE.md → note is "lint config X + conventions observed in the diff", fine; don't manufacture standards nobody wrote.
 
@@ -117,9 +117,11 @@ Read canonical file (`CLAUDE.md`/`AGENTS.md`) plus one lint config matching diff
 
 Distilled note = naming conventions, test patterns, forbidden patterns, code-style rules repo **explicitly** spells out. Target short note (~dozen bullets), reused unchanged across every PR in repo.
 
-## Phase 3 - Review each PR (subagent, scoped)
+## Phase 3 - Review each PR (this session, one at a time)
 
-Hand review subagent: PR's diff + title/body + repo's standards note + (if any) intent note from P1.5 + evidence worktree path (P1). Findings **anchor on diff**; **evidence comes from whole tree** - every symbol, key, test diff touches has callers, twins, consumers outside hunk, where bugs a good human reviewer finds live. Untouched code not reviewed for own sake; read to judge touched code.
+Review in this session, one PR after another. **No subagents unless the person asked for them in this conversation**; an unattended run never fans out. Unasked parallel agents are what people stop this skill for.
+
+Each review works from: PR's diff + title/body + repo's standards note + (if any) intent note from P1.5 + evidence worktree path (P1). Findings **anchor on diff**; **evidence comes from whole tree** - every symbol, key, test diff touches has callers, twins, consumers outside hunk, where bugs a good human reviewer finds live. Untouched code not reviewed for own sake; read to judge touched code.
 
 **Surface first, then diff.** Before any implementation line, read changed surface - PR body's `## Changed surface` section when author left one, else make it: `corgi surface --base <base>` from checkout (or `corgi_diff` with `surface: true` over stack). Lists exported symbols, routes, contracts, migrations, config that changed, removals and signature changes marked breaking. Every breaking line is question review must answer - who calls it, is caller in this PR or another, does ticket ask for it - before opening diff. Change whose surface is "nothing public changed" reviewed for behaviour and tests only. Summary names surface - each changed symbol, route or key by name, `breaking` where it is - never "the changes listed in the body"; reviewer reading only that line should know whether to look closer.
 
@@ -195,7 +197,7 @@ Plus **2-4 sentence human summary per PR** above findings list. When ticket enum
 - **Spend budget on evidence, not standards.** Twenty neighbour files opened to settle real question is the review; twenty opened to learn code style is not.
 - **Name overlap before dispatching.** Two PRs in set touching same files (stacked pair, or siblings in one repo) each re-derive same facts unless prompt says which files shared and what other reviewer covers. One line per prompt; orchestrator holds ledger, subagents cite it.
 - Big **set** → one PR at a time in this session; parallel subagents only when person asked for them here, each scoped to diff + shared note. **Mind the machine**: read load first (`uptime`, `nproc`/`sysctl -n hw.ncpu`); read-only reviewers can run together, but full test gates run one at a time per repo (two at most when load below core count) - five suites at once push load past 50, all crawl. Wait on subagents by notifications, never placeholder `sleep` task.
-- Big **single PR** (large diff / many files) → split diff by file/dir group across parallel subagents (cap group size so each fits context), then merge + dedupe, plus **one cross-slice reconcile pass** so caller-in-slice-A / definition-in-slice-B issue isn't missed.
+- Big **single PR** (large diff / many files) → review it in slices by file/dir group, one after another in this session (subagents only if person asked), then merge + dedupe, plus **one cross-slice reconcile pass** so caller-in-slice-A / definition-in-slice-B issue isn't missed.
 - Same-repo sibling PRs touching same code → add short **interaction note** (conflict or overlap?).
 
 ## Phase 3.5 - Cross-service contract pass

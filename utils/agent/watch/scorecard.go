@@ -54,7 +54,7 @@ func Scorecard(records []FixRecord, workspace string, since time.Time) []ScoreRo
 			row.Pushed++
 		case r.Said == "pushed" || (r.Said == "" && len(r.PRs) > 0):
 			row.Pushed++
-		case r.Said == "replied":
+		case r.Said == "replied", r.Said == "nothing" && reportingRoutine(r):
 			row.Replied++
 		case r.Said == "nothing":
 			row.Idle++
@@ -73,6 +73,14 @@ func Scorecard(records []FixRecord, workspace string, since time.Time) []ScoreRo
 		return out[i].Runs > out[j].Runs
 	})
 	return out
+}
+
+func reportingRoutine(r FixRecord) bool {
+	if Kind(r.Kind) != KindRoutine {
+		return false
+	}
+	k, ok := CatalogKind(strings.TrimPrefix(r.Ref, "routine/"))
+	return ok && k.Reads
 }
 
 func countedRun(r FixRecord) bool {
