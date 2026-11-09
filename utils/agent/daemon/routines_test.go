@@ -221,10 +221,10 @@ func TestAReadOnlyRoutineMayRunItsReadsWithoutTheBypass(t *testing.T) {
 func TestAPushNamesTheRoutineOnce(t *testing.T) {
 	cases := map[string]string{
 		"Retro: 96 runs in 7 days, 3 tasks filed.": "96 runs in 7 days, 3 tasks filed.",
-		"retro - 96 runs":                           "96 runs",
-		"Retrospective of 96 runs":                  "Retrospective of 96 runs",
-		"Retro:":                                    "Retro:",
-		"Three tasks filed.":                        "Three tasks filed.",
+		"retro - 96 runs":                          "96 runs",
+		"Retrospective of 96 runs":                 "Retrospective of 96 runs",
+		"Retro:":                                   "Retro:",
+		"Three tasks filed.":                       "Three tasks filed.",
 	}
 	for in, want := range cases {
 		if got := withoutName(in, "retro"); got != want {
