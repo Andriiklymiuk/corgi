@@ -43,9 +43,16 @@ func (d *Daemon) advanceTasks(ctx context.Context) {
 			continue
 		}
 		if reason := d.deferral(spec, now); reason != "" {
-			utils.Infof("agent: %s waits: %s\n", t.Ref(), reason)
+			if d.taskWaitSaid == nil {
+				d.taskWaitSaid = map[string]string{}
+			}
+			if d.taskWaitSaid[t.Key()] != reason {
+				d.taskWaitSaid[t.Key()] = reason
+				utils.Infof("agent: %s waits: %s\n", t.Ref(), reason)
+			}
 			continue
 		}
+		delete(d.taskWaitSaid, t.Key())
 		if !d.claimFix(t.Workspace, t.Ref()) {
 			continue
 		}

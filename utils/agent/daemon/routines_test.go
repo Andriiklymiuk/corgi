@@ -189,3 +189,31 @@ func TestAReadOnlyRoutineIsNotToldAboutPullRequests(t *testing.T) {
 		t.Fatal("a routine that writes code keeps the pull request rules")
 	}
 }
+
+func TestAReadOnlyRoutineMayRunItsReadsWithoutTheBypass(t *testing.T) {
+	spec := WatchSpec{Workspace: "api", Dir: t.TempDir()}
+	retro, _ := RoutineEvent("api", config.Routine{Kind: "retro"}, time.Now())
+	p := fixPrint(spec, retro, "")
+	if len(p.AllowedTools) == 0 || p.SkipPermissions {
+		t.Fatalf("a retro gets its read commands, not the bypass: %+v", p.AllowedTools)
+	}
+	joined := strings.Join(p.AllowedTools, " ")
+	for _, want := range []string{"Bash(corgi agent history:*)", "Bash(corgi agent task add:*)", "Bash(git log:*)"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("missing %s", want)
+		}
+	}
+	for _, never := range []string{"git push", "git commit", "gh pr merge", "gh api", "Bash(corgi:*)", "Bash(git:*)"} {
+		if strings.Contains(joined, never) {
+			t.Errorf("a read-only routine may not %s", never)
+		}
+	}
+	custom, _ := RoutineEvent("api", config.Routine{Name: "tidy", Prompt: "Fix the lint warnings and open a PR."}, time.Now())
+	if len(fixPrint(spec, custom, "").AllowedTools) != 0 {
+		t.Fatal("a routine that writes code gets no list: it needs the workspace's own permission choice")
+	}
+	spec.SkipPermissions = true
+	if p := fixPrint(spec, retro, ""); len(p.AllowedTools) != 0 || !p.SkipPermissions {
+		t.Fatal("with the bypass on, the list is not needed")
+	}
+}

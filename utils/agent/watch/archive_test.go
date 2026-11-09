@@ -92,3 +92,28 @@ func TestARunRemembersItsModelAndTheCostNamesIt(t *testing.T) {
 		t.Fatal("an empty row is ignored")
 	}
 }
+
+func TestARunThatNeverReachedTheAgentSpendsNoCap(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Now()
+	l := LoadFixLog(dir)
+	start := func(key string) {
+		l.StartFor(Event{Key: key, Ref: key, Workspace: "api", Kind: KindTask, At: now}, now.Add(-10*time.Minute))
+	}
+	start("dead")
+	l.Finish("dead", nil, "", "could not create worktrees: no repository", now.Add(-10*time.Minute))
+	start("cut")
+	l.Finish("cut", nil, "", InterruptedReason, now.Add(-5*time.Minute))
+	start("worked")
+	l.SetCost("worked", 0.4, 9000)
+	l.Finish("worked", nil, "", "exit status 1", now.Add(-time.Minute))
+	start("running")
+	if n := l.StartedSince("api", now.Add(-time.Hour)); n != 2 {
+		t.Fatalf("a failure before the first token and an interrupted run are not counted; a run that spent and failed is, and so is one still going: %d", n)
+	}
+	for _, r := range l.Records() {
+		if want := r.Key == "dead" || r.Key == "cut"; r.NeverRan() != want {
+			t.Errorf("%s NeverRan = %v", r.Key, !want)
+		}
+	}
+}

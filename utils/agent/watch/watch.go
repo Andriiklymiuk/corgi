@@ -1284,11 +1284,20 @@ func (l *FixLog) StartedSince(workspace string, since time.Time) int {
 	defer l.mu.Unlock()
 	n := 0
 	for _, r := range l.Started {
-		if r.Workspace == workspace && !r.StartedAt.Before(since) && r.Error != InterruptedReason {
+		if r.Workspace == workspace && !r.StartedAt.Before(since) && !r.NeverRan() {
 			n++
 		}
 	}
 	return n
+}
+
+// NeverRan says the agent never got to work: the daemon stopped it, or it
+// failed before the first token. Such a run spends no budget, so no cap counts it.
+func (r FixRecord) NeverRan() bool {
+	if r.Error == InterruptedReason {
+		return true
+	}
+	return r.Done() && strings.TrimSpace(r.Error) != "" && r.Tokens == 0 && r.CostUSD == 0 && r.FinishedAt.Sub(r.StartedAt) < 30*time.Second
 }
 
 func (l *FixLog) LastStarted(workspace string) (last time.Time, ok bool) {
