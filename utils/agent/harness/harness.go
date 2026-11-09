@@ -72,13 +72,9 @@ type Receipt struct {
 	Turns   int
 	// SessionID is the id to resume this run by, when the harness names it.
 	SessionID string
-	// Models are the models that answered, shortest name first, when the
-	// harness lists them.
-	Models []string
+	Models    []string
 }
 
-// ShortModel is a model's name as a card shows it: no vendor prefix, no
-// release date. claude-sonnet-4-5-20250929 is sonnet-4-5.
 func ShortModel(name string) string {
 	name = strings.TrimSpace(strings.ToLower(name))
 	name = strings.TrimPrefix(name, "claude-")

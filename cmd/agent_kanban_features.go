@@ -75,8 +75,6 @@ func kanbanFeatures(cards []KanbanCard) []KanbanFeature {
 	return out
 }
 
-// featureWaves orders the cards by what they wait for: a wave is the cards
-// that can run side by side, the next wave waits for the one before.
 func featureWaves(refs []string, byRef map[string]KanbanCard, ws string) [][]string {
 	placed := map[string]bool{}
 	var waves [][]string

@@ -915,9 +915,7 @@ type FixRecord struct {
 	// Harness is the agent that ran it (claude when empty), so a failure
 	// sidelines that agent and not the next one in the workspace's order.
 	Harness string `json:"harness,omitempty"`
-	// Model is what answered: the one asked for at the start, the ones the
-	// harness named at the end.
-	Model string `json:"model,omitempty"`
+	Model   string `json:"model,omitempty"`
 	// GreenAt is when the checks of the pull request it worked on passed after it
 	GreenAt time.Time `json:"greenAt,omitzero"`
 	// Said is the outcome the run reported: pushed, replied, nothing or blocked
@@ -1718,16 +1716,13 @@ func (l *FixLog) SetCost(key string, usd float64, tokens int64) {
 }
 
 type Cost struct {
-	USD    float64 `json:"usd"`
-	Tokens int64   `json:"tokens"`
-	Runs   int     `json:"runs"`
-	// Models and Agents are who did the work, each named once, in order of
-	// first appearance; an agent unnamed by a run is claude.
+	USD    float64  `json:"usd"`
+	Tokens int64    `json:"tokens"`
+	Runs   int      `json:"runs"`
 	Models []string `json:"models,omitempty"`
 	Agents []string `json:"agents,omitempty"`
 }
 
-// AddWorker names who worked: the agent, and the models it used.
 func (c *Cost) AddWorker(agent, models string) {
 	if agent = strings.TrimSpace(agent); agent == "" {
 		agent = "claude"

@@ -9,11 +9,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// How long a quiet card stays before the board lets it go.
 const (
-	// A finished run, a done ticket or a review with nothing open: a week.
-	reconcileKeep = 7 * 24 * time.Hour
-	// A card nothing ever happened on: two weeks.
+	reconcileKeep      = 7 * 24 * time.Hour
 	reconcileUntouched = 2 * reconcileKeep
 )
 
@@ -64,7 +61,6 @@ func staleWhy(c KanbanCard, keep time.Duration, now time.Time) (string, bool) {
 	days := func() string { return roughAge(age) + " ago" }
 	switch c.Column {
 	case ColDone:
-		// Into the history at once; the card itself shows one more day.
 		return c.Why, true
 	case ColReview:
 		if c.Pull != nil && pullOver(c.Pull.State) == "" {
@@ -151,7 +147,6 @@ func init() {
 	agentKanbanCmd.AddCommand(agentKanbanReconcileCmd)
 }
 
-// reconcileBoard is what the daemon runs once an hour.
 func reconcileBoard(dir string) func(now time.Time) []string {
 	return func(now time.Time) []string {
 		return reconcileKanban(gatherKanban(dir, "", now), watch.LoadArchive(dir), reconcileKeep, now, false)

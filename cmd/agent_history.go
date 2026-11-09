@@ -12,8 +12,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// HistoryEntry is one thing that happened to a ticket: a run on it, its
-// pull request merging, a task finishing, its card leaving the board.
 type HistoryEntry struct {
 	At        time.Time    `json:"at"`
 	Kind      string       `json:"kind"`
