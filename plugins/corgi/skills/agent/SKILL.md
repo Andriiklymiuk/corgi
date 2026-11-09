@@ -968,6 +968,41 @@ what the ticket has cost (runs keep claude's own receipt; sessions on the
 branch add their transcripts). The phone's Board tab draws the same. Moving a
 card is `watch move`; nobody drags one into Running.
 
+What a card also says (2.40): `now` is the live line of a Running card - the
+session's tool and file, or "a run is on it", with the model and the agent;
+`cost.models` and `cost.agents` are who worked on it, once each (claude,
+codex; `sonnet-4-5`, `gpt-5-codex`); `feature` is the plan (`P-3`) or the
+parent ticket the card is one piece of, `after` the cards it waits for. The
+`features` list in `--json` groups them with a state and `waves`: the cards
+of one wave run side by side, the waves in a row (`TASK-1 → TASK-2 + TASK-3`).
+A plan's tasks and a tracker's subtasks both show this way; a feature is
+`running` while one card runs, `review` when only reviews are left, `done`
+when every card is.
+
+**Done is history, not a column to read.** Every surface hides it by default
+and shows it on a switch; a Done card leaves after a day. Once an hour the
+daemon runs `corgi agent kanban reconcile`: a run that answered a week ago
+with nothing since, a review whose pull request closed, a ticket nothing
+touched for two weeks, a Done card - all leave the board. Never a card with a
+session, a run, an open pull request or a fresh pick, whatever its age; each
+card leaves once (one line in `agent.log`, nothing rings); anything new on
+the ticket brings its card back. `--dry-run` says what would leave,
+`--back ABC-12` puts one back by hand. `corgi agent history [--days 30]
+[--workspace X] [--json]` is what already happened, newest first: every run
+with what it said, its cost, model, agent and how long it took, every merge,
+every finished task, every card that left and why. When a person asks "what
+did corgi do this week" or "where did that ticket go", read this, not the
+board. The phone has it under + › History; `/launch/history` serves it.
+
+**Who reviews, and as whom.** A review request on a watched workspace is
+answered by the watch, as an unattended run under the person's own name, and
+the comment reads as theirs. A **bot** acts as itself - its own name on the
+comment, its own soul and model. A bot sheet that says "last seen 50d ago"
+with every trigger off is a bot with no job, not a sign that reviews
+stopped: check `corgi agent watch` and `corgi agent history` before saying
+anything is broken, and only suggest a reviewer bot when the person wants the
+agent's name on the review instead of theirs.
+
 ### What a workspace does on its own
 
 Switches per workspace, each off until flipped, each read live - from the
@@ -1102,6 +1137,11 @@ per laptop - those are not shared work.
   on the one it knew, `POST /launch/peers/join` on the new one). Nothing to run.
 - By hand: `corgi agent peers invite` on laptop A prints a URL and a
   ten-minute code; `corgi agent peers join <url> <code>` on B pairs both ways.
+- A machine that has nothing yet: `corgi agent peers bootstrap user@host` from
+  A installs corgi and claude there over ssh, clones A's workspaces under the
+  same names with their watch, starts the daemon and pairs; `--lead` makes it
+  the one that works unattended, `--with-tokens` carries the tracker tokens
+  over the ssh session, `--dry-run` only prints the plan (the setup skill).
 - `corgi agent peers` - who is paired, awake, leading, and what each watches.
 - `corgi agent peers lead` - this laptop leads every tracker it shares (the
   home machine that should do the unattended work); `lead off` returns to

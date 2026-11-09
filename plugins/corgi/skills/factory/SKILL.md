@@ -64,7 +64,8 @@ yet written. That is how the human gets out of the loop without quality falling.
 | Where a run happens | a worktree (`--isolate`), `agent container`, another laptop (`peers`) |
 | A run's memory | the tracker, git, `handoff`, `lesson`. Nothing else survives a run |
 | What stops a run | `--done-when`, `scope`, `guard`, `cap`, the breaker, quiet hours |
-| What you see | the board, `scorecard`, `cost`, `selfcheck`, `digest` |
+| What you see | the board (live line, who worked, features), `history`, `scorecard`, `cost`, `selfcheck`, `digest` |
+| What forgets | `kanban reconcile`, hourly: finished and quiet cards leave the board, into `history` |
 
 Work out what the workspace lacks before adding a trigger. A run must leave everything the next one needs
 in those memories, written down, never in a session's head.
@@ -110,6 +111,9 @@ corgi agent plan graph P-3            # who waits for whom, where each stands; -
 ```
 
 - Use a graph when work has a real order or can run side by side. One change wants `stories`, not a graph.
+- The board shows the plan as one **feature** above the columns, with its state and the order as waves
+  (`TASK-1 → TASK-2 + TASK-3`: two side by side after the first). That line is the plan's status for a
+  person; `plan graph` is the detail.
 - A node is one run, with one clear done. State lives on disk, so a crash or a closed lid resumes.
 - A failed node retries with the reason, up to the cap, then stops for a person.
 - Branching belongs in the tracker: a label or a column change triggers the next run. It stays visible and a
@@ -150,7 +154,8 @@ sessions ──▶ retro ──▶ one change ──▶ a person says yes ──
 - **A loop gaming its own number is the main failure.** An agent that can edit the test or the eval it is judged by
   will. The loop proposes; it never changes its own exam.
 - **Judge a change by what happens next:** the scorecard, the same mistake's count. A rule nobody can measure is a
-  wish. Remove it when it does nothing.
+  wish. Remove it when it does nothing. `corgi agent history --json` is the ledger behind both: every run with
+  its outcome, cost, model and agent per ticket, so a week can be compared with the one before.
 - Keep a person on the approval until the scorecard says otherwise, and keep it longer for the skills themselves.
 
 ## Red flags

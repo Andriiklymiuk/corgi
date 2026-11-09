@@ -1,6 +1,6 @@
 ---
 name: setup
-description: "Use to set corgi up end to end: \"set up corgi for me\", \"I just installed corgi, what now\", \"connect my phone, Telegram, Jira\". Runs every step a program can, lists the manual clicks. NOT authoring compose or running the stack."
+description: "Use to set corgi up end to end: \"set up corgi for me\", \"I just installed corgi, what now\", \"connect my phone, Telegram, Jira\"; or to add a machine to an existing setup: \"set up my new laptop\", \"put corgi on the server\", \"join the cluster\", \"a second machine for the unattended work\". Runs every step a program can, lists the manual clicks. NOT authoring compose or running the stack."
 ---
 
 # Set corgi up, end to end
@@ -379,6 +379,70 @@ on, and the agent answers. It is the Ideas tab on the phone, the Mac and the
 dashboard." Offer to make the first one now from a spec in the repo
 (`docs/**/*.md`) if there is one.
 
+## Joining an existing setup: another laptop, or a server
+
+A second machine is not a second setup. Paired as **peers**, two machines that watch the same
+trackers agree on one leader per tracker: it runs the fixes, the bots and the routines and rings
+the phone; the other records and stays quiet. Tasks move between them. Sessions stay per machine.
+The user says "my new laptop", "the server", "join the cluster": this is the pass.
+
+```
+home laptop ◀── peers pulse, once a minute ──▶ new laptop / server
+     │                                               │
+     └──────────── the phone pairs with both ────────┘
+```
+
+**One command does most of it, from the machine already set up:**
+
+```bash
+corgi agent peers bootstrap me@build-1 --dry-run            # the plan, nothing sent
+corgi agent peers bootstrap me@build-1 --with-tokens --lead # a server that does the unattended work
+corgi agent peers bootstrap me@laptop-2 --lan               # a second laptop on the same network
+```
+
+Over ssh it installs corgi and claude, clones every workspace with a git remote (or `--workspace api`)
+under the same names with its watch, models and routines, starts the daemon at login, sets linger and the
+timezone on Linux, pairs the two as peers and, with `--lead`, hands the unattended work over. Tokens go only
+with `--with-tokens`, inside the ssh session, never on a command line. `--dangerously-skip-permissions` is
+for a server nobody answers (add `corgi agent harden` there). It ends with what is left by hand: `claude auth
+login` and `gh auth login` on the other machine, and a stable tunnel. Without ssh, the same in two halves:
+`corgi agent peers export --json` here, `corgi agent peers import` there with the pack on stdin.
+
+By hand, or to check what it did:
+
+1. **Steps 1 and 2 as above, on the new machine.** On a server: the curl installer instead of brew,
+   `claude auth login` prints a URL to open anywhere and a code to paste back; `docs/agent.md`
+   "Running it on a server" is the full list (git identity, `gh`/`glab` login, the plugin, linger, TZ).
+   Register the same stacks **under the same workspace names**: a task sent across looks for its
+   checkout by that name.
+2. **Logins and tokens are per machine.** `claude auth login` for each account (`--config-dir` for the
+   second), `gh auth login` or `glab auth login`, and `corgi agent watch auth <tracker>` again. Nothing
+   is copied from the first machine, and nothing should be: the peer link carries events, never tokens.
+3. **Watch the same sources** (`corgi agent watch enable` with the same tracker and repos). Two machines
+   that watch the same project are how corgi knows they are peers of one tracker; a workspace watched on
+   one machine only is simply that machine's.
+4. **A URL the other side can reach.** `corgi agent up --at-login` with a named tunnel (step 3's table),
+   or `--http 0.0.0.0:8765` when both sit on one network. A server: `corgi agent install` for the unit,
+   `loginctl enable-linger $USER` so it outlives the SSH session.
+5. **Pair.** Scan the new machine's QR with the phone that already knows the first one: the phone
+   introduces them as peers by itself. Without the phone: `corgi agent peers invite` on the first machine
+   prints a URL and a ten-minute code, `corgi agent peers join <url> <code>` on the new one pairs both ways.
+   `corgi agent peers` on either shows who is paired, awake and leading.
+6. **Say who leads.** `corgi agent peers lead` on the machine that should do the unattended work, the one
+   that stays plugged in: usually the server, or the laptop that stays home. The leader that goes silent
+   for three minutes is replaced, and takes the lead back when it returns.
+7. **Make the unattended machine fit for it:** `corgi agent init --dangerously-skip-permissions` (else a
+   Bash step waits for an answer), `corgi agent harden`, `watch enable --isolate --prune-after 7d`, quiet
+   hours, `export TZ=…` before `install`. `corgi agent doctor --away` is the list for a machine nobody
+   touches for weeks: updates, lid, power, network, heat, the pulse.
+8. **Verify on both:** `corgi agent peers` names the other side and says who leads each tracker;
+   `corgi agent doctor` is green; the phone's board shows the other machine's sessions under
+   "on <name>". `corgi agent task add "…" --on <peer>` puts a task straight on the other machine.
+
+What does not travel: tokens, transcripts, sessions and their permission prompts, the agent config of the
+first machine. What does: the board, the day's runs, ignores and mutes (`watch ignore` on one ignores on
+both), tasks waiting for a run (after the home machine is silent for ten minutes, or `task send`).
+
 ## The manual checklist (print only what is still open)
 
 - Scan the QR on the phone (single use, ten minutes; `corgi agent up`
@@ -398,6 +462,9 @@ dashboard." Offer to make the first one now from a spec in the repo
 - Tokens for the watch: Linear API key, Jira API token, `gh auth login`,
   GitLab access token (table in step 7). Webhook entries in each service,
   from `corgi agent watch hooks`.
+- A second machine: `claude auth login` and `gh auth login` over SSH (URL +
+  code), a stable tunnel there, and `peers lead` on the one that does the
+  unattended work when `bootstrap` ran without `--lead`.
 
 ## Done when
 
