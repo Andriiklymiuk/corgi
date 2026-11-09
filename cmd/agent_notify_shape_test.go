@@ -139,3 +139,19 @@ func TestWebhookLinkNotifierRefusesABadURL(t *testing.T) {
 		}
 	}
 }
+
+func TestALinkTheBodyAlreadyNamesIsNotAddedAgain(t *testing.T) {
+	pr := "https://github.com/acme/api/pull/98"
+	req, err := buildNotifyRequest(webhookTelegram, "https://api.telegram.org/botX/sendMessage?chat_id=1", "corgi agent · api", "fixed TASK-3 - history filter\n"+pr, pr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := io.ReadAll(req.Body)
+	if n := strings.Count(string(raw), "pull/98"); n != 1 {
+		t.Fatalf("the pull request appears %d times: %s", n, raw)
+	}
+	req, _ = buildNotifyRequest(webhookTelegram, "https://api.telegram.org/botX/sendMessage?chat_id=1", "corgi agent · api", "needs you", "https://x.test/app")
+	if raw, _ := io.ReadAll(req.Body); !strings.Contains(string(raw), "x.test/app") {
+		t.Fatalf("a link the body does not name is still added: %s", raw)
+	}
+}
