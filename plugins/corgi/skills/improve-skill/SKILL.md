@@ -54,7 +54,9 @@ cheapest layer that stops this for good. Ask in this order:
 1. **Read the primary source, not your memory of it.** Default to this session. For more, run
    `python3 references/mine_sessions.py --last 30` (every `~/.claude*/projects`): tool errors, the same
    failing call sent twice, skill use, where the person stepped in. Open the transcript behind any
-   line you will act on. Its output holds real project data and stays out of the skill.
+   line you will act on. Its output holds real project data and stays out of the skill. In a corgi
+   workspace, the unattended runs count too: `corgi agent scorecard`, `corgi agent selfcheck`,
+   `corgi agent history --workspace . --json`, and a run's own log with `corgi agent history log <ref>`.
 2. **Weigh what the person said over what the tools said.** A correction costs more than an error, and an
    error the agent recovered from in one step may cost nothing. Count, and quote the count.
 3. **Group by cause, not by symptom,** and pick the layer above for each.

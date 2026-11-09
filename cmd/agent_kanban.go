@@ -281,6 +281,8 @@ func (b *kanbanBoard) placeRun(r watch.FixRecord) {
 		c.Now = &CardNow{Doing: "a run is on it", Model: r.Model, Agent: firstNonEmpty(r.Harness, "claude"), Since: r.StartedAt}
 	case len(r.PRs) > 0 && c.Column != ColDone:
 		c.Column, c.Why = ColReview, r.Outcome()
+	case strings.TrimSpace(r.Error) != "" && c.Column == ColRunning && c.Session == nil:
+		c.Column, c.Why = ColInbox, "the last run failed "+roughAge(b.in.now.Sub(r.FinishedAt))+" ago: "+firstLineOf(r.Error)
 	case c.Column == ColInbox && (c.Why == "" || c.Why == "waiting in the inbox"):
 		c.Why = "a run answered " + roughAge(b.in.now.Sub(r.FinishedAt)) + " ago · nothing since"
 	}

@@ -3,11 +3,13 @@ package cmd
 import (
 	"fmt"
 	"net/http"
+	"os"
 	"sort"
 	"strings"
 	"time"
 
 	"andriiklymiuk/corgi/utils"
+	"andriiklymiuk/corgi/utils/agent/daemon"
 	"andriiklymiuk/corgi/utils/agent/watch"
 	"github.com/spf13/cobra"
 )
@@ -140,7 +142,7 @@ by day.
 	Run: func(cmd *cobra.Command, _ []string) {
 		dir := mustAgentDir()
 		days, _ := cmd.Flags().GetInt("days")
-		ws, _ := cmd.Flags().GetString("workspace")
+		ws := historyWorkspace(cmd, dir)
 		if days <= 0 {
 			days = 14
 		}
@@ -162,6 +164,57 @@ by day.
 			}
 			fmt.Println("  " + historyLine(r))
 		}
+	},
+}
+
+func historyWorkspace(cmd *cobra.Command, dir string) string {
+	ws, _ := cmd.Flags().GetString("workspace")
+	if strings.TrimSpace(ws) != "." {
+		return ws
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	return workspaceIDForDir(dir, cwd)
+}
+
+func lastRunKey(records []watch.FixRecord, arg, workspace string) (watch.FixRecord, bool) {
+	for i := len(records) - 1; i >= 0; i-- {
+		r := records[i]
+		if workspace != "" && r.Workspace != workspace {
+			continue
+		}
+		if r.Key == arg || strings.EqualFold(r.Ref, arg) {
+			return r, true
+		}
+	}
+	return watch.FixRecord{}, false
+}
+
+var agentHistoryLogCmd = &cobra.Command{
+	Use:   "log <ref|key>",
+	Short: "What the last run on a ticket printed: its prompt, what it did, its outcome and cost",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		dir := mustAgentDir()
+		tail, _ := cmd.Flags().GetInt("tail")
+		ws := historyWorkspace(cmd, dir)
+		rec, ok := lastRunKey(watch.LoadFixLog(dir).Records(), args[0], ws)
+		if !ok {
+			exitWithError("agent_history", fmt.Errorf("no run on %s", args[0]), 2)
+			return
+		}
+		text := daemon.RunLog(dir, rec.Key, tail)
+		if utils.JSONOutput {
+			utils.PrintJSON(map[string]any{"key": rec.Key, "ref": rec.Ref, "workspace": rec.Workspace, "said": rec.Said, "error": rec.Error, "log": text})
+			return
+		}
+		if text == "" {
+			fmt.Printf("%s ran, but its log is gone\n", rec.Ref)
+			return
+		}
+		fmt.Print(text)
 	},
 }
 
@@ -198,6 +251,9 @@ func launchHistoryHandler(w http.ResponseWriter, r *http.Request) {
 
 func init() {
 	agentHistoryCmd.Flags().Int("days", 14, "How far back")
-	agentHistoryCmd.Flags().String("workspace", "", "Only this workspace")
+	agentHistoryCmd.Flags().String("workspace", "", "Only this workspace (. is the one you are in)")
+	agentHistoryLogCmd.Flags().Int("tail", 300, "Lines from the end of the log")
+	agentHistoryLogCmd.Flags().String("workspace", "", "Only this workspace (. is the one you are in)")
+	agentHistoryCmd.AddCommand(agentHistoryLogCmd)
 	agentCmd.AddCommand(agentHistoryCmd)
 }

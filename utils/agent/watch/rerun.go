@@ -21,8 +21,16 @@ var GitHubAPI = "https://api.github.com"
 
 type Rerun struct {
 	RunID int64     `json:"runId"`
+	Forge string    `json:"forge,omitempty"`
 	URL   string    `json:"url,omitempty"`
 	At    time.Time `json:"at"`
+}
+
+func rerunKey(forge string, runID int64) string {
+	if forge == "" || forge == "github" {
+		return strconv.FormatInt(runID, 10)
+	}
+	return forge + ":" + strconv.FormatInt(runID, 10)
 }
 
 type RerunLog struct {
@@ -46,17 +54,19 @@ func LoadReruns(agentDir string) *RerunLog {
 	return l
 }
 
-func (l *RerunLog) Seen(runID int64) bool {
+func (l *RerunLog) Seen(runID int64) bool { return l.SeenOn("github", runID) }
+
+func (l *RerunLog) SeenOn(forge string, runID int64) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	_, ok := l.Reruns[strconv.FormatInt(runID, 10)]
+	_, ok := l.Reruns[rerunKey(forge, runID)]
 	return ok
 }
 
 func (l *RerunLog) Set(r Rerun) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	l.Reruns[strconv.FormatInt(r.RunID, 10)] = r
+	l.Reruns[rerunKey(r.Forge, r.RunID)] = r
 	for len(l.Reruns) > rerunKeep {
 		oldest, at := "", time.Time{}
 		for k, v := range l.Reruns {
@@ -149,6 +159,77 @@ func RerunFailedJobs(ctx context.Context, s Secrets, repo string, runID int64) e
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("rerunning %s run %d: %s", repo, runID, resp.Status)
+	}
+	return nil
+}
+
+func splitGitLabMR(ref string) (project, iid string, ok bool) {
+	i := strings.LastIndex(ref, "!")
+	if i <= 0 || i == len(ref)-1 {
+		return "", "", false
+	}
+	return ref[:i], ref[i+1:], true
+}
+
+func gitlabAPI(s Secrets) string {
+	return strings.TrimRight(firstOr(strings.TrimSpace(s.GitLabURL), "https://gitlab.com"), "/") + "/api/v4"
+}
+
+func NewestFailedPipeline(ctx context.Context, s Secrets, ref string, since time.Time) (FailedRun, error) {
+	if s.GitLab == "" {
+		return FailedRun{}, ErrNoToken
+	}
+	project, iid, ok := splitGitLabMR(ref)
+	if !ok {
+		return FailedRun{}, fmt.Errorf("%s is not a merge request", ref)
+	}
+	g := &GitLab{URL: s.GitLabURL, Token: s.GitLab}
+	var list []struct {
+		ID        int64  `json:"id"`
+		Status    string `json:"status"`
+		Ref       string `json:"ref"`
+		WebURL    string `json:"web_url"`
+		UpdatedAt string `json:"updated_at"`
+	}
+	endpoint := gitlabAPI(s) + "/projects/" + url.PathEscape(project) + "/merge_requests/" + iid + "/pipelines?per_page=5"
+	if err := g.getInto(ctx, endpoint, &list); err != nil {
+		return FailedRun{}, fmt.Errorf("listing pipelines of %s: %w", ref, err)
+	}
+	if len(list) == 0 {
+		return FailedRun{}, fmt.Errorf("%s has no pipeline", ref)
+	}
+	newest := list[0]
+	at, _ := time.Parse(time.RFC3339, newest.UpdatedAt)
+	if newest.Status != "failed" {
+		return FailedRun{}, fmt.Errorf("the newest pipeline of %s is %s, not failed", ref, newest.Status)
+	}
+	if at.Before(since) {
+		return FailedRun{}, fmt.Errorf("no failed pipeline of %s since %s", ref, since.Format(time.Kitchen))
+	}
+	return FailedRun{ID: newest.ID, URL: newest.WebURL, Name: "pipeline " + strconv.FormatInt(newest.ID, 10), UpdatedAt: at}, nil
+}
+
+func RetryPipeline(ctx context.Context, s Secrets, ref string, pipelineID int64) error {
+	if s.GitLab == "" {
+		return ErrNoToken
+	}
+	project, _, ok := splitGitLabMR(ref)
+	if !ok {
+		return fmt.Errorf("%s is not a merge request", ref)
+	}
+	endpoint := gitlabAPI(s) + "/projects/" + url.PathEscape(project) + "/pipelines/" + strconv.FormatInt(pipelineID, 10) + "/retry"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("PRIVATE-TOKEN", s.GitLab)
+	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
+	if err != nil {
+		return fmt.Errorf("retrying pipeline %d of %s: %w", pipelineID, ref, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("retrying pipeline %d of %s: %s", pipelineID, ref, resp.Status)
 	}
 	return nil
 }
