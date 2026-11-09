@@ -287,3 +287,21 @@ func TestTheNewestRunSpeaksForTheCard(t *testing.T) {
 		t.Fatalf("an older run's pull request is kept: %+v", c.Fix)
 	}
 }
+
+func TestAHistoryLineSaysEachThingOnce(t *testing.T) {
+	now := time.Now()
+	rows := buildHistory(historyInputs{since: now.Add(-time.Hour), runs: []watch.FixRecord{
+		{Key: "k1", Ref: "T-1", Workspace: "api", StartedAt: now.Add(-6 * time.Minute), FinishedAt: now.Add(-time.Minute), Said: "pushed", Tokens: 2000, CostUSD: 1.5, Model: "opus-5-5, haiku-5-5", Harness: "claude"},
+		{Key: "k2", Ref: "T-2", Workspace: "api", StartedAt: now.Add(-time.Minute), FinishedAt: now.Add(-time.Minute), Error: "could not create worktrees: x", Model: "sonnet"},
+	}})
+	got := map[string]string{}
+	for _, r := range rows {
+		got[r.Ref] = historyLine(r)
+	}
+	if strings.Count(got["T-1"], "opus-5-5") != 1 || !strings.Contains(got["T-1"], "≈$1.50") || !strings.HasSuffix(got["T-1"], "5m") {
+		t.Fatalf("models once, dollars as an estimate, how long it took: %q", got["T-1"])
+	}
+	if strings.Contains(got["T-2"], "sonnet") || strings.Contains(got["T-2"], "just now") || strings.Contains(got["T-2"], "tok") {
+		t.Fatalf("a run that never started names no model, no time, no cost: %q", got["T-2"])
+	}
+}

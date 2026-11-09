@@ -785,7 +785,7 @@ func init() {
 func costLine(c CardCost) string {
 	parts := []string{humanTokens(c.Tokens) + " tok"}
 	if c.USD > 0 {
-		parts = append(parts, fmt.Sprintf("$%.2f", c.USD))
+		parts = append(parts, fmt.Sprintf("≈$%.2f", c.USD))
 	}
 	if c.Runs > 0 {
 		parts = append(parts, plural(c.Runs, "run", "runs"))

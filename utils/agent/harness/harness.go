@@ -284,19 +284,30 @@ func claudeUnwrap(raw []byte) ([]byte, Receipt) {
 			CacheRead  int64 `json:"cache_read_input_tokens"`
 			CacheWrite int64 `json:"cache_creation_input_tokens"`
 		} `json:"usage"`
-		ModelUsage map[string]json.RawMessage `json:"modelUsage"`
+		ModelUsage map[string]struct {
+			CostUSD float64 `json:"costUSD"`
+		} `json:"modelUsage"`
 	}
 	if json.Unmarshal(trimmed, &env) != nil || env.Type != "result" {
 		return raw, Receipt{}
 	}
 	u := env.Usage
-	var models []string
+	names := make([]string, 0, len(env.ModelUsage))
 	for name := range env.ModelUsage {
+		names = append(names, name)
+	}
+	sort.SliceStable(names, func(i, j int) bool {
+		if a, b := env.ModelUsage[names[i]].CostUSD, env.ModelUsage[names[j]].CostUSD; a != b {
+			return a > b
+		}
+		return names[i] < names[j]
+	})
+	var models []string
+	for _, name := range names {
 		if short := ShortModel(name); short != "" {
 			models = append(models, short)
 		}
 	}
-	sort.Strings(models)
 	return []byte(env.Result), Receipt{OK: true, CostUSD: env.CostUSD, Turns: env.NumTurns, SessionID: env.SessionID,
 		Tokens: u.Input + u.Output + u.CacheRead + u.CacheWrite, Models: models}
 }

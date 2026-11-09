@@ -586,7 +586,9 @@ reviews every pull request someone asks you about, as itself.
 **A board that stays current, and a history behind it.** A Running card
 carries a live line - *now: Edit cmd/x.go · sonnet-4-5* - and every card
 says who worked on it: the runs, the sessions, the tokens, the dollars, the
-models and the agents (claude, codex). Several cards that make one thing -
+models and the agents (claude, codex). The dollars are Claude Code's own
+estimate at API prices (≈$): on a subscription nothing is billed per run, and
+the tokens are what a run really spends. Several cards that make one thing -
 a plan's tasks, the subtasks of one parent ticket - show as a *feature*
 above the columns, with its state and the order they run in: `TASK-1 →
 TASK-2 + TASK-3 → TASK-4` says two go in parallel after the first. Done is

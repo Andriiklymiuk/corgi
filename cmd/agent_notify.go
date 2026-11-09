@@ -177,6 +177,9 @@ func webhookShapeFor(host string) string {
 }
 
 func buildNotifyRequest(shape, target, title, body, link string) (*http.Request, error) {
+	if link != "" && strings.Contains(body, link) {
+		link = ""
+	}
 	if shape == webhookNtfy {
 		req, err := http.NewRequest(http.MethodPost, target, strings.NewReader(body))
 		if err != nil {
