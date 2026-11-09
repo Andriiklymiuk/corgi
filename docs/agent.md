@@ -2234,6 +2234,18 @@ export CORGI_DATA_DIR="$(brew --prefix)/var/corgi"
 
 ## Running it on a server
 
+From a machine that already runs corgi, one command does the list below over ssh
+and pairs the two as peers:
+
+```bash
+corgi agent peers bootstrap me@build-1 --dry-run              # the plan
+corgi agent peers bootstrap me@build-1 --with-tokens --lead   # install, clone, watch, daemon, pair, lead
+```
+
+What stays by hand is printed at the end: `claude auth login` and `gh auth login`
+there, and a stable tunnel. The rest of this section is what it does, for a
+server set up without it.
+
 Nothing in agent mode needs a window. The daemon, the watch, the routines,
 the bots and every headless fix are plain processes, so a Linux box with
 `claude`, `git` and Docker runs the same loop a laptop does. The screen is
