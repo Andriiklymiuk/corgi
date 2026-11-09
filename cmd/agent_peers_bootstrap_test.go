@@ -86,7 +86,7 @@ func TestImportingAPackClonesRegistersAndKeepsTheWatch(t *testing.T) {
 	base := filepath.Join(t.TempDir(), "dev")
 	pack := peerPack{From: "home", GitName: "corgi on build-1", GitEmail: "me@example.com", Workspaces: []packWorkspace{
 		{ID: "api", Remote: "git@example.com:acme/api.git", Aliases: []string{"backend"},
-			Config: &config.WorkspaceConfig{Agents: []string{"claude", "codex"}, Watch: &config.WatchConfig{Enabled: true, Tracker: "linear", Project: "ENG", Action: "fix"}},
+			Config:  &config.WorkspaceConfig{Agents: []string{"claude", "codex"}, Watch: &config.WatchConfig{Enabled: true, Tracker: "linear", Project: "ENG", Action: "fix"}},
 			Secrets: &watch.Secrets{Linear: "lin_secret"}},
 		{ID: "stack", Remote: "git@example.com:acme/stack.git", Compose: true},
 	}, Secrets: &watch.Secrets{GitHub: "gh_secret"}}
