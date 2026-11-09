@@ -251,3 +251,17 @@ func TestAFeatureStateFollowsItsCards(t *testing.T) {
 		t.Fatalf("the order on the line: %q", line)
 	}
 }
+
+func TestAFailedRunOnATaskBackInTodoSaysItFailed(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Now()
+	tasks := watch.LoadTasks(dir)
+	_, _ = tasks.Add("x", "", "corgi", "cli", now)
+	fixes := watch.LoadFixLog(dir)
+	fixes.StartFor(watch.Event{Key: "task:1", Ref: "TASK-1", Workspace: "corgi", Kind: watch.KindTask, At: now}, now.Add(-time.Hour))
+	fixes.Finish("task:1", nil, "", "could not create worktrees: x", now.Add(-time.Hour))
+	cards := buildKanban(kanbanInputs{events: tasks.Events(now), moved: watch.LoadStateLog(dir), fixes: fixes, picks: watch.LoadPicks(dir), pulls: watch.LoadPullLog(dir), now: now})
+	if len(cards) != 1 || !strings.HasPrefix(cards[0].Why, "the last run failed") {
+		t.Fatalf("a failure is not \"a run answered\": %+v", cards)
+	}
+}

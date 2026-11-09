@@ -59,6 +59,7 @@ type WorkspaceDiagnostic struct {
 }
 
 type Daemon struct {
+	taskWaitSaid map[string]string
 	// askedAt: what the board last asked a forge about and got no answer.
 	askedAt sync.Map
 	// peersHeardAt is when a round of pulses last finished, unix millis.

@@ -268,6 +268,9 @@ tracker settings. Restart the daemon to apply it: corgi agent restart.`,
 			}
 		} else if err := moveWorkspaceToLevel(dir, ws, args[0], doneWhen); err != nil {
 			return err
+		} else if n, _ := strconv.Atoi(args[0]); n >= 3 && !workspaceSkipsPermissions(dir, ws) {
+			utils.Infof("⚠ %s asks before every Bash step, and nobody answers an unattended run: its tests, commits and pushes would stall. "+
+				"Let it run them: corgi agent init --dangerously-skip-permissions (in the workspace), then corgi agent harden. Read-only routines work either way.\n", ws)
 		}
 		facts, err := factoryFactsFor(dir, ws)
 		if err != nil {
@@ -284,6 +287,14 @@ tracker settings. Restart the daemon to apply it: corgi agent restart.`,
 		}
 		return nil
 	},
+}
+
+func workspaceSkipsPermissions(dir, ws string) bool {
+	user, err := config.LoadUser(agentUserConfigPath(dir))
+	if err != nil {
+		return false
+	}
+	return user.Workspaces[ws].DangerouslySkipPermissions
 }
 
 func moveWorkspaceToLevel(dir, ws, arg string, doneWhen []string) error {

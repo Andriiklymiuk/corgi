@@ -1384,7 +1384,19 @@ func fixArgsWith(spec WatchSpec, e watch.Event, handover string) []string {
 // read the prompt at index one.
 func fixPrint(spec WatchSpec, e watch.Event, handover string) harness.Print {
 	args := fixArgsWith(spec, e, handover)
-	return harness.Print{Prompt: args[1], SkipPermissions: spec.SkipPermissions}
+	p := harness.Print{Prompt: args[1], SkipPermissions: spec.SkipPermissions}
+	if !spec.SkipPermissions && watch.ReadOnlyRoutine(e) {
+		p.AllowedTools = readOnlyRoutineTools
+	}
+	return p
+}
+
+var readOnlyRoutineTools = []string{
+	"Bash(corgi agent scorecard:*)", "Bash(corgi agent selfcheck:*)", "Bash(corgi agent history:*)", "Bash(corgi agent left:*)",
+	"Bash(corgi agent task list:*)", "Bash(corgi agent task add:*)", "Bash(corgi agent watch moved:*)", "Bash(corgi agent watch pr threads:*)",
+	"Bash(corgi agent lesson:*)", "Bash(corgi agent scenario run:*)", "Bash(corgi suggest-history:*)", "Bash(corgi context:*)", "Bash(corgi test:*)",
+	"Bash(git log:*)", "Bash(git diff:*)", "Bash(git show:*)", "Bash(git status:*)",
+	"Bash(gh search:*)", "Bash(gh pr list:*)", "Bash(gh pr view:*)", "Bash(glab mr list:*)", "Bash(glab mr view:*)",
 }
 
 var prLink = regexp.MustCompile(`https://(?:github\.com/[^\s)]+/pull/\d+|[^\s)]+/-/merge_requests/\d+)`)
