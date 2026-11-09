@@ -269,6 +269,10 @@ func (d *Daemon) loadWatchFiles() {
 					continue
 				}
 				d.watchState.Unsee(key)
+				if strings.HasPrefix(key, "task:") {
+					_, _ = watch.LoadTasks(d.Dir).AskRun(key, time.Now())
+					continue
+				}
 				if e, ok := watch.FindEvent(d.Dir, key); ok {
 					d.watchState.Fixes.Defer(e)
 				}

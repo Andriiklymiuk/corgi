@@ -49,3 +49,24 @@ func TestRetryHandsASeenEventBackToTheWatch(t *testing.T) {
 	d.handleSessionCommand(context.Background(), command.Command{Action: command.ActionWatch, WatchEvent: &e, Retry: true})
 	waitFor(t, func() bool { return len(fakeRuns(ran)) == 1 })
 }
+
+func TestAnInterruptedTaskRunIsAskedForAgain(t *testing.T) {
+	d := testDaemon(t)
+	now := time.Now()
+	tasks := watch.LoadTasks(d.Dir)
+	if _, err := tasks.Add("history filter", "", "corgi", "cli", now); err != nil {
+		t.Fatal(err)
+	}
+	task, _ := tasks.Started("TASK-1", now)
+	if task.WantsRun() {
+		t.Fatal("a started task wants nothing more")
+	}
+	state := watch.LoadState(d.Dir)
+	state.Fixes.StartFor(task.Event(), now)
+
+	d.loadWatchFiles()
+
+	if got, _ := watch.LoadTasks(d.Dir).Find("TASK-1"); !got.WantsRun() {
+		t.Fatalf("a task whose run the restart cut is run again, not left in Doing: %+v", got)
+	}
+}
