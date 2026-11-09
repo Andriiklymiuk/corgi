@@ -61,9 +61,15 @@ func buildHistory(in historyInputs) []HistoryEntry {
 		}
 		var cost watch.Cost
 		cost.Runs, cost.USD, cost.Tokens = 1, r.CostUSD, r.Tokens
-		cost.AddWorker(r.Harness, r.Model)
+		took := ""
+		if !r.NeverRan() {
+			cost.AddWorker(r.Harness, r.Model)
+			if d := r.FinishedAt.Sub(r.StartedAt); d >= time.Minute {
+				took = roughAge(d)
+			}
+		}
 		e := HistoryEntry{At: r.FinishedAt, Kind: HistRun, Key: r.Key, Workspace: r.Workspace, Ref: r.Ref, Title: firstLineOf(r.Title), URL: r.URL,
-			Why: firstLineOf(r.Outcome()), PRs: r.PRs, StartedAt: r.StartedAt, Took: roughAge(r.FinishedAt.Sub(r.StartedAt)),
+			Why: firstLineOf(r.Outcome()), PRs: r.PRs, StartedAt: r.StartedAt, Took: took,
 			Cost: &CardCost{USD: cost.USD, Tokens: cost.Tokens, Runs: 1, Models: cost.Models, Agents: cost.Agents}, Feature: planOf[r.Workspace+"/"+r.Ref]}
 		out = append(out, e)
 	}
@@ -240,11 +246,8 @@ func historyLine(r HistoryEntry) string {
 	if r.Why != "" && r.Why != r.Kind {
 		line += ": " + clipTitle(r.Why, 70)
 	}
-	if r.Cost != nil && r.Cost.Tokens > 0 {
+	if r.Cost != nil && (r.Cost.Tokens > 0 || len(r.Cost.Models) > 0) {
 		line += " · " + costLine(*r.Cost)
-	}
-	if r.Cost != nil && len(r.Cost.Models) > 0 {
-		line += " · " + strings.Join(r.Cost.Models, ", ")
 	}
 	if r.Took != "" {
 		line += " · " + r.Took
