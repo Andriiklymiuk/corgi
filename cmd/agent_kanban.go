@@ -47,12 +47,8 @@ type KanbanCard struct {
 	Body      string            `json:"body,omitempty"`
 	Cost      *CardCost         `json:"cost,omitempty"`
 	Pull      *watch.PullStatus `json:"pull,omitempty"`
-	// Now is what is happening on the card this minute: a session's tool
-	// and model, or the run on it. Only a Running card has one.
-	Now *CardNow `json:"now,omitempty"`
-	// Feature is the plan or the parent ticket this card is one piece of.
-	Feature *CardFeature `json:"feature,omitempty"`
-	// After names the cards in the same plan this one waits for.
+	Now       *CardNow          `json:"now,omitempty"`
+	Feature   *CardFeature      `json:"feature,omitempty"`
 	After     []string          `json:"after,omitempty"`
 	UpdatedAt time.Time         `json:"updatedAt"`
 	Standing  sessions.Standing `json:"standing"`
@@ -79,9 +75,6 @@ type CardFeature struct {
 	Title string `json:"title,omitempty"`
 }
 
-// KanbanFeature is several cards that make one thing: a plan's tasks, or
-// the subtasks of one parent ticket. Waves are the order they run in: the
-// cards of one wave go in parallel, the waves in a row.
 type KanbanFeature struct {
 	Ref       string     `json:"ref"`
 	Title     string     `json:"title,omitempty"`
@@ -359,7 +352,6 @@ func (b *kanbanBoard) addSessionCost(c *KanbanCard, s sessions.Session) {
 	c.Cost.Models, c.Cost.Agents = w.Models, w.Agents
 }
 
-// sessionNow is the card's live line: what the session is doing right now.
 func sessionNow(s sessions.Session) *CardNow {
 	doing := strings.TrimSpace(s.Summary)
 	if doing == "" {
@@ -472,8 +464,6 @@ func appendFold(list []string, s string) []string {
 	return append(list, s)
 }
 
-// placePlans ties a task to its plan: the feature it is a piece of, and
-// the tasks it waits for.
 func (b *kanbanBoard) placePlans() {
 	for _, p := range b.in.plans {
 		for _, pt := range p.Tasks {
@@ -490,8 +480,6 @@ func (b *kanbanBoard) placePlans() {
 	}
 }
 
-// dropArchived takes off the cards the board already let go, unless
-// something newer happened on them.
 func (b *kanbanBoard) dropArchived() {
 	if b.in.archive == nil {
 		return

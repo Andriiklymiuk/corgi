@@ -12,9 +12,6 @@ import (
 	"andriiklymiuk/corgi/utils/atomicfile"
 )
 
-// Archived is a card that left the board: finished, or quiet for so long
-// that nothing was going to happen to it. It is the board's memory, not
-// ignore: anything new about the ticket puts a card back.
 type Archived struct {
 	Key       string    `json:"key"`
 	Ref       string    `json:"ref"`
@@ -47,8 +44,6 @@ func LoadArchive(agentDir string) *ArchiveLog {
 	return l
 }
 
-// Put takes a card off the board. The same key archived again replaces the
-// older row, so a ticket that came back and left again is one memory.
 func (l *ArchiveLog) Put(a Archived) error {
 	if a.Key == "" {
 		return nil
@@ -68,13 +63,8 @@ func (l *ArchiveLog) Put(a Archived) error {
 	return l.save()
 }
 
-// doneShows is how long a Done card stays in sight after it went into the
-// history.
 const doneShows = 24 * time.Hour
 
-// Hidden says the board already let this card go, and nothing about it has
-// happened since: a newer event on the same key brings it back. A card
-// archived from Done still shows for a day.
 func (l *ArchiveLog) Hidden(key string, lastAt, now time.Time) bool {
 	if l == nil {
 		return false
@@ -93,7 +83,6 @@ func (l *ArchiveLog) Hidden(key string, lastAt, now time.Time) bool {
 	return false
 }
 
-// Known says this card is already in the history as it stands now.
 func (l *ArchiveLog) Known(key string, lastAt time.Time) bool {
 	if l == nil {
 		return false
@@ -108,7 +97,6 @@ func (l *ArchiveLog) Known(key string, lastAt time.Time) bool {
 	return false
 }
 
-// Since lists what left the board after that moment, newest first.
 func (l *ArchiveLog) Since(since time.Time) []Archived {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -122,7 +110,6 @@ func (l *ArchiveLog) Since(since time.Time) []Archived {
 	return out
 }
 
-// Forget lets a ticket back on the board by hand.
 func (l *ArchiveLog) Forget(ref string) (Archived, bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
