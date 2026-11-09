@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -12,7 +14,7 @@ import (
 )
 
 func TestTheBoardIsReconciledFromTheCommandLineAndTheHistoryTellsIt(t *testing.T) {
-	dir, _ := watchFixture(t, nil)
+	dir, ws := watchFixture(t, nil)
 	now := time.Now()
 	old := now.Add(-15 * 24 * time.Hour)
 	fixes := watch.LoadFixLog(dir)
@@ -84,6 +86,25 @@ func TestTheBoardIsReconciledFromTheCommandLineAndTheHistoryTellsIt(t *testing.T
 	}
 	if out, code := cli(t, "--json", "agent", "history"); code != 0 || !strings.Contains(out, `"entries"`) {
 		t.Fatalf("json history: %d %s", code, out)
+	}
+	runs := filepath.Join(dir, "watch", "runs")
+	_ = os.MkdirAll(runs, 0o700)
+	_ = os.WriteFile(filepath.Join(runs, "k-old.log"), []byte("=== start\nread the diff\nOutcome: nothing\n"), 0o600)
+	if out, code := cli(t, "agent", "history", "log", "abc-1"); code != 0 || !strings.Contains(out, "Outcome: nothing") {
+		t.Fatalf("a run's log by its ref: %d %s", code, out)
+	}
+	if out, code := cli(t, "agent", "history", "log", "ABC-2", "--tail", "1"); code != 0 || !strings.Contains(out, "log is gone") {
+		t.Fatalf("a run with no log says so: %d %s", code, out)
+	}
+	if _, code := cli(t, "agent", "history", "log", "ABC-404"); code != 2 {
+		t.Fatal("no run on a ref is exit 2")
+	}
+	inWorkspace(t, ws)
+	if out, code := cli(t, "--json", "agent", "history", "log", "ABC-1", "--workspace", "."); code != 0 || !strings.Contains(out, `"workspace": "acme-stack"`) {
+		t.Fatalf("--workspace . is the one you are in: %d %s", code, out)
+	}
+	if out, code := cli(t, "agent", "history", "--days", "30", "--workspace", "."); code != 0 || !strings.Contains(out, "ABC-1") {
+		t.Fatalf("history --workspace .: %d %s", code, out)
 	}
 	if line := historyLine(HistoryEntry{At: now, Ref: "X-1", Kind: HistRun, Why: "pushed", Took: "3m", Cost: &CardCost{Tokens: 1500, Models: []string{"opus-4-1"}}}); !strings.Contains(line, "run: pushed") || !strings.Contains(line, "2k tok") || !strings.Contains(line, "opus-4-1") || !strings.HasSuffix(line, "3m") {
 		t.Fatalf("history line: %q", line)

@@ -27,7 +27,14 @@ func isolateFixWorktrees(dir, branch string) ([]string, error) {
 		}
 	}
 	if composePath == "" {
-		return nil, fmt.Errorf("no corgi-compose.yml in %s", dir)
+		if !dirIsWorkspace(dir) {
+			return nil, fmt.Errorf("no corgi-compose.yml and no git repository in %s", dir)
+		}
+		wt, err := utils.MaterializeBranchInRepo(dir, branch)
+		if err != nil {
+			return nil, err
+		}
+		return []string{wt}, nil
 	}
 	corgi, _, err := loadComposeForAgent(composePath)
 	if err != nil {

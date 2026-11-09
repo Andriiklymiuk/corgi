@@ -1555,7 +1555,7 @@ func init() {
 	f.Bool("headless", false, "Let a message for a session whose terminal is gone run as one headless turn (claude -p --resume, or codex exec resume; acceptEdits) in its own checkout, so the phone's chat keeps working")
 	f.Bool("night-shift", false, "Work through the quiet hours: fixes and routines run as by day, nothing rings until the quiet hours end, then one 'N while you were away' says what happened (--night-shift=false to sleep through them again)")
 	f.Bool("silent", false, "Nothing about this workspace's watch rings - no toast, no phone push: fixes run, the inbox and the kanban fill, and you look when you like (--silent=false to ring again)")
-	f.Bool(watchFlagRerunCI, false, "Rerun the failed jobs of a red build once before it is worked on or handed over; a second red on the same run goes the usual way (GitHub)")
+	f.Bool(watchFlagRerunCI, false, "Rerun the failed jobs of a red build once before it is worked on or handed over; a second red on the same run goes the usual way (GitHub, GitLab)")
 	f.Bool(watchFlagAutoCarry, false, "Carry a session that hit its five-hour quota to another of the workspace's accounts with budget, once per limit (only profiles the accounts list names)")
 	f.Int("slots", 1, "How many unattended runs may go at once in this workspace (1 to 8); above 1 turns on --isolate so each has worktrees of its own")
 	f.Bool("lessons", false, "Write what the workspace learned the hard way - a review on a PR of mine, a check that stayed red, a bot that failed - one line each for every new session to read (corgi agent lesson list)")

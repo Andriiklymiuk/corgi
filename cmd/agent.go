@@ -216,21 +216,7 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 		return w.Move(ctx, ref, status)
 	}
 	d.RerunCI = func(ctx context.Context, workspaceID, repo string, since time.Time) (watch.Rerun, error) {
-		secrets := watch.LoadSecretsFor(dir, workspaceID)
-		run, err := watch.NewestFailedRun(ctx, secrets, repo, since)
-		if err != nil {
-			return watch.Rerun{}, err
-		}
-		reruns := watch.LoadReruns(dir)
-		if reruns.Seen(run.ID) {
-			return watch.Rerun{}, fmt.Errorf("run %d (%s) was rerun already", run.ID, run.Name)
-		}
-		if err := watch.RerunFailedJobs(ctx, secrets, repo, run.ID); err != nil {
-			return watch.Rerun{}, err
-		}
-		r := watch.Rerun{RunID: run.ID, URL: run.URL, At: time.Now()}
-		_ = reruns.Set(r)
-		return r, nil
+		return rerunRedBuildOn(ctx, dir, watch.LoadSecretsFor(dir, workspaceID), repo, since)
 	}
 	d.Policy = func(s sessions.Session) daemon.Policy {
 		return policyFor(dir, s.Cwd)

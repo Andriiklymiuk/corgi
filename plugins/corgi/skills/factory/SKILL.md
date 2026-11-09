@@ -139,7 +139,7 @@ real one on a clock. Start with the one service that blocks the most runs.
 ## The factory improves itself
 
 ```bash
-corgi agent routine add retro      # what went wrong in recent sessions, cheapest fix first
+corgi agent routine add retro      # this workspace's runs and sessions; each top cause filed as a task
 corgi agent routine add ratchet    # tighten one check a week, never loosen
 corgi agent routine add lessons    # reviews become rules
 corgi agent selfcheck              # what keeps failing in unattended runs

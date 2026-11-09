@@ -153,7 +153,7 @@ A failed task starts again with the reason, up to three times, then waits for a 
 
 | Routine | What it does |
 |---|---|
-| `retro` | reads recent sessions and proposes the cheapest fix for what went wrong |
+| `retro` | reads the workspace's runs (scorecard, selfcheck, history, each run's log) and sessions; files each top cause as a task a person starts |
 | `ratchet` | tightens one automated check a week, never loosens one |
 | `lessons` | turns reviews of your PRs into rules every session reads |
 | `scenarios` | judges main against the stories kept outside the repository |
