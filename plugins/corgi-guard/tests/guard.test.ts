@@ -118,4 +118,17 @@ describe('corgi-guard', () => {
     expect(got.text).toBe('main')
     expect(got.context ?? []).toEqual([])
   })
+
+  test('a log query that timed out gets told to narrow it, and other tools are left alone', async ($, on) => {
+    on('tool.call', { tool: 'mcp__logs-prod__query_dataprime' }, () => ({ result: {}, text: 'The operation timed out.' }))
+    on('tool.call', { tool: 'mcp__logs-prod__list_indexes' }, () => ({ result: {}, text: 'The operation timed out.' }))
+    on('tool.call', { tool: 'mcp__logs-prod__query_logs' }, () => ({ result: {}, text: '3 rows' }))
+    const slow = await $.tool.call({ tool: 'mcp__logs-prod__query_dataprime', query: 'source logs | limit 100000' })
+    expect(String((slow.context ?? []).join(' '))).toContain('shorter time range')
+    const other = await $.tool.call({ tool: 'mcp__logs-prod__list_indexes' })
+    expect(other.context).toBe(undefined)
+    const fine = await $.tool.call({ tool: 'mcp__logs-prod__query_logs', query: 'x' })
+    expect(fine.context).toBe(undefined)
+    expect(fine.text).toBe('3 rows')
+  })
 })

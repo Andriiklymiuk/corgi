@@ -88,6 +88,18 @@ export function quoteEchoEquals(command: string): string {
     part.replace(equalsWord, (word, at: number) => (bare[start + at] ? `'${word}'` : word)))
 }
 
+export function mcpHint(tool: string, text: string): string | undefined {
+  if (!tool.startsWith('mcp__')) {
+    return undefined
+  }
+  const name = tool.split('__').pop() ?? ''
+  if (/query|logs?|search|traces?|metrics?|dataprime|sql/i.test(name) && /timed out|timeout|deadline exceeded/i.test(text)) {
+    return 'The query timed out. Narrow it before the next call: a shorter time range (15 minutes), one service or index, a limit, ' +
+      'then widen step by step. Sending the same query again times out again.'
+  }
+  return undefined
+}
+
 export function hint(command: string, text: string): string | undefined {
   if (/graphql/.test(command) && /Could not coerce value|provided invalid value/.test(text)) {
     return 'A GraphQL variable arrived empty. For review threads, `corgi agent watch pr threads <url> <url>...` ' +

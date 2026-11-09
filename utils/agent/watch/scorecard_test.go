@@ -56,3 +56,15 @@ func TestRunOutcomeReadsTheLine(t *testing.T) {
 		}
 	}
 }
+
+func TestARoutineThatReportsIsNotIdle(t *testing.T) {
+	now := time.Now()
+	done := now.Add(-time.Hour)
+	rows := Scorecard([]FixRecord{
+		{Workspace: "a", Kind: string(KindRoutine), Ref: "routine/digest", StartedAt: now.Add(-2 * time.Hour), FinishedAt: done, Said: "nothing"},
+		{Workspace: "a", Kind: string(KindRoutine), Ref: "routine/tidy", StartedAt: now.Add(-2 * time.Hour), FinishedAt: done, Said: "nothing"},
+	}, "", now.Add(-24*time.Hour))
+	if len(rows) != 1 || rows[0].Replied != 1 || rows[0].Idle != 1 {
+		t.Fatalf("a digest's report is its answer; a routine of your own that changed nothing is idle: %+v", rows)
+	}
+}

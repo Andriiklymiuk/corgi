@@ -11,6 +11,7 @@ A Claude Code mod that stops the Bash shapes corgi runs lose turns to, and hands
 - A GraphQL call with an empty variable - the result carries a pointer to `corgi agent watch pr threads`.
 - `gh pr checks` right after a push ("no checks reported") - the result carries the wait-for-checks loop.
 - A corgi chat post with a dead Slack token - the result says to tell you and how to renew it.
+- A log, trace or metrics query from a tracker or observability tool that timed out - the result says to narrow it (time range, one service, a limit) instead of sending it again.
 
 ## Install
 
