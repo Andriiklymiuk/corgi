@@ -156,3 +156,58 @@ func TestThePhoneReadsFeaturesAndTheHistory(t *testing.T) {
 		t.Fatalf("another workspace: %+v", hist.Entries)
 	}
 }
+
+func TestHistoryKeepsOnlyTheKindAsked(t *testing.T) {
+	dir, _ := watchFixture(t, nil)
+	now := time.Now()
+	fixes := watch.LoadFixLog(dir)
+	fixes.StartFor(watch.Event{Key: "k-run", Ref: "ABC-3", Workspace: "acme-stack", Kind: watch.KindIssueNew, Title: "a run", At: now}, now.Add(-time.Minute))
+	fixes.Finish("k-run", nil, "", "", now)
+	tasks := watch.LoadTasks(dir)
+	for _, title := range []string{"finished", "dropped"} {
+		if _, err := tasks.Add(title, "", "acme-stack", "cli", now); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, _ = tasks.Move("TASK-1", "Done", now)
+	_, _ = tasks.Move("TASK-2", "Canceled", now)
+	_ = watch.LoadArchive(dir).Put(watch.Archived{Key: "k-left", Ref: "ABC-7", Workspace: "acme-stack", Column: ColInbox, Why: "quiet", At: now})
+
+	for kind, want := range map[string]string{"run": "ABC-3", "done": "TASK-1", "canceled": "TASK-2", "left": "ABC-7"} {
+		out, code := cli(t, "agent", "history", "--kind", kind)
+		if code != 0 || !strings.Contains(out, want) {
+			t.Fatalf("--kind %s keeps %s: %d %s", kind, want, code, out)
+		}
+		for _, other := range []string{"ABC-3", "TASK-1", "TASK-2", "ABC-7"} {
+			if other != want && strings.Contains(out, other) {
+				t.Fatalf("--kind %s drops %s: %s", kind, other, out)
+			}
+		}
+	}
+	if out, code := cli(t, "agent", "history", "--kind", "merged"); code != 0 || !strings.Contains(out, "nothing in the last 14 days") {
+		t.Fatalf("no merges: %d %s", code, out)
+	}
+	out, code := cli(t, "--json", "agent", "history", "--kind", "left")
+	var got struct {
+		Entries []HistoryEntry `json:"entries"`
+	}
+	if err := json.Unmarshal([]byte(out), &got); err != nil || code != 0 || len(got.Entries) != 1 || got.Entries[0].Kind != HistLeft {
+		t.Fatalf("json --kind left: %d %v %s", code, err, out)
+	}
+	if out, code := cli(t, "--json", "agent", "history", "--kind", "lost"); code != 2 || !strings.Contains(out, "run, merged, done, canceled, left") {
+		t.Fatalf("an unknown kind is exit 2 with the kinds: %d %s", code, out)
+	}
+
+	rec := httptest.NewRecorder()
+	launchHistoryHandler(rec, httptest.NewRequest(http.MethodGet, "/launch/history?kind=done", nil))
+	got.Entries = nil
+	_ = json.Unmarshal(rec.Body.Bytes(), &got)
+	if rec.Code != 200 || len(got.Entries) != 1 || got.Entries[0].Ref != "TASK-1" {
+		t.Fatalf("?kind=done: %d %s", rec.Code, rec.Body.String())
+	}
+	rec = httptest.NewRecorder()
+	launchHistoryHandler(rec, httptest.NewRequest(http.MethodGet, "/launch/history?kind=lost", nil))
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "run, merged, done, canceled, left") {
+		t.Fatalf("?kind=lost: %d %s", rec.Code, rec.Body.String())
+	}
+}
