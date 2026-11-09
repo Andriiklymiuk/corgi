@@ -13,6 +13,7 @@ by day.
 
   corgi agent history
   corgi agent history --days 30 --workspace api
+  corgi agent history --kind merged
   corgi agent history --json
 
 ```
@@ -24,6 +25,7 @@ corgi agent history [flags]
 ```
       --days int           How far back (default 14)
   -h, --help               help for history
+      --kind string        Only this kind: run, merged, done, canceled, left
       --workspace string   Only this workspace (. is the one you are in)
 ```
 

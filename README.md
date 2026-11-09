@@ -598,8 +598,9 @@ review whose pull request closed, a ticket nothing touched for two weeks
 ABC-12` puts one back; anything new about the ticket brings its card back
 by itself). What left is not lost: `corgi agent history` is the timeline -
 every run with what it said, its cost and model, every merge, every finished
-task, every card that left and why, day by day; `--json` and
-`/launch/history` for the apps.
+task, every card that left and why, day by day; `--kind merged` (or run,
+done, canceled, left) keeps one kind; `--json` and `/launch/history?kind=`
+for the apps.
 
 **Tasks of your own, on the same board.** Not everything comes from a
 tracker. `corgi agent task add "Meta SDK on iOS" --workspace app --body "…"` -

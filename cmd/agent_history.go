@@ -105,7 +105,20 @@ func buildHistory(in historyInputs) []HistoryEntry {
 	return out
 }
 
-func gatherHistory(dir, onlyWorkspace string, since time.Time) []HistoryEntry {
+var historyKinds = map[string]string{"run": HistRun, "merged": HistMerged, "done": HistDone, "canceled": HistCanceled, "left": HistLeft}
+
+func historyKind(name string) (string, error) {
+	name = strings.ToLower(strings.TrimSpace(name))
+	if name == "" {
+		return "", nil
+	}
+	if kind, ok := historyKinds[name]; ok {
+		return kind, nil
+	}
+	return "", fmt.Errorf("unknown kind %q: one of run, merged, done, canceled, left", name)
+}
+
+func gatherHistory(dir, onlyWorkspace, onlyKind string, since time.Time) []HistoryEntry {
 	in := historyInputs{
 		runs:    watch.LoadFixLog(dir).Records(),
 		archive: watch.LoadArchive(dir).Since(since),
@@ -115,12 +128,9 @@ func gatherHistory(dir, onlyWorkspace string, since time.Time) []HistoryEntry {
 		since:   since,
 	}
 	rows := buildHistory(in)
-	if onlyWorkspace == "" {
-		return rows
-	}
 	kept := rows[:0]
 	for _, r := range rows {
-		if r.Workspace == onlyWorkspace {
+		if (onlyWorkspace == "" || r.Workspace == onlyWorkspace) && (onlyKind == "" || r.Kind == onlyKind) {
 			kept = append(kept, r)
 		}
 	}
@@ -137,17 +147,24 @@ by day.
 
   corgi agent history
   corgi agent history --days 30 --workspace api
+  corgi agent history --kind merged
   corgi agent history --json`,
 	Args: cobra.NoArgs,
 	Run: func(cmd *cobra.Command, _ []string) {
 		dir := mustAgentDir()
 		days, _ := cmd.Flags().GetInt("days")
 		ws := historyWorkspace(cmd, dir)
+		name, _ := cmd.Flags().GetString("kind")
+		kind, err := historyKind(name)
+		if err != nil {
+			exitWithError("agent_history", err, 2)
+			return
+		}
 		if days <= 0 {
 			days = 14
 		}
 		since := time.Now().Add(-time.Duration(days) * 24 * time.Hour)
-		rows := gatherHistory(dir, ws, since)
+		rows := gatherHistory(dir, ws, kind, since)
 		if utils.JSONOutput {
 			utils.PrintJSON(map[string]any{"since": since, "entries": rows})
 			return
@@ -241,17 +258,23 @@ func launchHistoryHandler(w http.ResponseWriter, r *http.Request) {
 		writeLaunchError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	kind, err := historyKind(r.URL.Query().Get("kind"))
+	if err != nil {
+		writeLaunchError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	days := 14
 	if n, err := fmt.Sscanf(r.URL.Query().Get("days"), "%d", &days); n != 1 || err != nil || days <= 0 || days > 365 {
 		days = 14
 	}
 	since := time.Now().Add(-time.Duration(days) * 24 * time.Hour)
-	writeLaunchJSON(w, map[string]any{"since": since, "entries": gatherHistory(dir, strings.TrimSpace(r.URL.Query().Get("workspace")), since)})
+	writeLaunchJSON(w, map[string]any{"since": since, "entries": gatherHistory(dir, strings.TrimSpace(r.URL.Query().Get("workspace")), kind, since)})
 }
 
 func init() {
 	agentHistoryCmd.Flags().Int("days", 14, "How far back")
 	agentHistoryCmd.Flags().String("workspace", "", "Only this workspace (. is the one you are in)")
+	agentHistoryCmd.Flags().String("kind", "", "Only this kind: run, merged, done, canceled, left")
 	agentHistoryLogCmd.Flags().Int("tail", 300, "Lines from the end of the log")
 	agentHistoryLogCmd.Flags().String("workspace", "", "Only this workspace (. is the one you are in)")
 	agentHistoryCmd.AddCommand(agentHistoryLogCmd)
