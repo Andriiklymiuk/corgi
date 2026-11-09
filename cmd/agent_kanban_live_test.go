@@ -265,3 +265,25 @@ func TestAFailedRunOnATaskBackInTodoSaysItFailed(t *testing.T) {
 		t.Fatalf("a failure is not \"a run answered\": %+v", cards)
 	}
 }
+
+func TestTheNewestRunSpeaksForTheCard(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Now()
+	tasks := watch.LoadTasks(dir)
+	_, _ = tasks.Add("x", "", "corgi", "cli", now)
+	_, _ = tasks.Started("TASK-1", now)
+	fixes := watch.LoadFixLog(dir)
+	e := watch.Event{Key: "task:1", Ref: "TASK-1", Workspace: "corgi", Kind: watch.KindTask, At: now}
+	fixes.StartFor(e, now.Add(-time.Hour))
+	fixes.Finish("task:1", []string{"https://github.com/a/b/pull/9"}, "", "could not create worktrees: x", now.Add(-time.Hour))
+	fixes.StartFor(e, now.Add(-time.Minute))
+	fixes.SetModel("task:1", "opus")
+	cards := buildKanban(kanbanInputs{events: tasks.Events(now), moved: watch.LoadStateLog(dir), fixes: fixes, picks: watch.LoadPicks(dir), pulls: watch.LoadPullLog(dir), now: now})
+	c := cards[0]
+	if c.Column != ColRunning || c.Now == nil || c.Now.Model != "opus" || strings.Contains(c.Why, "failed") || !c.Fix.Running {
+		t.Fatalf("the run going now is the card's state, not the one that failed before it: %s %q %+v", c.Column, c.Why, c.Now)
+	}
+	if len(c.Fix.PRs) != 1 {
+		t.Fatalf("an older run's pull request is kept: %+v", c.Fix)
+	}
+}

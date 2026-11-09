@@ -270,7 +270,10 @@ func (b *kanbanBoard) placeRun(r watch.FixRecord) {
 		}
 	}
 	c := b.card(r.Workspace, r.Ref)
-	if c.Fix != nil && !c.Fix.Running {
+	if c.Fix != nil {
+		if len(c.Fix.PRs) == 0 && len(r.PRs) > 0 {
+			c.Fix.PRs = r.PRs
+		}
 		return
 	}
 	c.Fix = &CardFix{Running: !r.Done(), StartedAt: r.StartedAt, Outcome: r.Outcome(), PRs: r.PRs, Branch: r.Branch}
