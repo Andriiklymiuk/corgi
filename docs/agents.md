@@ -302,6 +302,23 @@ Under `--json` (even placed after the bad flag) it is the `E_USAGE` envelope wit
 that text in `fix`. Unknown compose keys, unknown drivers and `depends_on` names
 that point nowhere get the same did-you-mean from `corgi validate`.
 
+## Docs and skills that name only real commands
+
+`corgi docs commands [<file or dir>…]` reads every `corgi …` invocation in the code
+of Markdown files (inline code, and shell or untagged fences) and checks the command
+path and each `--flag` against the binary, with the nearest real one for each finding:
+
+```text
+$ corgi docs commands plugins/corgi/skills
+plugins/corgi/skills/stories/SKILL.md:78  corgi logs --errors-only - the command takes no such flag
+1 file(s), 1 finding(s)
+```
+
+Exit 1 on a finding; `--json` returns `{ok, files, findings[]}`. With no paths it
+reads `docs`, `plugins` and `README.md`. corgi's own tests run it over its docs and
+skills, so a renamed flag fails the build instead of teaching agents a dead command.
+Point it at your own `CLAUDE.md`, `AGENTS.md` and project skills too.
+
 ## Record friction (`corgi feedback`)
 
 When a doc was wrong, a refusal did not say what to do, or a command took several

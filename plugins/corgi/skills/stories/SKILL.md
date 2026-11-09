@@ -75,7 +75,7 @@ collapses for it), spec names rollback. Workspace may extend
 list with `riskPaths:` under its entry in user agent config.
 
 **Bug lane - logs first, theories second.** Before hypothesis: reproduce
-against running stack (`corgi run`, `corgi logs <svc> --errors-only`,
+against running stack (`corgi run`, `corgi logs --service <svc> --grep '(?i)error'`,
 `corgi_wait_for_log`), quote failing line or request, write
 regression test that fails on `<base>`, then smallest fix. No plan file, no
 subagent fan-out: bug = straight line from log to test. Quoted

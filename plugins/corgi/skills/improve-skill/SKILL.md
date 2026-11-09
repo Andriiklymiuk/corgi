@@ -49,6 +49,8 @@ cheapest layer that stops this for good. Ask in this order:
    small: they cost every session, so they hold pointers, not rules.
 
 **Removing counts.** A line that changes no behaviour is a finding. So is a rule a check now enforces.
+A skill that hand-copies a corgi flag list or schema table goes stale: point at `corgi vocab <name>`,
+and run `corgi docs commands <the skill>` after any edit that names a corgi command.
 
 ## Retro mode (sessions named)
 1. **Read the primary source, not your memory of it.** Default to this session. For more, run
@@ -57,6 +59,8 @@ cheapest layer that stops this for good. Ask in this order:
    line you will act on. Its output holds real project data and stays out of the skill. In a corgi
    workspace, the unattended runs count too: `corgi agent scorecard`, `corgi agent selfcheck`,
    `corgi agent history --workspace . --json`, and a run's own log with `corgi agent history log <ref>`.
+   The friction agents wrote down as it happened is in `corgi feedback list --json`: each note is
+   evidence already, with the corgi version it was written against.
 2. **Weigh what the person said over what the tools said.** A correction costs more than an error, and an
    error the agent recovered from in one step may cost nothing. Count, and quote the count.
 3. **Group by cause, not by symptom,** and pick the layer above for each.

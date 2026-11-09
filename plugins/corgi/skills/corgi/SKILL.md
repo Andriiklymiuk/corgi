@@ -35,12 +35,14 @@ Detached lifecycle (preferred for agents): `corgi run --detach` (starts services
 
 | Task | Read |
 |------|------|
+| One key, flag, command or error code | `corgi vocab <name>` (`--json`; MCP `corgi_vocab`) - before any reference |
+| A command failed under `--json` | its `fix` field, then `corgi vocab <code>` |
 | Writing a new `corgi-compose.yml` | `references/yml-schema.md` then `references/db-drivers.md` |
 | Service repo has a Dockerfile / own docker-compose (run without `start:` scripts, `--docker` flag, runner options) | `references/yml-schema.md#dockerfile-services-when-start-is-optional` |
 | Picking a db driver (port, image, env prefix) | `references/db-drivers.md` |
 | Adding `healthCheck:` to a service or db | `references/healthchecks.md` |
 | `corgi doctor` or `corgi run` failed | `references/debugging.md` |
-| Explaining / choosing a CLI flag | `references/commands.md` |
+| Explaining / choosing a CLI flag | `corgi vocab <command>` or `corgi vocab --<flag>`; the tour in `references/commands.md` |
 | Setting up webhook tunnels (Stripe/GitHub/e-sign/etc.) | `https://github.com/Andriiklymiuk/corgi/blob/main/docs/tunnel.md` (full) or `references/commands.md#corgi-tunnel-services` |
 | Producing a service map / relation diagram for the project | run `/corgi-describe` (see `references/describe-output.md`) |
 | Running `corgi run` inside an agent loop | `references/long-running.md` |

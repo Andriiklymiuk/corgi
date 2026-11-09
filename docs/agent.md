@@ -949,7 +949,7 @@ Every session on the board carries, when known:
   what origin calls its default branch (`origin/HEAD`), else the first of
   main, master, trunk, develop on origin, else the same names locally -
   so a trunk repo with a stale local master is measured against trunk.
-  `drift`, `behind`, `corgi agent diff` and the scope hook read the same
+  `drift`, `behind`, `corgi agent ask --diff`, the phone's diff view and the scope hook read the same
   base. Slots carry it
   as one line, *4 files · 120 lines* - the number an operator reads before
   opening the diff.

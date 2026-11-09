@@ -5,6 +5,8 @@ description: Full corgi-compose.yml schema - top-level keys, services, db_servic
 
 # `corgi-compose.yml` schema
 
+Lookup, not reading: `corgi vocab <key>` answers for one key from the schema embedded in the binary (`corgi docs --json-schema` prints all of it), and `corgi validate` names the right spelling of an unknown key.
+
 ## Top-level keys
 
 ```yaml
