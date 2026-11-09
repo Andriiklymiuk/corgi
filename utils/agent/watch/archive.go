@@ -93,6 +93,21 @@ func (l *ArchiveLog) Hidden(key string, lastAt, now time.Time) bool {
 	return false
 }
 
+// Known says this card is already in the history as it stands now.
+func (l *ArchiveLog) Known(key string, lastAt time.Time) bool {
+	if l == nil {
+		return false
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for _, r := range l.Rows {
+		if r.Key == key {
+			return !lastAt.After(r.LastAt)
+		}
+	}
+	return false
+}
+
 // Since lists what left the board after that moment, newest first.
 func (l *ArchiveLog) Since(since time.Time) []Archived {
 	l.mu.Lock()

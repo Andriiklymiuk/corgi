@@ -132,6 +132,8 @@ type Host struct {
 	TermProgram string   `json:"termProgram,omitempty"`
 	Pane        string   `json:"pane,omitempty"`
 	Connected   bool     `json:"connected,omitempty"`
+	// PanelInput: the window's extension can press keys in a Claude Code chat tab.
+	PanelInput bool `json:"panelInput,omitempty"`
 }
 
 type Session struct {

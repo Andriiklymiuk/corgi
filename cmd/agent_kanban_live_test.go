@@ -169,8 +169,11 @@ func TestReconcileLetsTheQuietCardsGo(t *testing.T) {
 	if archive.Hidden("done", now.Add(-time.Minute), now) {
 		t.Fatal("a Done card still shows today")
 	}
-	if n := len(reconcileKanban(cards, archive, 0, now, true)); n != 4 {
-		t.Fatalf("a dry run names the same cards: %d", n)
+	if n := len(reconcileKanban(cards, archive, 0, now, true)); n != 0 {
+		t.Fatalf("what is in the history already is not named again: %d", n)
+	}
+	if n := len(reconcileKanban(cards, watch.LoadArchive(t.TempDir()), 0, now, true)); n != 4 {
+		t.Fatalf("a dry run on a fresh history names the same cards: %d", n)
 	}
 }
 
@@ -221,5 +224,30 @@ func TestHistoryTellsWhatHappened(t *testing.T) {
 	}
 	if len(rows) < 2 || rows[0].At.Before(rows[1].At) {
 		t.Fatal("newest first")
+	}
+}
+
+func TestAFeatureStateFollowsItsCards(t *testing.T) {
+	cases := []struct {
+		f     KanbanFeature
+		state string
+		why   string
+	}{
+		{KanbanFeature{Total: 3, Blocked: 1, Running: 1}, "blocked", "1 card is blocked"},
+		{KanbanFeature{Total: 2, Done: 2}, "done", "every card is done"},
+		{KanbanFeature{Total: 4, Done: 1, Running: 2}, "running", "2 cards run in parallel · 3 left"},
+		{KanbanFeature{Total: 3, Done: 1, Running: 1}, "running", "one card runs · 2 left"},
+		{KanbanFeature{Total: 3, Done: 1, Review: 2}, "review", "2 cards in review, nothing else left"},
+		{KanbanFeature{Total: 4, Done: 1, Review: 1}, "review", "1 card in review · 2 still to do"},
+		{KanbanFeature{Total: 3, Done: 1}, "waiting", "2 cards to do · 1 done"},
+	}
+	for _, c := range cases {
+		state, why := featureState(c.f)
+		if state != c.state || why != c.why {
+			t.Errorf("%+v: %s %q, want %s %q", c.f, state, why, c.state, c.why)
+		}
+	}
+	if line := featureLine(KanbanFeature{Ref: "P-1", State: "waiting", Why: "w", Waves: [][]string{{"TASK-1"}, {"TASK-2", "TASK-3"}}}); !strings.HasSuffix(line, "TASK-1 → TASK-2 + TASK-3") {
+		t.Fatalf("the order on the line: %q", line)
 	}
 }

@@ -28,7 +28,7 @@ func reconcileKanban(cards []KanbanCard, archive *watch.ArchiveLog, keep time.Du
 	var out []string
 	for _, c := range cards {
 		why, ok := staleWhy(c, keep, now)
-		if !ok {
+		if !ok || archive.Known(c.Key, cardLastAt(c)) {
 			continue
 		}
 		out = append(out, fmt.Sprintf("%s (%s) leaves the board: %s", c.Ref, c.Column, why))
@@ -110,6 +110,7 @@ The daemon does this once an hour on its own.
 			row, ok := archive.Forget(back)
 			if !ok {
 				exitWithError("agent_kanban", fmt.Errorf("%s is not in the history", back), 2)
+				return
 			}
 			if utils.JSONOutput {
 				utils.PrintJSON(map[string]any{"back": row.Ref, "row": row})
@@ -121,6 +122,7 @@ The daemon does this once an hour on its own.
 		keep, err := watch.ParseAge(keepFlag)
 		if err != nil {
 			exitWithError("agent_kanban", err, 2)
+			return
 		}
 		now := time.Now()
 		lines := reconcileKanban(gatherKanban(dir, "", now), archive, keep, now, dry)

@@ -17,6 +17,7 @@ import (
 type HistoryEntry struct {
 	At        time.Time    `json:"at"`
 	Kind      string       `json:"kind"`
+	Key       string       `json:"key,omitempty"`
 	Workspace string       `json:"workspace,omitempty"`
 	Ref       string       `json:"ref"`
 	Title     string       `json:"title,omitempty"`
@@ -61,7 +62,7 @@ func buildHistory(in historyInputs) []HistoryEntry {
 		var cost watch.Cost
 		cost.Runs, cost.USD, cost.Tokens = 1, r.CostUSD, r.Tokens
 		cost.AddWorker(r.Harness, r.Model)
-		e := HistoryEntry{At: r.FinishedAt, Kind: HistRun, Workspace: r.Workspace, Ref: r.Ref, Title: firstLineOf(r.Title), URL: r.URL,
+		e := HistoryEntry{At: r.FinishedAt, Kind: HistRun, Key: r.Key, Workspace: r.Workspace, Ref: r.Ref, Title: firstLineOf(r.Title), URL: r.URL,
 			Why: firstLineOf(r.Outcome()), PRs: r.PRs, StartedAt: r.StartedAt, Took: roughAge(r.FinishedAt.Sub(r.StartedAt)),
 			Cost: &CardCost{USD: cost.USD, Tokens: cost.Tokens, Runs: 1, Models: cost.Models, Agents: cost.Agents}, Feature: planOf[r.Workspace+"/"+r.Ref]}
 		out = append(out, e)
@@ -74,7 +75,7 @@ func buildHistory(in historyInputs) []HistoryEntry {
 		if a.Column == ColDone {
 			kind = HistDone
 		}
-		e := HistoryEntry{At: a.At, Kind: kind, Workspace: a.Workspace, Ref: a.Ref, Title: a.Title, URL: a.URL, Why: a.Why, Feature: planOf[a.Workspace+"/"+a.Ref]}
+		e := HistoryEntry{At: a.At, Kind: kind, Key: a.Key, Workspace: a.Workspace, Ref: a.Ref, Title: a.Title, URL: a.URL, Why: a.Why, Feature: planOf[a.Workspace+"/"+a.Ref]}
 		if a.Cost != nil {
 			e.Cost = &CardCost{USD: a.Cost.USD, Tokens: a.Cost.Tokens, Runs: a.Cost.Runs, Models: a.Cost.Models, Agents: a.Cost.Agents}
 		}
@@ -98,7 +99,7 @@ func buildHistory(in historyInputs) []HistoryEntry {
 		if n := len(t.Comments); n > 0 && t.Comments[n-1].By == watch.TaskAgent {
 			why = firstLineOf(t.Comments[n-1].Text)
 		}
-		out = append(out, HistoryEntry{At: t.UpdatedAt, Kind: kind, Workspace: t.Workspace, Ref: t.Ref(), Title: t.Title, Why: why, Feature: planOf[t.Workspace+"/"+t.Ref()]})
+		out = append(out, HistoryEntry{At: t.UpdatedAt, Kind: kind, Key: t.Key(), Workspace: t.Workspace, Ref: t.Ref(), Title: t.Title, Why: why, Feature: planOf[t.Workspace+"/"+t.Ref()]})
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].At.After(out[j].At) })
 	return out

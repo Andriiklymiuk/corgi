@@ -134,6 +134,13 @@ func featureLine(f KanbanFeature) string {
 		line += "  " + clipTitle(f.Title, 48)
 	}
 	line += " · " + f.State + " · " + f.Why
+	if len(f.Waves) > 1 {
+		var waves []string
+		for _, w := range f.Waves {
+			waves = append(waves, strings.Join(w, " + "))
+		}
+		line += " · " + strings.Join(waves, " → ")
+	}
 	if f.Cost != nil && f.Cost.Tokens > 0 {
 		line += " · " + costLine(*f.Cost)
 	}

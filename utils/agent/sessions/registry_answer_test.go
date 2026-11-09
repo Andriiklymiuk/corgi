@@ -43,12 +43,12 @@ func TestARiskyAllowNeedsTheConfirmedAnswer(t *testing.T) {
 }
 
 func TestOnlyATypableHostIsAnswerable(t *testing.T) {
-	for _, h := range []Host{{Kind: HostITerm}, {Kind: HostTerminalApp}, {Kind: HostTmux}, {Kind: HostVSCodeTerminal, WindowID: "w1", Connected: true}} {
+	for _, h := range []Host{{Kind: HostITerm}, {Kind: HostTerminalApp}, {Kind: HostTmux}, {Kind: HostVSCodeTerminal, WindowID: "w1", Connected: true}, {Kind: HostVSCodePanel, WindowID: "w1", Connected: true, PanelInput: true}} {
 		if why := h.Answerable(); why != "" {
 			t.Errorf("%+v: %s", h, why)
 		}
 	}
-	for _, h := range []Host{{Kind: HostVSCodePanel}, {Kind: HostVSCodeTerminal}, {Kind: HostUnknown}, {}} {
+	for _, h := range []Host{{Kind: HostVSCodePanel}, {Kind: HostVSCodePanel, WindowID: "w1", Connected: true}, {Kind: HostVSCodeTerminal}, {Kind: HostUnknown}, {}} {
 		if h.Answerable() == "" {
 			t.Errorf("%+v cannot take keys; it must say so", h)
 		}

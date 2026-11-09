@@ -53,3 +53,42 @@ func TestCostNamesWhoWorked(t *testing.T) {
 		t.Fatal("a ticket waiting on a deploy is over for the board")
 	}
 }
+
+func TestARunRemembersItsModelAndTheCostNamesIt(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Now()
+	l := LoadFixLog(dir)
+	e := Event{Key: "k1", Ref: "ABC-1", Workspace: "api", Kind: KindIssueNew, At: now}
+	l.StartFor(e, now)
+	l.SetModel("k1", "opus-4-1")
+	l.SetModel("k1", "  ")
+	l.SetModel("", "x")
+	l.SetModel("nope", "x")
+	l.SetHarness("k1", "codex")
+	l.SetCost("k1", 1.5, 3000)
+	l.Finish("k1", nil, "", "", now.Add(time.Minute))
+	l.StartFor(Event{Key: "k2", Ref: "ABC-1", Workspace: "api", Kind: KindIssueNew, At: now}, now)
+	l.SetModel("k2", "sonnet-4-5, opus-4-1")
+	l = LoadFixLog(dir)
+	c := l.CostFor("api", "ABC-1")
+	if c.Runs != 2 || c.USD != 1.5 || c.Tokens != 3000 {
+		t.Fatalf("cost adds up: %+v", c)
+	}
+	if len(c.Models) != 2 || c.Models[0] != "opus-4-1" || c.Models[1] != "sonnet-4-5" || len(c.Agents) != 2 || c.Agents[0] != "codex" || c.Agents[1] != "claude" {
+		t.Fatalf("who worked, once each, in order of appearance: %+v", c)
+	}
+	if other := l.CostFor("api", "ABC-2"); other.Runs != 0 || other.Models != nil {
+		t.Fatalf("another ticket has nothing: %+v", other)
+	}
+	a := LoadArchive(dir)
+	if a.Known("k1", now) || (*ArchiveLog)(nil).Known("k1", now) {
+		t.Fatal("nothing is known yet")
+	}
+	_ = a.Put(Archived{Key: "k1", Ref: "ABC-1", Column: "Inbox", LastAt: now, At: now})
+	if !a.Known("k1", now) || !a.Known("k1", now.Add(-time.Hour)) || a.Known("k1", now.Add(time.Hour)) {
+		t.Fatal("known as it stands, not after something newer")
+	}
+	if err := a.Put(Archived{}); err != nil {
+		t.Fatal("an empty row is ignored")
+	}
+}
