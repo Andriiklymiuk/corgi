@@ -1280,7 +1280,8 @@ func unattendedSuffix(spec WatchSpec, e watch.Event) string {
 		return "\n\nNobody is reading this run as it happens. Never ask a question, never offer options or wait for a choice: " +
 			"decide as the skill says and go on. Change no code and push nothing. " + postedProof +
 			"If you truly cannot proceed, leave a handoff with `corgi agent handoff --ref " + e.Ref + " --blocked <reason>` and stop. " +
-			"End with one line per pull request saying what you posted on it: approved, comments (how many), or nothing."
+			"Start your final message with `Outcome: replied` if you posted anything, `Outcome: nothing` if you posted nothing anywhere, " +
+			"then one line per pull request saying what you posted on it: approved, comments (how many), or nothing."
 	}
 	if watch.ReadOnlyRoutine(e) {
 		return "\n\nNobody is reading this run as it happens. Never ask a question, never offer options or wait for a choice: " +
@@ -1562,7 +1563,7 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 	}
 	d.watchState.Fixes.Finish(e.Key, links, note, "", time.Now())
 	d.replyOnTask(e, strings.TrimSpace(strings.Join(append(append([]string{}, links...), note), " ")))
-	d.watchState.Fixes.SetOutcome(e.Key, watch.RunOutcome(string(out)))
+	d.watchState.Fixes.SetOutcome(e.Key, watch.OutcomeOf(e.Kind, string(out)))
 	d.watchState.Fixes.SetLeft(e.Key, watch.LeftFor(string(out)))
 	d.watchState.Fixes.SetGaps(e.Key, watch.GapsIn(string(out)))
 	d.watchState.Fixes.SetHandover(e.Key, runHandover(spec.Dir, e.Ref, started, string(out)), time.Now())

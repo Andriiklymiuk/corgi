@@ -95,3 +95,38 @@ func TestLeftTicksLiveInAFileOfTheirOwn(t *testing.T) {
 		t.Fatalf("a tick survives a reload: %+v", got)
 	}
 }
+
+func TestAReviewRunGetsAnOutcomeFromWhatItPosted(t *testing.T) {
+	cases := map[string]string{
+		"Outcome: pushed\nfixed it":                                     "pushed",
+		"acme/web!80: comments (2: 1 summary, 1 inline), not approved.": "replied",
+		"acme/api#5: approved":                                          "replied",
+		"- acme/api#5 - 3 inline comments":                              "replied",
+		"acme/api#5: nothing":                                           "nothing",
+		"I looked at the diff.":                                         "",
+	}
+	for out, want := range cases {
+		if got := OutcomeOf(KindReviewRequested, out); got != want {
+			t.Errorf("review run %q: %q, want %q", out, got, want)
+		}
+	}
+	if got := OutcomeOf(KindPRComment, "acme/api#5: approved"); got != "" {
+		t.Fatalf("only a review run is read off what it posted: %q", got)
+	}
+
+	if got := LeftFor("## What you do next\n- Merge when you are ready. I never merge.\n- Decide who owns the follow-up.\n"); len(got) != 1 || !strings.HasPrefix(got[0].Text, "Decide") {
+		t.Fatalf("\"merge when you are ready\" is not a thing left for a person: %+v", got)
+	}
+
+	dir := t.TempDir()
+	l := LoadFixLog(dir)
+	now := time.Now()
+	e := Event{Key: "k1", Ref: "acme/api#9", Workspace: "api", Kind: KindReviewRequested, At: now}
+	l.StartFor(e, now.Add(-time.Hour))
+	l.Finish("k1", nil, "", "", now.Add(-50*time.Minute))
+	logs := map[string]string{"k1": "=== 2026-11-09T10:00:00Z review.requested acme/api#9\nacme/api#9: comments (1 summary), not approved.\n=== cost: $1\n"}
+	l.Backfill(func(k string) string { return logs[k] }, nil, now)
+	if rec := l.Records()[0]; rec.Said != "replied" {
+		t.Fatalf("an old review run gets its outcome from the log: %+v", rec.Said)
+	}
+}

@@ -1685,6 +1685,24 @@ func RunOutcome(output string) string {
 	return ""
 }
 
+var reviewPosted = regexp.MustCompile(`(?mi)^\W*(?:\S+\s*[:-]\s*)?(approved|comments? \(\d+|\d+ (?:inline )?comments?)\b`)
+var reviewNothing = regexp.MustCompile(`(?mi)^\W*(?:\S+\s*[:-]\s*)?nothing\b`)
+
+// OutcomeOf is the run's Outcome line, or for a review run the same read off
+// what it said it posted: approved or comments is replied, nothing is nothing.
+func OutcomeOf(kind Kind, output string) string {
+	if said := RunOutcome(output); said != "" || kind != KindReviewRequested {
+		return said
+	}
+	switch {
+	case reviewPosted.MatchString(output):
+		return "replied"
+	case reviewNothing.MatchString(output):
+		return "nothing"
+	}
+	return ""
+}
+
 func (l *FixLog) SetOutcome(key, outcome string) {
 	if key == "" || outcome == "" {
 		return

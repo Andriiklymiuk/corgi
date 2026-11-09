@@ -41,7 +41,7 @@ var (
 	leftHeadings = regexp.MustCompile(`(?im)^\s*(?:#{1,4}\s*|\*\*)(?:left for you|what you do next|you do next|what you need to do|what is left for you|what you need to do next|next)\b[^\n]*$`)
 	anyHeading   = regexp.MustCompile(`^\s*(?:#{1,4}\s|\*\*[^*]+\*\*\s*$)`)
 	bulletLine   = regexp.MustCompile(`^\s*(?:[-*•]|\d+[.)])\s+(.*\S)`)
-	nothingLeft  = regexp.MustCompile(`(?i)^(?:nothing|none|no action|you do nothing|i |i'm |i've |i'll |ci (?:is|was) not watched|corgi (?:will|watches))`)
+	nothingLeft  = regexp.MustCompile(`(?i)^(?:nothing|none|no action|you do nothing|i |i'm |i've |i'll |ci (?:is|was) not watched|corgi (?:will|watches)|merge (?:it |this |them )?when(?:ever)? you)`)
 	ciWords      = regexp.MustCompile(`\bCI\b|(?i:\bpipelines?\b|\bchecks? (?:go|goes|went|turn|pass|are green|is green))`)
 	mergeWords   = regexp.MustCompile(`(?i)\bmerge\b`)
 	// Work that only starts once the pull request is in: merging does not settle it.
@@ -351,7 +351,16 @@ func (l *FixLog) Backfill(logOf func(key string) string, pulls map[string]PullSt
 	filled := 0
 	for i := range l.Started {
 		r := &l.Started[i]
-		if !r.Done() || r.Error != "" || len(r.Left) > 0 || len(r.Gaps) > 0 || now.Sub(r.FinishedAt) > leftKeepOpen {
+		if !r.Done() || r.Error != "" {
+			continue
+		}
+		if r.Said == "" && !strings.HasPrefix(r.Ref, "routine/") {
+			if said := OutcomeOf(Kind(r.Kind), LastRunOf(logOf(r.Key))); said != "" {
+				r.Said = said
+				filled++
+			}
+		}
+		if len(r.Left) > 0 || len(r.Gaps) > 0 || now.Sub(r.FinishedAt) > leftKeepOpen {
 			continue
 		}
 		run := LastRunOf(logOf(r.Key))
