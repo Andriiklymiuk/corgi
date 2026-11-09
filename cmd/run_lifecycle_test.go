@@ -222,6 +222,7 @@ func TestRunPreflight_OmitUseAwsVpnSkipsInit(t *testing.T) {
 }
 
 func TestWithOmit_RestoresPrevious(t *testing.T) {
+	t.Setenv("CORGI_OMIT", "")
 	prev := omitItems
 	t.Cleanup(func() { omitItems = prev })
 	omitItems = []string{"beforeStart"}

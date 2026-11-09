@@ -2514,7 +2514,7 @@ const launcherPageHTML = `<!doctype html>
 
   function costBits(cost) {
     const bits = [humanTokens(cost.tokens) + ' tok'];
-    if (cost.usd) bits.push('$' + cost.usd.toFixed(2));
+    if (cost.usd) bits.push('≈$' + cost.usd.toFixed(2));
     if (cost.runs) bits.push(cost.runs + (cost.runs === 1 ? ' run' : ' runs'));
     if (cost.sessions) bits.push(cost.sessions + (cost.sessions === 1 ? ' session' : ' sessions'));
     if (cost.models && cost.models.length) bits.push(cost.models.join(', '));

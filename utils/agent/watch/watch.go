@@ -1796,7 +1796,9 @@ func (l *FixLog) CostFor(workspace, ref string) Cost {
 		c.Runs++
 		c.USD += r.CostUSD
 		c.Tokens += r.Tokens
-		c.AddWorker(r.Harness, r.Model)
+		if !r.NeverRan() {
+			c.AddWorker(r.Harness, r.Model)
+		}
 	}
 	return c
 }
