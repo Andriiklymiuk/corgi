@@ -18,6 +18,7 @@ type ValidationIssue struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
 	Field   string `json:"field,omitempty"`
+	Fix     string `json:"fix,omitempty"`
 }
 
 func ValidateCompose(c *CorgiCompose) (errs, warns []ValidationIssue) {
@@ -39,16 +40,34 @@ func ValidateCompose(c *CorgiCompose) (errs, warns []ValidationIssue) {
 	warns = append(warns, checkCloneWithoutBranch(c)...)
 	warns = append(warns, checkUnknownFields(c)...)
 
-	return errs, warns
+	return withFixes(errs), withFixes(warns)
+}
+
+func withFixes(issues []ValidationIssue) []ValidationIssue {
+	for i := range issues {
+		if issues[i].Fix == "" {
+			issues[i].Fix = FixFor(issues[i].Code)
+		}
+	}
+	return issues
+}
+
+func didYouMean(name string, candidates []string) string {
+	if n := Nearest(name, candidates); n != "" && n != name {
+		return fmt.Sprintf("did you mean %q?", n)
+	}
+	return ""
 }
 
 func checkUnknownFields(_ *CorgiCompose) []ValidationIssue {
 	var out []ValidationIssue
+	fields := ComposeFieldNames()
 	for _, f := range UnknownComposeFields {
 		out = append(out, ValidationIssue{
 			Code:    WarnUnknownField,
 			Message: fmt.Sprintf("unknown field %q in corgi-compose.yml - possible typo; it was ignored", f),
 			Field:   f,
+			Fix:     didYouMean(f, fields),
 		})
 	}
 	return out
@@ -66,7 +85,7 @@ func AbortOnValidationErrors(c *CorgiCompose) bool {
 	}
 	if JSONOutput {
 		for _, e := range errs {
-			JSONError(e.Code, e.Message)
+			JSONErrorFix(e.Code, e.Message, e.Fix)
 		}
 		return false
 	}
@@ -77,6 +96,9 @@ func AbortOnValidationErrors(c *CorgiCompose) bool {
 			field = fmt.Sprintf(" (%s)", e.Field)
 		}
 		Infof("  %s✗ [%s] %s%s%s\n", art.RedColor, e.Code, e.Message, field, art.WhiteColor)
+		if e.Fix != "" {
+			Infof("    → %s\n", e.Fix)
+		}
 	}
 	return false
 }
@@ -148,6 +170,7 @@ func checkUnknownDrivers(c *CorgiCompose) []ValidationIssue {
 			Code:    ErrUnknownDriver,
 			Message: fmt.Sprintf("db_service %q uses unknown driver %q (known: %s)", db.ServiceName, db.Driver, strings.Join(KnownDrivers, ", ")),
 			Field:   fmt.Sprintf("db_services.%s.driver", db.ServiceName),
+			Fix:     didYouMean(db.Driver, KnownDrivers),
 		})
 	}
 	return out
@@ -163,6 +186,7 @@ func checkDanglingDeps(c *CorgiCompose) []ValidationIssue {
 					Code:    ErrDanglingDep,
 					Message: fmt.Sprintf("service %q depends on unknown service %q", s.ServiceName, dep.Name),
 					Field:   fmt.Sprintf("services.%s.depends_on_services", s.ServiceName),
+					Fix:     didYouMean(dep.Name, keysOf(services)),
 				})
 			}
 		}
@@ -172,6 +196,7 @@ func checkDanglingDeps(c *CorgiCompose) []ValidationIssue {
 					Code:    ErrDanglingDep,
 					Message: fmt.Sprintf("service %q depends on unknown db_service %q", s.ServiceName, dep.Name),
 					Field:   fmt.Sprintf("services.%s.depends_on_db", s.ServiceName),
+					Fix:     didYouMean(dep.Name, keysOf(dbs)),
 				})
 			}
 		}
@@ -427,5 +452,14 @@ func checkCloneWithoutBranch(c *CorgiCompose) []ValidationIssue {
 			})
 		}
 	}
+	return out
+}
+
+func keysOf(m map[string]bool) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
 	return out
 }

@@ -20,6 +20,10 @@ var ciEnvVars = []string{
 
 var NonInteractive bool
 
+// AgentMode is set when a coding agent runs corgi: its output is read by a
+// model, so corgi drops the banner and quotes that only a person enjoys.
+var AgentMode bool
+
 var agentEnvVars = []string{
 	"CLAUDECODE",
 	"CLAUDE_CODE",
@@ -48,6 +52,7 @@ func detectFromEnv() {
 	}
 	if anyEnvSet(agentEnvVars) {
 		NonInteractive = true
+		AgentMode = true
 	}
 }
 

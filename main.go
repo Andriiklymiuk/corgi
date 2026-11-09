@@ -84,6 +84,8 @@ func canShowWelcomeMessages() bool {
 			arg == "logs" ||
 			arg == "env" ||
 			arg == "why" ||
+			arg == "vocab" || arg == "lookup" ||
+			arg == "feedback" ||
 			arg == "context" ||
 			arg == "exec" ||
 			arg == "open" ||
@@ -105,7 +107,7 @@ func canShowWelcomeMessages() bool {
 			return false
 		}
 	}
-	return !utils.CIMode
+	return !utils.CIMode && !utils.AgentMode
 }
 
 func showWelcomeMessage() {
@@ -160,6 +162,8 @@ func ClearTerminal() {
 			arg == "logs" ||
 			arg == "env" ||
 			arg == "why" ||
+			arg == "vocab" || arg == "lookup" ||
+			arg == "feedback" ||
 			arg == "context" ||
 			arg == "exec" ||
 			arg == "open" ||

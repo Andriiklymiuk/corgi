@@ -94,6 +94,7 @@ func printValidateHuman(errs, warns []utils.ValidationIssue, strict bool) {
 				field = fmt.Sprintf(" (%s)", e.Field)
 			}
 			utils.Infof("  %s✗ [%s] %s%s%s\n", art.RedColor, e.Code, e.Message, field, art.WhiteColor)
+			printIssueFix(e.Fix)
 		}
 	}
 
@@ -103,6 +104,7 @@ func printValidateHuman(errs, warns []utils.ValidationIssue, strict bool) {
 			field = fmt.Sprintf(" (%s)", w.Field)
 		}
 		utils.Infof("  %s⚠ [%s] %s%s%s\n", art.YellowColor, w.Code, w.Message, field, art.WhiteColor)
+		printIssueFix(w.Fix)
 	}
 
 	switch {
@@ -114,5 +116,11 @@ func printValidateHuman(errs, warns []utils.ValidationIssue, strict bool) {
 		utils.Infof("%s🎉 valid - %d warning(s)%s\n", art.GreenColor, len(warns), art.WhiteColor)
 	default:
 		utils.Infof("%s🎉 valid - no issues%s\n", art.GreenColor, art.WhiteColor)
+	}
+}
+
+func printIssueFix(fix string) {
+	if fix != "" {
+		utils.Infof("    → %s\n", fix)
 	}
 }

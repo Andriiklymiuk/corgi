@@ -46,16 +46,16 @@ func TestCanRunCliAgain(t *testing.T) {
 }
 
 func TestCanShowWelcomeMessages(t *testing.T) {
-	origCI := utils.CIMode
-	defer func() { utils.CIMode = origCI }()
+	origCI, origAgent := utils.CIMode, utils.AgentMode
+	defer func() { utils.CIMode, utils.AgentMode = origCI, origAgent }()
 
-	utils.CIMode = false
+	utils.CIMode, utils.AgentMode = false, false
 	withArgs(t, "corgi", "run")
 	if !canShowWelcomeMessages() {
 		t.Error("expected welcome for plain run command")
 	}
 
-	for _, suppress := range []string{"status", "doctor", "--json", "--version", "completion", "upd", "upgrade"} {
+	for _, suppress := range []string{"status", "doctor", "--json", "--version", "completion", "upd", "upgrade", "vocab", "feedback"} {
 		withArgs(t, "corgi", suppress)
 		if canShowWelcomeMessages() {
 			t.Errorf("arg %q should suppress welcome", suppress)
@@ -66,6 +66,11 @@ func TestCanShowWelcomeMessages(t *testing.T) {
 	withArgs(t, "corgi", "run")
 	if canShowWelcomeMessages() {
 		t.Error("CI mode should suppress welcome")
+	}
+
+	utils.CIMode, utils.AgentMode = false, true
+	if canShowWelcomeMessages() {
+		t.Error("an agent session should suppress welcome")
 	}
 }
 
