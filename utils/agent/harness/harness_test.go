@@ -133,3 +133,21 @@ func TestAJudgeRunNamesWhatItMayAndMayNotUse(t *testing.T) {
 		t.Fatalf("args: %s", args)
 	}
 }
+
+func TestClaudeReceiptNamesItsModels(t *testing.T) {
+	raw := []byte(`{"type":"result","result":"done","total_cost_usd":0.5,"num_turns":3,"session_id":"s1",` +
+		`"usage":{"input_tokens":10,"output_tokens":5,"cache_read_input_tokens":100,"cache_creation_input_tokens":0},` +
+		`"modelUsage":{"claude-sonnet-4-5-20250929":{"inputTokens":10},"claude-opus-4-1-20250805":{"inputTokens":1}}}`)
+	out, r := claudeUnwrap(raw)
+	if string(out) != "done" || !r.OK || r.Tokens != 115 {
+		t.Fatalf("unwrap: %q %+v", out, r)
+	}
+	if len(r.Models) != 2 || r.Models[0] != "opus-4-1" || r.Models[1] != "sonnet-4-5" {
+		t.Fatalf("models short and sorted: %v", r.Models)
+	}
+	for in, want := range map[string]string{"claude-sonnet-4-5-20250929": "sonnet-4-5", "gpt-5-codex": "gpt-5-codex", "Opus": "opus", "claude-haiku-4-5": "haiku-4-5", "": ""} {
+		if got := ShortModel(in); got != want {
+			t.Errorf("ShortModel(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

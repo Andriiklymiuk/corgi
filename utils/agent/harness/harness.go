@@ -72,6 +72,20 @@ type Receipt struct {
 	Turns   int
 	// SessionID is the id to resume this run by, when the harness names it.
 	SessionID string
+	// Models are the models that answered, shortest name first, when the
+	// harness lists them.
+	Models []string
+}
+
+// ShortModel is a model's name as a card shows it: no vendor prefix, no
+// release date. claude-sonnet-4-5-20250929 is sonnet-4-5.
+func ShortModel(name string) string {
+	name = strings.TrimSpace(strings.ToLower(name))
+	name = strings.TrimPrefix(name, "claude-")
+	if i := strings.LastIndex(name, "-"); i > 0 && len(name)-i-1 == 8 && strings.Trim(name[i+1:], "0123456789") == "" {
+		name = name[:i]
+	}
+	return name
 }
 
 type Harness struct {
@@ -274,13 +288,21 @@ func claudeUnwrap(raw []byte) ([]byte, Receipt) {
 			CacheRead  int64 `json:"cache_read_input_tokens"`
 			CacheWrite int64 `json:"cache_creation_input_tokens"`
 		} `json:"usage"`
+		ModelUsage map[string]json.RawMessage `json:"modelUsage"`
 	}
 	if json.Unmarshal(trimmed, &env) != nil || env.Type != "result" {
 		return raw, Receipt{}
 	}
 	u := env.Usage
+	var models []string
+	for name := range env.ModelUsage {
+		if short := ShortModel(name); short != "" {
+			models = append(models, short)
+		}
+	}
+	sort.Strings(models)
 	return []byte(env.Result), Receipt{OK: true, CostUSD: env.CostUSD, Turns: env.NumTurns, SessionID: env.SessionID,
-		Tokens: u.Input + u.Output + u.CacheRead + u.CacheWrite}
+		Tokens: u.Input + u.Output + u.CacheRead + u.CacheWrite, Models: models}
 }
 
 // ---- Codex ----------------------------------------------------------------

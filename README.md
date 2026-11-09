@@ -583,6 +583,24 @@ reviews every pull request someone asks you about, as itself.
 <p align="center"><img src="docs/media/kanban.gif" width="760" alt="corgi agent kanban: Inbox, Ready, Running, Blocked, Review, Done - with the session, the handoff, the pull requests and the cost on each card"></p>
 <p align="center"><sub>One card per ticket, its column worked out from runs, sessions and checks.</sub></p>
 
+**A board that stays current, and a history behind it.** A Running card
+carries a live line - *now: Edit cmd/x.go · sonnet-4-5* - and every card
+says who worked on it: the runs, the sessions, the tokens, the dollars, the
+models and the agents (claude, codex). Several cards that make one thing -
+a plan's tasks, the subtasks of one parent ticket - show as a *feature*
+above the columns, with its state and the order they run in: `TASK-1 →
+TASK-2 + TASK-3 → TASK-4` says two go in parallel after the first. Done is
+hidden by default on the phone, the menu bar, the editor and the page; a
+switch shows it. Once an hour the daemon lets go of what is over: a Done
+card after a day, a run that answered a week ago with nothing since, a
+review whose pull request closed, a ticket nothing touched for two weeks
+(`corgi agent kanban reconcile --dry-run` says what would leave; `--back
+ABC-12` puts one back; anything new about the ticket brings its card back
+by itself). What left is not lost: `corgi agent history` is the timeline -
+every run with what it said, its cost and model, every merge, every finished
+task, every card that left and why, day by day; `--json` and
+`/launch/history` for the apps.
+
 **Tasks of your own, on the same board.** Not everything comes from a
 tracker. `corgi agent task add "Meta SDK on iOS" --workspace app --body "…"` -
 or **+ Task for later** on the phone and the page - puts a ticket you wrote

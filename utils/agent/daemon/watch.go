@@ -1456,6 +1456,7 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 	if model := fixModel(spec, e, d.watchState.Fixes.FailedInARow(spec.Workspace, e.Ref)); model != "" {
 		print.Model = model
 		fmt.Fprintf(logFile, "=== model: %s\n", model)
+		d.watchState.Fixes.SetModel(e.Key, harness.ShortModel(model))
 	}
 	if spec.Isolate && d.Isolate != nil && !watch.ReadOnlyRoutine(e) && e.Kind != watch.KindReviewRequested {
 		branch := FixBranch(e.Ref)
@@ -1497,6 +1498,7 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 	if receipt.ok {
 		fmt.Fprintf(logFile, "\n=== cost: $%.4f · %d tokens · %d turns\n", receipt.costUSD, receipt.tokens, receipt.turns)
 		d.watchState.Fixes.SetCost(e.Key, receipt.costUSD, receipt.tokens)
+		d.watchState.Fixes.SetModel(e.Key, strings.Join(receipt.models, ", "))
 	}
 	if runErr != nil && daemonCtx.Err() != nil {
 		fmt.Fprintf(logFile, "\n=== interrupted: the daemon stopped mid-run; offered again at the next start\n")
@@ -2060,13 +2062,14 @@ type runReceipt struct {
 	costUSD float64
 	tokens  int64
 	turns   int
+	models  []string
 }
 
 func unwrapResult(raw []byte) ([]byte, runReceipt) { return unwrapWith(harness.For("", ""), raw) }
 
 func unwrapWith(h harness.Harness, raw []byte) ([]byte, runReceipt) {
 	out, r := h.Unwrap(raw)
-	return out, runReceipt{ok: r.OK, costUSD: r.CostUSD, tokens: r.Tokens, turns: r.Turns}
+	return out, runReceipt{ok: r.OK, costUSD: r.CostUSD, tokens: r.Tokens, turns: r.Turns, models: r.Models}
 }
 
 func fixModel(spec WatchSpec, e watch.Event, failedBefore int) string {

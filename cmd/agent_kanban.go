@@ -47,15 +47,57 @@ type KanbanCard struct {
 	Body      string            `json:"body,omitempty"`
 	Cost      *CardCost         `json:"cost,omitempty"`
 	Pull      *watch.PullStatus `json:"pull,omitempty"`
+	// Now is what is happening on the card this minute: a session's tool
+	// and model, or the run on it. Only a Running card has one.
+	Now *CardNow `json:"now,omitempty"`
+	// Feature is the plan or the parent ticket this card is one piece of.
+	Feature *CardFeature `json:"feature,omitempty"`
+	// After names the cards in the same plan this one waits for.
+	After     []string          `json:"after,omitempty"`
 	UpdatedAt time.Time         `json:"updatedAt"`
 	Standing  sessions.Standing `json:"standing"`
 }
 
 type CardCost struct {
-	USD      float64 `json:"usd,omitempty"`
-	Tokens   int64   `json:"tokens"`
-	Runs     int     `json:"runs"`
-	Sessions int     `json:"sessions"`
+	USD      float64  `json:"usd,omitempty"`
+	Tokens   int64    `json:"tokens"`
+	Runs     int      `json:"runs"`
+	Sessions int      `json:"sessions"`
+	Models   []string `json:"models,omitempty"`
+	Agents   []string `json:"agents,omitempty"`
+}
+
+type CardNow struct {
+	Doing string    `json:"doing"`
+	Model string    `json:"model,omitempty"`
+	Agent string    `json:"agent,omitempty"`
+	Since time.Time `json:"since,omitzero"`
+}
+
+type CardFeature struct {
+	Ref   string `json:"ref"`
+	Title string `json:"title,omitempty"`
+}
+
+// KanbanFeature is several cards that make one thing: a plan's tasks, or
+// the subtasks of one parent ticket. Waves are the order they run in: the
+// cards of one wave go in parallel, the waves in a row.
+type KanbanFeature struct {
+	Ref       string     `json:"ref"`
+	Title     string     `json:"title,omitempty"`
+	Workspace string     `json:"workspace,omitempty"`
+	URL       string     `json:"url,omitempty"`
+	State     string     `json:"state"`
+	Why       string     `json:"why"`
+	Cards     []string   `json:"cards"`
+	Waves     [][]string `json:"waves"`
+	Total     int        `json:"total"`
+	Done      int        `json:"done"`
+	Running   int        `json:"running"`
+	Review    int        `json:"review"`
+	Blocked   int        `json:"blocked"`
+	Cost      *CardCost  `json:"cost,omitempty"`
+	UpdatedAt time.Time  `json:"updatedAt"`
 }
 
 type CardSess struct {
@@ -96,6 +138,8 @@ type kanbanInputs struct {
 	pulls         *watch.PullLog
 	now           time.Time
 	sessionTokens func(s sessions.Session) (int64, bool)
+	archive       *watch.ArchiveLog
+	plans         []watch.Plan
 }
 
 type kanbanBoard struct {
@@ -117,6 +161,8 @@ func buildKanban(in kanbanInputs) []KanbanCard {
 	b.placeHandoffs()
 	b.placeWallsAndCost()
 	b.placePulls()
+	b.placePlans()
+	b.dropArchived()
 	return b.cards()
 }
 
@@ -151,6 +197,9 @@ func (b *kanbanBoard) placeEvents() {
 		c := b.card(e.Workspace, e.Ref)
 		if c.Key == "" {
 			c.Key, c.Title, c.URL, c.Kind, c.State, c.UpdatedAt = e.Key, firstLineOf(e.Title), e.URL, string(e.Kind), current, e.At
+		}
+		if e.Parent != "" && c.Feature == nil {
+			c.Feature = &CardFeature{Ref: e.Parent, Title: firstLineOf(e.ParentTitle)}
 		}
 		if len(e.Links) > 0 {
 			b.links[e.Workspace+"/"+e.Ref] = e.Links
@@ -236,8 +285,11 @@ func (b *kanbanBoard) placeRun(r watch.FixRecord) {
 	switch {
 	case !r.Done():
 		c.Column, c.Why = ColRunning, "a run started "+roughAge(b.in.now.Sub(r.StartedAt))+" ago"
+		c.Now = &CardNow{Doing: "a run is on it", Model: r.Model, Agent: firstNonEmpty(r.Harness, "claude"), Since: r.StartedAt}
 	case len(r.PRs) > 0 && c.Column != ColDone:
 		c.Column, c.Why = ColReview, r.Outcome()
+	case c.Column == ColInbox && (c.Why == "" || c.Why == "waiting in the inbox"):
+		c.Why = "a run answered " + roughAge(b.in.now.Sub(r.FinishedAt)) + " ago · nothing since"
 	}
 }
 
@@ -281,6 +333,7 @@ func (b *kanbanBoard) placeSession(c *KanbanCard, s sessions.Session) {
 	b.addSessionCost(c, s)
 	if cardOpen(c) {
 		c.Column, c.Why = ColRunning, sessionWhy(c.Session, s)
+		c.Now = sessionNow(s)
 	}
 	if s.PR != "" && cardOpen(c) {
 		c.Column, c.Why = ColReview, kanbanSessionWord+c.Session.Label+" opened a pull request"
@@ -300,6 +353,32 @@ func (b *kanbanBoard) addSessionCost(c *KanbanCard, s sessions.Session) {
 	}
 	c.Cost.Tokens += tok
 	c.Cost.Sessions++
+	var w watch.Cost
+	w.Models, w.Agents = c.Cost.Models, c.Cost.Agents
+	w.AddWorker(s.Agent, s.Model)
+	c.Cost.Models, c.Cost.Agents = w.Models, w.Agents
+}
+
+// sessionNow is the card's live line: what the session is doing right now.
+func sessionNow(s sessions.Session) *CardNow {
+	doing := strings.TrimSpace(s.Summary)
+	if doing == "" {
+		doing = strings.TrimSpace(strings.TrimSpace(s.Tool) + " " + strings.TrimSpace(s.Detail))
+	}
+	switch {
+	case doing != "":
+	case s.Status == sessions.StatusNeedsInput:
+		doing = "waiting for an answer"
+	case s.Status == sessions.StatusWorking:
+		doing = "working"
+	default:
+		doing = string(s.Status)
+	}
+	since := s.TurnStartedAt
+	if since.IsZero() {
+		since = s.StatusSince
+	}
+	return &CardNow{Doing: firstLineOf(doing), Model: s.Model, Agent: firstNonEmpty(s.Agent, "claude"), Since: since}
 }
 
 func (b *kanbanBoard) placePicks() {
@@ -378,6 +457,54 @@ func addRunCost(c *KanbanCard, cost watch.Cost) {
 	c.Cost.USD += cost.USD
 	c.Cost.Tokens += cost.Tokens
 	c.Cost.Runs = cost.Runs
+	for _, m := range cost.Models {
+		c.Cost.Models = appendFold(c.Cost.Models, m)
+	}
+	for _, a := range cost.Agents {
+		c.Cost.Agents = appendFold(c.Cost.Agents, a)
+	}
+}
+
+func appendFold(list []string, s string) []string {
+	if containsFold(list, s) {
+		return list
+	}
+	return append(list, s)
+}
+
+// placePlans ties a task to its plan: the feature it is a piece of, and
+// the tasks it waits for.
+func (b *kanbanBoard) placePlans() {
+	for _, p := range b.in.plans {
+		for _, pt := range p.Tasks {
+			c, ok := b.byRef[p.Workspace+"/"+fmt.Sprintf("TASK-%d", pt.ID)]
+			if !ok {
+				continue
+			}
+			c.Feature = &CardFeature{Ref: p.Ref(), Title: firstLineOf(p.Goal)}
+			c.After = c.After[:0]
+			for _, id := range pt.After {
+				c.After = append(c.After, fmt.Sprintf("TASK-%d", id))
+			}
+		}
+	}
+}
+
+// dropArchived takes off the cards the board already let go, unless
+// something newer happened on them.
+func (b *kanbanBoard) dropArchived() {
+	if b.in.archive == nil {
+		return
+	}
+	for id, c := range b.byRef {
+		last := c.UpdatedAt
+		if c.Fix != nil && c.Fix.StartedAt.After(last) {
+			last = c.Fix.StartedAt
+		}
+		if c.Session == nil && !(c.Fix != nil && c.Fix.Running) && b.in.archive.Hidden(c.Key, last, b.in.now) {
+			delete(b.byRef, id)
+		}
+	}
 }
 
 func (b *kanbanBoard) placePulls() {
@@ -555,6 +682,8 @@ func gatherKanban(dir, onlyWorkspace string, now time.Time) []KanbanCard {
 		picks:   watch.LoadPicks(dir),
 		pulls:   watch.LoadPullLog(dir),
 		now:     now,
+		archive: watch.LoadArchive(dir),
+		plans:   watch.LoadPlans(dir).All(),
 	}
 	if rep, err := readBoard(dir); err == nil {
 		in.sessions = rep.State.Sessions
@@ -606,13 +735,20 @@ moving a ticket moves it on the tracker (corgi agent watch move).
 		dir := mustAgentDir()
 		ws, _ := cmd.Flags().GetString("workspace")
 		cards := gatherKanban(dir, ws, time.Now())
+		features := kanbanFeatures(cards)
 		if utils.JSONOutput {
-			utils.PrintJSON(map[string]any{"columns": kanbanColumns, "cards": cards})
+			utils.PrintJSON(map[string]any{"columns": kanbanColumns, "cards": cards, "features": features})
 			return
 		}
 		if len(cards) == 0 {
 			fmt.Println("No cards: nothing in the inbox, no runs, no handoffs.")
 			return
+		}
+		if len(features) > 0 {
+			fmt.Printf("Features (%d)\n", len(features))
+			for _, f := range features {
+				fmt.Println("  " + featureLine(f))
+			}
 		}
 		for _, col := range kanbanColumns {
 			var rows []KanbanCard
@@ -632,6 +768,12 @@ moving a ticket moves it on the tracker (corgi agent watch move).
 				}
 				if c.Fix != nil && len(c.Fix.PRs) > 0 {
 					line += " · " + c.Fix.PRs[0]
+				}
+				if c.Now != nil {
+					line += " · now: " + c.Now.Doing
+					if c.Now.Model != "" {
+						line += " (" + c.Now.Model + ")"
+					}
 				}
 				if c.Cost != nil {
 					line += " · " + costLine(*c.Cost)
@@ -657,6 +799,9 @@ func costLine(c CardCost) string {
 	}
 	if c.Sessions > 0 {
 		parts = append(parts, plural(c.Sessions, "session", "sessions"))
+	}
+	if len(c.Models) > 0 {
+		parts = append(parts, strings.Join(c.Models, ", "))
 	}
 	return strings.Join(parts, " · ")
 }

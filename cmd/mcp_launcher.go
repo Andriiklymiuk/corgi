@@ -1317,6 +1317,17 @@ const launcherPageHTML = `<!doctype html>
   .kb .kcard.blocked{border-color:#E4695B}
   .kb .kcard.running{border-color:#5B8DEF}
   .kb .empty{font-size:.75rem;opacity:.5;padding:.4rem .2rem}
+  .kfeat{display:grid;gap:.3rem;margin:0 0 .6rem}
+  .kfeat .kcard{background:var(--card);border:1px solid var(--hair);border-radius:.55rem;padding:.45rem .55rem}
+  .kfeat .kref{font-weight:600;font-size:.85rem}
+  .kfeat .kws{font-size:.75rem;opacity:.7;margin-left:.4rem}
+  .kfeat .kwhy{font-size:.75rem;opacity:.85;margin:.15rem 0}
+  .kfeat .kmeta{font-size:.7rem;opacity:.7;margin:.1rem 0}
+  .kfeat .kcard.running{border-color:#5B8DEF}
+  .kfeat .kcard.blocked{border-color:#E4695B}
+  .kb .kcard .know{color:#5B8DEF;opacity:1}
+  .hist h4{margin:.6rem 1rem .2rem;font-size:.72rem;opacity:.7;text-transform:uppercase;letter-spacing:.05em}
+  .hist .kmeta{font-size:.74rem;opacity:.8;margin:.15rem 1rem;display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}
   .ev{background:var(--card2);border:1px solid var(--hair);border-radius:.6rem;padding:.5rem .65rem;margin:.3rem 0}
   .ev .eref{font-weight:600;font-size:.82rem}
   .ev .ekind{font-size:.66rem;text-transform:uppercase;letter-spacing:.04em;opacity:.6;margin-left:.35rem}
@@ -2359,15 +2370,19 @@ const launcherPageHTML = `<!doctype html>
   // moved on the tracker, worked on, or unblocked - the column follows.
   async function loadKanban() {
     const box = document.getElementById('kanban');
-    let cards = [], columns = [], boards = {};
+    let cards = [], columns = [], boards = {}, features = [];
     try {
       const r = await fetch('/launch/kanban', { headers: auth });
       if (!r.ok) { box.hidden = true; return; }
       const j = await r.json();
-      cards = j.cards || []; columns = j.columns || []; boards = j.boards || {};
+      cards = j.cards || []; columns = j.columns || []; boards = j.boards || {}; features = j.features || [];
     } catch { box.hidden = true; tabCount('kanban', 0); return; }
-    const live = cards.filter(c => c.column !== 'Done').length;
+    const done = cards.filter(c => c.column === 'Done').length;
+    const live = cards.length - done;
     tabCount('kanban', live);
+    // Done is history: hidden until asked for, so the live work comes first.
+    let showDone = false;
+    try { showDone = localStorage.getItem('corgi.showDone') === '1'; } catch {}
     if (!cards.length) {
       box.hidden = false; box.innerHTML = '';
       const e = document.createElement('p'); e.className = 'sum'; e.textContent = 'No cards yet. ';
@@ -2381,10 +2396,38 @@ const launcherPageHTML = `<!doctype html>
     const addBtn = document.createElement('button'); addBtn.textContent = '+ Task for later';
     addBtn.onclick = () => taskSheet(() => { loadKanban(); loadInbox(); });
     addBar.appendChild(addBtn);
+    if (done) {
+      const tg = document.createElement('button'); tg.textContent = showDone ? 'Hide done' : 'Show done (' + done + ')';
+      tg.onclick = () => { try { localStorage.setItem('corgi.showDone', showDone ? '0' : '1'); } catch {} loadKanban(); };
+      addBar.appendChild(tg);
+    }
+    const hist = document.createElement('a'); hist.className = 'eopen'; hist.href = '#'; hist.textContent = 'History';
+    hist.onclick = e => { e.preventDefault(); historySheet(); };
+    addBar.appendChild(hist);
     box.appendChild(addBar);
+    if (features.length) {
+      const fw = document.createElement('div'); fw.className = 'kfeat';
+      for (const f of features) {
+        const row = document.createElement('div'); row.className = 'kcard' + (f.state === 'blocked' ? ' blocked' : f.state === 'running' ? ' running' : '');
+        const head = document.createElement('div');
+        const ref = document.createElement('span'); ref.className = 'kref'; ref.textContent = f.ref; head.appendChild(ref);
+        if (f.title) { const t = document.createElement('span'); t.className = 'kws'; t.textContent = f.title; head.appendChild(t); }
+        row.appendChild(head);
+        const why = document.createElement('p'); why.className = 'kwhy'; why.textContent = f.state + ' · ' + f.why; row.appendChild(why);
+        const waves = document.createElement('p'); waves.className = 'kmeta';
+        waves.textContent = (f.waves || []).map(w => w.join(' + ')).join('  →  ');
+        row.appendChild(waves);
+        if (f.cost && f.cost.tokens) {
+          const m = document.createElement('p'); m.className = 'kmeta'; m.textContent = costBits(f.cost).join(' · '); row.appendChild(m);
+        }
+        fw.appendChild(row);
+      }
+      box.appendChild(fw);
+    }
     const wrap = document.createElement('div');
     wrap.className = 'kb';
     for (const col of columns) {
+      if (col === 'Done' && !showDone) continue;
       const rows = cards.filter(c => c.column === col);
       const kc = document.createElement('div');
       kc.className = 'kcol';
@@ -2408,15 +2451,13 @@ const launcherPageHTML = `<!doctype html>
         if (c.title) { const t = document.createElement('p'); t.className = 'ktitle'; t.textContent = c.title; card.appendChild(t); }
         const why = document.createElement('p'); why.className = 'kwhy'; why.textContent = c.why || ''; card.appendChild(why);
         if (c.body) { const d = document.createElement('p'); d.className = 'kmeta kbody'; d.textContent = c.body; card.appendChild(d); }
+        if (c.now) { const m = document.createElement('p'); m.className = 'kmeta know'; m.textContent = 'now: ' + c.now.doing + (c.now.model ? ' · ' + c.now.model : '') + (c.now.agent && c.now.agent !== 'claude' ? ' · ' + c.now.agent : ''); card.appendChild(m); }
         if (c.session) { const m = document.createElement('p'); m.className = 'kmeta'; m.textContent = sessionLine(c.session); card.appendChild(m); }
+        if (c.feature) { const m = document.createElement('p'); m.className = 'kmeta'; m.textContent = 'part of ' + c.feature.ref + (c.feature.title ? ' ' + c.feature.title : '') + (c.after && c.after.length ? ' · after ' + c.after.join(', ') : ''); card.appendChild(m); }
         if (c.branch) { const m = document.createElement('p'); m.className = 'kmeta'; m.textContent = c.branch; card.appendChild(m); }
         if (c.handoff && c.handoff.next) { const m = document.createElement('p'); m.className = 'kmeta'; m.textContent = 'next: ' + c.handoff.next; card.appendChild(m); }
         if (c.cost) {
-          const bits = [humanTokens(c.cost.tokens) + ' tok'];
-          if (c.cost.usd) bits.push('$' + c.cost.usd.toFixed(2));
-          if (c.cost.runs) bits.push(c.cost.runs + (c.cost.runs === 1 ? ' run' : ' runs'));
-          if (c.cost.sessions) bits.push(c.cost.sessions + (c.cost.sessions === 1 ? ' session' : ' sessions'));
-          const m = document.createElement('p'); m.className = 'kmeta'; m.textContent = bits.join(' · '); card.appendChild(m);
+          const m = document.createElement('p'); m.className = 'kmeta'; m.textContent = costBits(c.cost).join(' · '); card.appendChild(m);
         }
         if (c.kind === 'task' && c.key && col !== 'Done') {
           const say = document.createElement('input'); say.className = 'tin'; say.placeholder = 'Comment: the agent picks it up'; say.maxLength = 8000;
@@ -2469,6 +2510,46 @@ const launcherPageHTML = `<!doctype html>
       wrap.appendChild(kc);
     }
     box.appendChild(wrap);
+  }
+
+  function costBits(cost) {
+    const bits = [humanTokens(cost.tokens) + ' tok'];
+    if (cost.usd) bits.push('$' + cost.usd.toFixed(2));
+    if (cost.runs) bits.push(cost.runs + (cost.runs === 1 ? ' run' : ' runs'));
+    if (cost.sessions) bits.push(cost.sessions + (cost.sessions === 1 ? ' session' : ' sessions'));
+    if (cost.models && cost.models.length) bits.push(cost.models.join(', '));
+    if (cost.agents && cost.agents.some(a => a !== 'claude')) bits.push(cost.agents.join(' + '));
+    return bits;
+  }
+
+  // The history: what already happened, day by day, from /launch/history.
+  async function historySheet() {
+    let entries = [];
+    try {
+      const r = await fetch('/launch/history?days=14', { headers: auth });
+      if (r.ok) entries = (await r.json()).entries || [];
+    } catch { toast('no connection', true); return; }
+    const scrim = document.createElement('div'); scrim.className = 'scrim';
+    const panel = document.createElement('div'); panel.className = 'sheet hist';
+    const grab = document.createElement('div'); grab.className = 'grab'; panel.appendChild(grab);
+    const h = document.createElement('h3'); h.textContent = 'History · last 14 days'; panel.appendChild(h);
+    if (!entries.length) { const e = document.createElement('p'); e.className = 'sum'; e.textContent = 'Nothing yet.'; panel.appendChild(e); }
+    let day = '';
+    for (const e of entries) {
+      const d = new Date(e.at);
+      const label = d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+      if (label !== day) { day = label; const dh = document.createElement('h4'); dh.textContent = label; panel.appendChild(dh); }
+      const row = document.createElement('p'); row.className = 'kmeta';
+      const bits = [d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }), e.ref, e.kind + (e.why && e.why !== e.kind ? ': ' + e.why : '')];
+      if (e.cost && e.cost.tokens) bits.push(costBits(e.cost).join(' · '));
+      if (e.took) bits.push(e.took);
+      row.textContent = bits.join('  ');
+      if (e.url && /^https:\/\//.test(e.url)) { const a = document.createElement('a'); a.className = 'eopen'; a.href = e.url; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.textContent = 'Open'; row.appendChild(a); }
+      panel.appendChild(row);
+    }
+    scrim.appendChild(panel);
+    scrim.onclick = e => { if (e.target === scrim) scrim.remove(); };
+    document.body.appendChild(scrim);
   }
 
   async function loadInbox() {
@@ -3936,7 +4017,7 @@ func launchKanbanHandler(w http.ResponseWriter, r *http.Request) {
 			boards[c.Workspace] = map[string]any{"columns": names, "me": info.Me.Name}
 		}
 	}
-	writeLaunchJSON(w, map[string]any{"columns": kanbanColumns, "cards": cards, "boards": boards})
+	writeLaunchJSON(w, map[string]any{"columns": kanbanColumns, "cards": cards, "boards": boards, "features": kanbanFeatures(cards)})
 }
 
 func launchEventsHandler(w http.ResponseWriter, r *http.Request) {
