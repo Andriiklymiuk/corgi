@@ -824,7 +824,7 @@ func (r *Registry) bindInjectedWindow(s *Session, h *Host) {
 func (r *Registry) bindPanel(s *Session, h *Host) bool {
 	for _, w := range r.sortedWindowsLocked() {
 		if w.ExtHostPID > 0 && containsInt(s.Ancestors, w.ExtHostPID) {
-			h.Kind, h.WindowID, h.App, h.Connected = HostVSCodePanel, w.ID, w.App, true
+			h.Kind, h.WindowID, h.App, h.Connected, h.PanelInput = HostVSCodePanel, w.ID, w.App, true, w.PanelInput
 			if len(w.Folders) > 0 {
 				h.Folder = w.Folders[0]
 			}
@@ -1390,7 +1390,12 @@ func (r *Registry) Denied(ref string, now time.Time) bool {
 func (h Host) Answerable() string {
 	switch h.Kind {
 	case HostVSCodePanel:
-		return "it runs in the Claude Code panel, which takes answers only from the keyboard - answer it on the laptop"
+		if h.WindowID == "" || !h.Connected {
+			return "its VS Code window is not connected to corgi - answer it on the laptop"
+		}
+		if !h.PanelInput {
+			return "it runs in the Claude Code panel and this VS Code's corgi extension cannot press keys there yet - update the extension, or answer it on the laptop"
+		}
 	case HostVSCodeTerminal:
 		if h.WindowID == "" || !h.Connected {
 			return "its VS Code window is not connected to corgi - answer it on the laptop"

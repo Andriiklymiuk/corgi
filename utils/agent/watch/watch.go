@@ -213,6 +213,8 @@ var closedStates = map[string]string{
 	"done": "done", "closed": "closed", "resolved": "resolved",
 	"complete": "done", "completed": "done", "shipped": "shipped",
 	"released": "released", "merged": "merged", "to release": "waiting on a release",
+	"ready to deploy": "waiting on a deploy", "ready for release": "waiting on a release",
+	"ready to release": "waiting on a release", "to deploy": "waiting on a deploy",
 	"locked":   "locked",
 	"verified": "verified", "deployed": "deployed", "in production": "in production",
 	"on production": "in production", "live": "live", "qa passed": "past QA", "tested": "tested",
@@ -913,6 +915,9 @@ type FixRecord struct {
 	// Harness is the agent that ran it (claude when empty), so a failure
 	// sidelines that agent and not the next one in the workspace's order.
 	Harness string `json:"harness,omitempty"`
+	// Model is what answered: the one asked for at the start, the ones the
+	// harness named at the end.
+	Model string `json:"model,omitempty"`
 	// GreenAt is when the checks of the pull request it worked on passed after it
 	GreenAt time.Time `json:"greenAt,omitzero"`
 	// Said is the outcome the run reported: pushed, replied, nothing or blocked
@@ -1576,6 +1581,21 @@ func (l *FixLog) SetHarness(key, name string) {
 	}
 }
 
+func (l *FixLog) SetModel(key, model string) {
+	if model = strings.TrimSpace(model); key == "" || model == "" {
+		return
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for i := len(l.Started) - 1; i >= 0; i-- {
+		if l.Started[i].Key == key {
+			l.Started[i].Model = model
+			_ = l.save()
+			return
+		}
+	}
+}
+
 func (l *FixLog) SetHandover(key, text string, at time.Time) {
 	text = strings.TrimSpace(text)
 	if key == "" || text == "" {
@@ -1701,6 +1721,32 @@ type Cost struct {
 	USD    float64 `json:"usd"`
 	Tokens int64   `json:"tokens"`
 	Runs   int     `json:"runs"`
+	// Models and Agents are who did the work, each named once, in order of
+	// first appearance; an agent unnamed by a run is claude.
+	Models []string `json:"models,omitempty"`
+	Agents []string `json:"agents,omitempty"`
+}
+
+// AddWorker names who worked: the agent, and the models it used.
+func (c *Cost) AddWorker(agent, models string) {
+	if agent = strings.TrimSpace(agent); agent == "" {
+		agent = "claude"
+	}
+	c.Agents = appendOnce(c.Agents, agent)
+	for _, m := range strings.Split(models, ",") {
+		if m = strings.TrimSpace(m); m != "" {
+			c.Models = appendOnce(c.Models, m)
+		}
+	}
+}
+
+func appendOnce(list []string, s string) []string {
+	for _, have := range list {
+		if strings.EqualFold(have, s) {
+			return list
+		}
+	}
+	return append(list, s)
 }
 
 func (l *FixLog) CostFor(workspace, ref string) Cost {
@@ -1714,6 +1760,7 @@ func (l *FixLog) CostFor(workspace, ref string) Cost {
 		c.Runs++
 		c.USD += r.CostUSD
 		c.Tokens += r.Tokens
+		c.AddWorker(r.Harness, r.Model)
 	}
 	return c
 }

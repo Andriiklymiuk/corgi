@@ -534,6 +534,7 @@ func (d *Daemon) reapSessions(ctx context.Context) {
 	ticker := time.NewTicker(d.pollInterval(fast))
 	defer ticker.Stop()
 	nextSweep := time.Now().Add(sweepInterval)
+	nextReconcile := time.Now().Add(2 * time.Minute)
 	for {
 		ticker.Reset(d.pollInterval(fast))
 		select {
@@ -561,6 +562,12 @@ func (d *Daemon) reapSessions(ctx context.Context) {
 			d.checkDrift(now)
 			d.runRoutines(ctx, now)
 			d.pruneWorktrees(now)
+			if d.Reconcile != nil && !now.Before(nextReconcile) {
+				nextReconcile = now.Add(time.Hour)
+				for _, line := range d.Reconcile(now) {
+					utils.Infof("agent: board: %s\n", line)
+				}
+			}
 		}
 		d.flushSessions()
 	}

@@ -180,6 +180,7 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 	d.Isolate = isolateFixWorktrees
 	d.RunStack = runStackNote
 	d.ReleaseStack = releaseRunStack
+	d.Reconcile = reconcileBoard(dir)
 	d.Carry = autoCarry(dir)
 	d.Chat = func(ctx context.Context, workspaceID string, target watch.SlackTarget, text, emoji string) error {
 		poster := watch.NewSlackPoster(watch.LoadSecretsFor(dir, workspaceID))

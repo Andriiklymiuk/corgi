@@ -97,22 +97,24 @@ type Daemon struct {
 	gateMu      sync.Mutex
 	gating      map[string]bool
 
-	Version          string
-	Dir              string
-	Start            supervisor.Starter
-	Notify           func(title, body string)
-	NotifyWithLink   func(title, body, link string)
-	NotifyFocus      func(title, body, sessionID, link string)
-	LinkFor          func(workspaceID string) string
-	Pickup           func(workspace string, e watch.Event)
-	ClaimTicket      func(workspace string, e watch.Event) (ok bool, holder string, err error)
-	Delivered        func(workspace string, e watch.Event, prs []string)
-	Workpad          func(workspace, ref, section, text string)
-	Push             func(m push.Message)
-	Chat             func(ctx context.Context, workspace string, target watch.SlackTarget, text, emoji string) error
-	Isolate          func(dir, branch string) ([]string, error)
-	RunStack         func(dir, branch, mode string) string
-	ReleaseStack     func(dir, branch string)
+	Version        string
+	Dir            string
+	Start          supervisor.Starter
+	Notify         func(title, body string)
+	NotifyWithLink func(title, body, link string)
+	NotifyFocus    func(title, body, sessionID, link string)
+	LinkFor        func(workspaceID string) string
+	Pickup         func(workspace string, e watch.Event)
+	ClaimTicket    func(workspace string, e watch.Event) (ok bool, holder string, err error)
+	Delivered      func(workspace string, e watch.Event, prs []string)
+	Workpad        func(workspace, ref, section, text string)
+	Push           func(m push.Message)
+	Chat           func(ctx context.Context, workspace string, target watch.SlackTarget, text, emoji string) error
+	Isolate        func(dir, branch string) ([]string, error)
+	RunStack       func(dir, branch, mode string) string
+	ReleaseStack   func(dir, branch string)
+	// Reconcile lets the board's finished cards go; it runs once an hour.
+	Reconcile        func(now time.Time) []string
 	Events           *events.Log
 	CaptureBrief     func(brief.Params) *brief.Brief
 	peer             *peerNotes
