@@ -28,27 +28,30 @@ func SeedWorktreeDeps(corgi *CorgiCompose, set *WorktreeSet) []string {
 	var seeded []string
 	done := map[string]bool{}
 	for i := range corgi.Services {
-		svc := &corgi.Services[i]
-		root, ok := repoRoot(svc.AbsolutePath)
-		if !ok || trees[root] == "" {
-			continue
-		}
-		from, ok := realPath(svc.AbsolutePath)
-		if !ok {
-			continue
-		}
-		rel, err := filepath.Rel(root, from)
-		if err != nil || strings.HasPrefix(rel, "..") {
-			continue
-		}
-		to := filepath.Join(trees[root], rel)
-		if done[to] {
+		from, to, ok := worktreeTarget(corgi.Services[i].AbsolutePath, trees)
+		if !ok || done[to] {
 			continue
 		}
 		done[to] = true
 		seeded = append(seeded, seedDepsDir(from, to)...)
 	}
 	return seeded
+}
+
+func worktreeTarget(servicePath string, trees map[string]string) (from, to string, ok bool) {
+	root, ok := repoRoot(servicePath)
+	if !ok || trees[root] == "" {
+		return "", "", false
+	}
+	from, ok = realPath(servicePath)
+	if !ok {
+		return "", "", false
+	}
+	rel, err := filepath.Rel(root, from)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return "", "", false
+	}
+	return from, filepath.Join(trees[root], rel), true
 }
 
 func seedDepsDir(from, to string) []string {

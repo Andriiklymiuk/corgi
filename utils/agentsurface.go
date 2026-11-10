@@ -64,62 +64,71 @@ func kindRank(kind string) int {
 }
 
 func surfaceOfFile(f FileDiff) []SurfaceChange {
-	var out []SurfaceChange
 	op := "changed"
 	if f.New {
 		op = "added"
 	}
 	switch {
 	case migrDir.MatchString(f.Path):
-		out = append(out, SurfaceChange{Kind: "migration", Name: baseName(f.Path), Path: f.Path, Op: op, Breaking: sqlBreaks(f.Patch)})
-		return out
+		return []SurfaceChange{{Kind: "migration", Name: baseName(f.Path), Path: f.Path, Op: op, Breaking: sqlBreaks(f.Patch)}}
 	case contract.MatchString(f.Path):
-		out = append(out, SurfaceChange{Kind: "contract", Name: baseName(f.Path), Path: f.Path, Op: op})
-		out = append(out, contractDecls(f)...)
-		return out
+		return append([]SurfaceChange{{Kind: "contract", Name: baseName(f.Path), Path: f.Path, Op: op}}, contractDecls(f)...)
 	case configRe.MatchString(f.Path):
-		out = append(out, SurfaceChange{Kind: "config", Name: baseName(f.Path), Path: f.Path, Op: op})
-		return out
+		return []SurfaceChange{{Kind: "config", Name: baseName(f.Path), Path: f.Path, Op: op}}
 	}
 	if f.Binary || f.Patch == "" {
 		return nil
 	}
-	added, removed := map[string]string{}, map[string]string{}
-	for _, line := range strings.Split(f.Patch, "\n") {
+	added, removed := declsInPatch(f)
+	out := declChanges(f.Path, added, removed)
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
+}
+
+func patchLines(patch string, each func(sign byte, body string)) {
+	for _, line := range strings.Split(patch, "\n") {
 		if len(line) < 2 || strings.HasPrefix(line, "+++") || strings.HasPrefix(line, "---") {
 			continue
 		}
-		sign, body := line[0], line[1:]
-		if sign != '+' && sign != '-' {
-			continue
-		}
-		kind, name := declOf(f.Path, body)
-		if name == "" {
-			continue
-		}
-		key := kind + " " + name
-		if sign == '+' {
-			added[key] = strings.TrimSpace(body)
-		} else {
-			removed[key] = strings.TrimSpace(body)
+		if sign := line[0]; sign == '+' || sign == '-' {
+			each(sign, line[1:])
 		}
 	}
+}
+
+func declsInPatch(f FileDiff) (added, removed map[string]string) {
+	added, removed = map[string]string{}, map[string]string{}
+	patchLines(f.Patch, func(sign byte, body string) {
+		kind, name := declOf(f.Path, body)
+		if name == "" {
+			return
+		}
+		if sign == '+' {
+			added[kind+" "+name] = strings.TrimSpace(body)
+		} else {
+			removed[kind+" "+name] = strings.TrimSpace(body)
+		}
+	})
+	return added, removed
+}
+
+func declChanges(path string, added, removed map[string]string) []SurfaceChange {
+	var out []SurfaceChange
 	for key, line := range added {
 		kind, name := splitKey(key)
-		if old, ok := removed[key]; ok {
-			if old != line {
-				out = append(out, SurfaceChange{Kind: kind, Name: name, Path: f.Path, Op: "changed", Breaking: kind == "symbol" || kind == "route"})
-			}
-			delete(removed, key)
-			continue
+		old, ok := removed[key]
+		delete(removed, key)
+		switch {
+		case !ok:
+			out = append(out, SurfaceChange{Kind: kind, Name: name, Path: path, Op: "added"})
+		case old != line:
+			out = append(out, SurfaceChange{Kind: kind, Name: name, Path: path, Op: "changed", Breaking: kind == "symbol" || kind == "route"})
 		}
-		out = append(out, SurfaceChange{Kind: kind, Name: name, Path: f.Path, Op: "added"})
 	}
 	for key := range removed {
 		kind, name := splitKey(key)
-		out = append(out, SurfaceChange{Kind: kind, Name: name, Path: f.Path, Op: "removed", Breaking: true})
+		out = append(out, SurfaceChange{Kind: kind, Name: name, Path: path, Op: "removed", Breaking: true})
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
 }
 
@@ -135,6 +144,60 @@ func baseName(path string) string {
 	return path
 }
 
+type declLanguage struct {
+	files  func(path string) bool
+	isTest func(path string) bool
+	name   func(line string) string
+}
+
+func hasSuffix(suffixes ...string) func(string) bool {
+	return func(path string) bool {
+		for _, s := range suffixes {
+			if strings.HasSuffix(path, s) {
+				return true
+			}
+		}
+		return false
+	}
+}
+
+func containsAny(parts ...string) func(string) bool {
+	return func(path string) bool {
+		for _, p := range parts {
+			if strings.Contains(path, p) {
+				return true
+			}
+		}
+		return false
+	}
+}
+
+func groupOf(re *regexp.Regexp) func(string) string {
+	return func(line string) string {
+		if m := re.FindStringSubmatch(line); m != nil {
+			return firstGroup(m[1:])
+		}
+		return ""
+	}
+}
+
+var declLanguages = []declLanguage{
+	{files: hasSuffix(".go"), isTest: hasSuffix("_test.go"), name: groupOf(goDecl)},
+	{files: hasSuffix(".ts", ".tsx", ".js", ".mjs"), isTest: containsAny(".test.", ".spec.", "__tests__/"), name: func(line string) string {
+		if m := tsDecl.FindStringSubmatch(line); m != nil {
+			return m[1]
+		}
+		return ""
+	}},
+	{files: hasSuffix(".py"), isTest: containsAny("test"), name: func(line string) string {
+		if n := groupOf(pyDecl)(line); !strings.HasPrefix(n, "_") {
+			return n
+		}
+		return ""
+	}},
+	{files: hasSuffix(".rb"), isTest: containsAny("spec/", "test/"), name: groupOf(rbDecl)},
+}
+
 func declOf(path, line string) (kind, name string) {
 	if m := routeRe.FindStringSubmatch(line); m != nil {
 		route := m[2]
@@ -143,35 +206,17 @@ func declOf(path, line string) (kind, name string) {
 		}
 		return "route", strings.ToUpper(m[1]) + " " + route
 	}
-	switch {
-	case strings.HasSuffix(path, ".go"):
-		if strings.HasSuffix(path, "_test.go") {
+	for _, lang := range declLanguages {
+		if !lang.files(path) {
+			continue
+		}
+		if lang.isTest(path) {
 			return "", ""
 		}
-		if m := goDecl.FindStringSubmatch(line); m != nil {
-			return "symbol", firstGroup(m[1:])
+		if n := lang.name(line); n != "" {
+			return "symbol", n
 		}
-	case strings.HasSuffix(path, ".ts"), strings.HasSuffix(path, ".tsx"), strings.HasSuffix(path, ".js"), strings.HasSuffix(path, ".mjs"):
-		if strings.Contains(path, ".test.") || strings.Contains(path, ".spec.") || strings.Contains(path, "__tests__/") {
-			return "", ""
-		}
-		if m := tsDecl.FindStringSubmatch(line); m != nil {
-			return "symbol", m[1]
-		}
-	case strings.HasSuffix(path, ".py"):
-		if strings.Contains(path, "test") {
-			return "", ""
-		}
-		if m := pyDecl.FindStringSubmatch(line); m != nil && !strings.HasPrefix(firstGroup(m[1:]), "_") {
-			return "symbol", firstGroup(m[1:])
-		}
-	case strings.HasSuffix(path, ".rb"):
-		if strings.Contains(path, "spec/") || strings.Contains(path, "test/") {
-			return "", ""
-		}
-		if m := rbDecl.FindStringSubmatch(line); m != nil {
-			return "symbol", firstGroup(m[1:])
-		}
+		return "", ""
 	}
 	return "", ""
 }
@@ -185,27 +230,26 @@ func firstGroup(groups []string) string {
 	return ""
 }
 
+func contractName(body string) string {
+	if m := gqlDecl.FindStringSubmatch(body); m != nil {
+		return m[1] + " " + m[2]
+	}
+	if m := protoRe.FindStringSubmatch(body); m != nil {
+		return m[1]
+	}
+	if m := openAPI.FindStringSubmatch(body); m != nil {
+		return m[1]
+	}
+	return ""
+}
+
 func contractDecls(f FileDiff) []SurfaceChange {
 	var out []SurfaceChange
 	seen := map[string]bool{}
-	for _, line := range strings.Split(f.Patch, "\n") {
-		if len(line) < 2 || strings.HasPrefix(line, "+++") || strings.HasPrefix(line, "---") {
-			continue
-		}
-		sign, body := line[0], line[1:]
-		if sign != '+' && sign != '-' {
-			continue
-		}
-		name := ""
-		if m := gqlDecl.FindStringSubmatch(body); m != nil {
-			name = m[1] + " " + m[2]
-		} else if m := protoRe.FindStringSubmatch(body); m != nil {
-			name = m[1]
-		} else if m := openAPI.FindStringSubmatch(body); m != nil {
-			name = m[1]
-		}
+	patchLines(f.Patch, func(sign byte, body string) {
+		name := contractName(body)
 		if name == "" || seen[name] {
-			continue
+			return
 		}
 		seen[name] = true
 		op := "added"
@@ -213,7 +257,7 @@ func contractDecls(f FileDiff) []SurfaceChange {
 			op = "removed"
 		}
 		out = append(out, SurfaceChange{Kind: "contract", Name: name, Path: f.Path, Op: op, Breaking: op == "removed"})
-	}
+	})
 	return out
 }
 

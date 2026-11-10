@@ -868,26 +868,21 @@ func (id *Idea) Find(commentID int) (Comment, bool) {
 func (id *Idea) ForAgent() []Comment {
 	var out []Comment
 	for _, c := range id.Comments.Comments {
-		if c.Status != StatusOpen {
-			continue
-		}
-		if c.Kind == KindProposal {
-			accepted := false
-			for _, r := range c.Replies {
-				if r.By != Agent {
-					accepted = true
-				}
-			}
-			if !accepted {
-				continue
-			}
-		}
-		if lastAuthor(c) == Agent {
+		if c.Status != StatusOpen || (c.Kind == KindProposal && !accepted(c)) || lastAuthor(c) == Agent {
 			continue
 		}
 		out = append(out, c)
 	}
 	return out
+}
+
+func accepted(c Comment) bool {
+	for _, r := range c.Replies {
+		if r.By != Agent {
+			return true
+		}
+	}
+	return false
 }
 
 func lastAuthor(c Comment) string {
@@ -1028,31 +1023,35 @@ func (id *Idea) FilePath(name string) string {
 func Transcript(cs []Comment) string {
 	var b strings.Builder
 	for _, c := range cs {
-		fmt.Fprintf(&b, "### Comment %d (%s, by %s, %s)\n", c.ID, c.Kind, c.By, c.Status)
-		if c.Anchor != nil {
-			if c.Anchor.Heading != "" {
-				fmt.Fprintf(&b, "Under: %s\n", c.Anchor.Heading)
-			}
-			fmt.Fprintf(&b, "Highlighted: %q\n", c.Anchor.Quote)
-		} else {
-			b.WriteString("About: the whole page\n")
-		}
-		fmt.Fprintf(&b, "%s\n", c.Text)
-		for _, l := range c.Links {
-			fmt.Fprintf(&b, "Link: %s\n", l)
-		}
-		for _, f := range c.Files {
-			fmt.Fprintf(&b, "Attached: %s (%s, %d bytes)\n", f.Name, f.Type, f.Size)
-		}
-		for _, r := range c.Replies {
-			fmt.Fprintf(&b, "- %s replied: %s\n", r.By, r.Text)
-			for _, l := range r.Links {
-				fmt.Fprintf(&b, "  Link: %s\n", l)
-			}
-		}
-		b.WriteString("\n")
+		writeComment(&b, c)
 	}
 	return b.String()
+}
+
+func writeComment(b *strings.Builder, c Comment) {
+	fmt.Fprintf(b, "### Comment %d (%s, by %s, %s)\n", c.ID, c.Kind, c.By, c.Status)
+	if c.Anchor != nil {
+		if c.Anchor.Heading != "" {
+			fmt.Fprintf(b, "Under: %s\n", c.Anchor.Heading)
+		}
+		fmt.Fprintf(b, "Highlighted: %q\n", c.Anchor.Quote)
+	} else {
+		b.WriteString("About: the whole page\n")
+	}
+	fmt.Fprintf(b, "%s\n", c.Text)
+	for _, l := range c.Links {
+		fmt.Fprintf(b, "Link: %s\n", l)
+	}
+	for _, f := range c.Files {
+		fmt.Fprintf(b, "Attached: %s (%s, %d bytes)\n", f.Name, f.Type, f.Size)
+	}
+	for _, r := range c.Replies {
+		fmt.Fprintf(b, "- %s replied: %s\n", r.By, r.Text)
+		for _, l := range r.Links {
+			fmt.Fprintf(b, "  Link: %s\n", l)
+		}
+	}
+	b.WriteString("\n")
 }
 
 // HeadingFor is the nearest markdown heading above the first place quote
