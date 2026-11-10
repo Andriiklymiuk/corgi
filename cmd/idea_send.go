@@ -102,7 +102,6 @@ func liveTickets(dir string, m idea.Meta) []idea.Ticket {
 // sendIdea creates the page's epic and tickets in the tracker, or the page
 // in Confluence, and remembers where they went.
 type ideaSend struct {
-	ctx     context.Context
 	dir     string
 	slug    string
 	to      string
@@ -128,14 +127,14 @@ func sendIdea(dir, slug, to, project, space string) ([]idea.Link, error) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), ideaSendTimeout)
 	defer cancel()
-	s := ideaSend{ctx: ctx, dir: dir, slug: slug, to: to, id: id, name: firstNonEmpty(id.Meta.Name, id.Meta.Title),
+	s := ideaSend{dir: dir, slug: slug, to: to, id: id, name: firstNonEmpty(id.Meta.Name, id.Meta.Title),
 		link: ideaLink(dir, id.Meta, false), secrets: secrets, now: time.Now()}
 	var links []idea.Link
 	switch to {
 	case "jira", "linear":
-		links, err = s.toTracker(project)
+		links, err = s.toTracker(ctx, project)
 	case "confluence":
-		links, err = s.toConfluence(space)
+		links, err = s.toConfluence(ctx, space)
 	case "":
 		return nil, fmt.Errorf("say where: --to jira, linear or confluence (no tracker credentials were found)")
 	default:
@@ -165,7 +164,7 @@ func (s ideaSend) creator(project string) (watch.Creator, error) {
 
 // epic is the one an earlier send made when it broke part-way: the epic and
 // the tickets it made are kept and reused, not made twice.
-func (s ideaSend) epic(creator watch.Creator) (idea.Link, error) {
+func (s ideaSend) epic(ctx context.Context, creator watch.Creator) (idea.Link, error) {
 	for _, l := range s.id.Meta.Sent {
 		if l.Kind == "epic" && strings.HasPrefix(l.Title, s.to+":") {
 			return l, nil
@@ -175,7 +174,7 @@ func (s ideaSend) epic(creator watch.Creator) (idea.Link, error) {
 	if s.link != "" {
 		body += "\n\nThe page: " + s.link
 	}
-	epic, err := creator.Create(s.ctx, watch.NewIssue{Title: s.name, Body: body, Epic: true})
+	epic, err := creator.Create(ctx, watch.NewIssue{Title: s.name, Body: body, Epic: true})
 	if err != nil {
 		return idea.Link{}, err
 	}
@@ -184,12 +183,12 @@ func (s ideaSend) epic(creator watch.Creator) (idea.Link, error) {
 	return made, err
 }
 
-func (s ideaSend) toTracker(project string) ([]idea.Link, error) {
+func (s ideaSend) toTracker(ctx context.Context, project string) ([]idea.Link, error) {
 	creator, err := s.creator(project)
 	if err != nil {
 		return nil, err
 	}
-	epic, err := s.epic(creator)
+	epic, err := s.epic(ctx, creator)
 	if err != nil {
 		return nil, err
 	}
@@ -206,7 +205,7 @@ func (s ideaSend) toTracker(project string) ([]idea.Link, error) {
 			links = append(links, idea.Link{Kind: "ticket", Ref: t.Ref, URL: t.URL, Title: t.Title, At: s.now})
 			continue
 		}
-		made, err := creator.Create(s.ctx, watch.NewIssue{Title: t.Title, Body: s.ticketBody(refs, i), Parent: parent})
+		made, err := creator.Create(ctx, watch.NewIssue{Title: t.Title, Body: s.ticketBody(refs, i), Parent: parent})
 		if err != nil {
 			_, _ = idea.Update(s.dir, s.slug, func(id *idea.Idea) error { id.Meta.Tickets = refs; return nil })
 			return links, fmt.Errorf("after %d ticket(s) (kept; run send again to finish): %v", i, err)
@@ -271,11 +270,11 @@ func (s ideaSend) confluenceHTML() string {
 	return html
 }
 
-func (s ideaSend) toConfluence(space string) ([]idea.Link, error) {
+func (s ideaSend) toConfluence(ctx context.Context, space string) ([]idea.Link, error) {
 	if s.secrets.JiraToken == "" || s.secrets.JiraURL == "" {
 		return nil, fmt.Errorf("no Atlassian credentials - corgi agent watch auth jira (Confluence uses the same email and token)")
 	}
-	page, err := watch.NewJira(s.secrets, "").CreatePage(s.ctx, space, s.name, s.confluenceHTML())
+	page, err := watch.NewJira(s.secrets, "").CreatePage(ctx, space, s.name, s.confluenceHTML())
 	if err != nil {
 		return nil, err
 	}
