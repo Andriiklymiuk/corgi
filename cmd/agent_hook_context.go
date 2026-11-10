@@ -16,8 +16,10 @@ import (
 	"andriiklymiuk/corgi/utils/agent/lessons"
 	"andriiklymiuk/corgi/utils/agent/scope"
 	"andriiklymiuk/corgi/utils/agent/sessions"
+	"andriiklymiuk/corgi/utils/agent/usage"
 	"andriiklymiuk/corgi/utils/agent/watch"
 	"andriiklymiuk/corgi/utils/agent/workspace"
+
 	"gopkg.in/yaml.v3"
 )
 
@@ -176,28 +178,7 @@ func otherSessionsHere(st sessions.State, self, root string, now time.Time) stri
 		if root == "" || !(samePath(s.Folder, root) || sessions.Within(s.Cwd, root)) {
 			continue
 		}
-		name := s.Title
-		if name == "" {
-			name = firstNonEmpty(s.Display, s.Label)
-		}
-		part := fmt.Sprintf("%s %q %s", statusGlyph(s.Status), name, strings.ToLower(statusWord(s.Status)))
-		if s.Branch != "" {
-			part += " on " + s.Branch
-		}
-		if s.Detail != "" && s.Status != sessions.StatusDone {
-			part += " (" + s.Detail + ")"
-		}
-		if !s.StatusSince.IsZero() {
-			part += " " + roughAge(now.Sub(s.StatusSince))
-		}
-		if s.Changes != nil && len(s.Changes.Touched) > 0 {
-			touched := s.Changes.Touched
-			if len(touched) > 4 {
-				touched = append(touched[:4], fmt.Sprintf("+%d more", s.Changes.Files-4))
-			}
-			part += ", touching " + strings.Join(touched, ", ")
-		}
-		parts = append(parts, part)
+		parts = append(parts, sessionHereLine(s, now))
 		if len(parts) == 4 {
 			break
 		}
@@ -212,48 +193,82 @@ func otherSessionsHere(st sessions.State, self, root string, now time.Time) stri
 	return label + ": " + strings.Join(parts, " · ")
 }
 
+func sessionHereLine(s sessions.Session, now time.Time) string {
+	name := firstNonEmpty(s.Title, s.Display, s.Label)
+	part := fmt.Sprintf("%s %q %s", statusGlyph(s.Status), name, strings.ToLower(statusWord(s.Status)))
+	if s.Branch != "" {
+		part += " on " + s.Branch
+	}
+	if s.Detail != "" && s.Status != sessions.StatusDone {
+		part += " (" + s.Detail + ")"
+	}
+	if !s.StatusSince.IsZero() {
+		part += " " + roughAge(now.Sub(s.StatusSince))
+	}
+	if s.Changes != nil && len(s.Changes.Touched) > 0 {
+		touched := s.Changes.Touched
+		if len(touched) > 4 {
+			touched = append(touched[:4], fmt.Sprintf("+%d more", s.Changes.Files-4))
+		}
+		part += ", touching " + strings.Join(touched, ", ")
+	}
+	return part
+}
+
 func budgetLine(st sessions.State, configDir string, now time.Time) string {
 	for _, a := range st.Accounts {
-		if a.ConfigDir != configDir || a.Limits == nil {
-			continue
+		if a.ConfigDir == configDir && a.Limits != nil {
+			return accountBudgetLine(a, now)
 		}
-		l := *a.Limits
-		// A window that reset since the last read says nothing about now.
-		fiveOver := !l.FiveHour.ResetsAt.IsZero() && l.FiveHour.ResetsAt.Before(now)
-		weekOver := !l.SevenDay.ResetsAt.IsZero() && l.SevenDay.ResetsAt.Before(now)
-		if fiveOver && weekOver {
-			return ""
+	}
+	return ""
+}
+
+func budgetWindows(l usage.Limits, fiveOver, weekOver bool) []string {
+	var windows []string
+	if !fiveOver {
+		w := fmt.Sprintf("5h %d%%", l.FiveHour.Percent)
+		if !l.FiveHour.ResetsAt.IsZero() {
+			w += " (resets " + clock(l.FiveHour.ResetsAt) + ")"
 		}
-		var windows []string
-		if !fiveOver {
-			w := fmt.Sprintf("5h %d%%", l.FiveHour.Percent)
-			if !l.FiveHour.ResetsAt.IsZero() {
-				w += " (resets " + clock(l.FiveHour.ResetsAt) + ")"
-			}
-			windows = append(windows, w)
+		windows = append(windows, w)
+	}
+	if !weekOver {
+		w := fmt.Sprintf("week %d%%", l.SevenDay.Percent)
+		if !l.SevenDay.ResetsAt.IsZero() {
+			w += " (resets " + weekday(l.SevenDay.ResetsAt) + ")"
 		}
-		if !weekOver {
-			w := fmt.Sprintf("week %d%%", l.SevenDay.Percent)
-			if !l.SevenDay.ResetsAt.IsZero() {
-				w += " (resets " + weekday(l.SevenDay.ResetsAt) + ")"
-			}
-			windows = append(windows, w)
-		}
-		line := "budget: " + strings.Join(windows, " · ")
-		if fiveOver {
-			l.FiveHour.Percent = 0
-		}
-		if weekOver {
-			l.SevenDay.Percent = 0
-		}
-		if l.FiveHour.Percent >= 100 || l.SevenDay.Percent >= 100 {
-			line += " - limit reached, keep this turn short or `corgi agent carry`"
-		} else if !fiveOver && a.Forecast != nil && a.Forecast.FiveHour != nil && !a.Forecast.FiveHour.Safe && !a.Forecast.FiveHour.ExhaustAt.IsZero() {
-			line += " - at this pace the 5h window runs out at " + clock(a.Forecast.FiveHour.ExhaustAt)
-		} else if l.FiveHour.Percent >= 85 {
-			line += " - nearly out, prefer small turns"
-		}
-		return line
+		windows = append(windows, w)
+	}
+	return windows
+}
+
+func accountBudgetLine(a sessions.Account, now time.Time) string {
+	l := *a.Limits
+	// A window that reset since the last read says nothing about now.
+	fiveOver := !l.FiveHour.ResetsAt.IsZero() && l.FiveHour.ResetsAt.Before(now)
+	weekOver := !l.SevenDay.ResetsAt.IsZero() && l.SevenDay.ResetsAt.Before(now)
+	if fiveOver && weekOver {
+		return ""
+	}
+	line := "budget: " + strings.Join(budgetWindows(l, fiveOver, weekOver), " · ")
+	if fiveOver {
+		l.FiveHour.Percent = 0
+	}
+	if weekOver {
+		l.SevenDay.Percent = 0
+	}
+	return line + budgetAdvice(a, l, fiveOver)
+}
+
+func budgetAdvice(a sessions.Account, l usage.Limits, fiveOver bool) string {
+	switch {
+	case l.FiveHour.Percent >= 100 || l.SevenDay.Percent >= 100:
+		return " - limit reached, keep this turn short or `corgi agent carry`"
+	case !fiveOver && a.Forecast != nil && a.Forecast.FiveHour != nil && !a.Forecast.FiveHour.Safe && !a.Forecast.FiveHour.ExhaustAt.IsZero():
+		return " - at this pace the 5h window runs out at " + clock(a.Forecast.FiveHour.ExhaustAt)
+	case l.FiveHour.Percent >= 85:
+		return " - nearly out, prefer small turns"
 	}
 	return ""
 }

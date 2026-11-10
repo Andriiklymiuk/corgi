@@ -261,26 +261,30 @@ func botDetail(dir string, b bots.Bot) BotDetail {
 		if len(d.Runs) < 12 {
 			d.Runs = append(d.Runs, r)
 		}
-		d.ROI.Runs++
-		if r.Error != "" {
-			d.ROI.Failed++
-		}
-		if r.Retry != "" {
-			d.ROI.Retried++
-		}
-		d.ROI.CostUSD += r.CostUSD
-		d.ROI.Tokens += r.Tokens
-		for _, link := range r.PRs {
-			d.ROI.PRs++
-			if p, ok := pulls.Get(link); ok && p.State == "merged" {
-				d.ROI.Merged++
-			}
-		}
-		if d.ROI.Since.IsZero() || r.StartedAt.Before(d.ROI.Since) {
-			d.ROI.Since = r.StartedAt
-		}
+		d.countRun(r, pulls)
 	}
 	return d
+}
+
+func (d *BotDetail) countRun(r watch.FixRecord, pulls *watch.PullLog) {
+	d.ROI.Runs++
+	if r.Error != "" {
+		d.ROI.Failed++
+	}
+	if r.Retry != "" {
+		d.ROI.Retried++
+	}
+	d.ROI.CostUSD += r.CostUSD
+	d.ROI.Tokens += r.Tokens
+	for _, link := range r.PRs {
+		d.ROI.PRs++
+		if p, ok := pulls.Get(link); ok && p.State == "merged" {
+			d.ROI.Merged++
+		}
+	}
+	if d.ROI.Since.IsZero() || r.StartedAt.Before(d.ROI.Since) {
+		d.ROI.Since = r.StartedAt
+	}
 }
 
 var agentBotListCmd = &cobra.Command{
@@ -369,6 +373,18 @@ func mustCwd() string {
 	return cwd
 }
 
+func botRow(b bots.Bot) map[string]any {
+	on := b.On
+	if on == nil {
+		on = []string{}
+	}
+	return map[string]any{
+		"name": b.Name, "title": b.Display(), "workspace": b.Workspace, "model": b.Model, "profile": b.Profile,
+		"isolate": b.Isolate, "color": b.Color, "lastSession": b.LastSession, "lastSeen": b.LastSeen,
+		"hasSoul": strings.TrimSpace(b.Soul) != "", "soul": b.Soul, "on": on, "onWords": bots.TriggerWords(b.On),
+	}
+}
+
 func launchBotsHandler(w http.ResponseWriter, r *http.Request) {
 	setLaunchHeaders(w)
 	dir, err := agentDir()
@@ -381,119 +397,15 @@ func launchBotsHandler(w http.ResponseWriter, r *http.Request) {
 		writeLaunchError(w, http.StatusInternalServerError, "could not read the bots")
 		return
 	}
-	row := func(b bots.Bot) map[string]any {
-		on := b.On
-		if on == nil {
-			on = []string{}
-		}
-		return map[string]any{
-			"name": b.Name, "title": b.Display(), "workspace": b.Workspace, "model": b.Model, "profile": b.Profile,
-			"isolate": b.Isolate, "color": b.Color, "lastSession": b.LastSession, "lastSeen": b.LastSeen,
-			"hasSoul": strings.TrimSpace(b.Soul) != "", "soul": b.Soul, "on": on, "onWords": bots.TriggerWords(b.On),
-		}
-	}
 	switch r.Method {
 	case http.MethodGet:
 		if name := r.URL.Query().Get("name"); name != "" {
-			b, ok := store.Find(name)
-			if !ok {
-				writeLaunchError(w, http.StatusNotFound, "no bot named "+name)
-				return
-			}
-			detail := botDetail(dir, b)
-			out := row(b)
-			runs := make([]map[string]any, 0, len(detail.Runs))
-			for _, x := range detail.Runs {
-				run := map[string]any{"key": x.Key, "ref": x.Ref, "kind": x.Kind, "title": firstLineOf(x.Title), "url": x.URL, "startedAt": x.StartedAt, "running": !x.Done(), "outcome": x.Outcome()}
-				if len(x.PRs) > 0 {
-					run["prs"] = x.PRs
-				}
-				if x.Error != "" {
-					run["error"] = firstLineOf(x.Error)
-				}
-				if x.CostUSD > 0 || x.Tokens > 0 {
-					run["costUSD"], run["tokens"] = x.CostUSD, x.Tokens
-				}
-				runs = append(runs, run)
-			}
-			out["runs"] = runs
-			writeLaunchJSON(w, out)
+			showBot(w, dir, store, name)
 			return
 		}
-		list := make([]map[string]any, 0, len(store.Bots))
-		for _, b := range store.Bots {
-			list = append(list, row(b))
-		}
-		templates := make([]map[string]any, 0, len(bots.Templates))
-		for _, t := range bots.Templates {
-			templates = append(templates, map[string]any{"name": t.Name, "title": t.Title, "soul": t.Soul, "model": t.Model, "color": t.Color, "on": t.On, "isolate": t.Isolate, "onWords": bots.TriggerWords(t.On)})
-		}
-		triggers := make([]map[string]string, 0, len(bots.Triggers))
-		for _, k := range bots.TriggerKinds() {
-			triggers = append(triggers, map[string]string{"kind": k, "means": bots.Triggers[k]})
-		}
-		writeLaunchJSON(w, map[string]any{"bots": list, "templates": templates, "triggers": triggers, "colors": bots.Colors})
+		writeLaunchJSON(w, botsListing(store))
 	case http.MethodPost:
-		var req struct {
-			Name      string   `json:"name"`
-			Title     string   `json:"title"`
-			Workspace string   `json:"workspace"`
-			Soul      string   `json:"soul"`
-			Model     string   `json:"model"`
-			Profile   string   `json:"profile"`
-			Isolate   bool     `json:"isolate"`
-			Color     string   `json:"color"`
-			On        []string `json:"on"`
-		}
-		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 32<<10)).Decode(&req); err != nil {
-			writeLaunchError(w, http.StatusBadRequest, "could not read the request")
-			return
-		}
-		name := strings.ToLower(strings.TrimSpace(req.Name))
-		if !bots.ValidName(name) {
-			writeLaunchError(w, http.StatusBadRequest, "a bot name is lowercase letters, digits and dashes, up to 32")
-			return
-		}
-		if _, err := workspaceRoot(req.Workspace); err != nil {
-			writeLaunchError(w, http.StatusBadRequest, err.Error())
-			return
-		}
-		if len(req.Soul) > 8000 {
-			writeLaunchError(w, http.StatusBadRequest, "the soul is over 8000 characters")
-			return
-		}
-		if req.Model != "" && !validModel(req.Model) {
-			writeLaunchError(w, http.StatusBadRequest, "model: letters, digits, dots and dashes only")
-			return
-		}
-		if req.Profile != "" && !containsString(launchProfileNames(), req.Profile) {
-			writeLaunchError(w, http.StatusBadRequest, "no profile "+req.Profile)
-			return
-		}
-		if req.Color != "" && !containsString(bots.Colors, req.Color) {
-			writeLaunchError(w, http.StatusBadRequest, "color is one of "+strings.Join(bots.Colors, ", "))
-			return
-		}
-		on, err := bots.ParseTriggers(req.On)
-		if err != nil {
-			writeLaunchError(w, http.StatusBadRequest, err.Error())
-			return
-		}
-		color := req.Color
-		if color == "" {
-			if prev, ok := store.Find(name); ok && prev.Color != "" {
-				color = prev.Color
-			} else {
-				color = bots.Colors[len(store.Bots)%len(bots.Colors)]
-			}
-		}
-		store.Put(bots.Bot{Name: name, Title: strings.TrimSpace(req.Title), Workspace: req.Workspace, Soul: strings.TrimSpace(req.Soul), Model: req.Model, Profile: req.Profile, Isolate: req.Isolate, Color: color, On: on})
-		if err := bots.Save(bots.Path(dir), store); err != nil {
-			writeLaunchError(w, http.StatusInternalServerError, "could not save the bot")
-			return
-		}
-		b, _ := store.Find(name)
-		writeLaunchJSON(w, map[string]any{"done": "saved", "bot": row(b)})
+		saveBotFromRequest(w, r, dir, store)
 	case http.MethodDelete:
 		name := launchNameArg(r)
 		if !store.Remove(name) {
@@ -508,6 +420,118 @@ func launchBotsHandler(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeLaunchError(w, http.StatusMethodNotAllowed, "GET, POST or DELETE a bot")
 	}
+}
+
+func botRunRow(x watch.FixRecord) map[string]any {
+	run := map[string]any{"key": x.Key, "ref": x.Ref, "kind": x.Kind, "title": firstLineOf(x.Title), "url": x.URL, "startedAt": x.StartedAt, "running": !x.Done(), "outcome": x.Outcome()}
+	if len(x.PRs) > 0 {
+		run["prs"] = x.PRs
+	}
+	if x.Error != "" {
+		run["error"] = firstLineOf(x.Error)
+	}
+	if x.CostUSD > 0 || x.Tokens > 0 {
+		run["costUSD"], run["tokens"] = x.CostUSD, x.Tokens
+	}
+	return run
+}
+
+func showBot(w http.ResponseWriter, dir string, store *bots.Store, name string) {
+	b, ok := store.Find(name)
+	if !ok {
+		writeLaunchError(w, http.StatusNotFound, "no bot named "+name)
+		return
+	}
+	detail := botDetail(dir, b)
+	out := botRow(b)
+	runs := make([]map[string]any, 0, len(detail.Runs))
+	for _, x := range detail.Runs {
+		runs = append(runs, botRunRow(x))
+	}
+	out["runs"] = runs
+	writeLaunchJSON(w, out)
+}
+
+func botsListing(store *bots.Store) map[string]any {
+	list := make([]map[string]any, 0, len(store.Bots))
+	for _, b := range store.Bots {
+		list = append(list, botRow(b))
+	}
+	templates := make([]map[string]any, 0, len(bots.Templates))
+	for _, t := range bots.Templates {
+		templates = append(templates, map[string]any{"name": t.Name, "title": t.Title, "soul": t.Soul, "model": t.Model, "color": t.Color, "on": t.On, "isolate": t.Isolate, "onWords": bots.TriggerWords(t.On)})
+	}
+	triggers := make([]map[string]string, 0, len(bots.Triggers))
+	for _, k := range bots.TriggerKinds() {
+		triggers = append(triggers, map[string]string{"kind": k, "means": bots.Triggers[k]})
+	}
+	return map[string]any{"bots": list, "templates": templates, "triggers": triggers, "colors": bots.Colors}
+}
+
+type botRequest struct {
+	Name      string   `json:"name"`
+	Title     string   `json:"title"`
+	Workspace string   `json:"workspace"`
+	Soul      string   `json:"soul"`
+	Model     string   `json:"model"`
+	Profile   string   `json:"profile"`
+	Isolate   bool     `json:"isolate"`
+	Color     string   `json:"color"`
+	On        []string `json:"on"`
+}
+
+func botRequestRefusal(req botRequest, name string) string {
+	switch {
+	case !bots.ValidName(name):
+		return "a bot name is lowercase letters, digits and dashes, up to 32"
+	case len(req.Soul) > 8000:
+		return "the soul is over 8000 characters"
+	case req.Model != "" && !validModel(req.Model):
+		return modelNameRuleMessage
+	case req.Profile != "" && !containsString(launchProfileNames(), req.Profile):
+		return "no profile " + req.Profile
+	case req.Color != "" && !containsString(bots.Colors, req.Color):
+		return "color is one of " + strings.Join(bots.Colors, ", ")
+	}
+	if _, err := workspaceRoot(req.Workspace); err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
+func botColor(store *bots.Store, name, asked string) string {
+	if asked != "" {
+		return asked
+	}
+	if prev, ok := store.Find(name); ok && prev.Color != "" {
+		return prev.Color
+	}
+	return bots.Colors[len(store.Bots)%len(bots.Colors)]
+}
+
+func saveBotFromRequest(w http.ResponseWriter, r *http.Request, dir string, store *bots.Store) {
+	var req botRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 32<<10)).Decode(&req); err != nil {
+		writeLaunchError(w, http.StatusBadRequest, requestUnreadableMessage)
+		return
+	}
+	name := strings.ToLower(strings.TrimSpace(req.Name))
+	if why := botRequestRefusal(req, name); why != "" {
+		writeLaunchError(w, http.StatusBadRequest, why)
+		return
+	}
+	on, err := bots.ParseTriggers(req.On)
+	if err != nil {
+		writeLaunchError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	store.Put(bots.Bot{Name: name, Title: strings.TrimSpace(req.Title), Workspace: req.Workspace, Soul: strings.TrimSpace(req.Soul), Model: req.Model, Profile: req.Profile, Isolate: req.Isolate, Color: botColor(store, name, req.Color), On: on})
+	if err := bots.Save(bots.Path(dir), store); err != nil {
+		writeLaunchError(w, http.StatusInternalServerError, "could not save the bot")
+		return
+	}
+	b, _ := store.Find(name)
+	writeLaunchJSON(w, map[string]any{"done": "saved", "bot": botRow(b)})
 }
 
 func init() {
