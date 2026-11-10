@@ -19,6 +19,11 @@ import (
 	"github.com/russross/blackfriday/v2"
 )
 
+const (
+	headerContentSecurityPolicy = "Content-Security-Policy"
+	htmlContentType             = "text/html; charset=utf-8"
+)
+
 // The idea page over HTTP, on the dashboard's port.
 //
 //	GET  /idea/<slug>?k=<key>            the page (HTML)
@@ -185,7 +190,7 @@ func ideaOpenHandler(token, deviceStore string) http.HandlerFunc {
 			// The menu of every page: a shell for any browser, the list itself
 			// only for the dashboard's own (a share key opens one page, not all).
 			if !strings.Contains(r.Header.Get("Accept"), "json") {
-				w.Header().Set(headerContentType, "text/html; charset=utf-8")
+				w.Header().Set(headerContentType, htmlContentType)
 				_, _ = fmt.Fprint(w, ideaIndexHTML)
 				return
 			}
@@ -203,8 +208,8 @@ func ideaOpenHandler(token, deviceStore string) http.HandlerFunc {
 		}
 		if what == "" {
 			// The page is a shell; it asks for /doc with the key, and is told there when the key is wrong.
-			w.Header().Set(headerContentType, "text/html; charset=utf-8")
-			w.Header().Set("Content-Security-Policy", ideaPageCSP)
+			w.Header().Set(headerContentType, htmlContentType)
+			w.Header().Set(headerContentSecurityPolicy, ideaPageCSP)
 			_, _ = fmt.Fprint(w, ideaShellFor(r, slug, ideaTrusted(r, token, deviceStore)))
 			return
 		}
@@ -283,7 +288,7 @@ func ideaOpenHandler(token, deviceStore string) http.HandlerFunc {
 			}
 			var a ideaAction
 			if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, ideaBodyLimit)).Decode(&a); err != nil {
-				writeLaunchError(w, http.StatusBadRequest, "could not read the request")
+				writeLaunchError(w, http.StatusBadRequest, requestUnreadableMessage)
 				return
 			}
 			a.Do, a.Slug = what, slug
@@ -308,8 +313,8 @@ func ideaMock(w http.ResponseWriter, r *http.Request, id *idea.Idea) {
 		writeLaunchError(w, http.StatusNotFound, "no mockup yet - corgi idea mock "+id.Meta.Slug)
 		return
 	}
-	w.Header().Set(headerContentType, "text/html; charset=utf-8")
-	w.Header().Set("Content-Security-Policy", "sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:; frame-ancestors 'self'")
+	w.Header().Set(headerContentType, htmlContentType)
+	w.Header().Set(headerContentSecurityPolicy, "sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:; frame-ancestors 'self'")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	http.ServeFile(w, r, path)
 }
@@ -325,7 +330,7 @@ func ideaFile(w http.ResponseWriter, r *http.Request, dir string, id *idea.Idea,
 		mime := mimeFor(path)
 		w.Header().Set(headerContentType, mime)
 		// Anyone with the link may attach a file: whatever it is, it runs nothing here.
-		w.Header().Set("Content-Security-Policy", "default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'; sandbox")
+		w.Header().Set(headerContentSecurityPolicy, "default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'; sandbox")
 		if !(strings.HasPrefix(mime, "image/") || strings.HasPrefix(mime, "video/")) || mime == "image/svg+xml" {
 			w.Header().Set("Content-Disposition", "attachment; filename=\""+filepath.Base(path)+"\"")
 		}
@@ -333,7 +338,7 @@ func ideaFile(w http.ResponseWriter, r *http.Request, dir string, id *idea.Idea,
 	case http.MethodPost:
 		var a ideaAction
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, ideaBodyLimit)).Decode(&a); err != nil {
-			writeLaunchError(w, http.StatusBadRequest, "could not read the request")
+			writeLaunchError(w, http.StatusBadRequest, requestUnreadableMessage)
 			return
 		}
 		a.Do, a.Slug = "file", id.Meta.Slug
@@ -683,7 +688,7 @@ func launchIdeaHandler(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		var a ideaAction
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, ideaBodyLimit)).Decode(&a); err != nil {
-			writeLaunchError(w, http.StatusBadRequest, "could not read the request")
+			writeLaunchError(w, http.StatusBadRequest, requestUnreadableMessage)
 			return
 		}
 		if a.Do == "new" {

@@ -13,6 +13,12 @@ import (
 	"time"
 )
 
+const (
+	gitlabProjectsAPIPath = "/api/v4/projects/"
+	mergeRequestsPath     = "/merge_requests/"
+	gitlabDefaultBase     = "https://gitlab.com"
+)
+
 type GitLab struct {
 	URL    string
 	Token  string
@@ -72,7 +78,7 @@ func (g *GitLab) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 	}
 	base := g.URL
 	if base == "" {
-		base = "https://gitlab.com"
+		base = gitlabDefaultBase
 	}
 	if g.Me == "" {
 		g.Me = cursor["me"]
@@ -196,8 +202,8 @@ type gitlabNote struct {
 	} `json:"author"`
 }
 
-// A reviewer's comment on my own merge request makes no todo unless it
-// mentions me, so the todos alone miss most review feedback. This reads the
+// A reviewer's comment on my own merge request makes no to-do item unless it
+// mentions me, so the to-do list alone misses most review feedback. This reads the
 // notes of my open merge requests that moved since the last round, one event
 // per merge request carrying its newest note. The first round only marks
 // where to start.
@@ -286,13 +292,13 @@ func (g *GitLab) RefState(ctx context.Context, ref string) string {
 	}
 	base := g.URL
 	if base == "" {
-		base = "https://gitlab.com"
+		base = gitlabDefaultBase
 	}
 	var mr struct {
 		State string `json:"state"`
 		Draft bool   `json:"draft"`
 	}
-	if err := g.getInto(ctx, base+"/api/v4/projects/"+url.PathEscape(project)+"/merge_requests/"+num, &mr); err != nil {
+	if err := g.getInto(ctx, base+gitlabProjectsAPIPath+url.PathEscape(project)+mergeRequestsPath+num, &mr); err != nil {
 		return ""
 	}
 	if mr.Draft && mr.State == "opened" {
@@ -310,9 +316,9 @@ func (g *GitLab) AnsweredSince(ctx context.Context, ref string, at time.Time) st
 	}
 	base := g.URL
 	if base == "" {
-		base = "https://gitlab.com"
+		base = gitlabDefaultBase
 	}
-	mrURL := base + "/api/v4/projects/" + url.PathEscape(project) + "/merge_requests/" + num
+	mrURL := base + gitlabProjectsAPIPath + url.PathEscape(project) + mergeRequestsPath + num
 	var notes []gitlabNote
 	if err := g.getInto(ctx, mrURL+"/notes?sort=desc&order_by=created_at&per_page=20", &notes); err != nil {
 		return ""
@@ -339,7 +345,7 @@ func (g *GitLab) AnsweredSince(ctx context.Context, ref string, at time.Time) st
 	var c struct {
 		CommittedDate string `json:"committed_date"`
 	}
-	if err := g.getInto(ctx, base+"/api/v4/projects/"+url.PathEscape(project)+"/repository/commits/"+mr.SHA, &c); err != nil {
+	if err := g.getInto(ctx, base+gitlabProjectsAPIPath+url.PathEscape(project)+"/repository/commits/"+mr.SHA, &c); err != nil {
 		return ""
 	}
 	if t, err := time.Parse(time.RFC3339, c.CommittedDate); err != nil || t.Before(at) {
@@ -355,7 +361,7 @@ func (g *GitLab) MyReviewSince(ctx context.Context, ref string, since time.Time)
 	if !ok || g.Token == "" {
 		return ReviewOutcome{}, false
 	}
-	base := strings.TrimRight(firstOr(g.URL, "https://gitlab.com"), "/")
+	base := strings.TrimRight(firstOr(g.URL, gitlabDefaultBase), "/")
 	if g.Me == "" {
 		var user struct {
 			Username string `json:"username"`
@@ -366,7 +372,7 @@ func (g *GitLab) MyReviewSince(ctx context.Context, ref string, since time.Time)
 		g.Me = user.Username
 	}
 	var notes []gitlabNote
-	if err := g.getInto(ctx, base+"/api/v4/projects/"+url.PathEscape(project)+"/merge_requests/"+num+"/notes?sort=desc&order_by=created_at&per_page=100", &notes); err != nil {
+	if err := g.getInto(ctx, base+gitlabProjectsAPIPath+url.PathEscape(project)+mergeRequestsPath+num+"/notes?sort=desc&order_by=created_at&per_page=100", &notes); err != nil {
 		return ReviewOutcome{}, false
 	}
 	var out ReviewOutcome
@@ -418,7 +424,7 @@ func (g *GitLab) PullStatus(ctx context.Context, ref string) (PullStatus, bool) 
 	}
 	base := g.URL
 	if base == "" {
-		base = "https://gitlab.com"
+		base = gitlabDefaultBase
 	}
 	var mr struct {
 		State        string `json:"state"`
@@ -430,7 +436,7 @@ func (g *GitLab) PullStatus(ctx context.Context, ref string) (PullStatus, bool) 
 			Username string `json:"username"`
 		} `json:"author"`
 	}
-	endpoint := base + "/api/v4/projects/" + url.PathEscape(project) + "/merge_requests/" + num
+	endpoint := base + gitlabProjectsAPIPath + url.PathEscape(project) + mergeRequestsPath + num
 	if err := g.getInto(ctx, endpoint, &mr); err != nil {
 		return PullStatus{}, false
 	}
@@ -488,7 +494,7 @@ func (g *GitLab) TokenScopes(ctx context.Context) ([]string, error) {
 	}
 	base := g.URL
 	if base == "" {
-		base = "https://gitlab.com"
+		base = gitlabDefaultBase
 	}
 	var out struct {
 		Scopes []string `json:"scopes"`

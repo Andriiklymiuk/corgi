@@ -15,13 +15,17 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const (
+	claudeMemoryFile = "CLAUDE.md"
+)
+
 func promoteLesson(agentDir, workspace, root string, n int) (string, error) {
 	list := lessons.List(agentDir, workspace)
 	if n < 1 || n > len(list) {
 		return "", fmt.Errorf("%s has %d lessons; pick 1 to %d (corgi agent lesson list)", workspace, len(list), len(list))
 	}
 	line := "- " + strings.TrimSpace(list[n-1].Text)
-	path := filepath.Join(root, "CLAUDE.md")
+	path := filepath.Join(root, claudeMemoryFile)
 	data, err := os.ReadFile(path)
 	if err != nil && !os.IsNotExist(err) {
 		return "", err
@@ -77,7 +81,7 @@ func promoteOnBranch(agentDir, workspace, root string, n int) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if out, err := exec.Command("git", "-C", tree, "add", "CLAUDE.md").CombinedOutput(); err != nil {
+	if out, err := exec.Command("git", "-C", tree, "add", claudeMemoryFile).CombinedOutput(); err != nil {
 		return "", fmt.Errorf("git add: %v\n%s", err, out)
 	}
 	msg := "CLAUDE.md: " + strings.TrimPrefix(line, "- ")
@@ -146,10 +150,10 @@ and becomes a pull request (gh); your checkout is not touched.
 			exitWithError("agent_lesson", err, 1)
 		}
 		if utils.JSONOutput {
-			utils.PrintJSON(map[string]any{"workspace": ws, "path": filepath.Join(root, "CLAUDE.md"), "line": line})
+			utils.PrintJSON(map[string]any{"workspace": ws, "path": filepath.Join(root, claudeMemoryFile), "line": line})
 			return
 		}
-		utils.Infof("%s → %s (commit it when you are happy)\n", line, filepath.Join(root, "CLAUDE.md"))
+		utils.Infof("%s → %s (commit it when you are happy)\n", line, filepath.Join(root, claudeMemoryFile))
 	},
 }
 

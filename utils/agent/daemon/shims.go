@@ -39,13 +39,13 @@ func writeForgeShims(agentDir string) string {
 	}
 	wrote := false
 	for _, tool := range forgeTools {
-		real, err := exec.LookPath(tool)
-		if err != nil || strings.HasPrefix(real, dir) {
+		realPath, err := exec.LookPath(tool)
+		if err != nil || strings.HasPrefix(realPath, dir) {
 			continue
 		}
 		script := "#!/bin/sh\n" +
 			"exec " + strconv.Quote(perl) + " -e 'alarm shift; exec @ARGV or die \"cannot run $ARGV[0]\\n\"' " +
-			strconv.Itoa(forgeCallLimit) + " " + strconv.Quote(real) + " \"$@\"\n"
+			strconv.Itoa(forgeCallLimit) + " " + strconv.Quote(realPath) + " \"$@\"\n"
 		if os.WriteFile(filepath.Join(dir, tool), []byte(script), 0o700) == nil {
 			wrote = true
 		}

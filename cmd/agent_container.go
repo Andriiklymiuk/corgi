@@ -14,6 +14,11 @@ import (
 	"golang.org/x/term"
 )
 
+const (
+	claudeOAuthTokenEnvPrefix = "CLAUDE_CODE_OAUTH_TOKEN="
+	containerComposeFile      = "compose.yml"
+)
+
 // corgi in a container: the same daemon loop as on a laptop, on any Docker
 // host, this machine or a server over ssh. The image carries corgi, Claude
 // Code, git and the forge CLIs; the agent dir and the clones live in
@@ -116,7 +121,7 @@ func runAgentContainer(cmd *cobra.Command, args []string) error {
 		env = append(env, "DOCKER_HOST="+host)
 	}
 	compose := func(stream bool, parts ...string) error {
-		c := exec.Command("docker", append([]string{"compose", "-f", filepath.Join(containerDir(dir), "compose.yml")}, parts...)...)
+		c := exec.Command("docker", append([]string{"compose", "-f", filepath.Join(containerDir(dir), containerComposeFile)}, parts...)...)
 		c.Env = env
 		c.Stdout, c.Stderr = os.Stdout, os.Stderr
 		if stream {
@@ -156,7 +161,7 @@ func runAgentContainer(cmd *cobra.Command, args []string) error {
 		utils.Info("the volumes (agent dir, clones, Claude login) stay; docker volume rm corgi-agent-data corgi-agent-work corgi-agent-claude removes them")
 		return compose(false, "down")
 	case "status":
-		if _, err := os.Stat(filepath.Join(containerDir(dir), "compose.yml")); err != nil {
+		if _, err := os.Stat(filepath.Join(containerDir(dir), containerComposeFile)); err != nil {
 			utils.Info("no container yet - corgi agent container up")
 			return nil
 		}
@@ -179,9 +184,9 @@ func writeContainerFiles(dir, clone string, withDocker bool) error {
 		envLines = append(envLines, "CORGI_CLONE="+clone)
 	}
 	files := map[string]string{
-		"Dockerfile":    strings.Replace(containerDockerfile, "ARG CORGI_VERSION=", "ARG CORGI_VERSION="+APP_VERSION, 1),
-		"entrypoint.sh": containerEntrypoint,
-		"compose.yml":   fmt.Sprintf(containerCompose, extra),
+		"Dockerfile":         strings.Replace(containerDockerfile, "ARG CORGI_VERSION=", "ARG CORGI_VERSION="+APP_VERSION, 1),
+		"entrypoint.sh":      containerEntrypoint,
+		containerComposeFile: fmt.Sprintf(containerCompose, extra),
 	}
 	for name, body := range files {
 		mode := os.FileMode(0o600)
@@ -195,7 +200,7 @@ func writeContainerFiles(dir, clone string, withDocker bool) error {
 	envPath := filepath.Join(out, ".env")
 	if existing, err := os.ReadFile(envPath); err == nil {
 		for _, line := range strings.Split(string(existing), "\n") {
-			if strings.HasPrefix(line, "CLAUDE_CODE_OAUTH_TOKEN=") || strings.HasPrefix(line, "GIT_AUTHOR_") {
+			if strings.HasPrefix(line, claudeOAuthTokenEnvPrefix) || strings.HasPrefix(line, "GIT_AUTHOR_") {
 				envLines = append(envLines, line)
 			}
 		}
@@ -206,7 +211,7 @@ func writeContainerFiles(dir, clone string, withDocker bool) error {
 func ensureContainerToken(dir string) error {
 	envPath := filepath.Join(containerDir(dir), ".env")
 	existing, _ := os.ReadFile(envPath)
-	if strings.Contains(string(existing), "CLAUDE_CODE_OAUTH_TOKEN=") {
+	if strings.Contains(string(existing), claudeOAuthTokenEnvPrefix) {
 		return nil
 	}
 	fmt.Fprint(os.Stderr, "Claude token for the container (claude setup-token prints one; empty = log in inside later): ")
@@ -225,7 +230,7 @@ func ensureContainerToken(dir string) error {
 		return err
 	}
 	defer f.Close()
-	_, err = f.WriteString("CLAUDE_CODE_OAUTH_TOKEN=" + token + "\n")
+	_, err = f.WriteString(claudeOAuthTokenEnvPrefix + token + "\n")
 	return err
 }
 

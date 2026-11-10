@@ -24,6 +24,12 @@ import (
 	"andriiklymiuk/corgi/utils/agent/watch"
 )
 
+const (
+	unattendedRunNote = "\n\nNobody is reading this run as it happens. Never ask a question, never offer options or wait for a choice: "
+	itIsPrefix        = "it is "
+	notStartedPrefix  = "not started: "
+)
+
 type WatchSpec struct {
 	Workspace string
 	Dir       string
@@ -632,12 +638,12 @@ func (d *Daemon) stillWorthFixing(ctx context.Context, spec WatchSpec, e watch.E
 	states := watch.LoadStateLog(d.Dir)
 	if known, ok := states.Get(e.Key); ok {
 		if over := watch.Settled(e, known.Status); over != "" {
-			return "it is " + over
+			return itIsPrefix + over
 		}
 	}
 	if e.Kind == watch.KindCIFailed {
 		if over := watch.Settled(e, e.State); over != "" {
-			return "it is " + over
+			return itIsPrefix + over
 		}
 		if d.watchState != nil {
 			if n := d.watchState.Fixes.RunsOnSince(spec.Workspace, e.Ref, string(watch.KindCIFailed), time.Now().Add(-24*time.Hour)); n >= maxRedBuildRuns {
@@ -661,7 +667,7 @@ func (d *Daemon) stillWorthFixing(ctx context.Context, spec WatchSpec, e watch.E
 		}
 		_ = states.Set(e.Key, state, time.Now())
 		if over := watch.Settled(e, state); over != "" {
-			return "it is " + over
+			return itIsPrefix + over
 		}
 		break
 	}
@@ -772,11 +778,11 @@ func (d *Daemon) startFix(ctx context.Context, spec WatchSpec, e watch.Event) st
 	now := time.Now()
 	if why := chatRunRefusal(spec, e); why != "" {
 		d.watchState.Fixes.DropDeferred(e.Key)
-		return "not started: " + why
+		return notStartedPrefix + why
 	}
 	if why := d.stillWorthFixing(ctx, spec, e); why != "" {
 		utils.Infof("agent: watch %s: not fixing %s: %s\n", spec.Workspace, e.Ref, why)
-		return "not started: " + why
+		return notStartedPrefix + why
 	}
 	if at, hold := reviewHold(spec, e, now); hold {
 		at = d.watchState.Fixes.DeferUntil(e, at)
@@ -1281,20 +1287,20 @@ const postedProof = "What you post goes out under my name: state only what you p
 
 func unattendedSuffix(spec WatchSpec, e watch.Event) string {
 	if e.Kind == watch.KindReviewRequested {
-		return "\n\nNobody is reading this run as it happens. Never ask a question, never offer options or wait for a choice: " +
+		return unattendedRunNote +
 			"decide as the skill says and go on. Change no code and push nothing. " + postedProof +
 			"If you truly cannot proceed, leave a handoff with `corgi agent handoff --ref " + e.Ref + " --blocked <reason>` and stop. " +
 			"Start your final message with `Outcome: replied` if you posted anything, `Outcome: nothing` if you posted nothing anywhere, " +
 			"then one line per pull request saying what you posted on it: approved, comments (how many), or nothing."
 	}
 	if watch.ReadOnlyRoutine(e) {
-		return "\n\nNobody is reading this run as it happens. Never ask a question, never offer options or wait for a choice: " +
+		return unattendedRunNote +
 			"pick the recommended option yourself and go on. This run reads: no branch, no commit, no pull request, no handoff. " +
 			"A source you cannot reach (a tracker that wants a sign-in) gets one line inside the answer; go on with the rest.\n" +
 			"Start your final message with the line `Outcome: nothing`, then the answer exactly as asked, and nothing after it: " +
 			"no list of what you ran, no review of your own answer, no notes on earlier runs."
 	}
-	s := "\n\nNobody is reading this run as it happens. Never ask a question, never offer options or wait for a choice: " +
+	s := unattendedRunNote +
 		"pick the recommended option yourself, say which you picked and why, and go on. " +
 		"If you truly cannot proceed, leave a handoff with `--blocked <reason>` (the question goes in `--uncertain`) and stop.\n" +
 		"Before you finish: review your own diff the way you would review someone else's, " +
@@ -1456,7 +1462,7 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 		case err != nil:
 			utils.Infof("agent: could not claim %s, going ahead: %v\n", e.Ref, err)
 		case !ok:
-			d.watchState.Fixes.Finish(e.Key, nil, "", "not started: "+holder+" is already on it", time.Now())
+			d.watchState.Fixes.Finish(e.Key, nil, "", notStartedPrefix+holder+" is already on it", time.Now())
 			utils.Infof("agent: %s is already claimed by %s\n", e.Ref, holder)
 			return
 		}
@@ -1469,9 +1475,9 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 	before, hadBefore := usage.ReadLimits(spec.ConfigDir)
 	handover := d.watchState.Fixes.LastHandover(spec.Workspace, e.Ref)
 	started := time.Now()
-	print := fixPrint(spec, e, handover)
+	fix := fixPrint(spec, e, handover)
 	if model := fixModel(spec, e, d.watchState.Fixes.FailedInARow(spec.Workspace, e.Ref)); model != "" {
-		print.Model = model
+		fix.Model = model
 		fmt.Fprintf(logFile, "=== model: %s\n", model)
 		d.watchState.Fixes.SetModel(e.Key, harness.ShortModel(model))
 	}
@@ -1486,15 +1492,15 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 			return
 		}
 		d.watchState.Fixes.SetBranch(e.Key, branch)
-		if onExistingPull(e) {
-			print.Prompt += PullIsolationNote(trees)
+		if onOwnPullRequest(e) {
+			fix.Prompt += PullIsolationNote(trees)
 		} else {
-			print.Prompt += IsolationNote(branch, trees)
+			fix.Prompt += IsolationNote(branch, trees)
 		}
 		fmt.Fprintf(logFile, "=== worktrees on %s: %s\n", branch, strings.Join(trees, ", "))
 		if d.RunStack != nil {
 			if note := d.RunStack(spec.Dir, branch, spec.RunDB); note != "" {
-				print.Prompt += note
+				fix.Prompt += note
 				if d.ReleaseStack != nil && spec.RunDB != "shared" {
 					defer d.ReleaseStack(spec.Dir, branch)
 				}
@@ -1507,7 +1513,7 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 	}
 	d.watchState.Fixes.SetHarness(e.Key, h.Name)
 	env = harnessEnv(spec, h, env)
-	cmd := spec.runCommand(ctx, h, spec.Dir, env, h.PrintArgs(print)...)
+	cmd := spec.runCommand(ctx, h, spec.Dir, env, h.PrintArgs(fix)...)
 	cmd.Stdin = nil
 	raw, runErr := cmd.Output()
 	out, receipt := unwrapWith(h, raw)
@@ -1982,14 +1988,6 @@ func IsolationNote(branch string, trees []string) string {
 	return "\n\nThis run is isolated: every repository already has a worktree on branch `" + branch +
 		"`, created off its current HEAD. Work only in these directories and open the pull requests from this branch; " +
 		"do not create another branch and do not edit the main checkouts:\n- " + strings.Join(trees, "\n- ")
-}
-
-func onExistingPull(e watch.Event) bool {
-	switch e.Kind {
-	case watch.KindPRComment, watch.KindPRReview, watch.KindCIFailed:
-		return true
-	}
-	return false
 }
 
 // PullIsolationNote is for a run on a pull request that already exists: the

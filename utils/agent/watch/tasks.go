@@ -345,7 +345,7 @@ const (
 
 // Settle keeps the board honest about tasks whose run is over: merged is done,
 // closed is canceled, an open pull request is in review, a run that left
-// nothing goes to review, and one that failed goes back to Todo with the
+// nothing goes to review, and one that failed goes back to the start with the
 // reason. It returns what it moved, for the log.
 func (l *TaskLog) Settle(records []FixRecord, pulls map[string]PullStatus, skip func(Task) bool, now time.Time) []string {
 	l.mu.Lock()

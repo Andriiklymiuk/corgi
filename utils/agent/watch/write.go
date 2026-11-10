@@ -13,6 +13,18 @@ import (
 	"time"
 )
 
+const (
+	gitlabMergeRequestsWebPath = "/-/merge_requests/"
+	jiraIssueAPIPath           = "/rest/api/3/issue/"
+	bearerPrefix               = "Bearer "
+	headerContentType          = "Content-Type"
+	gitlabTokenHeader          = "PRIVATE-TOKEN"
+	jsonContentType            = "application/json"
+	githubJSONAccept           = "application/vnd.github+json"
+	githubHostPrefix           = "github.com/"
+	githubReposAPI             = "https://api.github.com/repos/"
+)
+
 type Status struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
@@ -102,14 +114,14 @@ func (j *Jira) Move(ctx context.Context, ref, status string) error {
 			} `json:"to"`
 		} `json:"transitions"`
 	}
-	if err := j.get(ctx, "/rest/api/3/issue/"+ref+"/transitions", nil, &available); err != nil {
+	if err := j.get(ctx, jiraIssueAPIPath+ref+"/transitions", nil, &available); err != nil {
 		return err
 	}
 	want := strings.ToLower(strings.TrimSpace(status))
 	for _, t := range available.Transitions {
 		if strings.ToLower(t.To.Name) == want || strings.ToLower(t.Name) == want {
 			body := map[string]any{"transition": map[string]string{"id": t.ID}}
-			return j.send(ctx, http.MethodPost, "/rest/api/3/issue/"+ref+"/transitions", body)
+			return j.send(ctx, http.MethodPost, jiraIssueAPIPath+ref+"/transitions", body)
 		}
 	}
 	var names []string
@@ -123,15 +135,15 @@ func (j *Jira) Move(ctx context.Context, ref, status string) error {
 }
 
 func (j *Jira) Assign(ctx context.Context, ref, userID string) error {
-	return j.send(ctx, http.MethodPut, "/rest/api/3/issue/"+ref+"/assignee", map[string]any{"accountId": userID})
+	return j.send(ctx, http.MethodPut, jiraIssueAPIPath+ref+"/assignee", map[string]any{"accountId": userID})
 }
 
 func (j *Jira) Comment(ctx context.Context, ref, body string) error {
-	return j.send(ctx, http.MethodPost, "/rest/api/3/issue/"+ref+"/comment", map[string]any{"body": adf(body)})
+	return j.send(ctx, http.MethodPost, jiraIssueAPIPath+ref+"/comment", map[string]any{"body": adf(body)})
 }
 
 func (j *Jira) UpdateComment(ctx context.Context, ref, id, body string) error {
-	return j.send(ctx, http.MethodPut, "/rest/api/3/issue/"+ref+"/comment/"+url.PathEscape(id), map[string]any{"body": adf(body)})
+	return j.send(ctx, http.MethodPut, jiraIssueAPIPath+ref+"/comment/"+url.PathEscape(id), map[string]any{"body": adf(body)})
 }
 
 func adf(text string) map[string]any {
@@ -207,8 +219,8 @@ func (j *Jira) send(ctx context.Context, method, path string, body any) error {
 		return fmt.Errorf("jira %s: %w", path, err)
 	}
 	req.SetBasicAuth(j.Email, j.Token)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
+	req.Header.Set(headerContentType, jsonContentType)
+	req.Header.Set("Accept", jsonContentType)
 	client := j.Client
 	if client == nil {
 		client = &http.Client{Timeout: 30 * time.Second}
@@ -372,9 +384,9 @@ func jsonString(s string) string {
 
 func ClosePR(ctx context.Context, s Secrets, link string) error {
 	switch {
-	case strings.Contains(link, "github.com/"):
+	case strings.Contains(link, githubHostPrefix):
 		return closeGitHubPR(ctx, s, link)
-	case strings.Contains(link, "/-/merge_requests/"):
+	case strings.Contains(link, gitlabMergeRequestsWebPath):
 		return closeGitLabMR(ctx, s, link)
 	}
 	return fmt.Errorf("%s is not a GitHub pull request or a GitLab merge request", link)
@@ -392,12 +404,12 @@ func closeGitHubPR(ctx context.Context, s Secrets, link string) error {
 	}
 	body, _ := json.Marshal(map[string]string{"state": "closed"})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPatch,
-		"https://api.github.com/repos/"+m[1]+"/pulls/"+m[2], strings.NewReader(string(body)))
+		githubReposAPI+m[1]+pullsSegment+m[2], strings.NewReader(string(body)))
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Authorization", "Bearer "+s.GitHub)
-	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("Authorization", bearerPrefix+s.GitHub)
+	req.Header.Set("Accept", githubJSONAccept)
 	return doClose(req, link)
 }
 
@@ -433,7 +445,7 @@ func closeGitLabMR(ctx context.Context, s Secrets, link string) error {
 	if err != nil {
 		return err
 	}
-	req.Header.Set("PRIVATE-TOKEN", s.GitLab)
+	req.Header.Set(gitlabTokenHeader, s.GitLab)
 	return doClose(req, link)
 }
 
@@ -454,7 +466,7 @@ func doRequest(req *http.Request, link, verb string) error {
 
 func ReadyPR(ctx context.Context, s Secrets, link string) error {
 	switch {
-	case strings.Contains(link, "github.com/"):
+	case strings.Contains(link, githubHostPrefix):
 		m := githubPRPath.FindStringSubmatch(link)
 		if m == nil {
 			return fmt.Errorf("cannot read a repo and number out of %s", link)
@@ -462,12 +474,12 @@ func ReadyPR(ctx context.Context, s Secrets, link string) error {
 		if s.GitHub == "" {
 			return ErrNoToken
 		}
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.github.com/repos/"+m[1]+"/pulls/"+m[2], nil)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, githubReposAPI+m[1]+pullsSegment+m[2], nil)
 		if err != nil {
 			return err
 		}
-		req.Header.Set("Authorization", "Bearer "+s.GitHub)
-		req.Header.Set("Accept", "application/vnd.github+json")
+		req.Header.Set("Authorization", bearerPrefix+s.GitHub)
+		req.Header.Set("Accept", githubJSONAccept)
 		resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
 		if err != nil {
 			return fmt.Errorf("reading %s: %w", link, err)
@@ -493,10 +505,10 @@ func ReadyPR(ctx context.Context, s Secrets, link string) error {
 		if err != nil {
 			return err
 		}
-		req.Header.Set("Authorization", "Bearer "+s.GitHub)
-		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", bearerPrefix+s.GitHub)
+		req.Header.Set(headerContentType, jsonContentType)
 		return doGraphQL(req, link)
-	case strings.Contains(link, "/-/merge_requests/"):
+	case strings.Contains(link, gitlabMergeRequestsWebPath):
 		if s.GitLab == "" {
 			return ErrNoToken
 		}
@@ -509,7 +521,7 @@ func ReadyPR(ctx context.Context, s Secrets, link string) error {
 		if err != nil {
 			return err
 		}
-		req.Header.Set("PRIVATE-TOKEN", s.GitLab)
+		req.Header.Set(gitlabTokenHeader, s.GitLab)
 		resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
 		if err != nil {
 			return fmt.Errorf("reading %s: %w", link, err)
@@ -532,8 +544,8 @@ func ReadyPR(ctx context.Context, s Secrets, link string) error {
 		if err != nil {
 			return err
 		}
-		req.Header.Set("PRIVATE-TOKEN", s.GitLab)
-		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set(gitlabTokenHeader, s.GitLab)
+		req.Header.Set(headerContentType, jsonContentType)
 		return doClose(req, link)
 	}
 	return fmt.Errorf("%s is not a GitHub pull request or a GitLab merge request", link)
@@ -541,7 +553,7 @@ func ReadyPR(ctx context.Context, s Secrets, link string) error {
 
 func DraftPR(ctx context.Context, s Secrets, link string) error {
 	switch {
-	case strings.Contains(link, "github.com/"):
+	case strings.Contains(link, githubHostPrefix):
 		m := githubPRPath.FindStringSubmatch(link)
 		if m == nil {
 			return fmt.Errorf("cannot read a repo and number out of %s", link)
@@ -564,10 +576,10 @@ func DraftPR(ctx context.Context, s Secrets, link string) error {
 		if err != nil {
 			return err
 		}
-		req.Header.Set("Authorization", "Bearer "+s.GitHub)
-		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", bearerPrefix+s.GitHub)
+		req.Header.Set(headerContentType, jsonContentType)
 		return doGraphQL(req, link)
-	case strings.Contains(link, "/-/merge_requests/"):
+	case strings.Contains(link, gitlabMergeRequestsWebPath):
 		if s.GitLab == "" {
 			return ErrNoToken
 		}
@@ -580,7 +592,7 @@ func DraftPR(ctx context.Context, s Secrets, link string) error {
 		if err != nil {
 			return err
 		}
-		req.Header.Set("PRIVATE-TOKEN", s.GitLab)
+		req.Header.Set(gitlabTokenHeader, s.GitLab)
 		resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
 		if err != nil {
 			return fmt.Errorf("reading %s: %w", link, err)
@@ -602,8 +614,8 @@ func DraftPR(ctx context.Context, s Secrets, link string) error {
 		if err != nil {
 			return err
 		}
-		req.Header.Set("PRIVATE-TOKEN", s.GitLab)
-		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set(gitlabTokenHeader, s.GitLab)
+		req.Header.Set(headerContentType, jsonContentType)
 		return doClose(req, link)
 	}
 	return fmt.Errorf("%s is not a GitHub pull request or a GitLab merge request", link)
@@ -611,7 +623,7 @@ func DraftPR(ctx context.Context, s Secrets, link string) error {
 
 func ReopenPR(ctx context.Context, s Secrets, link string) error {
 	switch {
-	case strings.Contains(link, "github.com/"):
+	case strings.Contains(link, githubHostPrefix):
 		m := githubPRPath.FindStringSubmatch(link)
 		if m == nil {
 			return fmt.Errorf("cannot read a repo and number out of %s", link)
@@ -621,14 +633,14 @@ func ReopenPR(ctx context.Context, s Secrets, link string) error {
 		}
 		body, _ := json.Marshal(map[string]string{"state": "open"})
 		req, err := http.NewRequestWithContext(ctx, http.MethodPatch,
-			"https://api.github.com/repos/"+m[1]+"/pulls/"+m[2], strings.NewReader(string(body)))
+			githubReposAPI+m[1]+pullsSegment+m[2], strings.NewReader(string(body)))
 		if err != nil {
 			return err
 		}
-		req.Header.Set("Authorization", "Bearer "+s.GitHub)
-		req.Header.Set("Accept", "application/vnd.github+json")
+		req.Header.Set("Authorization", bearerPrefix+s.GitHub)
+		req.Header.Set("Accept", githubJSONAccept)
 		return doClose(req, link)
-	case strings.Contains(link, "/-/merge_requests/"):
+	case strings.Contains(link, gitlabMergeRequestsWebPath):
 		if s.GitLab == "" {
 			return ErrNoToken
 		}
@@ -641,7 +653,7 @@ func ReopenPR(ctx context.Context, s Secrets, link string) error {
 		if err != nil {
 			return err
 		}
-		req.Header.Set("PRIVATE-TOKEN", s.GitLab)
+		req.Header.Set(gitlabTokenHeader, s.GitLab)
 		return doClose(req, link)
 	}
 	return fmt.Errorf("%s is not a GitHub pull request or a GitLab merge request", link)
@@ -657,12 +669,12 @@ func readGitHubPR(ctx context.Context, s Secrets, repo, num, link string) (struc
 		Draft  bool   `json:"draft"`
 		State  string `json:"state"`
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.github.com/repos/"+repo+"/pulls/"+num, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, githubReposAPI+repo+pullsSegment+num, nil)
 	if err != nil {
 		return pr, err
 	}
-	req.Header.Set("Authorization", "Bearer "+s.GitHub)
-	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("Authorization", bearerPrefix+s.GitHub)
+	req.Header.Set("Accept", githubJSONAccept)
 	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
 	if err != nil {
 		return pr, fmt.Errorf("reading %s: %w", link, err)
@@ -716,7 +728,7 @@ func doGraphQL(req *http.Request, link string) error {
 
 func MergePR(ctx context.Context, s Secrets, link string) error {
 	switch {
-	case strings.Contains(link, "github.com/"):
+	case strings.Contains(link, githubHostPrefix):
 		m := githubPRPath.FindStringSubmatch(link)
 		if m == nil {
 			return fmt.Errorf("cannot read a repo and number out of %s", link)
@@ -725,15 +737,15 @@ func MergePR(ctx context.Context, s Secrets, link string) error {
 			return ErrNoToken
 		}
 		req, err := http.NewRequestWithContext(ctx, http.MethodPut,
-			"https://api.github.com/repos/"+m[1]+"/pulls/"+m[2]+"/merge", strings.NewReader(`{}`))
+			githubReposAPI+m[1]+pullsSegment+m[2]+"/merge", strings.NewReader(`{}`))
 		if err != nil {
 			return err
 		}
-		req.Header.Set("Authorization", "Bearer "+s.GitHub)
-		req.Header.Set("Accept", "application/vnd.github+json")
-		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", bearerPrefix+s.GitHub)
+		req.Header.Set("Accept", githubJSONAccept)
+		req.Header.Set(headerContentType, jsonContentType)
 		return doRequest(req, link, "merging")
-	case strings.Contains(link, "/-/merge_requests/"):
+	case strings.Contains(link, gitlabMergeRequestsWebPath):
 		if s.GitLab == "" {
 			return ErrNoToken
 		}
@@ -746,7 +758,7 @@ func MergePR(ctx context.Context, s Secrets, link string) error {
 		if err != nil {
 			return err
 		}
-		req.Header.Set("PRIVATE-TOKEN", s.GitLab)
+		req.Header.Set(gitlabTokenHeader, s.GitLab)
 		return doRequest(req, link, "merging")
 	}
 	return fmt.Errorf("%s is not a GitHub pull request or a GitLab merge request", link)
@@ -773,7 +785,7 @@ func WriteFix(err error) string {
 	msg := err.Error()
 	switch {
 	case strings.Contains(msg, "insufficient_scope"):
-		if strings.Contains(msg, "github.com/") {
+		if strings.Contains(msg, githubHostPrefix) {
 			return "the GitHub token cannot write - it needs the repo scope; corgi agent watch auth"
 		}
 		return "the GitLab token cannot write - it needs the api scope, read_api is not enough; corgi agent watch auth"
@@ -796,7 +808,7 @@ func (j *Jira) RecentComments(ctx context.Context, ref string, limit int) ([]Com
 	params := url.Values{}
 	params.Set("orderBy", "-created")
 	params.Set("maxResults", fmt.Sprint(limit))
-	if err := j.get(ctx, "/rest/api/3/issue/"+url.PathEscape(ref)+"/comment", params, &page); err != nil {
+	if err := j.get(ctx, jiraIssueAPIPath+url.PathEscape(ref)+"/comment", params, &page); err != nil {
 		return nil, err
 	}
 	out := make([]Comment, 0, len(page.Comments))
@@ -853,7 +865,7 @@ func (j *Jira) RefState(ctx context.Context, ref string) string {
 	}
 	params := url.Values{}
 	params.Set("fields", "status")
-	if err := j.get(ctx, "/rest/api/3/issue/"+url.PathEscape(ref), params, &issue); err != nil {
+	if err := j.get(ctx, jiraIssueAPIPath+url.PathEscape(ref), params, &issue); err != nil {
 		return ""
 	}
 	return issue.Fields.Status.Name
@@ -891,7 +903,7 @@ func ReviewPR(ctx context.Context, s Secrets, link, verdict, body string) error 
 		return fmt.Errorf("say what to change")
 	}
 	switch {
-	case strings.Contains(link, "github.com/"):
+	case strings.Contains(link, githubHostPrefix):
 		m := githubPRPath.FindStringSubmatch(link)
 		if m == nil {
 			return fmt.Errorf("cannot read a repo and number out of %s", link)
@@ -902,15 +914,15 @@ func ReviewPR(ctx context.Context, s Secrets, link, verdict, body string) error 
 		event := map[string]string{ReviewApprove: "APPROVE", ReviewRequest: "REQUEST_CHANGES", ReviewComment: "COMMENT"}[verdict]
 		payload, _ := json.Marshal(map[string]string{"event": event, "body": body})
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-			"https://api.github.com/repos/"+m[1]+"/pulls/"+m[2]+"/reviews", bytes.NewReader(payload))
+			githubReposAPI+m[1]+pullsSegment+m[2]+"/reviews", bytes.NewReader(payload))
 		if err != nil {
 			return err
 		}
-		req.Header.Set("Authorization", "Bearer "+s.GitHub)
-		req.Header.Set("Accept", "application/vnd.github+json")
-		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", bearerPrefix+s.GitHub)
+		req.Header.Set("Accept", githubJSONAccept)
+		req.Header.Set(headerContentType, jsonContentType)
 		return doClose(req, link)
-	case strings.Contains(link, "/-/merge_requests/"):
+	case strings.Contains(link, gitlabMergeRequestsWebPath):
 		if s.GitLab == "" {
 			return ErrNoToken
 		}
@@ -928,9 +940,9 @@ func ReviewPR(ctx context.Context, s Secrets, link, verdict, body string) error 
 			if err != nil {
 				return err
 			}
-			req.Header.Set("PRIVATE-TOKEN", s.GitLab)
+			req.Header.Set(gitlabTokenHeader, s.GitLab)
 			if payload != nil {
-				req.Header.Set("Content-Type", "application/json")
+				req.Header.Set(headerContentType, jsonContentType)
 			}
 			return doClose(req, link)
 		}

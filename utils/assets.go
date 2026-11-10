@@ -9,6 +9,10 @@ import (
 	"strings"
 )
 
+const (
+	quietFlag = "--quiet"
+)
+
 const AssetsBranchPrefix = "pr-assets/"
 
 type AssetFile struct {
@@ -55,9 +59,9 @@ func PushAssets(dir, key, base string, files []string) (AssetPush, error) {
 	}
 
 	branch := AssetsBranchPrefix + key
-	_ = gitRunNoPrompt(dir, "fetch", "--quiet", "origin", branch)
+	_ = gitRunNoPrompt(dir, "fetch", quietFlag, "origin", branch)
 	start := "origin/" + branch
-	if _, err := gitOut(dir, gitRevParse, "--verify", "--quiet", start); err != nil {
+	if _, err := gitOut(dir, gitRevParse, "--verify", quietFlag, start); err != nil {
 		start, err = assetsStartRef(dir, base)
 		if err != nil {
 			return out, err
@@ -102,13 +106,13 @@ func PushAssets(dir, key, base string, files []string) (AssetPush, error) {
 	if err := gitRun(wt, "add", "-f", "--", rel); err != nil {
 		return out, fmt.Errorf("git add: %v", err)
 	}
-	if _, err := gitOut(wt, "diff", "--cached", "--quiet"); err != nil {
+	if _, err := gitOut(wt, "diff", "--cached", quietFlag); err != nil {
 		msg := "PR assets for " + key + " (screenshots only, never merge)"
-		if err := gitRun(wt, "commit", "--quiet", "-m", msg); err != nil {
+		if err := gitRun(wt, "commit", quietFlag, "-m", msg); err != nil {
 			return out, fmt.Errorf("git commit: %v", err)
 		}
 	}
-	if err := gitRunNoPrompt(wt, "push", "--quiet", "-u", "origin", branch); err != nil {
+	if err := gitRunNoPrompt(wt, "push", quietFlag, "-u", "origin", branch); err != nil {
 		return out, fmt.Errorf("git push origin %s: %v", branch, err)
 	}
 	head, _ := gitOut(wt, gitRevParse, "HEAD")
@@ -130,7 +134,7 @@ func assetsStartRef(dir, base string) (string, error) {
 		return "", fmt.Errorf("could not resolve the base branch; pass --base")
 	}
 	for _, ref := range []string{"origin/" + base, base} {
-		if _, err := gitOut(dir, gitRevParse, "--verify", "--quiet", ref); err == nil {
+		if _, err := gitOut(dir, gitRevParse, "--verify", quietFlag, ref); err == nil {
 			return ref, nil
 		}
 	}

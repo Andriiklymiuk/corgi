@@ -21,8 +21,8 @@ const (
 	envURL          = "\n%sURL=%s"
 	envDashboardURL = "\n%sDASHBOARD_URL=%s\n"
 
-	urlHostPort    = "http://%s:%s"
-	urlHostPortInt = "http://%s:%d"
+	hostPortText = "%s:%s"
+	hostPortInt  = "%s:%d"
 
 	concat5 = "%s%s%s%s%s"
 	concat6 = "%s%s%s%s%s%s"
@@ -51,7 +51,7 @@ var DriverConfigs = map[string]DriverConfig{
 			user := fmt.Sprintf(envUser, serviceNameInEnv, db.User)
 			port := fmt.Sprintf(envPort, serviceNameInEnv, db.Port)
 			password := fmt.Sprintf(envPassword, serviceNameInEnv, db.Password)
-			dashboardUrl := fmt.Sprintf(envDashboardURL, serviceNameInEnv, fmt.Sprintf(urlHostPort, db.Host, "15672"))
+			dashboardUrl := fmt.Sprintf(envDashboardURL, serviceNameInEnv, PlainHTTPURL(fmt.Sprintf(hostPortText, db.Host, "15672"), ""))
 
 			return fmt.Sprintf(concat5, host, user, port, password, dashboardUrl)
 		},
@@ -70,7 +70,7 @@ var DriverConfigs = map[string]DriverConfig{
 				fmt.Sprintf(awsRegionEnvFmt, templates.SqsRegion),
 				fmt.Sprintf("\n%sENDPOINT=http://%s:%d/000000000000/", serviceNameInEnv, db.Host, db.Port),
 				fmt.Sprintf("\n%sQUEUE_NAME=%s", serviceNameInEnv, db.DatabaseName),
-				fmt.Sprintf("\n%sQUEUE_URL=%s", serviceNameInEnv, fmt.Sprintf("http://%s:%d/000000000000/%s", db.Host, db.Port, db.DatabaseName)),
+				fmt.Sprintf("\n%sQUEUE_URL=%s", serviceNameInEnv, PlainHTTPURL(fmt.Sprintf(hostPortInt, db.Host, db.Port), "/000000000000/"+db.DatabaseName)),
 				"\nAWS_ACCESS_KEY_ID=test",
 				"\nAWS_SECRET_ACCESS_KEY=test",
 			)
@@ -261,7 +261,7 @@ var DriverConfigs = map[string]DriverConfig{
 			name := fmt.Sprintf(envName, serviceNameInEnv, db.DatabaseName)
 			password := fmt.Sprintf(envPassword, serviceNameInEnv, db.Password)
 
-			dashboardUrl := fmt.Sprintf(envDashboardURL, serviceNameInEnv, fmt.Sprintf(urlHostPort, db.Host, "9000"))
+			dashboardUrl := fmt.Sprintf(envDashboardURL, serviceNameInEnv, PlainHTTPURL(fmt.Sprintf(hostPortText, db.Host, "9000"), ""))
 
 			return fmt.Sprintf(concat6, host, user, port, name, password, dashboardUrl)
 		},
@@ -406,7 +406,7 @@ var DriverConfigs = map[string]DriverConfig{
 			port := fmt.Sprintf(envPort, serviceNameInEnv, db.Port)
 			password := fmt.Sprintf(envPassword, serviceNameInEnv, db.Password)
 
-			dashboardUrl := fmt.Sprintf(envDashboardURL, serviceNameInEnv, fmt.Sprintf(urlHostPort, db.Host, "7474"))
+			dashboardUrl := fmt.Sprintf(envDashboardURL, serviceNameInEnv, PlainHTTPURL(fmt.Sprintf(hostPortText, db.Host, "7474"), ""))
 
 			return fmt.Sprintf(concat6, host, user, name, port, password, dashboardUrl)
 		},
@@ -423,8 +423,8 @@ var DriverConfigs = map[string]DriverConfig{
 			name := fmt.Sprintf(envName, serviceNameInEnv, "0")
 			port := fmt.Sprintf(envPort, serviceNameInEnv, db.Port)
 
-			dashboardUrl := fmt.Sprintf(envDashboardURL, serviceNameInEnv, fmt.Sprintf(urlHostPort, db.Host, "8000"))
-			dbUrl := fmt.Sprintf(envDashboardURL, serviceNameInEnv, fmt.Sprintf(urlHostPortInt, db.Host, db.Port))
+			dashboardUrl := fmt.Sprintf(envDashboardURL, serviceNameInEnv, PlainHTTPURL(fmt.Sprintf(hostPortText, db.Host, "8000"), ""))
+			dbUrl := fmt.Sprintf(envDashboardURL, serviceNameInEnv, PlainHTTPURL(fmt.Sprintf(hostPortInt, db.Host, db.Port), ""))
 
 			return fmt.Sprintf(concat5, host, name, port, dashboardUrl, dbUrl)
 		},
@@ -442,7 +442,7 @@ var DriverConfigs = map[string]DriverConfig{
 			port := fmt.Sprintf(envPort, serviceNameInEnv, db.Port)
 			password := fmt.Sprintf(envPassword, serviceNameInEnv, db.Password)
 
-			dashboardUrl := fmt.Sprintf(envDashboardURL, serviceNameInEnv, fmt.Sprintf(urlHostPortInt, db.Host, db.Port))
+			dashboardUrl := fmt.Sprintf(envDashboardURL, serviceNameInEnv, PlainHTTPURL(fmt.Sprintf(hostPortInt, db.Host, db.Port), ""))
 
 			return fmt.Sprintf(concat6, host, user, name, port, password, dashboardUrl)
 		},
@@ -461,7 +461,7 @@ var DriverConfigs = map[string]DriverConfig{
 			port := fmt.Sprintf(envPort, serviceNameInEnv, db.Port)
 			password := fmt.Sprintf(envPassword, serviceNameInEnv, db.Password)
 
-			kibanaDashboardUrl := fmt.Sprintf("\n%sKIBANA_DASHBOARD_URL=%s\n", serviceNameInEnv, fmt.Sprintf("http://%s:5601", db.Host))
+			kibanaDashboardUrl := fmt.Sprintf("\n%sKIBANA_DASHBOARD_URL=%s\n", serviceNameInEnv, PlainHTTPURL(db.Host+":5601", ""))
 
 			return fmt.Sprintf(concat6, host, user, name, port, password, kibanaDashboardUrl)
 		},
@@ -496,7 +496,7 @@ var DriverConfigs = map[string]DriverConfig{
 			port := fmt.Sprintf(envPort, serviceNameInEnv, db.Port)
 			password := fmt.Sprintf(envPassword, serviceNameInEnv, db.Password)
 
-			dashboardUrl := fmt.Sprintf(envDashboardURL, serviceNameInEnv, fmt.Sprintf("http://%s:%d/_utils", db.Host, db.Port))
+			dashboardUrl := fmt.Sprintf(envDashboardURL, serviceNameInEnv, PlainHTTPURL(fmt.Sprintf(hostPortInt, db.Host, db.Port), "/_utils"))
 
 			return fmt.Sprintf(concat6, host, user, name, port, password, dashboardUrl)
 		},
@@ -515,7 +515,7 @@ var DriverConfigs = map[string]DriverConfig{
 			port := fmt.Sprintf(envPort, serviceNameInEnv, db.Port)
 			masterKey := fmt.Sprintf("\n%sMASTER_KEY=%s\n", serviceNameInEnv, db.Password)
 
-			dashboardUrl := fmt.Sprintf(envDashboardURL, serviceNameInEnv, fmt.Sprintf(urlHostPortInt, db.Host, db.Port))
+			dashboardUrl := fmt.Sprintf(envDashboardURL, serviceNameInEnv, PlainHTTPURL(fmt.Sprintf(hostPortInt, db.Host, db.Port), ""))
 
 			return fmt.Sprintf(concat5, host, name, port, masterKey, dashboardUrl)
 		},
@@ -533,7 +533,7 @@ var DriverConfigs = map[string]DriverConfig{
 			if uiPort == 0 {
 				uiPort = 8025
 			}
-			dashboardUrl := fmt.Sprintf(envDashboardURL, serviceNameInEnv, fmt.Sprintf(urlHostPortInt, db.Host, uiPort))
+			dashboardUrl := fmt.Sprintf(envDashboardURL, serviceNameInEnv, PlainHTTPURL(fmt.Sprintf(hostPortInt, db.Host, uiPort), ""))
 
 			return fmt.Sprintf("%s%s%s", host, port, dashboardUrl)
 		},
@@ -566,7 +566,7 @@ var DriverConfigs = map[string]DriverConfig{
 			user := fmt.Sprintf(envUser, serviceNameInEnv, db.User)
 			password := fmt.Sprintf("\n%sPASSWORD=%s", serviceNameInEnv, db.Password)
 
-			dashboardUrl := fmt.Sprintf(envDashboardURL, serviceNameInEnv, fmt.Sprintf(urlHostPortInt, db.Host, 15433))
+			dashboardUrl := fmt.Sprintf(envDashboardURL, serviceNameInEnv, PlainHTTPURL(fmt.Sprintf(hostPortInt, db.Host, 15433), ""))
 
 			return fmt.Sprintf(concat6, host, user, name, port, password, dashboardUrl)
 		},

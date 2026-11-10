@@ -261,20 +261,20 @@ func init() {
 }
 
 var autoForNames = map[string][]string{
-	"tickets":  {"issue.new"},
-	"issues":   {"issue.new"},
-	"comments": {"issue.comment", "pr.comment"},
-	"reviews":  {"pr.review"},
+	"tickets":  {string(watch.KindIssueNew)},
+	"issues":   {string(watch.KindIssueNew)},
+	"comments": {"issue.comment", string(watch.KindPRComment)},
+	"reviews":  {string(watch.KindPRReview)},
 	"requests": {"review.requested"},
-	"ci":       {"ci.failed"},
-	"builds":   {"ci.failed"},
+	"ci":       {string(watch.KindCIFailed)},
+	"builds":   {string(watch.KindCIFailed)},
 	"errors":   {"error.new"},
-	"prs":      {"pr.review", "pr.comment"},
+	"prs":      {string(watch.KindPRReview), string(watch.KindPRComment)},
 	"all":      nil,
 }
 
 var knownWatchKinds = map[string]bool{
-	"error.new": true, "issue.new": true, "issue.comment": true, "pr.comment": true, "pr.review": true, "review.requested": true, "ci.failed": true,
+	"error.new": true, string(watch.KindIssueNew): true, "issue.comment": true, string(watch.KindPRComment): true, string(watch.KindPRReview): true, "review.requested": true, string(watch.KindCIFailed): true,
 }
 
 func parseAutoFor(raw string) ([]string, error) {

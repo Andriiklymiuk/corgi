@@ -13,6 +13,10 @@ import (
 	"time"
 )
 
+const (
+	linearKeyPrefix = "linear:"
+)
+
 const linearURL = "https://api.linear.app/graphql"
 
 const bodyMax = 200
@@ -86,7 +90,7 @@ func (l *Linear) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 		created, updated := trackerTime(n.CreatedAt), trackerTime(n.UpdatedAt)
 		newestIssue = later(newestIssue, updated)
 		mine := n.Assignee != nil && isMe(l.Me, n.Assignee.ID)
-		key, at := "linear:"+n.Identifier, created
+		key, at := linearKeyPrefix+n.Identifier, created
 		if !created.After(issuesSince) {
 			h, ok := l.becameMine(n.History.Nodes, issuesSince)
 			if !ok || !mine {
@@ -106,7 +110,7 @@ func (l *Linear) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 			continue
 		}
 		e := Event{
-			Key:    "linear:" + n.Issue.Identifier + ":c" + n.ID,
+			Key:    linearKeyPrefix + n.Issue.Identifier + ":c" + n.ID,
 			Source: "linear",
 			Kind:   KindIssueComment,
 			Ref:    n.Issue.Identifier,
@@ -330,7 +334,7 @@ func (l *Linear) Mine(ctx context.Context) ([]Event, error) {
 	}
 	var events []Event
 	for _, n := range data.Issues.Nodes {
-		events = append(events, l.issueEvent(n, "linear:"+n.Identifier, trackerTime(n.CreatedAt)))
+		events = append(events, l.issueEvent(n, linearKeyPrefix+n.Identifier, trackerTime(n.CreatedAt)))
 	}
 	return events, nil
 }

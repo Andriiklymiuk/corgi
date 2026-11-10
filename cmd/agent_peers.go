@@ -17,6 +17,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const (
+	postOnlyMessage = "POST only"
+)
+
 // Two laptops on the same trackers: they pair with each other the way a
 // phone pairs with one, pulse each other every minute, and for every
 // tracker both watch, one leads - it fixes and rings, the other stays quiet
@@ -303,7 +307,7 @@ func launchPeersHandler(w http.ResponseWriter, r *http.Request) {
 func launchPeersInviteHandler(w http.ResponseWriter, r *http.Request) {
 	setLaunchHeaders(w)
 	if r.Method != http.MethodPost {
-		writeLaunchError(w, http.StatusMethodNotAllowed, "POST only")
+		writeLaunchError(w, http.StatusMethodNotAllowed, postOnlyMessage)
 		return
 	}
 	dir, err := agentDir()
@@ -322,7 +326,7 @@ func launchPeersInviteHandler(w http.ResponseWriter, r *http.Request) {
 func launchPeersJoinHandler(w http.ResponseWriter, r *http.Request) {
 	setLaunchHeaders(w)
 	if r.Method != http.MethodPost {
-		writeLaunchError(w, http.StatusMethodNotAllowed, "POST only")
+		writeLaunchError(w, http.StatusMethodNotAllowed, postOnlyMessage)
 		return
 	}
 	dir, err := agentDir()
@@ -368,7 +372,7 @@ func launchPeersJoinHandler(w http.ResponseWriter, r *http.Request) {
 func launchPeersTasksHandler(w http.ResponseWriter, r *http.Request) {
 	setLaunchHeaders(w)
 	if r.Method != http.MethodPost {
-		writeLaunchError(w, http.StatusMethodNotAllowed, "POST only")
+		writeLaunchError(w, http.StatusMethodNotAllowed, postOnlyMessage)
 		return
 	}
 	dir, err := agentDir()
@@ -397,7 +401,7 @@ func launchPeersTasksHandler(w http.ResponseWriter, r *http.Request) {
 func launchPeersPulseHandler(w http.ResponseWriter, r *http.Request) {
 	setLaunchHeaders(w)
 	if r.Method != http.MethodPost {
-		writeLaunchError(w, http.StatusMethodNotAllowed, "POST only")
+		writeLaunchError(w, http.StatusMethodNotAllowed, postOnlyMessage)
 		return
 	}
 	dir, err := agentDir()

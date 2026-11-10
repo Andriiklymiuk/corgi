@@ -31,6 +31,15 @@ import (
 )
 
 const (
+	nightShiftFlag    = "night-shift"
+	postToFlag        = "post-to"
+	replyAsFlag       = "reply-as"
+	reviewChannelFlag = "review-channel"
+	runDBFlag         = "run-db"
+	sentryProjectFlag = "sentry-project"
+)
+
+const (
 	watchFlagPruneAfter         = "prune-after"
 	watchFlagReviewDelay        = "review-delay"
 	watchFlagMaxPerHour         = "max-per-hour"
@@ -166,8 +175,8 @@ var agentWatchEnableCmd = &cobra.Command{
 		if flags.Changed("isolate") {
 			wc.Isolate, _ = flags.GetBool("isolate")
 		}
-		if flags.Changed("run-db") {
-			v, _ := flags.GetString("run-db")
+		if flags.Changed(runDBFlag) {
+			v, _ := flags.GetString(runDBFlag)
 			if v = strings.TrimSpace(v); v != "own" && v != "shared" && v != "off" {
 				return fmt.Errorf("--run-db is own, shared or off")
 			}
@@ -249,14 +258,14 @@ var agentWatchEnableCmd = &cobra.Command{
 		if v, _ := flags.GetString("sentry-org"); v != "" {
 			wc.SentryOrg, wc.Errors = v, true
 		}
-		if flags.Changed("sentry-project") {
-			wc.SentryProjects, _ = flags.GetStringSlice("sentry-project")
+		if flags.Changed(sentryProjectFlag) {
+			wc.SentryProjects, _ = flags.GetStringSlice(sentryProjectFlag)
 		}
 		if v, _ := flags.GetString("sentry-level"); v != "" {
 			wc.SentryLevel = v
 		}
-		if flags.Changed("night-shift") {
-			wc.NightShift, _ = flags.GetBool("night-shift")
+		if flags.Changed(nightShiftFlag) {
+			wc.NightShift, _ = flags.GetBool(nightShiftFlag)
 		}
 		if flags.Changed("headless") {
 			wc.Headless, _ = flags.GetBool("headless")
@@ -939,7 +948,7 @@ func withoutSource(list []string, drop string) []string {
 
 func chatFromFlags(flags *pflag.FlagSet, current *config.ChatConfig) (*config.ChatConfig, error) {
 	touched := false
-	for _, n := range []string{"mentions", "channel", "review-channel", "trust", "post-to", "reply-as"} {
+	for _, n := range []string{"mentions", "channel", reviewChannelFlag, "trust", postToFlag, replyAsFlag} {
 		if flags.Changed(n) {
 			touched = true
 		}
@@ -958,18 +967,18 @@ func chatFromFlags(flags *pflag.FlagSet, current *config.ChatConfig) (*config.Ch
 	if flags.Changed("channel") {
 		out.Slack.Channels, _ = flags.GetStringSlice("channel")
 	}
-	if flags.Changed("review-channel") {
-		out.Slack.ReviewChannels, _ = flags.GetStringSlice("review-channel")
+	if flags.Changed(reviewChannelFlag) {
+		out.Slack.ReviewChannels, _ = flags.GetStringSlice(reviewChannelFlag)
 	}
 	if flags.Changed("trust") {
 		out.Slack.Trust, _ = flags.GetStringSlice("trust")
 	}
-	if flags.Changed("post-to") {
-		v, _ := flags.GetString("post-to")
+	if flags.Changed(postToFlag) {
+		v, _ := flags.GetString(postToFlag)
 		out.Slack.PostTo = strings.TrimSpace(v)
 	}
-	if flags.Changed("reply-as") {
-		v, _ := flags.GetString("reply-as")
+	if flags.Changed(replyAsFlag) {
+		v, _ := flags.GetString(replyAsFlag)
 		if v = strings.TrimSpace(v); v != "bot" && v != "me" && v != "" {
 			return nil, fmt.Errorf("--reply-as must be bot or me")
 		}
@@ -1533,7 +1542,7 @@ func init() {
 	f.String(watchFlagReviewStatus, "", "Column a ticket moves to once a run opened a pull request for it, e.g. \"In Review\"")
 	f.Bool("lease", false, "Claim a ticket on the tracker before working it, so a second machine watching the same board leaves it alone")
 	f.Bool("isolate", false, "Give every unattended run its own worktrees on a corgi/<ref> branch, so it never touches your checkout")
-	f.String("run-db", "own", "How an isolated run gets databases: own (empty ones on ports nobody else uses, the default), shared (the workspace's own, read only - for a database too big to copy) or off")
+	f.String(runDBFlag, "own", "How an isolated run gets databases: own (empty ones on ports nobody else uses, the default), shared (the workspace's own, read only - for a database too big to copy) or off")
 	f.String("kind", "", "The agent that runs here: claude (default) or codex; also what corgi agent claude opens in this workspace")
 	f.StringSlice("agents", nil, "The agents to try in order, e.g. claude,codex: the next takes a run when the first cannot")
 	f.String(watchFlagPruneAfter, "", "Remove an isolated run's worktrees this long after it finished, e.g. 7d; the branch stays, a dirty worktree stays (empty keeps them until `watch undo` or `watch prune`)")
@@ -1550,10 +1559,10 @@ func init() {
 	f.Bool(watchFlagHandOver, false, "Type a review comment, a red build or an asked-for review into the session already on that branch")
 	f.Bool("errors", false, "Take new errors into the inbox, from Sentry and from alert webhooks; you pick which to work on (--auto-for errors runs them by itself)")
 	f.String("sentry-org", "", "Sentry organization to read new errors from (implies --errors); the token: corgi agent watch auth sentry")
-	f.StringSlice("sentry-project", nil, "Only these Sentry projects, comma separated")
+	f.StringSlice(sentryProjectFlag, nil, "Only these Sentry projects, comma separated")
 	f.String("sentry-level", "", "The quietest Sentry level that counts: info, warning, error (default) or fatal")
 	f.Bool("headless", false, "Let a message for a session whose terminal is gone run as one headless turn (claude -p --resume, or codex exec resume; acceptEdits) in its own checkout, so the phone's chat keeps working")
-	f.Bool("night-shift", false, "Work through the quiet hours: fixes and routines run as by day, nothing rings until the quiet hours end, then one 'N while you were away' says what happened (--night-shift=false to sleep through them again)")
+	f.Bool(nightShiftFlag, false, "Work through the quiet hours: fixes and routines run as by day, nothing rings until the quiet hours end, then one 'N while you were away' says what happened (--night-shift=false to sleep through them again)")
 	f.Bool("silent", false, "Nothing about this workspace's watch rings - no toast, no phone push: fixes run, the inbox and the kanban fill, and you look when you like (--silent=false to ring again)")
 	f.Bool(watchFlagRerunCI, false, "Rerun the failed jobs of a red build once before it is worked on or handed over; a second red on the same run goes the usual way (GitHub, GitLab)")
 	f.Bool(watchFlagAutoCarry, false, "Carry a session that hit its five-hour quota to another of the workspace's accounts with budget, once per limit (only profiles the accounts list names)")
@@ -1568,10 +1577,10 @@ func init() {
 	f.String("from", "", "Only comments and reviews from these people (comma separated); empty is anyone")
 	f.Bool("mentions", false, "Ring when someone names you in Slack or writes to you directly (needs corgi agent watch auth slack)")
 	f.StringSlice("channel", nil, "Slack channels every message of which is news, e.g. #incidents (repeatable)")
-	f.StringSlice("review-channel", nil, "Slack channels where pull requests are posted for review: a post with links is one review, answered in its thread (repeatable)")
+	f.StringSlice(reviewChannelFlag, nil, "Slack channels where pull requests are posted for review: a post with links is one review, answered in its thread (repeatable)")
 	f.StringSlice("trust", nil, "Colleagues whose Slack mention may start an unattended run - the person who WROTE the message, e.g. @teammate (repeatable). Empty means nobody: a mention only rings")
-	f.String("post-to", "", "Default Slack channel for corgi agent chat post")
-	f.String("reply-as", "", "Whose voice a reply speaks in: bot or me (default: the bot when a bot token is stored)")
+	f.String(postToFlag, "", "Default Slack channel for corgi agent chat post")
+	f.String(replyAsFlag, "", "Whose voice a reply speaks in: bot or me (default: the bot when a bot token is stored)")
 	f.String(watchFlagAutoFor, "", "With --action fix, what to work on unattended: tickets, comments, reviews (comma separated). Empty means everything")
 	agentWatchRunCmd.Flags().Bool(watchFlagDryRun, false, "Do not advance the saved cursors")
 	agentWatchSweepCmd.Flags().Bool(watchFlagDryRun, false, "Print what would be handed over, hand nothing")

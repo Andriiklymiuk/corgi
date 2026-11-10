@@ -22,6 +22,10 @@ import (
 	"andriiklymiuk/corgi/utils/atomicfile"
 )
 
+const (
+	ringHotAction = "ring hot"
+)
+
 // A laptop closed in a bag on a hotspot cooks its battery. The machine watch
 // reads the battery and the thermal state once a minute, holds new runs while
 // it is warm, pauses the sessions while it is hot, and says so once per
@@ -59,13 +63,13 @@ type Laptop struct {
 var batteryLine = regexp.MustCompile(`(?m)^[\s|]*"(CurrentCapacity|MaxCapacity|Temperature|ExternalConnected)"\s*=\s*(\S+)\s*$`)
 
 func parseBattery(out string) (pct int, onAC bool, tempC float64, ok bool) {
-	current, max := -1, -1
+	current, capacity := -1, -1
 	for _, m := range batteryLine.FindAllStringSubmatch(out, -1) {
 		switch m[1] {
 		case "CurrentCapacity":
 			current, _ = strconv.Atoi(m[2])
 		case "MaxCapacity":
-			max, _ = strconv.Atoi(m[2])
+			capacity, _ = strconv.Atoi(m[2])
 		case "Temperature":
 			if t, err := strconv.Atoi(m[2]); err == nil {
 				tempC = float64(t) / 100
@@ -74,10 +78,10 @@ func parseBattery(out string) (pct int, onAC bool, tempC float64, ok bool) {
 			onAC = m[2] == "Yes"
 		}
 	}
-	if current < 0 || max <= 0 {
+	if current < 0 || capacity <= 0 {
 		return -1, onAC, tempC, false
 	}
-	return current * 100 / max, onAC, tempC, true
+	return current * 100 / capacity, onAC, tempC, true
 }
 
 var readBattery = func() (pct int, onAC bool, tempC float64, ok bool) {
@@ -233,11 +237,11 @@ func (w *machineWatch) observe(now time.Time, m Machine, heat string, mayPause b
 			w.paused = true
 			steps = append(steps, "pause")
 		}
-		steps = append(steps, "ring hot")
+		steps = append(steps, ringHotAction)
 		w.lastHotRing = now
 	case heat == "hot" && mayPause && !w.paused:
 		w.paused = true
-		steps = append(steps, "pause", "ring hot")
+		steps = append(steps, "pause", ringHotAction)
 	case heat == "warm" && was == "":
 		steps = append(steps, "ring warm")
 	case heat == "" && was != "":
@@ -278,7 +282,7 @@ func (d *Daemon) actOnMachine(ctx context.Context, step string, m Machine) {
 		n := d.resumeSessions()
 		utils.Infof("agent: heat: cooled to %s - resumed %d session(s)\n", m.degrees(), n)
 		d.setLowPower(false)
-	case "ring hot":
+	case ringHotAction:
 		if n := d.pausedCount(); n > 0 {
 			d.ringMachine("heat", fmt.Sprintf("too hot: %s. %s paused until it cools - give the laptop air", m.why(), plural(n, "session")))
 		} else {
@@ -420,7 +424,7 @@ func (d *Daemon) resumeSessions() int {
 }
 
 func (d *Daemon) thawLeftovers() {
-	if n := d.pausedCount(); n > 0 {
+	if d.pausedCount() > 0 {
 		utils.Infof("agent: heat: %d session(s) were left paused - resuming them\n", d.resumeSessions())
 	}
 }

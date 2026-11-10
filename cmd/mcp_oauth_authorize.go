@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/agent/pairing"
 )
 
@@ -346,7 +347,7 @@ func approvePendingLocally(agentDir, code string) (string, error) {
 		}
 	}()
 	body, _ := json.Marshal(approveRequest{Code: code})
-	req, err := http.NewRequest(http.MethodPost, "http://"+addr+oauthApprovePath, strings.NewReader(string(body)))
+	req, err := http.NewRequest(http.MethodPost, utils.PlainHTTPURL(addr, oauthApprovePath), strings.NewReader(string(body)))
 	if err != nil {
 		return "", err
 	}

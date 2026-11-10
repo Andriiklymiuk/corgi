@@ -73,7 +73,7 @@ func TestSharingFromOutsideIsTheOwnersAlone(t *testing.T) {
 	t.Cleanup(func() { ideaAutoAnswerHere = was })
 	spec := filepath.Join(t.TempDir(), "secret-plan.md")
 	_ = os.WriteFile(spec, []byte("# Plan\n\ntext\n"), 0o600)
-	res, err := shareIdea(dir, shareRequest{Target: spec, By: "me"}, time.Now())
+	res, err := shareFromCommandLine(dir, shareRequest{Target: spec, By: "me"}, time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +122,7 @@ func TestASharedFileTakesItsVideosAndGetsTheAgentsChangesBack(t *testing.T) {
 	text := "# Demo\n\n![the flow](media/demo.mp4)\n\n![x](" + outside + ")\n\n![y](../../" + filepath.Base(filepath.Dir(outside)) + "/secret.png)\n\n[notes](media/notes.txt)\n"
 	_ = os.WriteFile(spec, []byte(text), 0o600)
 
-	res, err := shareIdea(dir, shareRequest{Target: spec, By: "me"}, time.Now())
+	res, err := shareFromCommandLine(dir, shareRequest{Target: spec, By: "me"}, time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -286,19 +286,19 @@ func TestAFileWithoutAHeadingIsNamedByItsFile(t *testing.T) {
 	folder := t.TempDir()
 	empty := filepath.Join(folder, "empty.md")
 	_ = os.WriteFile(empty, []byte("\n\n"), 0o600)
-	if _, err := shareIdea(dir, shareRequest{Target: empty}, time.Now()); err == nil {
+	if _, err := shareFromCommandLine(dir, shareRequest{Target: empty}, time.Now()); err == nil {
 		t.Fatal("an empty file is no page")
 	}
 	plain := filepath.Join(folder, "pricing-notes.md")
 	_ = os.WriteFile(plain, []byte("just words\n"), 0o600)
-	res, err := shareIdea(dir, shareRequest{Target: plain, Type: "hld"}, time.Now())
+	res, err := shareFromCommandLine(dir, shareRequest{Target: plain, Type: "hld"}, time.Now())
 	if err != nil || res.Name != "pricing-notes" {
 		t.Fatalf("named by the file: %+v %v", res, err)
 	}
 	if page, _ := idea.Load(dir, res.Slug); page.Meta.Type != idea.TypeHLD {
 		t.Fatalf("the type asked for: %s", page.Meta.Type)
 	}
-	if _, err := shareIdea(dir, shareRequest{Target: folder}, time.Now()); err == nil {
+	if _, err := shareFromCommandLine(dir, shareRequest{Target: folder}, time.Now()); err == nil {
 		t.Fatal("a folder is no page")
 	}
 }

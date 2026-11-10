@@ -108,10 +108,10 @@ func sweepWorkspace(ctx context.Context, spec daemon.WatchSpec, state *watch.Sta
 		}
 		for _, e := range events {
 			e.Workspace = spec.Workspace
-			if why := spec.Rules.Why(e); why != "" {
+			if spec.Rules.Why(e) != "" {
 				continue
 			}
-			if skip := sweepSkips(state, spec.Workspace, e); skip != "" {
+			if sweepSkips(state, spec.Workspace, e) != "" {
 				continue
 			}
 			out = append(out, e)

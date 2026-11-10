@@ -16,6 +16,10 @@ import (
 )
 
 const (
+	waitingInInboxText = "waiting in the inbox"
+)
+
+const (
 	ColInbox   = "Inbox"
 	ColReady   = "Ready"
 	ColRunning = "Running"
@@ -219,7 +223,7 @@ func (b *kanbanBoard) placeTask(c *KanbanCard, e watch.Event, current string) {
 		}
 		c.Column, c.Why = ColDone, strings.ToLower(watch.TaskColumn(current))
 	default:
-		c.Why = "waiting in the inbox"
+		c.Why = waitingInInboxText
 	}
 }
 
@@ -235,7 +239,7 @@ func (b *kanbanBoard) placeTicket(c *KanbanCard, e watch.Event, current string) 
 		}
 		c.Column, c.Why = ColDone, over
 	case c.Why == "":
-		c.Why = "waiting in the inbox"
+		c.Why = waitingInInboxText
 	}
 }
 
@@ -286,7 +290,7 @@ func (b *kanbanBoard) placeRun(r watch.FixRecord) {
 		c.Column, c.Why = ColReview, r.Outcome()
 	case strings.TrimSpace(r.Error) != "" && c.Session == nil && (c.Column == ColRunning || c.Column == ColInbox):
 		c.Column, c.Why = ColInbox, "the last run failed "+roughAge(b.in.now.Sub(r.FinishedAt))+" ago: "+firstLineOf(r.Error)
-	case c.Column == ColInbox && (c.Why == "" || c.Why == "waiting in the inbox"):
+	case c.Column == ColInbox && (c.Why == "" || c.Why == waitingInInboxText):
 		c.Why = "a run answered " + roughAge(b.in.now.Sub(r.FinishedAt)) + " ago · nothing since"
 	}
 }

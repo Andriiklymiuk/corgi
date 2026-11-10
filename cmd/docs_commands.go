@@ -15,6 +15,10 @@ import (
 	"github.com/spf13/pflag"
 )
 
+const (
+	corgiCommandPrefix = "corgi "
+)
+
 var docsCommandsCmd = &cobra.Command{
 	Use:   "commands [<file or dir>…]",
 	Short: "Every corgi command and flag named in Markdown exists in this binary",
@@ -194,7 +198,7 @@ func isShellFence(tag string) bool {
 
 func stripComment(line string) string {
 	t := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "$ "))
-	if !strings.HasPrefix(t, "corgi ") && t != "corgi" && !strings.Contains(t, "&& corgi") && !strings.Contains(t, "| corgi") {
+	if !strings.HasPrefix(t, corgiCommandPrefix) && t != "corgi" && !strings.Contains(t, "&& corgi") && !strings.Contains(t, "| corgi") {
 		return ""
 	}
 	if i := strings.Index(t, " #"); i >= 0 {
@@ -223,7 +227,7 @@ func checkInvocation(words []string) (commandFinding, bool) {
 			}
 			if c == rootCmd && i == start {
 				near := utils.Nearest(w, commandNames(rootCmd))
-				return commandFinding{Mention: "corgi " + w, Problem: "no such command", Fix: suggestion(near, "corgi ")}, true
+				return commandFinding{Mention: corgiCommandPrefix + w, Problem: "no such command", Fix: suggestion(near, corgiCommandPrefix)}, true
 			}
 			if len(c.Commands()) > 0 && !c.Runnable() {
 				near := utils.Nearest(w, commandNames(c))

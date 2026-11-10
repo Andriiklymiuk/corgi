@@ -100,8 +100,8 @@ func mcpHTTP(a httpArgs) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	if a.Body != "" && a.Headers["Content-Type"] == "" && looksLikeJSON(a.Body) {
-		req.Header.Set("Content-Type", "application/json")
+	if a.Body != "" && a.Headers[headerContentType] == "" && looksLikeJSON(a.Body) {
+		req.Header.Set(headerContentType, "application/json")
 	}
 	for k, v := range a.Headers {
 		req.Header.Set(k, v)
@@ -118,7 +118,7 @@ func mcpHTTP(a httpArgs) (any, error) {
 		raw = raw[:httpBodyMax]
 	}
 	headers := map[string]string{}
-	for _, k := range []string{"Content-Type", "Content-Length", "Location", "Retry-After", "X-Request-Id", "Cache-Control"} {
+	for _, k := range []string{headerContentType, "Content-Length", "Location", "Retry-After", "X-Request-Id", "Cache-Control"} {
 		if v := resp.Header.Get(k); v != "" {
 			headers[k] = v
 		}

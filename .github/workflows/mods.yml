@@ -17,13 +17,18 @@ on:
       - ".claude-plugin/marketplace.json"
   workflow_dispatch:
 
+env:
+  CLAUDE_CODE_VERSION: "2.1.322"
+
 jobs:
   mods:
     name: Validate and test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-      - run: npm install -g @anthropic-ai/claude-code
+      - run: |
+          npm install -g --ignore-scripts "@anthropic-ai/claude-code@${{ env.CLAUDE_CODE_VERSION }}"
+          node "$(npm root -g)/@anthropic-ai/claude-code/install.cjs"
       - run: claude plugin validate .
       - run: |
           for m in plugins/corgi-band plugins/corgi-guard; do

@@ -19,5 +19,6 @@ func nudgeProcess(int) error { return nil }
 
 func notifyNudge(chan<- struct{}) func() {
 	return func() {
+		// no signals to stop on windows
 	}
 }

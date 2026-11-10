@@ -58,7 +58,7 @@ func TestAnIsolatedRunIsToldWhereToWork(t *testing.T) {
 			t.Fatalf("note lacks %q: %s", want, note)
 		}
 	}
-	if !onExistingPull(watch.Event{Kind: watch.KindPRComment}) || onExistingPull(watch.Event{Kind: watch.KindIssueNew}) {
+	if !onOwnPullRequest(watch.Event{Kind: watch.KindPRComment}) || onOwnPullRequest(watch.Event{Kind: watch.KindIssueNew}) {
 		t.Fatal("a comment on a pull request is work on that pull request; a new ticket is not")
 	}
 	pull := PullIsolationNote([]string{"/w/api"})

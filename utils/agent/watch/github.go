@@ -13,6 +13,15 @@ import (
 	"time"
 )
 
+const (
+	commitsSegment   = "/commits/"
+	pullsSegment     = "/pulls/"
+	reposSegment     = "/repos/"
+	reviewsPageQuery = "/reviews?per_page=100"
+	githubKeyPrefix  = "github:"
+	githubAPIBase    = "https://api.github.com"
+)
+
 type GitHub struct {
 	Token  string
 	Repos  []string
@@ -152,9 +161,9 @@ func (g *GitHub) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 		pull := g.pull(ctx, pulls, t.Subject.URL)
 		author, body, bot, hasComment := g.latestComment(ctx, t.Subject.LatestCommentURL, t.Subject.URL)
 		kind, review := r.kind, ""
-		key := "github:" + ref + ":" + t.ID + ":" + t.UpdatedAt
+		key := githubKeyPrefix + ref + ":" + t.ID + ":" + t.UpdatedAt
 		if id := githubCommentKey(t.Subject.LatestCommentURL); id != "" {
-			key = "github:" + ref + ":" + id
+			key = githubKeyPrefix + ref + ":" + id
 		}
 		if !hasComment && r.kind == KindPRComment {
 			// A review submitted with a body and nothing after it leaves the thread's
@@ -164,7 +173,7 @@ func (g *GitHub) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 			if rv, ok := g.reviewBehind(ctx, t.Repository.FullName, number, at); ok {
 				author, body, bot, hasComment = rv.author, rv.body, rv.bot, true
 				kind, review = KindPRReview, rv.state
-				key = "github:" + ref + ":r" + rv.id
+				key = githubKeyPrefix + ref + ":r" + rv.id
 			}
 		}
 		if r.kind == KindPRComment && (!hasComment || (author != "" && strings.EqualFold(author, g.Me))) {
@@ -193,7 +202,7 @@ func (g *GitHub) latestComment(ctx context.Context, commentURL, subjectURL strin
 	if commentURL == "" || commentURL == subjectURL {
 		return "", "", false, false
 	}
-	path := strings.TrimPrefix(commentURL, "https://api.github.com")
+	path := strings.TrimPrefix(commentURL, githubAPIBase)
 	if path == commentURL {
 		return "", "", false, true
 	}
@@ -237,7 +246,7 @@ func (g *GitHub) reviewBehind(ctx context.Context, repo, num string, at time.Tim
 			Type  string `json:"type"`
 		} `json:"user"`
 	}
-	resp, err := g.get(ctx, "/repos/"+repo+"/pulls/"+num+"/reviews?per_page=100", "")
+	resp, err := g.get(ctx, reposSegment+repo+pullsSegment+num+reviewsPageQuery, "")
 	if err != nil || githubDecode(resp, &reviews) != nil {
 		return githubReview{}, false
 	}
@@ -282,7 +291,7 @@ func (g *GitHub) pull(ctx context.Context, cache map[string]githubPullInfo, apiU
 		return p
 	}
 	cache[apiURL] = githubPullInfo{}
-	path := strings.TrimPrefix(apiURL, "https://api.github.com")
+	path := strings.TrimPrefix(apiURL, githubAPIBase)
 	if path == apiURL {
 		return githubPullInfo{}
 	}
@@ -330,7 +339,7 @@ func (g *GitHub) wantsRepo(fullName string) bool {
 func (g *GitHub) get(ctx context.Context, path, ifModifiedSince string) (*http.Response, error) {
 	base := g.URL
 	if base == "" {
-		base = "https://api.github.com"
+		base = githubAPIBase
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(base, "/")+path, nil)
 	if err != nil {
@@ -370,7 +379,7 @@ func (g *GitHub) RefState(ctx context.Context, ref string) string {
 	if !ok || g.Token == "" {
 		return ""
 	}
-	return g.pull(ctx, map[string]githubPullInfo{}, "https://api.github.com/repos/"+repo+"/pulls/"+num).state
+	return g.pull(ctx, map[string]githubPullInfo{}, "https://api.github.com/repos/"+repo+pullsSegment+num).state
 }
 
 func (g *GitHub) PullStatus(ctx context.Context, ref string) (PullStatus, bool) {
@@ -392,7 +401,7 @@ func (g *GitHub) PullStatus(ctx context.Context, ref string) (PullStatus, bool) 
 			Login string `json:"login"`
 		} `json:"user"`
 	}
-	resp, err := g.get(ctx, "/repos/"+repo+"/pulls/"+num, "")
+	resp, err := g.get(ctx, reposSegment+repo+pullsSegment+num, "")
 	if err != nil || githubDecode(resp, &pr) != nil {
 		return PullStatus{}, false
 	}
@@ -413,7 +422,7 @@ func (g *GitHub) PullStatus(ctx context.Context, ref string) (PullStatus, bool) 
 			Login string `json:"login"`
 		} `json:"user"`
 	}
-	if resp, err := g.get(ctx, "/repos/"+repo+"/pulls/"+num+"/reviews?per_page=100", ""); err == nil && githubDecode(resp, &reviews) == nil {
+	if resp, err := g.get(ctx, reposSegment+repo+pullsSegment+num+reviewsPageQuery, ""); err == nil && githubDecode(resp, &reviews) == nil {
 		last := map[string]string{}
 		for _, r := range reviews {
 			if g.Me != "" && strings.EqualFold(r.User.Login, g.Me) && r.SubmittedAt.After(out.MyReviewAt) {
@@ -447,7 +456,7 @@ func (g *GitHub) PullStatus(ctx context.Context, ref string) (PullStatus, bool) 
 				Conclusion string `json:"conclusion"`
 			} `json:"check_runs"`
 		}
-		if resp, err := g.get(ctx, "/repos/"+repo+"/commits/"+pr.Head.SHA+"/check-runs?per_page=100", ""); err == nil && githubDecode(resp, &runs) == nil {
+		if resp, err := g.get(ctx, reposSegment+repo+commitsSegment+pr.Head.SHA+"/check-runs?per_page=100", ""); err == nil && githubDecode(resp, &runs) == nil {
 			for _, r := range runs.CheckRuns {
 				if r.Status != "completed" {
 					running++
@@ -461,7 +470,7 @@ func (g *GitHub) PullStatus(ctx context.Context, ref string) (PullStatus, bool) 
 				State string `json:"state"`
 			} `json:"statuses"`
 		}
-		if resp, err := g.get(ctx, "/repos/"+repo+"/commits/"+pr.Head.SHA+"/status", ""); err == nil && githubDecode(resp, &combined) == nil {
+		if resp, err := g.get(ctx, reposSegment+repo+commitsSegment+pr.Head.SHA+"/status", ""); err == nil && githubDecode(resp, &combined) == nil {
 			for _, s := range combined.Statuses {
 				if s.State == "pending" {
 					running++
@@ -505,7 +514,7 @@ func (g *GitHub) MyReviewSince(ctx context.Context, ref string, since time.Time)
 			Login string `json:"login"`
 		} `json:"user"`
 	}
-	resp, err := g.get(ctx, "/repos/"+repo+"/pulls/"+num+"/reviews?per_page=100", "")
+	resp, err := g.get(ctx, reposSegment+repo+pullsSegment+num+reviewsPageQuery, "")
 	if err != nil || githubDecode(resp, &reviews) != nil {
 		return ReviewOutcome{}, false
 	}
@@ -520,7 +529,7 @@ func (g *GitHub) MyReviewSince(ctx context.Context, ref string, since time.Time)
 			out.ChangesRequested = true
 		}
 	}
-	for _, path := range []string{"/repos/" + repo + "/pulls/" + num + "/comments?per_page=100", "/repos/" + repo + "/issues/" + num + "/comments?per_page=100"} {
+	for _, path := range []string{reposSegment + repo + pullsSegment + num + "/comments?per_page=100", reposSegment + repo + "/issues/" + num + "/comments?per_page=100"} {
 		var comments []struct {
 			CreatedAt string `json:"created_at"`
 			User      struct {
@@ -554,7 +563,7 @@ func (g *GitHub) AnsweredSince(ctx context.Context, ref string, at time.Time) st
 			SHA string `json:"sha"`
 		} `json:"head"`
 	}
-	resp, err := g.get(ctx, "/repos/"+repo+"/pulls/"+num, "")
+	resp, err := g.get(ctx, reposSegment+repo+pullsSegment+num, "")
 	if err != nil || githubDecode(resp, &pr) != nil || pr.Head.SHA == "" {
 		return ""
 	}
@@ -565,7 +574,7 @@ func (g *GitHub) AnsweredSince(ctx context.Context, ref string, at time.Time) st
 			} `json:"committer"`
 		} `json:"commit"`
 	}
-	resp, err = g.get(ctx, "/repos/"+repo+"/commits/"+pr.Head.SHA, "")
+	resp, err = g.get(ctx, reposSegment+repo+commitsSegment+pr.Head.SHA, "")
 	if err != nil || githubDecode(resp, &c) != nil || trackerTime(c.Commit.Committer.Date).Before(at) {
 		return ""
 	}

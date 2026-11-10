@@ -36,6 +36,15 @@ import (
 	"andriiklymiuk/corgi/utils/agent/workspace"
 )
 
+const (
+	getOnlyMessage            = "GET only"
+	workspaceRequiredMessage  = "a workspace is required"
+	requestUnreadableMessage  = "could not read the request"
+	agentDirUnresolvedMessage = "could not resolve the agent data directory"
+	modelNameRuleMessage      = "model: letters, digits, dots and dashes only"
+	noSuchProfileMessage      = "no such profile"
+)
+
 type launchWorkspace struct {
 	ID           string            `json:"id"`
 	Aliases      []string          `json:"aliases,omitempty"`
@@ -115,7 +124,7 @@ func launchRegisterWorkspace(w http.ResponseWriter, r *http.Request) {
 		ID   string `json:"id"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&req); err != nil {
-		writeLaunchError(w, http.StatusBadRequest, "could not read the request")
+		writeLaunchError(w, http.StatusBadRequest, requestUnreadableMessage)
 		return
 	}
 	path := filepath.Clean(strings.TrimSpace(req.Path))
@@ -162,7 +171,7 @@ func launchProfilesHandler(w http.ResponseWriter, r *http.Request) {
 			Bin       string `json:"bin"`
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&req); err != nil {
-			writeLaunchError(w, http.StatusBadRequest, "could not read the request")
+			writeLaunchError(w, http.StatusBadRequest, requestUnreadableMessage)
 			return
 		}
 		name := strings.TrimSpace(req.Name)
@@ -519,7 +528,7 @@ func launchStartHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if strings.TrimSpace(req.Workspace) == "" {
-		writeLaunchError(w, http.StatusBadRequest, "a workspace is required")
+		writeLaunchError(w, http.StatusBadRequest, workspaceRequiredMessage)
 		return
 	}
 	result, err := mcpSessionStart(req.Workspace, req.Profile, req.Name)
@@ -544,7 +553,7 @@ func launchStopHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if strings.TrimSpace(req.Workspace) == "" {
-		writeLaunchError(w, http.StatusBadRequest, "a workspace is required")
+		writeLaunchError(w, http.StatusBadRequest, workspaceRequiredMessage)
 		return
 	}
 	result, err := mcpSessionStop(req.Workspace)
@@ -576,12 +585,12 @@ type claudeSession struct {
 func launchSessionsHandler(w http.ResponseWriter, r *http.Request) {
 	setLaunchHeaders(w)
 	if r.Method != http.MethodGet {
-		writeLaunchError(w, http.StatusMethodNotAllowed, "GET only")
+		writeLaunchError(w, http.StatusMethodNotAllowed, getOnlyMessage)
 		return
 	}
 	id := strings.TrimSpace(r.URL.Query().Get("workspace"))
 	if id == "" {
-		writeLaunchError(w, http.StatusBadRequest, "a workspace is required")
+		writeLaunchError(w, http.StatusBadRequest, workspaceRequiredMessage)
 		return
 	}
 	absPath, configDir, ok := workspaceSessionTarget(id, runningProfile(id))
@@ -612,7 +621,7 @@ func recentEvents(workspaceID string, limit int) []launchLastEvent {
 func launchInfoHandler(w http.ResponseWriter, r *http.Request) {
 	setLaunchHeaders(w)
 	if r.Method != http.MethodGet {
-		writeLaunchError(w, http.StatusMethodNotAllowed, "GET only")
+		writeLaunchError(w, http.StatusMethodNotAllowed, getOnlyMessage)
 		return
 	}
 	host, _ := os.Hostname()
@@ -642,7 +651,7 @@ func launchInfoHandler(w http.ResponseWriter, r *http.Request) {
 func launchBoardHandler(w http.ResponseWriter, r *http.Request) {
 	setLaunchHeaders(w)
 	if r.Method != http.MethodGet {
-		writeLaunchError(w, http.StatusMethodNotAllowed, "GET only")
+		writeLaunchError(w, http.StatusMethodNotAllowed, getOnlyMessage)
 		return
 	}
 	dir, err := agentDir()
@@ -742,7 +751,7 @@ func launchConnectorHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	dir, err := agentDir()
 	if err != nil {
-		writeLaunchError(w, http.StatusInternalServerError, "could not resolve the agent data directory")
+		writeLaunchError(w, http.StatusInternalServerError, agentDirUnresolvedMessage)
 		return
 	}
 	path := pairing.StorePath(dir)
@@ -763,7 +772,7 @@ func launchDevicesHandler(w http.ResponseWriter, r *http.Request) {
 	setLaunchHeaders(w)
 	dir, err := agentDir()
 	if err != nil {
-		writeLaunchError(w, http.StatusInternalServerError, "could not resolve the agent data directory")
+		writeLaunchError(w, http.StatusInternalServerError, agentDirUnresolvedMessage)
 		return
 	}
 	path := pairing.StorePath(dir)
@@ -816,7 +825,7 @@ func launchDevicesHandler(w http.ResponseWriter, r *http.Request) {
 func launchDoctorHandler(w http.ResponseWriter, r *http.Request) {
 	setLaunchHeaders(w)
 	if r.Method != http.MethodGet {
-		writeLaunchError(w, http.StatusMethodNotAllowed, "GET only")
+		writeLaunchError(w, http.StatusMethodNotAllowed, getOnlyMessage)
 		return
 	}
 	writeLaunchJSON(w, map[string]any{"checks": collectAgentChecks()})
@@ -3556,7 +3565,7 @@ func launchInterruptHandler(w http.ResponseWriter, r *http.Request) {
 		Session string `json:"session"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&req); err != nil {
-		writeLaunchError(w, http.StatusBadRequest, "could not read the request")
+		writeLaunchError(w, http.StatusBadRequest, requestUnreadableMessage)
 		return
 	}
 	session, code, msg := launchSessionFor(req.Session)
@@ -3586,7 +3595,7 @@ func launchCarryHandler(w http.ResponseWriter, r *http.Request) {
 		Fresh   bool   `json:"fresh"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&req); err != nil {
-		writeLaunchError(w, http.StatusBadRequest, "could not read the request")
+		writeLaunchError(w, http.StatusBadRequest, requestUnreadableMessage)
 		return
 	}
 	session, code, msg := launchSessionFor(req.Session)
@@ -3601,7 +3610,7 @@ func launchCarryHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	profile := strings.TrimSpace(req.Profile)
 	if profile != "" && profile != "default" && (!profileNamePattern.MatchString(profile) || !containsString(launchProfileNames(), profile)) {
-		writeLaunchError(w, http.StatusBadRequest, "no such profile")
+		writeLaunchError(w, http.StatusBadRequest, noSuchProfileMessage)
 		return
 	}
 	if to == "" && !req.Fresh && profile == "" {
@@ -3643,7 +3652,7 @@ func launchFreshHandler(w http.ResponseWriter, r *http.Request) {
 		Session string `json:"session"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&req); err != nil {
-		writeLaunchError(w, http.StatusBadRequest, "could not read the request")
+		writeLaunchError(w, http.StatusBadRequest, requestUnreadableMessage)
 		return
 	}
 	session, code, msg := launchSessionFor(req.Session)
@@ -3809,12 +3818,12 @@ func launchNewHandler(w http.ResponseWriter, r *http.Request) {
 		Agent string `json:"agent"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&req); err != nil {
-		writeLaunchError(w, http.StatusBadRequest, "could not read the request")
+		writeLaunchError(w, http.StatusBadRequest, requestUnreadableMessage)
 		return
 	}
 	model := strings.TrimSpace(req.Model)
 	if model != "" && !validModel(model) {
-		writeLaunchError(w, http.StatusBadRequest, "model: letters, digits, dots and dashes only")
+		writeLaunchError(w, http.StatusBadRequest, modelNameRuleMessage)
 		return
 	}
 	agent := strings.ToLower(strings.TrimSpace(req.Agent))
@@ -3825,7 +3834,7 @@ func launchNewHandler(w http.ResponseWriter, r *http.Request) {
 	profile := strings.TrimSpace(req.Profile)
 	if profile != "" && profile != "default" {
 		if !profileNamePattern.MatchString(profile) || !containsString(launchProfileNames(), profile) {
-			writeLaunchError(w, http.StatusBadRequest, "no such profile")
+			writeLaunchError(w, http.StatusBadRequest, noSuchProfileMessage)
 			return
 		}
 	} else {
@@ -3960,7 +3969,7 @@ func launchPushHandler(w http.ResponseWriter, r *http.Request) {
 	setLaunchHeaders(w)
 	dir, err := agentDir()
 	if err != nil {
-		writeLaunchError(w, http.StatusInternalServerError, "could not resolve the agent data directory")
+		writeLaunchError(w, http.StatusInternalServerError, agentDirUnresolvedMessage)
 		return
 	}
 	device, ok := authorizedDevice(pairing.StorePath(dir), r.Header.Get("Authorization"))
@@ -4161,7 +4170,7 @@ func launchTicketHandler(w http.ResponseWriter, r *http.Request) {
 		Ref       string `json:"ref"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&req); err != nil {
-		writeLaunchError(w, http.StatusBadRequest, "could not read the request")
+		writeLaunchError(w, http.StatusBadRequest, requestUnreadableMessage)
 		return
 	}
 	dir, err := agentDir()
@@ -4432,12 +4441,12 @@ func launchWorkOnHandler(w http.ResponseWriter, r *http.Request) {
 		Models   []string `json:"models"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(&req); err != nil {
-		writeLaunchError(w, http.StatusBadRequest, "could not read the request")
+		writeLaunchError(w, http.StatusBadRequest, requestUnreadableMessage)
 		return
 	}
 	for _, m := range req.Models {
 		if m != "" && !validModel(m) {
-			writeLaunchError(w, http.StatusBadRequest, "model: letters, digits, dots and dashes only")
+			writeLaunchError(w, http.StatusBadRequest, modelNameRuleMessage)
 			return
 		}
 	}
@@ -4524,12 +4533,12 @@ func workOnCommand(dir string, keys []string, opt workOnOptions) (command.Comman
 	}
 	model := strings.TrimSpace(opt.Model)
 	if model != "" && !validModel(model) {
-		return command.Command{}, http.StatusBadRequest, "model: letters, digits, dots and dashes only"
+		return command.Command{}, http.StatusBadRequest, modelNameRuleMessage
 	}
 	profile := strings.TrimSpace(opt.Profile)
 	if profile != "" && profile != "default" {
 		if !profileNamePattern.MatchString(profile) || !containsString(launchProfileNames(), profile) {
-			return command.Command{}, http.StatusBadRequest, "no such profile"
+			return command.Command{}, http.StatusBadRequest, noSuchProfileMessage
 		}
 	} else {
 		profile = ""
@@ -4710,7 +4719,7 @@ func launchTaskCommentHandler(w http.ResponseWriter, r *http.Request) {
 		By   string `json:"by"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&req); err != nil {
-		writeLaunchError(w, http.StatusBadRequest, "could not read the request")
+		writeLaunchError(w, http.StatusBadRequest, requestUnreadableMessage)
 		return
 	}
 	dir, err := agentDir()
@@ -4752,7 +4761,7 @@ func launchTaskHandler(w http.ResponseWriter, r *http.Request) {
 			Comments []watch.TaskComment `json:"comments"`
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&req); err != nil {
-			writeLaunchError(w, http.StatusBadRequest, "could not read the request")
+			writeLaunchError(w, http.StatusBadRequest, requestUnreadableMessage)
 			return
 		}
 		if isViewer(r) {

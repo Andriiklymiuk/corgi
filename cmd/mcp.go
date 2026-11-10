@@ -437,7 +437,7 @@ func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 
 	announceMCPAuth(token, deviceStore)
 	fmt.Fprintf(os.Stderr, "corgi mcp serving Streamable HTTP on %s/mcp\n", addr)
-	printMCPClientConfig(os.Stderr, "http://"+localURL(addr)+"/mcp", token)
+	printMCPClientConfig(os.Stderr, utils.PlainHTTPURL(localURL(addr), "/mcp"), token)
 	if pairSession != nil {
 		announcePairing(pairSession, addr)
 	}

@@ -9,6 +9,10 @@ import (
 	"andriiklymiuk/corgi/utils/agent/watch"
 )
 
+const (
+	stayedWhereItWasFormat = "corgi: %s stayed where it was: %v\n"
+)
+
 const pickupTimeout = 20 * time.Second
 
 func markPickedUp(agentD string, events []watch.Event) {
@@ -51,7 +55,7 @@ func markPickedUp(agentD string, events []watch.Event) {
 			continue
 		}
 		if err := w.Move(ctx, ref, status); err != nil {
-			utils.Infof("corgi: %s stayed where it was: %v\n", ref, err)
+			utils.Infof(stayedWhereItWasFormat, ref, err)
 			continue
 		}
 		_ = watch.LoadStateLog(agentD).SetFrom(e.Key, status, e.State, time.Now())
@@ -95,13 +99,13 @@ func markDelivered(agentD, workspaceID string, e watch.Event, prs []string) {
 	}
 	w, _, err := watchWriter(agentD, workspaceID)
 	if err != nil {
-		utils.Infof("corgi: %s stayed where it was: %v\n", e.Ref, err)
+		utils.Infof(stayedWhereItWasFormat, e.Ref, err)
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), pickupTimeout)
 	defer cancel()
 	if err := w.Move(ctx, e.Ref, status); err != nil {
-		utils.Infof("corgi: %s stayed where it was: %v\n", e.Ref, err)
+		utils.Infof(stayedWhereItWasFormat, e.Ref, err)
 		return
 	}
 	_ = watch.LoadStateLog(agentD).Set(e.Key, status, time.Now())

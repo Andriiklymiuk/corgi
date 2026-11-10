@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"andriiklymiuk/corgi/utils"
 	"fmt"
 	"net"
 	"net/http"
@@ -21,7 +22,7 @@ type originAllowlist struct {
 func newOriginAllowlist(listenAddr string, extra []string) *originAllowlist {
 	a := &originAllowlist{exact: map[string]bool{}}
 	if listenAddr != "" {
-		a.add("http://" + localURL(listenAddr))
+		a.add(utils.PlainHTTPURL(localURL(listenAddr), ""))
 	}
 	for _, o := range extra {
 		a.add(o)

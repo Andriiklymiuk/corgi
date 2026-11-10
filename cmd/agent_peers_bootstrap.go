@@ -22,6 +22,13 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const (
+	gitGlobalFlag       = "--global"
+	skipPermissionsFlag = "dangerously-skip-permissions"
+	gitUserNameKey      = "user.name"
+	withTokensFlag      = "with-tokens"
+)
+
 type peerPack struct {
 	From       string          `json:"from"`
 	At         time.Time       `json:"at"`
@@ -72,7 +79,7 @@ func buildPeerPack(dir string, only []string, withTokens bool) (peerPack, error)
 		return peerPack{}, err
 	}
 	pack := peerPack{From: peers.Me(), At: time.Now(), TZ: os.Getenv("TZ"),
-		GitName: gitOutput(".", "config", "--global", "user.name"), GitEmail: gitOutput(".", "config", "--global", "user.email")}
+		GitName: gitOutput(".", "config", gitGlobalFlag, gitUserNameKey), GitEmail: gitOutput(".", "config", gitGlobalFlag, "user.email")}
 	if pack.TZ == "" {
 		if zone, err := os.Readlink("/etc/localtime"); err == nil {
 			if i := strings.Index(zone, "zoneinfo/"); i >= 0 {
@@ -150,9 +157,9 @@ func applyPeerPack(dir string, pack peerPack, opt importOptions) ([]string, erro
 		opt.base = filepath.Join(home, "dev")
 	}
 	var done []string
-	if pack.GitName != "" && gitOutput(".", "config", "--global", "user.name") == "" {
-		_ = exec.Command("git", "config", "--global", "user.name", pack.GitName).Run()
-		_ = exec.Command("git", "config", "--global", "user.email", pack.GitEmail).Run()
+	if pack.GitName != "" && gitOutput(".", "config", gitGlobalFlag, gitUserNameKey) == "" {
+		_ = exec.Command("git", "config", gitGlobalFlag, gitUserNameKey, pack.GitName).Run()
+		_ = exec.Command("git", "config", gitGlobalFlag, "user.email", pack.GitEmail).Run()
 		done = append(done, "git identity: "+pack.GitName)
 	}
 	if pack.Secrets != nil && watch.LoadSecrets(dir).IsZero() {
@@ -345,7 +352,7 @@ var agentPeersExportCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, _ []string) {
 		dir := mustAgentDir()
 		only, _ := cmd.Flags().GetStringSlice("workspace")
-		withTokens, _ := cmd.Flags().GetBool("with-tokens")
+		withTokens, _ := cmd.Flags().GetBool(withTokensFlag)
 		pack, err := buildPeerPack(dir, only, withTokens)
 		if err != nil {
 			exitWithError("agent_peers", err, 2)
@@ -362,7 +369,7 @@ var agentPeersImportCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, _ []string) {
 		dir := mustAgentDir()
 		base, _ := cmd.Flags().GetString("dir")
-		skipPerms, _ := cmd.Flags().GetBool("dangerously-skip-permissions")
+		skipPerms, _ := cmd.Flags().GetBool(skipPermissionsFlag)
 		raw, err := io.ReadAll(os.Stdin)
 		if err != nil {
 			exitWithError("agent_peers", err, 1)
@@ -413,8 +420,8 @@ answers; pair it with corgi agent harden there.`,
 		dir := mustAgentDir()
 		only, _ := cmd.Flags().GetStringSlice("workspace")
 		base, _ := cmd.Flags().GetString("dir")
-		withTokens, _ := cmd.Flags().GetBool("with-tokens")
-		skipPerms, _ := cmd.Flags().GetBool("dangerously-skip-permissions")
+		withTokens, _ := cmd.Flags().GetBool(withTokensFlag)
+		skipPerms, _ := cmd.Flags().GetBool(skipPermissionsFlag)
 		lead, _ := cmd.Flags().GetBool("lead")
 		lan, _ := cmd.Flags().GetBool("lan")
 		noPair, _ := cmd.Flags().GetBool("no-pair")
@@ -437,14 +444,14 @@ answers; pair it with corgi agent harden there.`,
 
 func init() {
 	agentPeersExportCmd.Flags().StringSlice("workspace", nil, "Only these workspace ids")
-	agentPeersExportCmd.Flags().Bool("with-tokens", false, "Include the tracker tokens")
+	agentPeersExportCmd.Flags().Bool(withTokensFlag, false, "Include the tracker tokens")
 	agentPeersImportCmd.Flags().String("dir", "", "Where the checkouts go (default ~/dev)")
-	agentPeersImportCmd.Flags().Bool("dangerously-skip-permissions", false, "Register every workspace with permission prompts off")
+	agentPeersImportCmd.Flags().Bool(skipPermissionsFlag, false, "Register every workspace with permission prompts off")
 	for _, f := range []*cobra.Command{agentPeersBootstrapCmd} {
 		f.Flags().StringSlice("workspace", nil, "Only these workspace ids")
 		f.Flags().String("dir", "~/dev", "Where the checkouts go on the other machine")
-		f.Flags().Bool("with-tokens", false, "Copy this machine's tracker tokens over ssh")
-		f.Flags().Bool("dangerously-skip-permissions", false, "Register the workspaces there with permission prompts off (a server)")
+		f.Flags().Bool(withTokensFlag, false, "Copy this machine's tracker tokens over ssh")
+		f.Flags().Bool(skipPermissionsFlag, false, "Register the workspaces there with permission prompts off (a server)")
 		f.Flags().Bool("lead", false, "The other machine leads every shared tracker")
 		f.Flags().Bool("lan", false, "Serve on 0.0.0.0:8765 there instead of a tunnel")
 		f.Flags().Bool("no-pair", false, "Set it up without pairing as peers")

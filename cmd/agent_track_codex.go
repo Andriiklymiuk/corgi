@@ -15,6 +15,11 @@ import (
 	"andriiklymiuk/corgi/utils/atomicfile"
 )
 
+const (
+	codexDirName    = ".codex"
+	codexConfigFile = "config.toml"
+)
+
 // A codex with hooks gets the same lifecycle hooks Claude Code has, in
 // ~/.codex/hooks.json: every prompt, tool, permission and stop reaches the
 // board, with the terminal it runs in, so a codex session can be focused,
@@ -29,13 +34,13 @@ var codexNotifyRe = regexp.MustCompile(`(?m)^notify\s*=.*$`)
 
 func codexConfigPath() string {
 	if home := strings.TrimSpace(os.Getenv("CODEX_HOME")); home != "" {
-		return filepath.Join(home, "config.toml")
+		return filepath.Join(home, codexConfigFile)
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(home, ".codex", "config.toml")
+	return filepath.Join(home, codexDirName, codexConfigFile)
 }
 
 func codexHooksPath() string {
@@ -46,7 +51,7 @@ func codexHooksPath() string {
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(home, ".codex", "hooks.json")
+	return filepath.Join(home, codexDirName, "hooks.json")
 }
 
 var codexHooksFeatureRe = regexp.MustCompile(`(?m)^hooks\s+\S+\s+true\s*$`)
@@ -212,9 +217,9 @@ func codexDecidesItself(permissionMode, cwd string) bool {
 	paths := []string{codexConfigPath()}
 	if cwd != "" {
 		if root := sessions.RepoRoot(cwd); root != "" {
-			paths = append([]string{filepath.Join(root, ".codex", "config.toml")}, paths...)
+			paths = append([]string{filepath.Join(root, codexDirName, codexConfigFile)}, paths...)
 		}
-		paths = append([]string{filepath.Join(cwd, ".codex", "config.toml")}, paths...)
+		paths = append([]string{filepath.Join(cwd, codexDirName, codexConfigFile)}, paths...)
 	}
 	for _, p := range paths {
 		if raw, err := os.ReadFile(p); err == nil && codexAutoReviewRe.Match(codexTopLevel(raw)) {

@@ -34,7 +34,7 @@ func runAgentDashboard(cmd *cobra.Command, _ []string) {
 	if err != nil {
 		exitWithError("agent_dashboard", fmt.Errorf("the daemon is not running - start it with `corgi agent up`"), 2)
 	}
-	base := "http://" + strings.TrimSpace(string(addr))
+	base := utils.PlainHTTPURL(strings.TrimSpace(string(addr)), "")
 
 	name, _ := cmd.Flags().GetString("name")
 	token, err := pairing.PairLocal(pairing.StorePath(dir), name)

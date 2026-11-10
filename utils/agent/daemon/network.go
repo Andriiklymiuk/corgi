@@ -27,8 +27,9 @@ const DefaultHotspotBudget = 2 << 30
 const (
 	networkTick      = 30 * time.Second
 	offlineBeforeHop = 90 * time.Second
-	captiveProbe     = "http://captive.apple.com/hotspot-detect.html"
 )
+
+var captiveProbe = utils.PlainHTTPURL("captive.apple.com", "/hotspot-detect.html")
 
 var hopBackoff = []time.Duration{30 * time.Second, time.Minute, 2 * time.Minute, 5 * time.Minute}
 

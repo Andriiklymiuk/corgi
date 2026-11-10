@@ -463,7 +463,7 @@ func answerIdea(dir, slug, model string) (bool, error) {
 		model = firstNonEmpty(id.Meta.Model, ideaModel)
 	}
 	_, _ = idea.Update(dir, slug, func(id *idea.Idea) error { id.Meta.Answering = true; return nil })
-	clear := func() {
+	clearAnswering := func() {
 		_, _ = idea.Update(dir, slug, func(id *idea.Idea) error { id.Meta.Answering = false; return nil })
 	}
 	runIn := ideaWorkspaceRoot(id.Meta.Workspace)
@@ -485,12 +485,12 @@ func answerIdea(dir, slug, model string) (bool, error) {
 	defer cancel()
 	out, err := runIdeaPrint(ctx, runIn, model, ideaAnswerSoul, prompt)
 	if err != nil {
-		clear()
+		clearAnswering()
 		return true, err
 	}
 	ans, err := parseIdeaComments(out)
 	if err != nil {
-		clear()
+		clearAnswering()
 		return true, err
 	}
 	now := time.Now()
@@ -608,7 +608,7 @@ type ideaBuild struct {
 }
 
 // buildIdea hands the page to the agents: a planner cuts it into tasks on
-// the board (replacing earlier ones from this page still in Todo), a plan
+// the board (replacing earlier ones from this page not yet started), a plan
 // works through them, and the daemon starts the first when the workspace
 // is watched with worktrees. Without that, the tasks and the plan wait.
 func buildIdea(dir, slug, ws, model string, slots int, run bool) (ideaBuild, error) {
@@ -959,7 +959,7 @@ var ideaOpenCmd = &cobra.Command{
 			if _, statErr := os.Stat(args[0]); statErr != nil {
 				exitWithError("idea", err, 2)
 			}
-			res, shareErr := shareIdea(dir, shareRequest{Target: args[0], By: osUserName()}, time.Now())
+			res, shareErr := shareFromCommandLine(dir, shareRequest{Target: args[0], By: osUserName()}, time.Now())
 			if shareErr != nil {
 				exitWithError("idea", shareErr, 1)
 			}

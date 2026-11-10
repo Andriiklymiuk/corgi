@@ -22,10 +22,9 @@ import (
 	"golang.org/x/term"
 )
 
-const (
-	awayDiskMinGB   = 20
-	captiveProbeURL = "http://captive.apple.com/hotspot-detect.html"
-)
+const awayDiskMinGB = 20
+
+var captiveProbeURL = utils.PlainHTTPURL("captive.apple.com", "/hotspot-detect.html")
 
 func macUpdatesOff(out string) (off, known bool) {
 	switch strings.TrimSpace(out) {

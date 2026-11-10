@@ -19,6 +19,12 @@ import (
 	"time"
 )
 
+const (
+	binaryContentType    = "application/octet-stream"
+	zipContentType       = "application/zip"
+	plainTextContentType = "text/plain"
+)
+
 type AttachmentKind string
 
 const (
@@ -43,18 +49,18 @@ const maxAttachmentSize = math.MaxInt32
 // Sniffing names a family, not the format: a .mov reads as octet-stream, a .docx as
 // zip, a .csv as plain text. The extension narrows it only inside the family the bytes show.
 var extensionTypes = map[string]struct{ sniffed, contentType string }{
-	".mp4":  {"application/octet-stream", "video/mp4"},
-	".m4v":  {"application/octet-stream", "video/x-m4v"},
-	".mov":  {"application/octet-stream", "video/quicktime"},
-	".csv":  {"text/plain", "text/csv"},
-	".tsv":  {"text/plain", "text/tab-separated-values"},
-	".json": {"text/plain", "application/json"},
-	".md":   {"text/plain", "text/markdown"},
-	".doc":  {"application/octet-stream", "application/msword"},
-	".xls":  {"application/octet-stream", "application/vnd.ms-excel"},
-	".docx": {"application/zip", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"},
-	".xlsx": {"application/zip", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"},
-	".pptx": {"application/zip", "application/vnd.openxmlformats-officedocument.presentationml.presentation"},
+	".mp4":  {binaryContentType, "video/mp4"},
+	".m4v":  {binaryContentType, "video/x-m4v"},
+	".mov":  {binaryContentType, "video/quicktime"},
+	".csv":  {plainTextContentType, "text/csv"},
+	".tsv":  {plainTextContentType, "text/tab-separated-values"},
+	".json": {plainTextContentType, "application/json"},
+	".md":   {plainTextContentType, "text/markdown"},
+	".doc":  {binaryContentType, "application/msword"},
+	".xls":  {binaryContentType, "application/vnd.ms-excel"},
+	".docx": {zipContentType, "application/vnd.openxmlformats-officedocument.wordprocessingml.document"},
+	".xlsx": {zipContentType, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"},
+	".pptx": {zipContentType, "application/vnd.openxmlformats-officedocument.presentationml.presentation"},
 }
 
 // ReadAttachments checks every file before anything reaches the tracker, so a bad
@@ -258,7 +264,7 @@ func (j *Jira) attach(ctx context.Context, ref string, f Attachment) error {
 	writer := multipart.NewWriter(&form)
 	header := textproto.MIMEHeader{}
 	header.Set("Content-Disposition", fmt.Sprintf(`form-data; name="file"; filename=%q`, f.Name))
-	header.Set("Content-Type", f.ContentType)
+	header.Set(headerContentType, f.ContentType)
 	if _, err := writer.CreatePart(header); err != nil {
 		return err
 	}
@@ -275,7 +281,7 @@ func (j *Jira) attach(ctx context.Context, ref string, f Attachment) error {
 	}
 	req.ContentLength = int64(len(envelope)) + f.Size
 	req.SetBasicAuth(j.Email, j.Token)
-	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req.Header.Set(headerContentType, writer.FormDataContentType())
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("X-Atlassian-Token", "no-check")
 	return doUpload(j.Client, req, "jira "+path)
@@ -392,7 +398,7 @@ func (l *Linear) upload(ctx context.Context, f Attachment) (string, error) {
 		return "", err
 	}
 	req.ContentLength = f.Size
-	req.Header.Set("Content-Type", f.ContentType)
+	req.Header.Set(headerContentType, f.ContentType)
 	req.Header.Set("Cache-Control", "public, max-age=31536000")
 	for _, h := range upload.Headers {
 		req.Header.Set(h.Key, h.Value)

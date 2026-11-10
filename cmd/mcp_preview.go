@@ -14,6 +14,10 @@ import (
 	"time"
 )
 
+const (
+	launchPreviewPath = "/launch/preview/"
+)
+
 const previewFor = 10 * time.Minute
 
 type previewTicket struct {
@@ -98,11 +102,11 @@ func launchPreviewHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	previewTickets[token] = previewTicket{Workspace: id, Service: service, Port: found.Port, Until: until}
 	previewMu.Unlock()
-	writeLaunchJSON(w, map[string]any{"url": "/launch/preview/" + token + "/", "expiresAt": until, "service": service, "port": found.Port, "workspace": id})
+	writeLaunchJSON(w, map[string]any{"url": launchPreviewPath + token + "/", "expiresAt": until, "service": service, "port": found.Port, "workspace": id})
 }
 
 func previewProxyHandler(w http.ResponseWriter, r *http.Request) {
-	rest := strings.TrimPrefix(r.URL.Path, "/launch/preview/")
+	rest := strings.TrimPrefix(r.URL.Path, launchPreviewPath)
 	token, path, ok := strings.Cut(rest, "/")
 	if !ok || token == "" {
 		http.NotFound(w, r)
@@ -120,7 +124,7 @@ func previewProxyHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	target := &url.URL{Scheme: "http", Host: "127.0.0.1:" + strconv.Itoa(t.Port)}
-	prefix := "/launch/preview/" + token + "/"
+	prefix := launchPreviewPath + token + "/"
 	proxy := &httputil.ReverseProxy{
 		Rewrite: func(pr *httputil.ProxyRequest) {
 			pr.SetURL(target)

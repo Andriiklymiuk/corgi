@@ -14,6 +14,10 @@ import (
 	"andriiklymiuk/corgi/utils"
 )
 
+const (
+	isolateBulletPrefix = "- `corgi --isolate "
+)
+
 var isolateMu sync.Mutex
 
 func isolateFixWorktrees(dir, branch string) ([]string, error) {
@@ -113,9 +117,9 @@ func runStackNote(dir, branch, mode string) string {
 	}
 	lease := runLease(branch)
 	return "\n\nThis run has a stack of its own, so a check that needs a database is never skipped for want of one. From `" + dir + "`:\n" +
-		"- `corgi --isolate " + lease + " db -u --wait` starts this workspace's databases (" + strings.Join(dbs, ", ") + ") empty, on ports and database names nobody else uses.\n" +
-		"- `corgi --isolate " + lease + " exec <service> --feature " + branch + " -- <command>` runs a migration, a schema load, a SQL check or a spec in your worktree against them, with that service's env.\n" +
-		"- `corgi --isolate " + lease + " test --feature " + branch + " --changed` runs the tests of what you changed.\n" +
+		isolateBulletPrefix + lease + " db -u --wait` starts this workspace's databases (" + strings.Join(dbs, ", ") + ") empty, on ports and database names nobody else uses.\n" +
+		isolateBulletPrefix + lease + " exec <service> --feature " + branch + " -- <command>` runs a migration, a schema load, a SQL check or a spec in your worktree against them, with that service's env.\n" +
+		isolateBulletPrefix + lease + " test --feature " + branch + " --changed` runs the tests of what you changed.\n" +
 		"They start empty: build what a check needs with the schema and the specs' own fixtures. Never restore, copy or load a dump of another database into them - a production-sized copy takes hours. " +
 		"A check that needs real data goes under `## Left for you`. corgi stops these databases and frees the lease when the run ends. Your report names the checks you ran this way."
 }

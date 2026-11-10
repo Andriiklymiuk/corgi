@@ -753,6 +753,7 @@ func waitDetachedReadyOrExit(cmd *cobra.Command, corgi *utils.CorgiCompose) func
 	ctx, cancel := context.WithTimeout(context.Background(), remaining)
 	defer cancel()
 	stopFollow := func() {
+		// no follow started
 	}
 	if follow, _ := cmd.Flags().GetBool("follow"); follow {
 		stopFollow = startLogFollow()

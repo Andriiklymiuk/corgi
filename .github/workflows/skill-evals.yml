@@ -12,13 +12,18 @@ on:
       - "scripts/skill-activation.sh"
   workflow_dispatch:
 
+env:
+  CLAUDE_CODE_VERSION: "2.1.322"
+
 jobs:
   validate:
     name: Plugin manifest
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-      - run: npm install -g @anthropic-ai/claude-code
+      - run: |
+          npm install -g --ignore-scripts "@anthropic-ai/claude-code@${{ env.CLAUDE_CODE_VERSION }}"
+          node "$(npm root -g)/@anthropic-ai/claude-code/install.cjs"
       - run: claude plugin validate plugins/corgi
 
   activation:
@@ -34,7 +39,9 @@ jobs:
         run: |
           if [ -n "$CLAUDE_CODE_OAUTH_TOKEN" ] || [ -n "$ANTHROPIC_API_KEY" ]; then echo "has=true" >> "$GITHUB_OUTPUT"; else echo "no Claude login in secrets - skipping"; echo "has=false" >> "$GITHUB_OUTPUT"; fi
       - if: steps.login.outputs.has == 'true'
-        run: npm install -g @anthropic-ai/claude-code
+        run: |
+          npm install -g --ignore-scripts "@anthropic-ai/claude-code@${{ env.CLAUDE_CODE_VERSION }}"
+          node "$(npm root -g)/@anthropic-ai/claude-code/install.cjs"
       - if: steps.login.outputs.has == 'true'
         run: scripts/skill-activation.sh
 
@@ -50,7 +57,9 @@ jobs:
         run: |
           if [ -n "$CLAUDE_CODE_OAUTH_TOKEN" ] || [ -n "$ANTHROPIC_API_KEY" ]; then echo "has=true" >> "$GITHUB_OUTPUT"; else echo "no Claude login in secrets - skipping"; echo "has=false" >> "$GITHUB_OUTPUT"; fi
       - if: steps.login.outputs.has == 'true'
-        run: npm install -g @anthropic-ai/claude-code
+        run: |
+          npm install -g --ignore-scripts "@anthropic-ai/claude-code@${{ env.CLAUDE_CODE_VERSION }}"
+          node "$(npm root -g)/@anthropic-ai/claude-code/install.cjs"
       # Early access: when the command is not available on this account the
       # step says so and passes; the activation job above still gates.
       - if: steps.login.outputs.has == 'true'

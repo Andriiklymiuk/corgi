@@ -101,12 +101,12 @@ func NewestFailedRun(ctx context.Context, s Secrets, repo string, since time.Tim
 	if err != nil {
 		return FailedRun{}, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, GitHubAPI+"/repos/"+repo+"/actions/runs?status=failure&per_page=10&actor="+url.QueryEscape(me), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, GitHubAPI+reposSegment+repo+"/actions/runs?status=failure&per_page=10&actor="+url.QueryEscape(me), nil)
 	if err != nil {
 		return FailedRun{}, err
 	}
-	req.Header.Set("Authorization", "Bearer "+s.GitHub)
-	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("Authorization", bearerPrefix+s.GitHub)
+	req.Header.Set("Accept", githubJSONAccept)
 	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
 	if err != nil {
 		return FailedRun{}, fmt.Errorf("listing runs of %s: %w", repo, err)
@@ -146,12 +146,12 @@ func RerunFailedJobs(ctx context.Context, s Secrets, repo string, runID int64) e
 	if s.GitHub == "" {
 		return ErrNoToken
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, GitHubAPI+"/repos/"+repo+"/actions/runs/"+strconv.FormatInt(runID, 10)+"/rerun-failed-jobs", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, GitHubAPI+reposSegment+repo+"/actions/runs/"+strconv.FormatInt(runID, 10)+"/rerun-failed-jobs", nil)
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Authorization", "Bearer "+s.GitHub)
-	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("Authorization", bearerPrefix+s.GitHub)
+	req.Header.Set("Accept", githubJSONAccept)
 	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
 	if err != nil {
 		return fmt.Errorf("rerunning %s run %d: %w", repo, runID, err)
@@ -245,12 +245,12 @@ func SetPullBody(ctx context.Context, s Secrets, link, body string) error {
 			return ErrNoToken
 		}
 		payload, _ := json.Marshal(map[string]string{"body": body})
-		req, err := http.NewRequestWithContext(ctx, http.MethodPatch, GitHubAPI+"/repos/"+m[1]+"/pulls/"+m[2], strings.NewReader(string(payload)))
+		req, err := http.NewRequestWithContext(ctx, http.MethodPatch, GitHubAPI+reposSegment+m[1]+"/pulls/"+m[2], strings.NewReader(string(payload)))
 		if err != nil {
 			return err
 		}
-		req.Header.Set("Authorization", "Bearer "+s.GitHub)
-		req.Header.Set("Accept", "application/vnd.github+json")
+		req.Header.Set("Authorization", bearerPrefix+s.GitHub)
+		req.Header.Set("Accept", githubJSONAccept)
 		req.Header.Set("Content-Type", "application/json")
 		return doWrite(req, link)
 	case strings.Contains(link, "/-/merge_requests/"):
@@ -290,8 +290,8 @@ func githubLogin(ctx context.Context, token string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("Authorization", bearerPrefix+token)
+	req.Header.Set("Accept", githubJSONAccept)
 	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
 	if err != nil {
 		return "", fmt.Errorf("reading who I am on GitHub: %w", err)

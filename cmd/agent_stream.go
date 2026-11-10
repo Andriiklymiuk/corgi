@@ -21,6 +21,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const (
+	conversationUnreadableMessage = "could not read the conversation"
+)
+
 var agentStreamCmd = &cobra.Command{
 	Use:   "stream",
 	Short: "Which workspaces a paired phone may read as a conversation",
@@ -199,7 +203,7 @@ func launchTranscriptHandler(w http.ResponseWriter, r *http.Request) {
 	if req.Why {
 		steps, err := transcriptSteps(path, req.Max)
 		if err != nil {
-			writeLaunchError(w, http.StatusInternalServerError, "could not read the conversation")
+			writeLaunchError(w, http.StatusInternalServerError, conversationUnreadableMessage)
 			return
 		}
 		writeLaunchJSON(w, map[string]any{"session": session.ID, "steps": steps})
@@ -219,7 +223,7 @@ func launchTranscriptHandler(w http.ResponseWriter, r *http.Request) {
 	if req.After <= 0 {
 		entries, offset, err := transcript.Last(path, req.Max)
 		if err != nil {
-			writeLaunchError(w, http.StatusInternalServerError, "could not read the conversation")
+			writeLaunchError(w, http.StatusInternalServerError, conversationUnreadableMessage)
 			return
 		}
 		if entries == nil {
@@ -236,7 +240,7 @@ func launchTranscriptHandler(w http.ResponseWriter, r *http.Request) {
 	for {
 		entries, offset, err := transcript.Read(path, req.After, req.Max)
 		if err != nil {
-			writeLaunchError(w, http.StatusInternalServerError, "could not read the conversation")
+			writeLaunchError(w, http.StatusInternalServerError, conversationUnreadableMessage)
 			return
 		}
 		if len(entries) > 0 || offset != req.After || wait == 0 || time.Now().After(deadline) {

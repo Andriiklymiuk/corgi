@@ -69,7 +69,7 @@ func localLauncherURL() string {
 	if addr == "" || !mcpListening(addr) {
 		return ""
 	}
-	return "http://" + addr + "/app"
+	return utils.PlainHTTPURL(addr, "/app")
 }
 
 func loopbackAddr(addr string) string {

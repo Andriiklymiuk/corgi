@@ -61,7 +61,7 @@ about every comment on the desktop and the phone.`,
 			ro, _ := cmd.Flags().GetBool("read-only")
 			req.ReadOnly = &ro
 		}
-		res, err := shareIdea(dir, req, time.Now())
+		res, err := shareFromCommandLine(dir, req, time.Now())
 		if err != nil {
 			exitWithError("idea", err, 1)
 		}
@@ -80,6 +80,7 @@ about every comment on the desktop and the phone.`,
 type shareRequest struct {
 	Target    string // a slug, or a markdown file
 	Markdown  string // or the page's text, with Title
+	Source    string // the file Markdown was read from, set by the command line only
 	Title     string
 	Type      string
 	Workspace string
@@ -158,6 +159,39 @@ func shareIdea(dir string, req shareRequest, now time.Time) (shareResult, error)
 	return res, nil
 }
 
+func shareFromCommandLine(dir string, req shareRequest, now time.Time) (shareResult, error) {
+	req, err := withFileTarget(dir, req)
+	if err != nil {
+		return shareResult{}, err
+	}
+	return shareIdea(dir, req, now)
+}
+
+func withFileTarget(dir string, req shareRequest) (shareRequest, error) {
+	target := strings.TrimSpace(req.Target)
+	if req.Markdown != "" {
+		return req, nil
+	}
+	if idea.ValidSlug(target) {
+		if _, err := idea.Load(dir, target); err == nil {
+			return req, nil
+		}
+	}
+	path, err := filepath.Abs(target)
+	if err != nil {
+		return req, err
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return req, fmt.Errorf("%s is neither a page here nor a file - corgi idea list shows the pages", target)
+		}
+		return req, err
+	}
+	req.Markdown, req.Source = string(data), path
+	return req, nil
+}
+
 // pageToShare finds or makes the page: an existing slug, or a markdown
 // file (or text) kept word for word, updated in place when shared again.
 func pageToShare(dir string, req shareRequest, now time.Time) (slug string, created, updated bool, err error) {
@@ -167,20 +201,9 @@ func pageToShare(dir string, req shareRequest, now time.Time) (slug string, crea
 			return target, false, false, nil
 		}
 	}
-	text, source := req.Markdown, ""
-	if text == "" {
-		path, err := filepath.Abs(target)
-		if err != nil {
-			return "", false, false, err
-		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			if os.IsNotExist(err) {
-				return "", false, false, fmt.Errorf("%s is neither a page here nor a file - corgi idea list shows the pages", target)
-			}
-			return "", false, false, err
-		}
-		text, source = string(data), path
+	text, source := req.Markdown, req.Source
+	if text == "" && source == "" {
+		return "", false, false, fmt.Errorf("%s is neither a page here nor a file - corgi idea list shows the pages", target)
 	}
 	if strings.TrimSpace(text) == "" {
 		return "", false, false, fmt.Errorf("the page is empty")

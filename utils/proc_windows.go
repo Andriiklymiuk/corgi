@@ -9,6 +9,7 @@ import (
 )
 
 func SetProcessGroup(cmd *exec.Cmd) {
+	// windows has no process groups to set
 }
 
 func KillProcessGroup(pid int) error {

@@ -20,6 +20,14 @@ import (
 	"andriiklymiuk/corgi/utils/atomicfile"
 )
 
+const (
+	inProductionText     = "in production"
+	itIsPrefix           = "it is "
+	notStartedText       = "not started"
+	slackTestCursor      = "test/slack"
+	waitingOnReleaseText = "waiting on a release"
+)
+
 type Kind string
 
 const (
@@ -120,7 +128,7 @@ func (r Rules) Why(e Event) string {
 		}
 		if len(r.States) == 0 {
 			if over := finishedState(e.State); over != "" {
-				return "it is " + over + " - there is nothing to review"
+				return itIsPrefix + over + " - there is nothing to review"
 			}
 		}
 	case KindChatMention, KindChatMessage:
@@ -147,7 +155,7 @@ func (r Rules) Why(e Event) string {
 		}
 		if len(r.States) == 0 {
 			if over := finishedState(e.State); over != "" {
-				return "it is " + over + " - the comment is not work"
+				return itIsPrefix + over + " - the comment is not work"
 			}
 		}
 		if e.Kind != KindPRReview && IsAcknowledgement(e.Body) {
@@ -169,7 +177,7 @@ func (r Rules) Why(e Event) string {
 	case KindIssueNew:
 		if dead := finishedState(e.State); dead != "" {
 			if len(r.States) == 0 {
-				return "it is " + dead + " - nobody is going to act on it"
+				return itIsPrefix + dead + " - nobody is going to act on it"
 			}
 		}
 		if len(r.States) == 0 && InFlight(e.State) {
@@ -212,12 +220,12 @@ func InFlight(state string) bool {
 var closedStates = map[string]string{
 	"done": "done", "closed": "closed", "resolved": "resolved",
 	"complete": "done", "completed": "done", "shipped": "shipped",
-	"released": "released", "merged": "merged", "to release": "waiting on a release",
-	"ready to deploy": "waiting on a deploy", "ready for release": "waiting on a release",
-	"ready to release": "waiting on a release", "to deploy": "waiting on a deploy",
+	"released": "released", "merged": "merged", "to release": waitingOnReleaseText,
+	"ready to deploy": "waiting on a deploy", "ready for release": waitingOnReleaseText,
+	"ready to release": waitingOnReleaseText, "to deploy": "waiting on a deploy",
 	"locked":   "locked",
-	"verified": "verified", "deployed": "deployed", "in production": "in production",
-	"on production": "in production", "live": "live", "qa passed": "past QA", "tested": "tested",
+	"verified": "verified", "deployed": "deployed", inProductionText: inProductionText,
+	"on production": inProductionText, "live": "live", "qa passed": "past QA", "tested": "tested",
 }
 
 var approvingVerdict = regexp.MustCompile(`(?im)^\W*verdict:?\W*approved?\b`)
@@ -544,10 +552,10 @@ func (s *State) SetThreadForTest(key, parent string) {
 	if s.Cursors == nil {
 		s.Cursors = map[string]Cursor{}
 	}
-	if s.Cursors["test/slack"] == nil {
-		s.Cursors["test/slack"] = Cursor{}
+	if s.Cursors[slackTestCursor] == nil {
+		s.Cursors[slackTestCursor] = Cursor{}
 	}
-	s.Cursors["test/slack"]["thread:"+key] = parent
+	s.Cursors[slackTestCursor]["thread:"+key] = parent
 }
 
 func (s *State) setCursor(ws, source string, c Cursor, now time.Time, err error) {
@@ -1070,7 +1078,7 @@ func (l *FixLog) FailedInARow(workspace, ref string) int {
 		if r.Workspace != workspace || r.Ref != ref || !r.Done() {
 			continue
 		}
-		if strings.HasPrefix(r.Error, "not started") || killedByTheDaemon(r.Error) || strings.HasPrefix(r.Error, EnvironmentPrefix) {
+		if strings.HasPrefix(r.Error, notStartedText) || killedByTheDaemon(r.Error) || strings.HasPrefix(r.Error, EnvironmentPrefix) {
 			continue
 		}
 		if r.Error == "" || r.Forgiven {
@@ -1169,7 +1177,7 @@ func (l *FixLog) EnvironmentFailures(workspace, ref string) int {
 	n := 0
 	for i := len(l.Started) - 1; i >= 0; i-- {
 		r := l.Started[i]
-		if r.Workspace != workspace || r.Ref != ref || !r.Done() || strings.HasPrefix(r.Error, "not started") {
+		if r.Workspace != workspace || r.Ref != ref || !r.Done() || strings.HasPrefix(r.Error, notStartedText) {
 			continue
 		}
 		if !strings.HasPrefix(r.Error, EnvironmentPrefix) {
@@ -1214,7 +1222,7 @@ func (l *FixLog) RunsOnSince(workspace, ref, kind string, since time.Time) int {
 	defer l.mu.Unlock()
 	n := 0
 	for _, r := range l.Started {
-		if r.Workspace == workspace && r.Ref == ref && r.Kind == kind && !r.StartedAt.Before(since) && !strings.HasPrefix(r.Error, "not started") {
+		if r.Workspace == workspace && r.Ref == ref && r.Kind == kind && !r.StartedAt.Before(since) && !strings.HasPrefix(r.Error, notStartedText) {
 			n++
 		}
 	}
@@ -1790,7 +1798,7 @@ func (l *FixLog) CostFor(workspace, ref string) Cost {
 	defer l.mu.Unlock()
 	var c Cost
 	for _, r := range l.Started {
-		if r.Workspace != workspace || r.Ref != ref || strings.HasPrefix(r.Error, "not started") {
+		if r.Workspace != workspace || r.Ref != ref || strings.HasPrefix(r.Error, notStartedText) {
 			continue
 		}
 		c.Runs++

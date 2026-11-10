@@ -13,6 +13,10 @@ import (
 	"andriiklymiuk/corgi/utils/atomicfile"
 )
 
+const (
+	leasesDirName = ".leases"
+)
+
 var IsolateLease string
 
 const (
@@ -32,7 +36,7 @@ type Lease struct {
 }
 
 func LeasesDir(composeDir string) string {
-	return filepath.Join(CorgiServicesIn(composeDir), ".leases")
+	return filepath.Join(CorgiServicesIn(composeDir), leasesDirName)
 }
 
 func ApplyIsolationLease(c *CorgiCompose, name string) error {
@@ -114,7 +118,7 @@ func claimLeaseSlot(name string) (Lease, error) {
 	if mkErr := os.MkdirAll(dir, 0o755); mkErr != nil {
 		return Lease{}, mkErr
 	}
-	EnsureCorgiServicesIgnore(filepath.Dir(dir), ".leases")
+	EnsureCorgiServicesIgnore(filepath.Dir(dir), leasesDirName)
 
 	taken := map[int]bool{}
 	for _, lease := range ListLeases() {
@@ -165,7 +169,7 @@ func writeLease(lease Lease) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	EnsureCorgiServicesIgnore(filepath.Dir(dir), ".leases")
+	EnsureCorgiServicesIgnore(filepath.Dir(dir), leasesDirName)
 	data, err := json.MarshalIndent(lease, "", "  ")
 	if err != nil {
 		return err

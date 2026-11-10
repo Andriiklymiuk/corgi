@@ -1,7 +1,7 @@
 package utils
 
 import (
-	_ "embed"
+	_ "embed" // for go:embed
 	"fmt"
 	"net/url"
 	"os"
@@ -127,6 +127,7 @@ func SilenceNotifyDispatchForTests(t interface{ Cleanup(func()) }) {
 
 func SilenceNotificationsForTests() {
 	sendNotificationOverride = func(string, string) {
+		// no desktop alerts in tests
 	}
 }
 

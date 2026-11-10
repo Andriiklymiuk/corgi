@@ -614,7 +614,7 @@ func lanLauncherURL(addr, code string) string {
 	if ip == "" {
 		return ""
 	}
-	base := "http://" + net.JoinHostPort(ip, port)
+	base := utils.PlainHTTPURL(net.JoinHostPort(ip, port), "")
 	out := "  🏠 on the same Wi-Fi, skip the tunnel entirely:\n"
 	if code != "" {
 		out += "    pair:     " + base + "/pair#" + code + "\n"

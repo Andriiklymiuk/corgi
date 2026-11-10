@@ -882,7 +882,7 @@ func (id *Idea) ForAgent() []Comment {
 				continue
 			}
 		}
-		if last := lastAuthor(c); last == Agent {
+		if lastAuthor(c) == Agent {
 			continue
 		}
 		out = append(out, c)

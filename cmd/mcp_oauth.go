@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"andriiklymiuk/corgi/utils"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,6 +11,11 @@ import (
 	"strings"
 	"sync"
 	"time"
+)
+
+const (
+	headerCacheControl  = "Cache-Control"
+	allowPostAndOptions = "POST, OPTIONS"
 )
 
 const (
@@ -58,7 +64,7 @@ func newOAuthServer(listenAddr string, hosts *oauthClientHosts, origins *originA
 		state = &oauthState{}
 	}
 	return &oauthServer{
-		issuer:      "http://" + localURL(listenAddr),
+		issuer:      utils.PlainHTTPURL(localURL(listenAddr), ""),
 		hosts:       hosts,
 		origins:     origins,
 		deviceStore: deviceStore,
@@ -158,7 +164,7 @@ func (oa *oauthServer) authorizationServerMetadata() map[string]any {
 func (oa *oauthServer) metadataHandler(doc func() map[string]any) http.Handler {
 	return oa.guard("GET, HEAD, OPTIONS", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set(headerContentType, mimeJSON)
-		w.Header().Set("Cache-Control", "max-age=300")
+		w.Header().Set(headerCacheControl, "max-age=300")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return
@@ -200,11 +206,11 @@ func (oa *oauthServer) mount(mux *http.ServeMux) {
 	mux.Handle(oauthPRMPath+"/mcp", prm)
 	mux.Handle(oauthASMetadataPath, as)
 	mux.Handle(oauthASMetadataPath+"/mcp", as)
-	mux.Handle(oauthRegisterPath, oa.guard("POST, OPTIONS", http.HandlerFunc(oa.registerHandler)))
-	mux.Handle(oauthTokenPath, oa.guard("POST, OPTIONS", http.HandlerFunc(oa.tokenHandler)))
-	mux.Handle(oauthRevokePath, oa.guard("POST, OPTIONS", http.HandlerFunc(oa.revokeHandler)))
+	mux.Handle(oauthRegisterPath, oa.guard(allowPostAndOptions, http.HandlerFunc(oa.registerHandler)))
+	mux.Handle(oauthTokenPath, oa.guard(allowPostAndOptions, http.HandlerFunc(oa.tokenHandler)))
+	mux.Handle(oauthRevokePath, oa.guard(allowPostAndOptions, http.HandlerFunc(oa.revokeHandler)))
 	mux.Handle(oauthAuthorizePath, oa.guard("GET, HEAD", http.HandlerFunc(oa.authorizeHandler)))
-	mux.Handle(oauthApprovePath, oa.guard("POST, OPTIONS", http.HandlerFunc(oa.approveHandler)))
+	mux.Handle(oauthApprovePath, oa.guard(allowPostAndOptions, http.HandlerFunc(oa.approveHandler)))
 	mux.Handle(oauthPendingPath, oa.guard("GET", http.HandlerFunc(oa.pendingHandler)))
 }
 
@@ -276,7 +282,7 @@ func (oa *oauthServer) registerHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set(headerContentType, mimeJSON)
-	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set(headerCacheControl, "no-store")
 	w.WriteHeader(http.StatusCreated)
 	body, _ := json.Marshal(map[string]any{
 		"client_id":                  id,
@@ -292,7 +298,7 @@ func (oa *oauthServer) registerHandler(w http.ResponseWriter, r *http.Request) {
 
 func oauthError(w http.ResponseWriter, status int, code, description string) {
 	w.Header().Set(headerContentType, mimeJSON)
-	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set(headerCacheControl, "no-store")
 	w.Header().Set("Pragma", "no-cache")
 	w.WriteHeader(status)
 	body, _ := json.Marshal(map[string]string{"error": code, "error_description": description})

@@ -80,14 +80,17 @@ func publicIP(ip net.IP) bool {
 	return true
 }
 
-var reservedV4 = func() []*net.IPNet {
-	var out []*net.IPNet
-	for _, c := range []string{"0.0.0.0/8", "100.64.0.0/10", "192.0.0.0/24", "198.18.0.0/15", "240.0.0.0/4"} {
-		_, n, _ := net.ParseCIDR(c)
-		out = append(out, n)
-	}
-	return out
-}()
+var reservedV4 = []*net.IPNet{
+	ipv4Block(0, 0, 0, 8),
+	ipv4Block(100, 64, 0, 10),
+	ipv4Block(192, 0, 0, 24),
+	ipv4Block(198, 18, 0, 15),
+	ipv4Block(240, 0, 0, 4),
+}
+
+func ipv4Block(a, b, c byte, prefix int) *net.IPNet {
+	return &net.IPNet{IP: net.IPv4(a, b, c, 0).To4(), Mask: net.CIDRMask(prefix, 32)}
+}
 
 func (f *cimdFetcher) client(ctx context.Context, clientID string, hosts *oauthClientHosts) (oauthClient, error) {
 	u, err := url.Parse(clientID)
