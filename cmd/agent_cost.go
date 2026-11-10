@@ -25,6 +25,63 @@ type CostRow struct {
 	DayCap  int64   `json:"dayCap,omitempty"`
 }
 
+type costTable struct {
+	rows map[string]*CostRow
+}
+
+func (t costTable) row(k string) *CostRow {
+	if r, ok := t.rows[k]; ok {
+		return r
+	}
+	r := &CostRow{Key: k}
+	t.rows[k] = r
+	return r
+}
+
+func (t costTable) addRuns(fixes []watch.FixRecord, since time.Time, keyOf func(watch.FixRecord) string) {
+	for _, f := range fixes {
+		if f.StartedAt.Before(since) {
+			continue
+		}
+		if k := keyOf(f); k != "" {
+			r := t.row(k)
+			r.Tokens += f.Tokens
+			r.USD += f.CostUSD
+			r.Runs++
+		}
+	}
+}
+
+func (t costTable) addRepoCaps(dir string) {
+	user, err := config.LoadUser(agentUserConfigPath(dir))
+	if err != nil || user == nil {
+		return
+	}
+	for id, wc := range user.Workspaces {
+		if wc.Watch != nil && wc.Watch.DayCap > 0 {
+			t.row(id).DayCap = wc.Watch.DayCap
+		}
+	}
+}
+
+func (t costTable) sorted(byDay bool) []CostRow {
+	out := make([]CostRow, 0, len(t.rows))
+	for _, r := range t.rows {
+		out = append(out, *r)
+	}
+	if byDay {
+		sort.Slice(out, func(i, j int) bool { return out[i].Key < out[j].Key })
+		return out
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Tokens != out[j].Tokens {
+			return out[i].Tokens > out[j].Tokens
+		}
+		return out[i].Key < out[j].Key
+	})
+	return out
+}
+
 func costBy(dir, by string, n int, now time.Time) ([]CostRow, error) {
 	if n < 1 {
 		n = 14
@@ -36,83 +93,31 @@ func costBy(dir, by string, n int, now time.Time) ([]CostRow, error) {
 	days := usage.ReadLedgerDays(dir, dates)
 	since := now.AddDate(0, 0, -n)
 	fixes := watch.LoadFixLog(dir).RecentFixes("", 2000)
-	rows := map[string]*CostRow{}
-	row := func(k string) *CostRow {
-		if r, ok := rows[k]; ok {
-			return r
-		}
-		r := &CostRow{Key: k}
-		rows[k] = r
-		return r
-	}
+	t := costTable{rows: map[string]*CostRow{}}
 	switch by {
 	case "repo":
 		for _, d := range days {
-			for ws, t := range d.Tokens {
-				row(ws).Tokens += t
+			for ws, tokens := range d.Tokens {
+				t.row(ws).Tokens += tokens
 			}
 		}
-		for _, f := range fixes {
-			if f.StartedAt.Before(since) {
-				continue
-			}
-			r := row(f.Workspace)
-			r.Tokens += f.Tokens
-			r.USD += f.CostUSD
-			r.Runs++
-		}
-		if user, err := config.LoadUser(agentUserConfigPath(dir)); err == nil && user != nil {
-			for id, wc := range user.Workspaces {
-				if wc.Watch != nil && wc.Watch.DayCap > 0 {
-					row(id).DayCap = wc.Watch.DayCap
-				}
-			}
-		}
+		t.addRuns(fixes, since, func(f watch.FixRecord) string { return f.Workspace })
+		t.addRepoCaps(dir)
 	case "day":
 		for _, date := range dates {
-			r := row(date)
+			r := t.row(date)
 			if d, ok := days[date]; ok {
 				r.Tokens += d.TokensTotal
 				r.Prompts = d.Messages
 			}
 		}
-		for _, f := range fixes {
-			if f.StartedAt.Before(since) {
-				continue
-			}
-			r := row(usage.Today(f.StartedAt))
-			r.Tokens += f.Tokens
-			r.USD += f.CostUSD
-			r.Runs++
-		}
+		t.addRuns(fixes, since, func(f watch.FixRecord) string { return usage.Today(f.StartedAt) })
 	case "bot":
-		for _, f := range fixes {
-			if f.StartedAt.Before(since) || f.Bot == "" {
-				continue
-			}
-			r := row(f.Bot)
-			r.Tokens += f.Tokens
-			r.USD += f.CostUSD
-			r.Runs++
-		}
+		t.addRuns(fixes, since, func(f watch.FixRecord) string { return f.Bot })
 	default:
 		return nil, fmt.Errorf("--by repo, day or bot")
 	}
-	out := make([]CostRow, 0, len(rows))
-	for _, r := range rows {
-		out = append(out, *r)
-	}
-	if by == "day" {
-		sort.Slice(out, func(i, j int) bool { return out[i].Key < out[j].Key })
-	} else {
-		sort.Slice(out, func(i, j int) bool {
-			if out[i].Tokens != out[j].Tokens {
-				return out[i].Tokens > out[j].Tokens
-			}
-			return out[i].Key < out[j].Key
-		})
-	}
-	return out, nil
+	return t.sorted(by == "day"), nil
 }
 
 var agentCostCmd = &cobra.Command{

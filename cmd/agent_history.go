@@ -48,67 +48,77 @@ type historyInputs struct {
 }
 
 func buildHistory(in historyInputs) []HistoryEntry {
-	var out []HistoryEntry
 	planOf := map[string]*CardFeature{}
 	for _, p := range in.plans {
 		for _, id := range p.TaskIDs() {
 			planOf[p.Workspace+"/"+fmt.Sprintf("TASK-%d", id)] = &CardFeature{Ref: p.Ref(), Title: firstLineOf(p.Goal)}
 		}
 	}
+	var out []HistoryEntry
 	for _, r := range in.runs {
-		if !r.Done() || r.Ref == "" || strings.HasPrefix(r.Ref, "routine/") || r.FinishedAt.Before(in.since) || strings.HasPrefix(r.Error, "not started") {
-			continue
+		if e, ok := runHistory(r, in.since, planOf); ok {
+			out = append(out, e)
 		}
-		var cost watch.Cost
-		cost.Runs, cost.USD, cost.Tokens = 1, r.CostUSD, r.Tokens
-		took := ""
-		if !r.NeverRan() {
-			cost.AddWorker(r.Harness, r.Model)
-			if d := r.FinishedAt.Sub(r.StartedAt); d >= time.Minute {
-				took = roughAge(d)
-			}
-		}
-		e := HistoryEntry{At: r.FinishedAt, Kind: HistRun, Key: r.Key, Workspace: r.Workspace, Ref: r.Ref, Title: firstLineOf(r.Title), URL: r.URL,
-			Why: firstLineOf(r.Outcome()), PRs: r.PRs, StartedAt: r.StartedAt, Took: took,
-			Cost: &CardCost{USD: cost.USD, Tokens: cost.Tokens, Runs: 1, Models: cost.Models, Agents: cost.Agents}, Feature: planOf[r.Workspace+"/"+r.Ref]}
-		out = append(out, e)
 	}
 	for _, a := range in.archive {
-		if a.At.Before(in.since) {
-			continue
+		if !a.At.Before(in.since) {
+			out = append(out, archiveHistory(a, planOf))
 		}
-		kind := HistLeft
-		if a.Column == ColDone {
-			kind = HistDone
-		}
-		e := HistoryEntry{At: a.At, Kind: kind, Key: a.Key, Workspace: a.Workspace, Ref: a.Ref, Title: a.Title, URL: a.URL, Why: a.Why, Feature: planOf[a.Workspace+"/"+a.Ref]}
-		if a.Cost != nil {
-			e.Cost = &CardCost{USD: a.Cost.USD, Tokens: a.Cost.Tokens, Runs: a.Cost.Runs, Models: a.Cost.Models, Agents: a.Cost.Agents}
-		}
-		out = append(out, e)
 	}
 	for ref, p := range in.pulls {
-		if pullOver(p.State) != "merged" || p.At.Before(in.since) {
-			continue
+		if pullOver(p.State) == "merged" && !p.At.Before(in.since) {
+			out = append(out, HistoryEntry{At: p.At, Kind: HistMerged, Workspace: p.Workspace, Ref: ref, URL: p.Link, Why: "merged"})
 		}
-		out = append(out, HistoryEntry{At: p.At, Kind: HistMerged, Workspace: p.Workspace, Ref: ref, URL: p.Link, Why: "merged"})
 	}
 	for _, t := range in.tasks {
-		if watch.FinishedState(t.State) == "" || t.UpdatedAt.Before(in.since) {
-			continue
+		if watch.FinishedState(t.State) != "" && !t.UpdatedAt.Before(in.since) {
+			out = append(out, taskHistory(t, planOf))
 		}
-		kind := HistDone
-		if t.State == "Canceled" {
-			kind = HistCanceled
-		}
-		why := strings.ToLower(t.State)
-		if n := len(t.Comments); n > 0 && t.Comments[n-1].By == watch.TaskAgent {
-			why = firstLineOf(t.Comments[n-1].Text)
-		}
-		out = append(out, HistoryEntry{At: t.UpdatedAt, Kind: kind, Key: t.Key(), Workspace: t.Workspace, Ref: t.Ref(), Title: t.Title, Why: why, Feature: planOf[t.Workspace+"/"+t.Ref()]})
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].At.After(out[j].At) })
 	return out
+}
+
+func runHistory(r watch.FixRecord, since time.Time, planOf map[string]*CardFeature) (HistoryEntry, bool) {
+	if !r.Done() || r.Ref == "" || strings.HasPrefix(r.Ref, "routine/") || r.FinishedAt.Before(since) || strings.HasPrefix(r.Error, "not started") {
+		return HistoryEntry{}, false
+	}
+	var cost watch.Cost
+	cost.Runs, cost.USD, cost.Tokens = 1, r.CostUSD, r.Tokens
+	took := ""
+	if !r.NeverRan() {
+		cost.AddWorker(r.Harness, r.Model)
+		if d := r.FinishedAt.Sub(r.StartedAt); d >= time.Minute {
+			took = roughAge(d)
+		}
+	}
+	return HistoryEntry{At: r.FinishedAt, Kind: HistRun, Key: r.Key, Workspace: r.Workspace, Ref: r.Ref, Title: firstLineOf(r.Title), URL: r.URL,
+		Why: firstLineOf(r.Outcome()), PRs: r.PRs, StartedAt: r.StartedAt, Took: took,
+		Cost: &CardCost{USD: cost.USD, Tokens: cost.Tokens, Runs: 1, Models: cost.Models, Agents: cost.Agents}, Feature: planOf[r.Workspace+"/"+r.Ref]}, true
+}
+
+func archiveHistory(a watch.Archived, planOf map[string]*CardFeature) HistoryEntry {
+	kind := HistLeft
+	if a.Column == ColDone {
+		kind = HistDone
+	}
+	e := HistoryEntry{At: a.At, Kind: kind, Key: a.Key, Workspace: a.Workspace, Ref: a.Ref, Title: a.Title, URL: a.URL, Why: a.Why, Feature: planOf[a.Workspace+"/"+a.Ref]}
+	if a.Cost != nil {
+		e.Cost = &CardCost{USD: a.Cost.USD, Tokens: a.Cost.Tokens, Runs: a.Cost.Runs, Models: a.Cost.Models, Agents: a.Cost.Agents}
+	}
+	return e
+}
+
+func taskHistory(t watch.Task, planOf map[string]*CardFeature) HistoryEntry {
+	kind := HistDone
+	if t.State == "Canceled" {
+		kind = HistCanceled
+	}
+	why := strings.ToLower(t.State)
+	if n := len(t.Comments); n > 0 && t.Comments[n-1].By == watch.TaskAgent {
+		why = firstLineOf(t.Comments[n-1].Text)
+	}
+	return HistoryEntry{At: t.UpdatedAt, Kind: kind, Key: t.Key(), Workspace: t.Workspace, Ref: t.Ref(), Title: t.Title, Why: why, Feature: planOf[t.Workspace+"/"+t.Ref()]}
 }
 
 var historyKinds = map[string]string{"run": HistRun, "merged": HistMerged, "done": HistDone, "canceled": HistCanceled, "left": HistLeft}

@@ -14,31 +14,7 @@ const explainSoul = `You explain a code change to its author, who is reading on 
 
 const explainPatchMax = 60 << 10
 
-func explainSession(ctx context.Context, s sessions.Session, question string) (answer, risk string, files int, err error) {
-	dir := diffDirFor(s)
-	if dir == "" {
-		return "", "", 0, fmt.Errorf("this session has no checkout to diff")
-	}
-	gitCtx, cancel := context.WithTimeout(ctx, diffTimeout)
-	defer cancel()
-	base := diffBase(gitCtx, dir)
-	if base == "" {
-		return "", "", 0, fmt.Errorf("no main branch to diff against")
-	}
-	list, err := diffFiles(gitCtx, dir, base)
-	if err != nil {
-		return "", "", 0, fmt.Errorf("git could not diff the branch")
-	}
-	if len(list) == 0 {
-		return "", "", 0, fmt.Errorf("nothing changed on this branch yet")
-	}
-	patch, truncated, err := diffPatch(gitCtx, dir, base, "")
-	if err != nil {
-		return "", "", 0, fmt.Errorf("git could not diff the branch")
-	}
-	if len(patch) > explainPatchMax {
-		patch, truncated = patch[:explainPatchMax], true
-	}
+func explainPrompt(s sessions.Session, list []DiffFile, patch string, truncated bool, question string) string {
 	var b strings.Builder
 	if s.Ticket != "" {
 		b.WriteString("TICKET: " + s.Ticket + "\n")
@@ -67,9 +43,45 @@ func explainSession(ctx context.Context, s sessions.Session, question string) (a
 		}
 		b.WriteString("\n\nQUESTION: " + q)
 	}
+	return b.String()
+}
+
+func explainDiff(ctx context.Context, s sessions.Session) ([]DiffFile, string, bool, error) {
+	dir := diffDirFor(s)
+	if dir == "" {
+		return nil, "", false, fmt.Errorf("this session has no checkout to diff")
+	}
+	gitCtx, cancel := context.WithTimeout(ctx, diffTimeout)
+	defer cancel()
+	base := diffBase(gitCtx, dir)
+	if base == "" {
+		return nil, "", false, fmt.Errorf("no main branch to diff against")
+	}
+	list, err := diffFiles(gitCtx, dir, base)
+	if err != nil {
+		return nil, "", false, fmt.Errorf("git could not diff the branch")
+	}
+	if len(list) == 0 {
+		return nil, "", false, fmt.Errorf("nothing changed on this branch yet")
+	}
+	patch, truncated, err := diffPatch(gitCtx, dir, base, "")
+	if err != nil {
+		return nil, "", false, fmt.Errorf("git could not diff the branch")
+	}
+	if len(patch) > explainPatchMax {
+		patch, truncated = patch[:explainPatchMax], true
+	}
+	return list, patch, truncated, nil
+}
+
+func explainSession(ctx context.Context, s sessions.Session, question string) (answer, risk string, files int, err error) {
+	list, patch, truncated, err := explainDiff(ctx, s)
+	if err != nil {
+		return "", "", 0, err
+	}
 	askCtx, cancelAsk := context.WithTimeout(ctx, askTimeout)
 	defer cancelAsk()
-	answer, err = runClaudePrint(askCtx, askModel, explainSoul, b.String())
+	answer, err = runClaudePrint(askCtx, askModel, explainSoul, explainPrompt(s, list, patch, truncated, question))
 	if err != nil {
 		return "", "", 0, err
 	}
