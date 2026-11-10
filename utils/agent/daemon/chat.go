@@ -137,42 +137,39 @@ func (d *Daemon) chatReviewReply(ctx context.Context, spec WatchSpec, e watch.Ev
 	var lines []string
 	var total watch.ReviewOutcome
 	for _, link := range e.Links {
-		ref := watch.PullRef(link)
-		if ref == "" {
-			continue
+		if ref := watch.PullRef(link); ref != "" {
+			lines = append(lines, ref+" - "+reviewSaid(ctx, spec, ref, since, &total))
 		}
-		said := "reviewed"
-		told := false
-		for _, src := range spec.Sources {
-			teller, ok := src.(watch.ReviewTeller)
-			if !ok {
-				continue
-			}
-			if o, ok := teller.MyReviewSince(ctx, ref, since); ok {
-				said = o.Line()
-				total.Approved = total.Approved || o.Approved
-				total.ChangesRequested = total.ChangesRequested || o.ChangesRequested
-				total.Comments += o.Comments
-				told = true
-				break
-			}
-		}
-		if !told {
-			for _, src := range spec.Sources {
-				if asker, ok := src.(watch.PullAsker); ok {
-					if st, ok := asker.PullStatus(ctx, ref); ok && st.Review == "approved" {
-						said, total.Approved = "approved ✅", true
-					}
-					break
-				}
-			}
-		}
-		lines = append(lines, ref+" - "+said)
 	}
 	if len(lines) == 0 {
 		return "", total, false
 	}
 	return strings.Join(lines, "\n"), total, true
+}
+
+func reviewSaid(ctx context.Context, spec WatchSpec, ref string, since time.Time, total *watch.ReviewOutcome) string {
+	for _, src := range spec.Sources {
+		teller, ok := src.(watch.ReviewTeller)
+		if !ok {
+			continue
+		}
+		if o, ok := teller.MyReviewSince(ctx, ref, since); ok {
+			total.Approved = total.Approved || o.Approved
+			total.ChangesRequested = total.ChangesRequested || o.ChangesRequested
+			total.Comments += o.Comments
+			return o.Line()
+		}
+	}
+	for _, src := range spec.Sources {
+		if asker, ok := src.(watch.PullAsker); ok {
+			if st, ok := asker.PullStatus(ctx, ref); ok && st.Review == "approved" {
+				total.Approved = true
+				return "approved ✅"
+			}
+			break
+		}
+	}
+	return "reviewed"
 }
 
 func reviewMark(o watch.ReviewOutcome) string {

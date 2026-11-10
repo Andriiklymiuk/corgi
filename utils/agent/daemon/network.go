@@ -77,7 +77,6 @@ func onHotspotName(current, hotspot string) bool {
 // tick is one look at the network: online or not, what Wi-Fi this is, and
 // the interface's byte counter so far.
 func (h *hopper) tick(now time.Time, online bool, current string, bytes uint64) hopStep {
-	var step hopStep
 	wasOnHotspot := h.onHotspot
 	h.onHotspot = onHotspotName(current, h.ssid)
 	if h.onHotspot && !wasOnHotspot {
@@ -87,28 +86,39 @@ func (h *hopper) tick(now time.Time, online bool, current string, bytes uint64) 
 		h.used = bytes - h.bytesAtHop
 	}
 	if online {
-		if !h.offlineSince.IsZero() {
-			gap := now.Sub(h.offlineSince)
-			h.offlineSince, h.attempts, h.nextTry = time.Time{}, 0, time.Time{}
-			step.Back = true
-			switch {
-			case h.onHotspot:
-				step.Say = "offline for " + roughSpan(gap) + " - hopped onto the hotspot " + strings.TrimSpace(current)
-			case gap >= offlineWorthSaying:
-				step.Say = "back online after " + roughSpan(gap)
-			}
-		} else if wasOnHotspot && !h.onHotspot && current != "" {
-			step.Say = "back on " + strings.TrimSpace(current) + " after " + roughSpan(now.Sub(h.hotspotSince)) + " on the hotspot (" + sizeOf(h.used) + " used)"
-			h.overBudget = false
-		}
-		if h.onHotspot && h.budget > 0 && h.used >= h.budget && !h.overBudget {
-			h.overBudget = true
-			step.Say = "the hotspot has used " + sizeOf(h.used) + " of its " + sizeOf(h.budget) + " budget - no new fix starts until Wi-Fi is back"
-		}
-		step.Hold = h.onHotspot && h.budget > 0 && h.used >= h.budget
-		h.lastSSID = current
-		return step
+		return h.onlineTick(now, current, wasOnHotspot)
 	}
+	return h.offlineTick(now)
+}
+
+func (h *hopper) onlineTick(now time.Time, current string, wasOnHotspot bool) hopStep {
+	var step hopStep
+	if !h.offlineSince.IsZero() {
+		gap := now.Sub(h.offlineSince)
+		h.offlineSince, h.attempts, h.nextTry = time.Time{}, 0, time.Time{}
+		step.Back = true
+		switch {
+		case h.onHotspot:
+			step.Say = "offline for " + roughSpan(gap) + " - hopped onto the hotspot " + strings.TrimSpace(current)
+		case gap >= offlineWorthSaying:
+			step.Say = "back online after " + roughSpan(gap)
+		}
+	} else if wasOnHotspot && !h.onHotspot && current != "" {
+		step.Say = "back on " + strings.TrimSpace(current) + " after " + roughSpan(now.Sub(h.hotspotSince)) + " on the hotspot (" + sizeOf(h.used) + " used)"
+		h.overBudget = false
+	}
+	spent := h.onHotspot && h.budget > 0 && h.used >= h.budget
+	if spent && !h.overBudget {
+		h.overBudget = true
+		step.Say = "the hotspot has used " + sizeOf(h.used) + " of its " + sizeOf(h.budget) + " budget - no new fix starts until Wi-Fi is back"
+	}
+	step.Hold = spent
+	h.lastSSID = current
+	return step
+}
+
+func (h *hopper) offlineTick(now time.Time) hopStep {
+	var step hopStep
 	if h.offlineSince.IsZero() {
 		h.offlineSince = now
 		h.nextTry = now.Add(offlineBeforeHop)
@@ -292,37 +302,41 @@ func (d *Daemon) watchNetwork(ctx context.Context) {
 	t := time.NewTicker(networkTick)
 	defer t.Stop()
 	for {
-		now := time.Now()
-		online := readOnline()
-		ssid := readSSID(iface)
-		if h.ssid == "" && online && looksLikePhoneHotspot(ssid) {
-			h.ssid = strings.TrimSpace(ssid)
-			utils.Infof("agent: hotspot: this is a phone's hotspot - %s is the one to hop to from now on\n", h.ssid)
-			if d.LearnHotspot != nil {
-				d.LearnHotspot(h.ssid)
-			}
-		}
-		step := h.tick(now, online, ssid, readBytes(iface))
-		setHotspotHold(step.Hold)
-		link.offline.Store(!online)
-		link.onHotspot.Store(h.onHotspot)
-		d.setNetwork(online, ssid, h.onHotspot)
-		if step.Say != "" {
-			d.ringMachine("network", step.Say)
-		}
-		if step.Back {
-			d.flushHeldPushes()
-		}
-		if step.Join {
-			utils.Infof("agent: hotspot: offline for %s - joining %s (try %d)\n", roughSpan(now.Sub(h.offlineSince)), h.ssid, h.attempts)
-			if err := joinNetwork(iface, h.ssid, hotspotPassword(h.ssid)); err != nil {
-				utils.Infof("agent: hotspot: %v\n", err)
-			}
-		}
+		d.networkTick(h, iface)
 		select {
 		case <-ctx.Done():
 			return
 		case <-t.C:
+		}
+	}
+}
+
+func (d *Daemon) networkTick(h *hopper, iface string) {
+	now := time.Now()
+	online := readOnline()
+	ssid := readSSID(iface)
+	if h.ssid == "" && online && looksLikePhoneHotspot(ssid) {
+		h.ssid = strings.TrimSpace(ssid)
+		utils.Infof("agent: hotspot: this is a phone's hotspot - %s is the one to hop to from now on\n", h.ssid)
+		if d.LearnHotspot != nil {
+			d.LearnHotspot(h.ssid)
+		}
+	}
+	step := h.tick(now, online, ssid, readBytes(iface))
+	setHotspotHold(step.Hold)
+	link.offline.Store(!online)
+	link.onHotspot.Store(h.onHotspot)
+	d.setNetwork(online, ssid, h.onHotspot)
+	if step.Say != "" {
+		d.ringMachine("network", step.Say)
+	}
+	if step.Back {
+		d.flushHeldPushes()
+	}
+	if step.Join {
+		utils.Infof("agent: hotspot: offline for %s - joining %s (try %d)\n", roughSpan(now.Sub(h.offlineSince)), h.ssid, h.attempts)
+		if err := joinNetwork(iface, h.ssid, hotspotPassword(h.ssid)); err != nil {
+			utils.Infof("agent: hotspot: %v\n", err)
 		}
 	}
 }

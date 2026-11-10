@@ -27,51 +27,62 @@ func (d *Daemon) advancePlans(ctx context.Context) {
 	tasks := watch.LoadTasks(d.Dir)
 	now := time.Now()
 	for _, p := range running {
-		spec, ok := d.watchSpecFor(p.Workspace)
-		if !ok {
-			continue
+		if spec, ok := d.watchSpecFor(p.Workspace); ok {
+			d.advancePlan(ctx, spec, plans, tasks, p, now)
 		}
-		pr := p.Progress(tasks)
-		if pr.Over() {
-			_, _ = plans.SetState(p.ID, watch.PlanDone, now)
-			utils.Infof("agent: plan %s is done: %d done, %d in review, %d canceled\n", p.Ref(), pr.Done, pr.Review, pr.Canceled)
-			go d.notifyAttentionAt(notifyTitlePrefix+p.Workspace,
-				fmt.Sprintf("plan %s finished: %s - %d in review, %d done", p.Ref(), clipGoal(p.Goal), pr.Review, pr.Done), p.Workspace, "")
-			continue
-		}
-		busy := 0
-		for _, id := range p.TaskIDs() {
-			if d.fixActiveFor(p.Workspace, fmt.Sprintf("TASK-%d", id)) {
-				busy++
-			}
-		}
-		if p.Retries > 0 {
-			busy += d.retryFailedTasks(ctx, spec, p, tasks, busy, now)
-		}
-		for _, t := range pr.Ready {
-			if busy >= p.Slots {
-				break
-			}
-			if d.planTaskTried(p.Workspace, t) {
-				continue
-			}
-			if reason := d.deferral(spec, now); reason != "" {
-				utils.Infof("agent: plan %s: %s waits: %s\n", p.Ref(), t.Ref(), reason)
-				break
-			}
-			if !d.claimFix(p.Workspace, t.Ref()) {
-				busy++
-				continue
-			}
-			e := t.Event()
-			e.Body = planTaskBody(p, t)
-			_, _ = tasks.Move(t.Ref(), "Doing", now)
-			d.watchState.Fixes.StartFor(e, now)
-			d.spawnFix(ctx, spec, e)
-			utils.Infof("agent: plan %s: started %s - %s\n", p.Ref(), t.Ref(), t.Title)
+	}
+}
+
+func (d *Daemon) advancePlan(ctx context.Context, spec WatchSpec, plans *watch.PlanLog, tasks *watch.TaskLog, p watch.Plan, now time.Time) {
+	pr := p.Progress(tasks)
+	if pr.Over() {
+		_, _ = plans.SetState(p.ID, watch.PlanDone, now)
+		utils.Infof("agent: plan %s is done: %d done, %d in review, %d canceled\n", p.Ref(), pr.Done, pr.Review, pr.Canceled)
+		go d.notifyAttentionAt(notifyTitlePrefix+p.Workspace,
+			fmt.Sprintf("plan %s finished: %s - %d in review, %d done", p.Ref(), clipGoal(p.Goal), pr.Review, pr.Done), p.Workspace, "")
+		return
+	}
+	busy := 0
+	for _, id := range p.TaskIDs() {
+		if d.fixActiveFor(p.Workspace, fmt.Sprintf("TASK-%d", id)) {
 			busy++
 		}
 	}
+	if p.Retries > 0 {
+		busy += d.retryFailedTasks(ctx, spec, p, tasks, busy, now)
+	}
+	for _, t := range pr.Ready {
+		if busy >= p.Slots {
+			return
+		}
+		started, stop := d.startPlanTask(ctx, spec, p, tasks, t, now)
+		if stop {
+			return
+		}
+		if started {
+			busy++
+		}
+	}
+}
+
+func (d *Daemon) startPlanTask(ctx context.Context, spec WatchSpec, p watch.Plan, tasks *watch.TaskLog, t watch.Task, now time.Time) (taken, stop bool) {
+	if d.planTaskTried(p.Workspace, t) {
+		return false, false
+	}
+	if reason := d.deferral(spec, now); reason != "" {
+		utils.Infof("agent: plan %s: %s waits: %s\n", p.Ref(), t.Ref(), reason)
+		return false, true
+	}
+	if !d.claimFix(p.Workspace, t.Ref()) {
+		return true, false
+	}
+	e := t.Event()
+	e.Body = planTaskBody(p, t)
+	_, _ = tasks.Move(t.Ref(), "Doing", now)
+	d.watchState.Fixes.StartFor(e, now)
+	d.spawnFix(ctx, spec, e)
+	utils.Infof("agent: plan %s: started %s - %s\n", p.Ref(), t.Ref(), t.Title)
+	return true, false
 }
 
 // retryFailedTasks starts again the plan's tasks whose last run failed, up to

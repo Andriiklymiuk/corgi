@@ -83,34 +83,40 @@ func (d *Daemon) runRoutines(ctx context.Context, now time.Time) {
 	}
 	for _, spec := range d.Watches {
 		for _, r := range spec.Routines {
-			if r.Off {
-				continue
+			if d.startRoutineIfDue(ctx, spec, r, now) {
+				break
 			}
-			sched, err := watch.ParseSchedule(r.Schedule)
-			if err != nil {
-				continue
-			}
-			key := spec.Workspace + "/" + firstNonEmpty(r.Name, r.Kind)
-			if !sched.Due(d.routines.get(key), now) {
-				continue
-			}
-			e, ok := RoutineEvent(spec.Workspace, r, now)
-			if !ok {
-				continue
-			}
-			if reason := d.deferral(spec, now); reason != "" {
-				d.logRoutineWait(spec.Workspace+"/"+e.Title, e.Title, reason)
-				continue
-			}
-			if !d.claimFix(spec.Workspace, e.Ref) {
-				continue
-			}
-			d.logRoutineWait(spec.Workspace+"/"+e.Title, e.Title, "")
-			d.routines.set(key, now)
-			d.startRoutine(ctx, spec, r, e)
-			break
 		}
 	}
+}
+
+func (d *Daemon) startRoutineIfDue(ctx context.Context, spec WatchSpec, r config.Routine, now time.Time) bool {
+	if r.Off {
+		return false
+	}
+	sched, err := watch.ParseSchedule(r.Schedule)
+	if err != nil {
+		return false
+	}
+	key := spec.Workspace + "/" + firstNonEmpty(r.Name, r.Kind)
+	if !sched.Due(d.routines.get(key), now) {
+		return false
+	}
+	e, ok := RoutineEvent(spec.Workspace, r, now)
+	if !ok {
+		return false
+	}
+	if reason := d.deferral(spec, now); reason != "" {
+		d.logRoutineWait(spec.Workspace+"/"+e.Title, e.Title, reason)
+		return false
+	}
+	if !d.claimFix(spec.Workspace, e.Ref) {
+		return false
+	}
+	d.logRoutineWait(spec.Workspace+"/"+e.Title, e.Title, "")
+	d.routines.set(key, now)
+	d.startRoutine(ctx, spec, r, e)
+	return true
 }
 
 func (d *Daemon) startRoutine(ctx context.Context, spec WatchSpec, r config.Routine, e watch.Event) {

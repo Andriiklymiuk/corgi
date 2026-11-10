@@ -228,6 +228,18 @@ type machineWatch struct {
 
 // observe is one tick: the steps the daemon takes for it.
 func (w *machineWatch) observe(now time.Time, m Machine, heat string, mayPause bool) []string {
+	steps := w.observeHeat(now, heat, mayPause)
+	if heat == "hot" && m.TempC >= criticalC && w.criticalAt.IsZero() {
+		w.criticalAt = now
+		steps = append(steps, "critical")
+	}
+	if heat != "hot" {
+		w.criticalAt = time.Time{}
+	}
+	return append(steps, w.observeBattery(m)...)
+}
+
+func (w *machineWatch) observeHeat(now time.Time, heat string, mayPause bool) []string {
 	var steps []string
 	was := w.heat
 	w.heat = heat
@@ -251,25 +263,22 @@ func (w *machineWatch) observe(now time.Time, m Machine, heat string, mayPause b
 		}
 		steps = append(steps, "ring cool")
 	}
-	if heat == "hot" && m.TempC >= criticalC && w.criticalAt.IsZero() {
-		w.criticalAt = now
-		steps = append(steps, "critical")
-	}
-	if heat != "hot" {
-		w.criticalAt = time.Time{}
-	}
+	return steps
+}
+
+func (w *machineWatch) observeBattery(m Machine) []string {
 	onBattery := m.Battery >= 0 && !m.Charging && lidClosedNow.Load()
 	switch {
 	case !onBattery:
 		w.lowTold, w.flatTold = false, false
 	case m.Battery < flatBattery && !w.flatTold:
 		w.lowTold, w.flatTold = true, true
-		steps = append(steps, "ring flat")
+		return []string{"ring flat"}
 	case m.Battery < lowBatteryPct && !w.lowTold:
 		w.lowTold = true
-		steps = append(steps, "ring low")
+		return []string{"ring low"}
 	}
-	return steps
+	return nil
 }
 
 func (d *Daemon) actOnMachine(ctx context.Context, step string, m Machine) {

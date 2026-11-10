@@ -66,19 +66,21 @@ func agentUnwell(spec WatchSpec, name string, log *watch.FixLog, now time.Time) 
 	if log == nil {
 		return ""
 	}
-	records := log.Records()
+	return lastRunSidelined(log.Records(), spec.Workspace, name, now)
+}
+
+func ranOn(r watch.FixRecord, name string) bool {
+	ran := strings.TrimSpace(r.Harness)
+	return ran == name || (ran == "" && name == harness.Claude)
+}
+
+func lastRunSidelined(records []watch.FixRecord, workspace, name string, now time.Time) string {
 	for i := len(records) - 1; i >= 0; i-- {
 		r := records[i]
-		if r.FinishedAt.IsZero() || r.Workspace != spec.Workspace {
+		if r.FinishedAt.IsZero() || r.Workspace != workspace || !ranOn(r, name) {
 			continue
 		}
-		if ran := strings.TrimSpace(r.Harness); ran != name && !(ran == "" && name == harness.Claude) {
-			continue
-		}
-		if now.Sub(r.FinishedAt) > 24*time.Hour {
-			break
-		}
-		if watch.Sidelining(r.Failure) {
+		if now.Sub(r.FinishedAt) <= 24*time.Hour && watch.Sidelining(r.Failure) {
 			return r.Failure
 		}
 		return ""

@@ -109,50 +109,74 @@ func (d *Daemon) handOverEvent(ctx context.Context, spec WatchSpec, e watch.Even
 
 func (d *Daemon) pullChanged(ctx context.Context, spec WatchSpec, ref, link string, was, now watch.PullStatus, known bool) {
 	handOver, autoMerge := d.automation(spec)
-	if handOver && link != "" && now.Checks == "failing" && (!known || was.Checks != "failing") {
-		if s, ok := d.sessionOnPull(link); ok {
-			hands := watch.LoadHands(d.Dir)
-			key := "checks:" + ref + ":" + now.At.Format(time.RFC3339)
-			label := s.Display
-			if label == "" {
-				label = s.Label
-			}
-			_ = hands.Set(key, watch.Hand{At: time.Now(), To: s.ID, Label: label, By: "daemon"})
-			d.sendToSession(ctx, s.ID, "The checks went red on "+link+". Read the failing job, fix it on this branch, run the tests, and push.", true)
-			utils.Infof("agent: red checks on %s handed to %s\n", ref, label)
-		}
-	}
-	if link != "" && known && now.Checks == "passing" && was.Checks != "" && was.Checks != "passing" {
-		d.creditGreen(spec, ref, link)
-	}
-	if link != "" && now.Checks == "passing" && (!known || was.Checks != "passing") {
-		d.tickLeft(spec, link, "checks ✓", watch.LeftCI)
+	if link != "" {
+		d.checksChanged(ctx, spec, pullChange{ref: ref, link: link, was: was, now: now, known: known}, handOver)
 	}
 	approved := autoMerge && now.Ready() && now.Checks == "passing" && now.Mine
 	if link != "" && d.MergePull != nil && d.mergeWorthTrying(link, time.Now()) && (approved || d.mayMergeUnread(ctx, spec, ref, link, now)) {
-		how := "checks ✓, approved"
-		if !approved {
-			how = "checks ✓, low risk, scenarios ✓, nobody read it"
-		}
-		if err := d.MergePull(ctx, spec.Workspace, link); err != nil {
-			utils.Infof("agent: auto-merge %s: %v\n", ref, err)
-			if body, first := d.rememberMergeFailure(link, err, time.Now()); first {
-				go d.notifyAttentionAt(notifyTitlePrefix+spec.Workspace, body, spec.Workspace, link)
-			}
+		merged, ok := d.autoMerge(ctx, spec, ref, link, now, approved)
+		if !ok {
 			return
 		}
-		d.forgetMergeFailure(link)
-		_ = watch.LoadPullLog(d.Dir).Set(ref, watch.PullStatus{State: "merged", Checks: now.Checks, Review: now.Review, At: time.Now()})
-		if d.Events != nil {
-			d.Events.Append(spec.Workspace, events.Event{At: time.Now().UTC(), Kind: "merged", Reason: "merged " + ref + " - " + how, URL: link})
-		}
-		go d.notifyAttentionAt(notifyTitlePrefix+spec.Workspace, "merged "+link+" - "+how, spec.Workspace, link)
-		now = watch.PullStatus{State: "merged", Checks: now.Checks, Review: now.Review, At: now.At}
+		now = merged
 	}
 	if now.State == "merged" && (!known || was.State != "merged") {
 		d.tickLeft(spec, link, "merged", watch.LeftCI, watch.LeftMerge)
 		d.ticketAfterMerge(ctx, spec, link)
 	}
+}
+
+type pullChange struct {
+	ref, link string
+	was, now  watch.PullStatus
+	known     bool
+}
+
+func (d *Daemon) checksChanged(ctx context.Context, spec WatchSpec, c pullChange, handOver bool) {
+	if handOver && c.now.Checks == "failing" && (!c.known || c.was.Checks != "failing") {
+		d.handRedChecks(ctx, c.ref, c.link, c.now)
+	}
+	if c.now.Checks != "passing" {
+		return
+	}
+	if c.known && c.was.Checks != "" && c.was.Checks != "passing" {
+		d.creditGreen(spec, c.ref, c.link)
+	}
+	if !c.known || c.was.Checks != "passing" {
+		d.tickLeft(spec, c.link, "checks ✓", watch.LeftCI)
+	}
+}
+
+func (d *Daemon) handRedChecks(ctx context.Context, ref, link string, now watch.PullStatus) {
+	s, ok := d.sessionOnPull(link)
+	if !ok {
+		return
+	}
+	label := firstNonEmpty(s.Display, s.Label)
+	_ = watch.LoadHands(d.Dir).Set("checks:"+ref+":"+now.At.Format(time.RFC3339), watch.Hand{At: time.Now(), To: s.ID, Label: label, By: "daemon"})
+	d.sendToSession(ctx, s.ID, "The checks went red on "+link+". Read the failing job, fix it on this branch, run the tests, and push.", true)
+	utils.Infof("agent: red checks on %s handed to %s\n", ref, label)
+}
+
+func (d *Daemon) autoMerge(ctx context.Context, spec WatchSpec, ref, link string, now watch.PullStatus, approved bool) (watch.PullStatus, bool) {
+	how := "checks ✓, approved"
+	if !approved {
+		how = "checks ✓, low risk, scenarios ✓, nobody read it"
+	}
+	if err := d.MergePull(ctx, spec.Workspace, link); err != nil {
+		utils.Infof("agent: auto-merge %s: %v\n", ref, err)
+		if body, first := d.rememberMergeFailure(link, err, time.Now()); first {
+			go d.notifyAttentionAt(notifyTitlePrefix+spec.Workspace, body, spec.Workspace, link)
+		}
+		return now, false
+	}
+	d.forgetMergeFailure(link)
+	_ = watch.LoadPullLog(d.Dir).Set(ref, watch.PullStatus{State: "merged", Checks: now.Checks, Review: now.Review, At: time.Now()})
+	if d.Events != nil {
+		d.Events.Append(spec.Workspace, events.Event{At: time.Now().UTC(), Kind: "merged", Reason: "merged " + ref + " - " + how, URL: link})
+	}
+	go d.notifyAttentionAt(notifyTitlePrefix+spec.Workspace, "merged "+link+" - "+how, spec.Workspace, link)
+	return watch.PullStatus{State: "merged", Checks: now.Checks, Review: now.Review, At: now.At}, true
 }
 
 type mergeFailure struct {

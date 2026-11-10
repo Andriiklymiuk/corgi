@@ -392,44 +392,59 @@ func (d *Daemon) absorbPeers() {
 	boards := make([]sessions.PeerBoard, 0, len(store.Peers))
 	for _, p := range store.Peers {
 		boards = append(boards, sessions.PeerBoard{Name: p.Name, Alive: p.Alive(now), Lead: p.Lead, Budget: p.Budget, SeenAt: p.SeenAt, Sessions: p.Sessions, Runs: p.Runs})
-		if !p.Alive(now) {
-			continue
+		if p.Alive(now) {
+			d.absorbLivePeer(p, now)
 		}
-		// A mute set over there quiets this laptop for the same span; a
-		// longer mute here stays.
-		if p.MutedUntil > 0 {
-			if until := time.UnixMilli(p.MutedUntil); until.After(now) && until.After(MutedUntil(d.Dir).Add(time.Minute)) {
-				_ = SetMute(d.Dir, until)
-				utils.Infof("agent: muted until %s, as %s is\n", until.Local().Format("15:04"), p.Name)
-			}
-		}
-		if d.watchState != nil {
-			for _, key := range p.Ignored {
-				if !d.watchState.IsIgnored(key) {
-					_ = d.watchState.Ignore(key)
-				}
-			}
-		}
-		if p.Unwell != "" && d.rangOnce("unwell|"+p.Name+"|"+p.Unwell, now) {
-			why := "its agent wants a login"
-			if p.Unwell == "limit" {
-				why = "its five-hour window is spent"
-			}
-			go d.notifyAttention("corgi agent", p.Name+" cannot run fixes ("+why+") - this laptop leads the trackers you share until it can", "")
-		}
-		for _, r := range p.Runs {
-			if r.State != "failed" && r.State != "blocked" {
-				continue
-			}
-			if d.rangOnce("run|"+p.Name+"|"+r.Ref+"|"+r.State+"|"+strconv.FormatInt(r.At, 10), now) {
-				utils.Infof("agent: on %s, %s %s: %s\n", p.Name, r.Ref, r.State, r.Reason)
-			}
-		}
-		d.ringPeerCrossings(p, now)
 	}
 	if d.Sessions != nil {
 		d.Sessions.SetPeers(boards)
 	}
+}
+
+func (d *Daemon) absorbLivePeer(p peers.Peer, now time.Time) {
+	d.adoptPeerMute(p, now)
+	d.adoptPeerIgnores(p)
+	d.ringPeerUnwell(p, now)
+	for _, r := range p.Runs {
+		if (r.State == "failed" || r.State == "blocked") && d.rangOnce("run|"+p.Name+"|"+r.Ref+"|"+r.State+"|"+strconv.FormatInt(r.At, 10), now) {
+			utils.Infof("agent: on %s, %s %s: %s\n", p.Name, r.Ref, r.State, r.Reason)
+		}
+	}
+	d.ringPeerCrossings(p, now)
+}
+
+// adoptPeerMute: a mute set over there quiets this laptop for the same span;
+// a longer mute here stays.
+func (d *Daemon) adoptPeerMute(p peers.Peer, now time.Time) {
+	if p.MutedUntil <= 0 {
+		return
+	}
+	if until := time.UnixMilli(p.MutedUntil); until.After(now) && until.After(MutedUntil(d.Dir).Add(time.Minute)) {
+		_ = SetMute(d.Dir, until)
+		utils.Infof("agent: muted until %s, as %s is\n", until.Local().Format("15:04"), p.Name)
+	}
+}
+
+func (d *Daemon) adoptPeerIgnores(p peers.Peer) {
+	if d.watchState == nil {
+		return
+	}
+	for _, key := range p.Ignored {
+		if !d.watchState.IsIgnored(key) {
+			_ = d.watchState.Ignore(key)
+		}
+	}
+}
+
+func (d *Daemon) ringPeerUnwell(p peers.Peer, now time.Time) {
+	if p.Unwell == "" || !d.rangOnce("unwell|"+p.Name+"|"+p.Unwell, now) {
+		return
+	}
+	why := "its agent wants a login"
+	if p.Unwell == "limit" {
+		why = "its five-hour window is spent"
+	}
+	go d.notifyAttention("corgi agent", p.Name+" cannot run fixes ("+why+") - this laptop leads the trackers you share until it can", "")
 }
 
 // ringPeerCrossings rings once when a session here and one on the peer
@@ -441,22 +456,26 @@ func (d *Daemon) ringPeerCrossings(p peers.Peer, now time.Time) {
 	for _, mine := range d.Sessions.Sessions() {
 		switch mine.Status {
 		case sessions.StatusWorking, sessions.StatusNeedsInput, sessions.StatusDone:
-		default:
-			continue
+			d.ringCrossingsFor(mine, p, now)
 		}
-		for _, theirs := range p.Sessions {
-			sameTicket := mine.Ticket != "" && strings.EqualFold(mine.Ticket, theirs.Ticket)
-			sameBranch := mine.Branch != "" && mine.Branch == theirs.Branch && strings.EqualFold(mine.Label, theirs.Label) && !isMainBranch(mine.Branch)
-			if !sameTicket && !sameBranch {
-				continue
-			}
-			what := "ticket " + mine.Ticket
-			if !sameTicket {
-				what = "branch " + mine.Branch
-			}
-			if d.rangOnce("cross|"+mine.ID+"|"+p.Name+"|"+theirs.ID, now) {
-				go d.notifySession(notifyTitlePrefix+label(mine), "crossing laptops: "+p.Name+" is also on "+what+" ("+firstNonEmpty(theirs.Display, theirs.Label)+", "+theirs.Status+")", mine)
-			}
+	}
+}
+
+func crossing(mine sessions.Session, theirs peers.PeerSession) string {
+	if mine.Ticket != "" && strings.EqualFold(mine.Ticket, theirs.Ticket) {
+		return "ticket " + mine.Ticket
+	}
+	if mine.Branch != "" && mine.Branch == theirs.Branch && strings.EqualFold(mine.Label, theirs.Label) && !isMainBranch(mine.Branch) {
+		return "branch " + mine.Branch
+	}
+	return ""
+}
+
+func (d *Daemon) ringCrossingsFor(mine sessions.Session, p peers.Peer, now time.Time) {
+	for _, theirs := range p.Sessions {
+		what := crossing(mine, theirs)
+		if what != "" && d.rangOnce("cross|"+mine.ID+"|"+p.Name+"|"+theirs.ID, now) {
+			go d.notifySession(notifyTitlePrefix+label(mine), "crossing laptops: "+p.Name+" is also on "+what+" ("+firstNonEmpty(theirs.Display, theirs.Label)+", "+theirs.Status+")", mine)
 		}
 	}
 }

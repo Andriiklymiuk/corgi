@@ -634,33 +634,15 @@ func (d *Daemon) notifyAttentionKey(title, body, workspaceID, link, key string) 
 }
 
 func (d *Daemon) notifyAttentionFull(title, body, workspaceID, link, key, sessionID string) {
-	if d.muted() {
-		utils.Infof("agent: (muted) %s: %s\n", title, body)
-		return
-	}
-	if d.silenced(workspaceID) {
-		utils.Infof("agent: (silent %s) %s: %s\n", workspaceID, title, body)
-		return
-	}
-	if sessionID == "" && d.heldForMorning(workspaceID, key, body, time.Now()) {
-		utils.Infof("agent: (held until morning %s) %s: %s\n", workspaceID, title, body)
+	if why := d.attentionHeld(workspaceID, key, body, sessionID); why != "" {
+		utils.Infof("agent: (%s) %s: %s\n", why, title, body)
 		return
 	}
 	if link == "" && d.LinkFor != nil {
 		link = d.LinkFor(workspaceID)
 	}
 	if d.Push != nil {
-		data := map[string]string{"workspace": workspaceID}
-		if link != "" {
-			data["url"] = link
-		}
-		if key != "" {
-			data["key"] = key
-		}
-		if needsPerson(body) {
-			data["needs"] = "1"
-		}
-		go d.Push(push.Message{Title: title, Body: body, Category: "inbox", Data: data, Thread: workspaceID})
+		go d.Push(push.Message{Title: title, Body: body, Category: "inbox", Data: attentionData(workspaceID, link, key, body), Thread: workspaceID})
 	}
 	if d.NotifyFocus != nil {
 		if id := d.focusableSession(sessionID, workspaceID); id != "" {
@@ -675,6 +657,32 @@ func (d *Daemon) notifyAttentionFull(title, body, workspaceID, link, key, sessio
 	if d.Notify != nil {
 		d.Notify(title, body)
 	}
+}
+
+func (d *Daemon) attentionHeld(workspaceID, key, body, sessionID string) string {
+	switch {
+	case d.muted():
+		return "muted"
+	case d.silenced(workspaceID):
+		return "silent " + workspaceID
+	case sessionID == "" && d.heldForMorning(workspaceID, key, body, time.Now()):
+		return "held until morning " + workspaceID
+	}
+	return ""
+}
+
+func attentionData(workspaceID, link, key, body string) map[string]string {
+	data := map[string]string{"workspace": workspaceID}
+	if link != "" {
+		data["url"] = link
+	}
+	if key != "" {
+		data["key"] = key
+	}
+	if needsPerson(body) {
+		data["needs"] = "1"
+	}
+	return data
 }
 
 func (d *Daemon) focusableSession(sessionID, workspaceID string) string {
@@ -692,14 +700,15 @@ func (d *Daemon) focusableSession(sessionID, workspaceID string) string {
 			}
 			continue
 		}
-		if workspaceID == "" || !sessions.Within(s.Cwd, workspaceID) && s.Folder != workspaceID {
-			continue
-		}
-		if best.ID == "" || s.LastActivity.After(best.LastActivity) {
+		if onWorkspace(s, workspaceID) && (best.ID == "" || s.LastActivity.After(best.LastActivity)) {
 			best = s
 		}
 	}
 	return best.ID
+}
+
+func onWorkspace(s sessions.Session, workspaceID string) bool {
+	return workspaceID != "" && (sessions.Within(s.Cwd, workspaceID) || s.Folder == workspaceID)
 }
 
 func inWindow(s sessions.Session) bool {
@@ -1168,43 +1177,49 @@ func (d *Daemon) HoldAwakeWhileWorking(ctx context.Context, lock *supervisor.Wak
 	defer lock.Release()
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
-	lastBusy := time.Time{}
-	held := false
+	a := awakeState{}
 	for {
-		hold, display := false, false
-		if d.AwakePolicy != nil {
-			hold, display = d.AwakePolicy()
-		}
-		if d.anyoneWorking() {
-			lastBusy = time.Now()
-		}
-		busy := !lastBusy.IsZero() && time.Since(lastBusy) <= awakeGrace
-		if hold != held {
-			held = hold
-			if hold {
-				utils.Info("agent: holding the machine awake for as long as this daemon runs (stayAwake)")
-			} else {
-				utils.Info("agent: back to a wake lock per session")
-			}
-		}
-		if d.lidIsClosed() {
-			_ = lock.SetDisplay(hold || busy)
-		} else {
-			_ = lock.SetDisplay(display)
-		}
-		if hold || busy {
-			if !lock.Held() {
-				if err := lock.Acquire(os.Getpid()); err != nil {
-					utils.Infof("agent: could not hold the machine awake: %v\n", err)
-				}
-			}
-		} else if lock.Held() {
-			lock.Release()
-		}
+		d.awakeTick(lock, &a)
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
 		}
+	}
+}
+
+type awakeState struct {
+	lastBusy time.Time
+	held     bool
+}
+
+func (d *Daemon) awakeTick(lock *supervisor.WakeLock, a *awakeState) {
+	hold, display := false, false
+	if d.AwakePolicy != nil {
+		hold, display = d.AwakePolicy()
+	}
+	if d.anyoneWorking() {
+		a.lastBusy = time.Now()
+	}
+	busy := !a.lastBusy.IsZero() && time.Since(a.lastBusy) <= awakeGrace
+	if hold != a.held {
+		a.held = hold
+		if hold {
+			utils.Info("agent: holding the machine awake for as long as this daemon runs (stayAwake)")
+		} else {
+			utils.Info("agent: back to a wake lock per session")
+		}
+	}
+	if d.lidIsClosed() {
+		display = hold || busy
+	}
+	_ = lock.SetDisplay(display)
+	switch {
+	case (hold || busy) && !lock.Held():
+		if err := lock.Acquire(os.Getpid()); err != nil {
+			utils.Infof("agent: could not hold the machine awake: %v\n", err)
+		}
+	case !hold && !busy && lock.Held():
+		lock.Release()
 	}
 }

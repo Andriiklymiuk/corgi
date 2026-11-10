@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -131,20 +132,15 @@ func (d *Daemon) shouldTakeTask(store *peers.Store, workspace string, now time.T
 		able = append(able, me)
 	}
 	for _, q := range store.Peers {
-		if !q.Alive(now) || q.Unwell != "" {
-			continue
-		}
-		copies, ok := watch.LoadTaskCopies(d.Dir, q.Name)
-		if !ok {
-			continue
-		}
-		for _, ws := range copies.Fixes {
-			if ws == workspace {
-				able = append(able, strings.ToLower(q.Name))
-				break
-			}
+		if q.Alive(now) && q.Unwell == "" && d.peerFixes(q.Name, workspace) {
+			able = append(able, strings.ToLower(q.Name))
 		}
 	}
 	sort.Strings(able)
 	return len(able) > 0 && able[0] == me
+}
+
+func (d *Daemon) peerFixes(peer, workspace string) bool {
+	copies, ok := watch.LoadTaskCopies(d.Dir, peer)
+	return ok && slices.Contains(copies.Fixes, workspace)
 }

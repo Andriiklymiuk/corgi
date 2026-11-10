@@ -32,28 +32,8 @@ func (d *Daemon) advanceTasks(ctx context.Context) {
 	d.takeOverTasks(now)
 	tasks := watch.LoadTasks(d.Dir)
 	for _, t := range tasks.Tasks {
-		if !t.WantsRun() {
-			continue
-		}
-		spec, ok := d.watchSpecFor(t.Workspace)
-		if !ok || spec.Action != "fix" || d.fixActiveFor(t.Workspace, t.Ref()) {
-			continue
-		}
-		if d.fixesActiveIn(t.Workspace) >= taskSlots(spec) {
-			continue
-		}
-		if reason := d.deferral(spec, now); reason != "" {
-			if d.taskWaitSaid == nil {
-				d.taskWaitSaid = map[string]string{}
-			}
-			if d.taskWaitSaid[t.Key()] != reason {
-				d.taskWaitSaid[t.Key()] = reason
-				utils.Infof("agent: %s waits: %s\n", t.Ref(), reason)
-			}
-			continue
-		}
-		delete(d.taskWaitSaid, t.Key())
-		if !d.claimFix(t.Workspace, t.Ref()) {
+		spec, ok := d.taskRunnable(t, now)
+		if !ok || !d.claimFix(t.Workspace, t.Ref()) {
 			continue
 		}
 		e := t.Event()
@@ -61,6 +41,32 @@ func (d *Daemon) advanceTasks(ctx context.Context) {
 		d.watchState.Fixes.StartFor(e, now)
 		d.spawnFix(ctx, spec, e)
 		utils.Infof("agent: started %s - %s\n", t.Ref(), t.Title)
+	}
+}
+
+func (d *Daemon) taskRunnable(t watch.Task, now time.Time) (WatchSpec, bool) {
+	if !t.WantsRun() {
+		return WatchSpec{}, false
+	}
+	spec, ok := d.watchSpecFor(t.Workspace)
+	if !ok || spec.Action != "fix" || d.fixActiveFor(t.Workspace, t.Ref()) || d.fixesActiveIn(t.Workspace) >= taskSlots(spec) {
+		return spec, false
+	}
+	if reason := d.deferral(spec, now); reason != "" {
+		d.sayTaskWaits(t, reason)
+		return spec, false
+	}
+	delete(d.taskWaitSaid, t.Key())
+	return spec, true
+}
+
+func (d *Daemon) sayTaskWaits(t watch.Task, reason string) {
+	if d.taskWaitSaid == nil {
+		d.taskWaitSaid = map[string]string{}
+	}
+	if d.taskWaitSaid[t.Key()] != reason {
+		d.taskWaitSaid[t.Key()] = reason
+		utils.Infof("agent: %s waits: %s\n", t.Ref(), reason)
 	}
 }
 

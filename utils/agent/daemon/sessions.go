@@ -37,92 +37,112 @@ func (d *Daemon) handleSessionCommand(ctx context.Context, c command.Command) bo
 	if d.Sessions == nil {
 		return false
 	}
+	if act, ok := d.boardActions(ctx)[c.Action]; ok {
+		act(c)
+		return true
+	}
 	switch c.Action {
 	case command.ActionSession:
-		if c.Event != nil {
-			d.Ledger.Note(c.Event.Name, c.Event.SessionID, c.Event.Agent != "", c.Event.At)
-			d.Sessions.Apply(*c.Event)
-			if c.Event.Bot != "" && c.Event.SessionID != "" && !sessions.Placeholder(c.Event.SessionID) {
-				if err := bots.RecordSession(bots.Path(d.Dir), c.Event.Bot, c.Event.SessionID, c.Event.At); err != nil {
-					utils.Infof("agent: bot %s: %v\n", c.Event.Bot, err)
-				}
-			}
-		}
-	case command.ActionFocus:
-		d.focusSession(ctx, c.SessionID)
-	case command.ActionPin:
-		d.Sessions.Pin(c.Index, c.Pinned)
-	case command.ActionPage:
-		d.Sessions.Page(c.Direction)
-	case command.ActionRescan:
-		d.rescan()
-	case command.ActionRefresh:
-		d.refresh()
-	case command.ActionResize:
-		d.Sessions.Resize(c.Size)
-	case command.ActionNew:
-		d.newSession(ctx, c.WindowID, c.Command)
+		d.applySessionEvent(c.Event)
 	case command.ActionDismiss:
 		if err := d.Sessions.Dismiss(c.SessionID, time.Now()); err != nil {
 			utils.Infof("agent: dismiss %s: %v\n", c.SessionID, err)
 			d.Sessions.SetNotice(err)
 		}
 	case command.ActionNote:
-		if err := d.Sessions.SetNote(c.SessionID, c.Note); err != nil {
-			d.Sessions.SetNotice(err)
-		}
+		d.noticeIfErr(d.Sessions.SetNote(c.SessionID, c.Note))
 	case command.ActionCap:
 		if strings.TrimSpace(c.SessionID) == "" {
 			d.SessionCap = c.Tokens
-		} else if err := d.Sessions.SetCap(c.SessionID, c.Tokens); err != nil {
-			d.Sessions.SetNotice(err)
+		} else {
+			d.noticeIfErr(d.Sessions.SetCap(c.SessionID, c.Tokens))
 		}
-	case command.ActionSend:
-		d.sendToSession(ctx, c.SessionID, c.Text, c.Enter)
 	case command.ActionWatch:
-		if c.WatchEvent != nil {
-			if c.Retry && d.watchState != nil {
-				d.watchState.Unsee(c.WatchEvent.Key)
-				d.watchState.Fixes.DropDeferred(c.WatchEvent.Key)
-			}
-			d.handleWatchEvent(ctx, *c.WatchEvent)
-		}
-	case command.ActionPlan:
-		d.advanceWork(ctx)
+		d.retryWatchEvent(ctx, c)
 	case command.ActionAnswer:
-		answerKeys := d.Sessions.PendingAnswer
-		if c.Confirmed {
-			answerKeys = d.Sessions.PendingAnswerConfirmed
-		}
-		keys, err := answerKeys(c.SessionID, c.Answer)
-		if err != nil {
-			utils.Infof("agent: answer %s: %v\n", c.SessionID, err)
-			d.Sessions.SetNotice(err)
-			return true
-		}
-		var settled func()
-		if c.Answer == "deny" {
-			id := c.SessionID
-			settled = func() { d.Sessions.Denied(id, time.Now()) }
-		}
-		d.sendKeys(ctx, c.SessionID, keys, false, settled)
-	case command.ActionRead:
-		_ = d.Sessions.ReadBy(c.SessionID, time.Now())
-	case command.ActionContinue:
-		d.continueHeadless(ctx, c.SessionID, c.Text)
+		d.answerSession(ctx, c)
 	case command.ActionInterrupt:
-		keys, err := d.Sessions.InterruptKeys(c.SessionID)
-		if err != nil {
-			utils.Infof("agent: interrupt %s: %v\n", c.SessionID, err)
-			d.Sessions.SetNotice(err)
-			return true
-		}
-		id := c.SessionID
-		d.sendKeys(ctx, id, keys, false, func() { d.Sessions.Interrupted(id, time.Now()) })
+		d.interruptSession(ctx, c.SessionID)
 	default:
 		return false
 	}
 	return true
+}
+
+func (d *Daemon) boardActions(ctx context.Context) map[string]func(command.Command) {
+	return map[string]func(command.Command){
+		command.ActionFocus:    func(c command.Command) { d.focusSession(ctx, c.SessionID) },
+		command.ActionPin:      func(c command.Command) { d.Sessions.Pin(c.Index, c.Pinned) },
+		command.ActionPage:     func(c command.Command) { d.Sessions.Page(c.Direction) },
+		command.ActionRescan:   func(command.Command) { d.rescan() },
+		command.ActionRefresh:  func(command.Command) { d.refresh() },
+		command.ActionResize:   func(c command.Command) { d.Sessions.Resize(c.Size) },
+		command.ActionNew:      func(c command.Command) { d.newSession(ctx, c.WindowID, c.Command) },
+		command.ActionSend:     func(c command.Command) { d.sendToSession(ctx, c.SessionID, c.Text, c.Enter) },
+		command.ActionPlan:     func(command.Command) { d.advanceWork(ctx) },
+		command.ActionRead:     func(c command.Command) { _ = d.Sessions.ReadBy(c.SessionID, time.Now()) },
+		command.ActionContinue: func(c command.Command) { d.continueHeadless(ctx, c.SessionID, c.Text) },
+	}
+}
+
+func (d *Daemon) noticeIfErr(err error) {
+	if err != nil {
+		d.Sessions.SetNotice(err)
+	}
+}
+
+func (d *Daemon) applySessionEvent(ev *sessions.Event) {
+	if ev == nil {
+		return
+	}
+	d.Ledger.Note(ev.Name, ev.SessionID, ev.Agent != "", ev.At)
+	d.Sessions.Apply(*ev)
+	if ev.Bot == "" || ev.SessionID == "" || sessions.Placeholder(ev.SessionID) {
+		return
+	}
+	if err := bots.RecordSession(bots.Path(d.Dir), ev.Bot, ev.SessionID, ev.At); err != nil {
+		utils.Infof("agent: bot %s: %v\n", ev.Bot, err)
+	}
+}
+
+func (d *Daemon) retryWatchEvent(ctx context.Context, c command.Command) {
+	if c.WatchEvent == nil {
+		return
+	}
+	if c.Retry && d.watchState != nil {
+		d.watchState.Unsee(c.WatchEvent.Key)
+		d.watchState.Fixes.DropDeferred(c.WatchEvent.Key)
+	}
+	d.handleWatchEvent(ctx, *c.WatchEvent)
+}
+
+func (d *Daemon) answerSession(ctx context.Context, c command.Command) {
+	answerKeys := d.Sessions.PendingAnswer
+	if c.Confirmed {
+		answerKeys = d.Sessions.PendingAnswerConfirmed
+	}
+	keys, err := answerKeys(c.SessionID, c.Answer)
+	if err != nil {
+		utils.Infof("agent: answer %s: %v\n", c.SessionID, err)
+		d.Sessions.SetNotice(err)
+		return
+	}
+	var settled func()
+	if c.Answer == "deny" {
+		id := c.SessionID
+		settled = func() { d.Sessions.Denied(id, time.Now()) }
+	}
+	d.sendKeys(ctx, c.SessionID, keys, false, settled)
+}
+
+func (d *Daemon) interruptSession(ctx context.Context, id string) {
+	keys, err := d.Sessions.InterruptKeys(id)
+	if err != nil {
+		utils.Infof("agent: interrupt %s: %v\n", id, err)
+		d.Sessions.SetNotice(err)
+		return
+	}
+	d.sendKeys(ctx, id, keys, false, func() { d.Sessions.Interrupted(id, time.Now()) })
 }
 
 func (d *Daemon) flushSessions() {
@@ -228,20 +248,8 @@ func (d *Daemon) stillWaiting(id string, since time.Time, subject string) bool {
 }
 
 func (d *Daemon) onSessionTransition(s sessions.Session, from, to sessions.Status, now time.Time) {
-	label := s.Display
-	if label == "" {
-		label = s.Label
-	}
-	switch from {
-	case sessions.StatusNeedsInput, sessions.StatusLimited:
-		kind := "wait"
-		if from == sessions.StatusLimited {
-			kind = "limited"
-		}
-		if secs := int(now.Sub(s.StatusSince).Seconds()); secs > 0 {
-			_ = usage.RecordWait(d.Dir, usage.Wait{At: now.UTC(), Kind: kind, Label: label, Profile: s.Profile, Seconds: secs})
-		}
-	}
+	label := firstNonEmpty(s.Display, s.Label)
+	d.recordWait(s, from, label, now)
 	if to == sessions.StatusDone && from == sessions.StatusWorking {
 		d.swaps.Add(1)
 		go func() {
@@ -251,30 +259,59 @@ func (d *Daemon) onSessionTransition(s sessions.Session, from, to sessions.Statu
 		}()
 		d.gateDone(s)
 	}
-	if to == sessions.StatusNeedsInput && s.Pending != nil && d.allowsByPolicy(s) {
-		go d.autoAllow(s)
+	if to == sessions.StatusNeedsInput && s.Pending != nil {
+		if d.allowsByPolicy(s) {
+			go d.autoAllow(s)
+			return
+		}
+		d.pushPermission(s, label)
+	}
+	resumed, rested := d.trackLimit(s, from, to, label, now)
+	if resumed {
+		d.ringLiftAfterGrace(s, label)
+	}
+	if rested != "" {
+		go d.notifySession(notifyTitlePrefix+label, "the turn resumed after the limit"+d.accountWord(s)+" is "+rested, s)
+	}
+}
+
+func (d *Daemon) recordWait(s sessions.Session, from sessions.Status, label string, now time.Time) {
+	if from != sessions.StatusNeedsInput && from != sessions.StatusLimited {
 		return
 	}
-	if to == sessions.StatusNeedsInput && s.Pending != nil && d.Push != nil {
-		body := "permission: " + s.Pending.Tool
-		if s.Pending.Subject != "" {
-			body += " " + s.Pending.Subject
-		}
-		data := map[string]string{"session": s.ID, "tool": s.Pending.Tool, "workspace": s.Label, "needs": "1"}
-		if s.Pending.Risky() {
-			data["risky"] = "1"
-		}
-		if s.Pending.Risk != "" {
-			data["risk"] = s.Pending.Risk
-		}
-		d.pushWhenStillWaiting(s, push.Message{Title: notifyTitlePrefix + label, Body: body, Category: "permission", Data: data, Thread: s.ID})
+	kind := "wait"
+	if from == sessions.StatusLimited {
+		kind = "limited"
 	}
+	if secs := int(now.Sub(s.StatusSince).Seconds()); secs > 0 {
+		_ = usage.RecordWait(d.Dir, usage.Wait{At: now.UTC(), Kind: kind, Label: label, Profile: s.Profile, Seconds: secs})
+	}
+}
+
+func (d *Daemon) pushPermission(s sessions.Session, label string) {
+	if d.Push == nil {
+		return
+	}
+	body := "permission: " + s.Pending.Tool
+	if s.Pending.Subject != "" {
+		body += " " + s.Pending.Subject
+	}
+	data := map[string]string{"session": s.ID, "tool": s.Pending.Tool, "workspace": s.Label, "needs": "1"}
+	if s.Pending.Risky() {
+		data["risky"] = "1"
+	}
+	if s.Pending.Risk != "" {
+		data["risk"] = s.Pending.Risk
+	}
+	d.pushWhenStillWaiting(s, push.Message{Title: notifyTitlePrefix + label, Body: body, Category: "permission", Data: data, Thread: s.ID})
+}
+
+func (d *Daemon) trackLimit(s sessions.Session, from, to sessions.Status, label string, now time.Time) (resumed bool, rested string) {
 	d.attentionMu.Lock()
+	defer d.attentionMu.Unlock()
 	if d.limitWatch == nil {
 		d.limitWatch = map[string]bool{}
 	}
-	rested := ""
-	resumed := false
 	switch {
 	case from == sessions.StatusLimited && to == sessions.StatusWorking:
 		d.limitWatch[s.ID] = true
@@ -292,33 +329,34 @@ func (d *Daemon) onSessionTransition(s sessions.Session, from, to sessions.Statu
 			rested = "needs you"
 		}
 	}
-	d.attentionMu.Unlock()
-	if resumed {
-		id := s.ID
-		grace := d.LiftGrace
-		if grace == 0 {
-			grace = 20 * time.Second
-		}
-		time.AfterFunc(grace, func() {
-			d.attentionMu.Lock()
-			still := d.limitWatch[id]
-			recent := !d.liftRang[id].IsZero() && time.Since(d.liftRang[id]) < liftEpisode
-			if still && !recent {
-				if d.liftRang == nil {
-					d.liftRang = map[string]time.Time{}
-				}
-				d.liftRang[id] = time.Now()
-			}
-			d.attentionMu.Unlock()
-			if !still || recent {
-				return
-			}
+	return resumed, rested
+}
+
+func (d *Daemon) ringLiftAfterGrace(s sessions.Session, label string) {
+	grace := d.LiftGrace
+	if grace == 0 {
+		grace = 20 * time.Second
+	}
+	time.AfterFunc(grace, func() {
+		if d.claimLiftRing(s.ID) {
 			d.notifySession(notifyTitlePrefix+label, d.liftWord(s), s)
-		})
+		}
+	})
+}
+
+func (d *Daemon) claimLiftRing(id string) bool {
+	d.attentionMu.Lock()
+	defer d.attentionMu.Unlock()
+	still := d.limitWatch[id]
+	recent := !d.liftRang[id].IsZero() && time.Since(d.liftRang[id]) < liftEpisode
+	if !still || recent {
+		return false
 	}
-	if rested != "" {
-		go d.notifySession(notifyTitlePrefix+label, "the turn resumed after the limit"+d.accountWord(s)+" is "+rested, s)
+	if d.liftRang == nil {
+		d.liftRang = map[string]time.Time{}
 	}
+	d.liftRang[id] = time.Now()
+	return true
 }
 
 func (d *Daemon) accountWord(s sessions.Session) string {
