@@ -176,132 +176,161 @@ func ideaOpenHandler(token, deviceStore string) http.HandlerFunc {
 		// The link carries its key: never into a search index, never in a Referer to another site.
 		w.Header().Set("X-Robots-Tag", "noindex, nofollow")
 		w.Header().Set("Referrer-Policy", "no-referrer")
-		rest := strings.TrimPrefix(r.URL.Path, "/idea/")
-		parts := strings.SplitN(rest, "/", 3)
-		slug := parts[0]
-		what, name := "", ""
-		if len(parts) > 1 {
-			what = parts[1]
+		parts := strings.SplitN(strings.TrimPrefix(r.URL.Path, "/idea/"), "/", 3)
+		for len(parts) < 3 {
+			parts = append(parts, "")
 		}
-		if len(parts) > 2 {
-			name = parts[2]
-		}
-		if slug == "" {
-			// The menu of every page: a shell for any browser, the list itself
-			// only for the dashboard's own (a share key opens one page, not all).
-			if !strings.Contains(r.Header.Get("Accept"), "json") {
-				w.Header().Set(headerContentType, htmlContentType)
-				_, _ = fmt.Fprint(w, ideaIndexHTML)
-				return
-			}
-			if !ideaTrusted(r, token, deviceStore) {
-				writeLaunchError(w, http.StatusForbidden, "the list of pages is for the dashboard: open it from corgi agent dashboard")
-				return
-			}
-			dir, err := agentDir()
-			if err != nil {
-				writeLaunchError(w, http.StatusInternalServerError, err.Error())
-				return
-			}
-			writeLaunchJSON(w, map[string]any{"ideas": ideaRows(dir, true)})
-			return
-		}
-		if what == "" {
+		slug, what, name := parts[0], parts[1], parts[2]
+		trusted := ideaTrusted(r, token, deviceStore)
+		switch {
+		case slug == "":
+			ideaIndex(w, r, trusted)
+		case what == "":
 			// The page is a shell; it asks for /doc with the key, and is told there when the key is wrong.
 			w.Header().Set(headerContentType, htmlContentType)
 			w.Header().Set(headerContentSecurityPolicy, ideaPageCSP)
-			_, _ = fmt.Fprint(w, ideaShellFor(r, slug, ideaTrusted(r, token, deviceStore)))
-			return
-		}
-		dir, err := agentDir()
-		if err != nil {
-			writeLaunchError(w, http.StatusInternalServerError, err.Error())
-			return
-		}
-		id, err := idea.Load(dir, slug)
-		if err != nil {
-			writeLaunchError(w, http.StatusNotFound, "no such idea page")
-			return
-		}
-		trusted := ideaTrusted(r, token, deviceStore)
-		if !trusted {
-			if id.Meta.Key == "" || subtle.ConstantTimeCompare([]byte(r.URL.Query().Get("k")), []byte(id.Meta.Key)) != 1 {
-				writeLaunchError(w, http.StatusForbidden, "this page is closed - ask for a fresh link")
-				return
-			}
-			if !id.Meta.LinkOpen(time.Now()) {
-				writeLaunchError(w, http.StatusForbidden, "this link has expired - ask for a fresh one")
-				return
-			}
-			if r.Method != http.MethodGet && id.Meta.ReadOnly {
-				writeLaunchError(w, http.StatusForbidden, "this link is for reading only")
-				return
-			}
-			if r.Method != http.MethodGet && !ideaGuestWrites.allow(slug, guestAddress(r), time.Now()) {
-				w.Header().Set("Retry-After", "60")
-				writeLaunchError(w, http.StatusTooManyRequests, "too many comments at once - wait a minute")
-				return
-			}
-		}
-		switch what {
-		case "doc":
-			if r.Method != http.MethodGet {
-				writeLaunchError(w, http.StatusMethodNotAllowed, "GET the page")
-				return
-			}
-			writeLaunchJSON(w, ideaDocument(dir, id, true, trusted))
-		case "rev":
-			n, _ := strconv.Atoi(name)
-			rv, doc, err := id.RevisionDoc(n)
-			if err != nil {
-				writeLaunchError(w, ideaHTTPStatus(err), err.Error())
-				return
-			}
-			writeLaunchJSON(w, map[string]any{"revision": rv, "markdown": doc, "html": renderIdeaHTML(doc)})
-		case "stream":
-			ideaStream(w, r, dir, id)
-		case "agent":
-			w.Header().Set(headerContentType, "text/markdown; charset=utf-8")
-			link := ideaRemote{Base: ideaRequestBase(r) + "/idea/" + slug, Slug: slug, Key: r.URL.Query().Get("k")}
-			_, _ = fmt.Fprint(w, ideaAgentText(link, id))
-		case "file":
-			ideaFile(w, r, dir, id, name)
-		case "mock":
-			if r.Method == http.MethodGet {
-				ideaMock(w, r, id)
-				return
-			}
-			if r.Method != http.MethodPost {
-				writeLaunchError(w, http.StatusMethodNotAllowed, "GET the mockup, or POST to draw it")
-				return
-			}
-			out, status, err := ideaPerform(dir, ideaAction{Do: "mock", Slug: slug}, trusted, "someone")
-			if err != nil {
-				writeLaunchError(w, status, err.Error())
-				return
-			}
-			writeLaunchJSON(w, out)
-		case "comment", "reply", "status", "build", "edit", "auto", "send", "set", "share", "approve", "decide", "delete":
-			if r.Method != http.MethodPost {
-				writeLaunchError(w, http.StatusMethodNotAllowed, "POST to "+what)
-				return
-			}
-			var a ideaAction
-			if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, ideaBodyLimit)).Decode(&a); err != nil {
-				writeLaunchError(w, http.StatusBadRequest, requestUnreadableMessage)
-				return
-			}
-			a.Do, a.Slug = what, slug
-			out, status, err := ideaPerform(dir, a, trusted, "someone")
-			if err != nil {
-				writeLaunchError(w, status, err.Error())
-				return
-			}
-			writeLaunchJSON(w, out)
+			_, _ = fmt.Fprint(w, ideaShellFor(r, slug, trusted))
 		default:
-			writeLaunchError(w, http.StatusNotFound, "no such part of an idea page")
+			ideaPart(w, r, ideaPartRequest{slug: slug, what: what, name: name, trusted: trusted})
 		}
 	}
+}
+
+// ideaIndex is the menu of every page: a shell for any browser, the list
+// itself only for the dashboard's own (a share key opens one page, not all).
+func ideaIndex(w http.ResponseWriter, r *http.Request, trusted bool) {
+	if !strings.Contains(r.Header.Get("Accept"), "json") {
+		w.Header().Set(headerContentType, htmlContentType)
+		_, _ = fmt.Fprint(w, ideaIndexHTML)
+		return
+	}
+	if !trusted {
+		writeLaunchError(w, http.StatusForbidden, "the list of pages is for the dashboard: open it from corgi agent dashboard")
+		return
+	}
+	dir, err := agentDir()
+	if err != nil {
+		writeLaunchError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeLaunchJSON(w, map[string]any{"ideas": ideaRows(dir, true)})
+}
+
+type ideaPartRequest struct {
+	slug, what, name string
+	trusted          bool
+}
+
+func guestRefusal(w http.ResponseWriter, r *http.Request, id *idea.Idea, slug string) (int, string) {
+	if id.Meta.Key == "" || subtle.ConstantTimeCompare([]byte(r.URL.Query().Get("k")), []byte(id.Meta.Key)) != 1 {
+		return http.StatusForbidden, "this page is closed - ask for a fresh link"
+	}
+	if !id.Meta.LinkOpen(time.Now()) {
+		return http.StatusForbidden, "this link has expired - ask for a fresh one"
+	}
+	if r.Method == http.MethodGet {
+		return 0, ""
+	}
+	if id.Meta.ReadOnly {
+		return http.StatusForbidden, "this link is for reading only"
+	}
+	if !ideaGuestWrites.allow(slug, guestAddress(r), time.Now()) {
+		w.Header().Set("Retry-After", "60")
+		return http.StatusTooManyRequests, "too many comments at once - wait a minute"
+	}
+	return 0, ""
+}
+
+var ideaPostParts = map[string]bool{"comment": true, "reply": true, "status": true, "build": true, "edit": true, "auto": true,
+	"send": true, "set": true, "share": true, "approve": true, "decide": true, "delete": true}
+
+func ideaPart(w http.ResponseWriter, r *http.Request, req ideaPartRequest) {
+	dir, err := agentDir()
+	if err != nil {
+		writeLaunchError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	id, err := idea.Load(dir, req.slug)
+	if err != nil {
+		writeLaunchError(w, http.StatusNotFound, "no such idea page")
+		return
+	}
+	if !req.trusted {
+		if status, msg := guestRefusal(w, r, id, req.slug); status != 0 {
+			writeLaunchError(w, status, msg)
+			return
+		}
+	}
+	if ideaPostParts[req.what] {
+		ideaPostPart(w, r, dir, req)
+		return
+	}
+	ideaReadPart(w, r, dir, id, req)
+}
+
+func ideaReadPart(w http.ResponseWriter, r *http.Request, dir string, id *idea.Idea, req ideaPartRequest) {
+	switch req.what {
+	case "doc":
+		if r.Method != http.MethodGet {
+			writeLaunchError(w, http.StatusMethodNotAllowed, "GET the page")
+			return
+		}
+		writeLaunchJSON(w, ideaDocument(dir, id, true, req.trusted))
+	case "rev":
+		n, _ := strconv.Atoi(req.name)
+		rv, doc, err := id.RevisionDoc(n)
+		if err != nil {
+			writeLaunchError(w, ideaHTTPStatus(err), err.Error())
+			return
+		}
+		writeLaunchJSON(w, map[string]any{"revision": rv, "markdown": doc, "html": renderIdeaHTML(doc)})
+	case "stream":
+		ideaStream(w, r, dir, id)
+	case "agent":
+		w.Header().Set(headerContentType, "text/markdown; charset=utf-8")
+		link := ideaRemote{Base: ideaRequestBase(r) + "/idea/" + req.slug, Slug: req.slug, Key: r.URL.Query().Get("k")}
+		_, _ = fmt.Fprint(w, ideaAgentText(link, id))
+	case "file":
+		ideaFile(w, r, dir, id, req.name)
+	case "mock":
+		ideaMockPart(w, r, dir, id, req)
+	default:
+		writeLaunchError(w, http.StatusNotFound, "no such part of an idea page")
+	}
+}
+
+func ideaMockPart(w http.ResponseWriter, r *http.Request, dir string, id *idea.Idea, req ideaPartRequest) {
+	switch r.Method {
+	case http.MethodGet:
+		ideaMock(w, r, id)
+	case http.MethodPost:
+		writeIdeaResult(w, dir, ideaAction{Do: "mock", Slug: req.slug}, req.trusted)
+	default:
+		writeLaunchError(w, http.StatusMethodNotAllowed, "GET the mockup, or POST to draw it")
+	}
+}
+
+func ideaPostPart(w http.ResponseWriter, r *http.Request, dir string, req ideaPartRequest) {
+	if r.Method != http.MethodPost {
+		writeLaunchError(w, http.StatusMethodNotAllowed, "POST to "+req.what)
+		return
+	}
+	var a ideaAction
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, ideaBodyLimit)).Decode(&a); err != nil {
+		writeLaunchError(w, http.StatusBadRequest, requestUnreadableMessage)
+		return
+	}
+	a.Do, a.Slug = req.what, req.slug
+	writeIdeaResult(w, dir, a, req.trusted)
+}
+
+func writeIdeaResult(w http.ResponseWriter, dir string, a ideaAction, trusted bool) {
+	out, status, err := ideaPerform(dir, a, trusted, "someone")
+	if err != nil {
+		writeLaunchError(w, status, err.Error())
+		return
+	}
+	writeLaunchJSON(w, out)
 }
 
 // ideaMock serves the mockup the agent drew. It is the agent's HTML with its
@@ -356,220 +385,280 @@ func ideaFile(w http.ResponseWriter, r *http.Request, dir string, id *idea.Idea,
 // ideaPerform is one action on a page, from any client. trusted says the
 // dashboard's own token or a paired device sent it; the share key alone
 // may comment, reply, set a status and attach files, never build or edit.
-func ideaPerform(dir string, a ideaAction, trusted bool, defaultBy string) (any, int, error) {
-	by := strings.TrimSpace(a.By)
-	if by == "" {
-		by = defaultBy
+type ideaCall struct {
+	dir     string
+	a       ideaAction
+	trusted bool
+	by      string
+	now     time.Time
+}
+
+type ideaResult struct {
+	out    any
+	status int
+	err    error
+}
+
+func ideaOK(out any) ideaResult { return ideaResult{out: out} }
+
+func ideaFailed(err error) ideaResult { return ideaResult{status: ideaHTTPStatus(err), err: err} }
+
+func ideaRefused(status int, format string, a ...any) ideaResult {
+	return ideaResult{status: status, err: fmt.Errorf(format, a...)}
+}
+
+func ideaPerformers() map[string]func(ideaCall) ideaResult {
+	return map[string]func(ideaCall) ideaResult{
+		"comment": ideaDoComment, "reply": ideaDoReply, "status": ideaDoStatus, "file": ideaDoFile,
+		"share": ideaDoShare, "send": ideaDoSend, "build": ideaDoBuild, "edit": ideaDoEdit, "set": ideaDoSet,
+		"auto": ideaDoAuto, "approve": ideaDoApprove, "delete": ideaDoDelete, "decide": ideaDoDecide, "mock": ideaDoMock,
 	}
+}
+
+func ideaPerform(dir string, a ideaAction, trusted bool, defaultBy string) (any, int, error) {
+	by := firstNonEmpty(strings.TrimSpace(a.By), defaultBy)
 	if by == idea.Agent {
 		by = "someone"
 	}
-	now := time.Now()
-	switch a.Do {
-	case "comment":
-		var c idea.Comment
-		id, err := idea.Update(dir, a.Slug, func(id *idea.Idea) error {
-			anchor := anchorOrGiven(id.Doc, a.Quote, a.Prefix, a.Suffix, a.Heading)
-			var err error
-			c, err = id.AddComment(idea.KindComment, by, a.Text, anchor, ownFiles(id, a.Files), a.Links, now)
-			if err == nil && !trusted {
-				id.MarkGuest(c.ID, 0)
-				c.Guest = true
-			}
-			return err
-		})
-		if err != nil {
-			return nil, ideaHTTPStatus(err), err
-		}
-		ideaNotify(dir, id.Meta, "comment by "+by, clipTitle(a.Text, 160))
-		scheduleIdeaAnswer(dir, a.Slug)
-		return map[string]any{"comment": c, "open": id.Open(), "forAgent": len(id.ForAgent())}, 0, nil
-	case "reply":
-		var r idea.Reply
-		id, err := idea.Update(dir, a.Slug, func(id *idea.Idea) error {
-			var err error
-			r, err = id.Reply(a.ID, by, a.Text, false, ownFiles(id, a.Files), a.Links, now)
-			if err == nil && !trusted {
-				id.MarkGuest(a.ID, r.ID)
-				r.Guest = true
-			}
-			return err
-		})
-		if err != nil {
-			return nil, ideaHTTPStatus(err), err
-		}
-		ideaNotify(dir, id.Meta, "reply by "+by, clipTitle(a.Text, 160))
-		scheduleIdeaAnswer(dir, a.Slug)
-		c, _ := id.Find(a.ID)
-		return map[string]any{"reply": r, "comment": c, "open": id.Open(), "forAgent": len(id.ForAgent())}, 0, nil
-	case "status":
-		var c idea.Comment
-		id, err := idea.Update(dir, a.Slug, func(id *idea.Idea) error {
-			var err error
-			c, err = id.SetStatus(a.ID, a.Status, now)
-			return err
-		})
-		if err != nil {
-			return nil, ideaHTTPStatus(err), err
-		}
-		if a.Status == idea.StatusOpen {
-			scheduleIdeaAnswer(dir, a.Slug)
-		}
-		return map[string]any{"comment": c, "open": id.Open(), "forAgent": len(id.ForAgent())}, 0, nil
-	case "file":
-		data, err := base64.StdEncoding.DecodeString(strings.TrimSpace(a.Data))
-		if err != nil || len(data) == 0 {
-			return nil, http.StatusBadRequest, fmt.Errorf("data is the file, base64")
-		}
-		id, err := idea.Load(dir, a.Slug)
-		if err != nil {
-			return nil, http.StatusNotFound, err
-		}
-		att, err := id.AddFile(a.Name, data, firstNonEmpty(a.Type, mimeFor(a.Name)))
-		if err != nil {
-			return nil, http.StatusBadRequest, err
-		}
-		return map[string]any{"file": att}, 0, nil
-	case "share":
-		if !trusted {
-			return nil, http.StatusForbidden, fmt.Errorf("only the page's owner opens or closes its link")
-		}
-		if _, err := idea.Load(dir, a.Slug); err != nil {
-			return nil, ideaHTTPStatus(err), err
-		}
-		req := shareRequest{Target: a.Slug, By: by, Off: a.Off, Rotate: a.Rotate, ReadOnly: a.ReadOnly}
-		if strings.TrimSpace(a.For) != "" {
-			d, err := parseLinkFor(a.For)
-			if err != nil {
-				return nil, http.StatusBadRequest, err
-			}
-			req.For = &d
-		}
-		res, err := shareIdea(dir, req, now)
-		if err != nil {
-			return nil, ideaHTTPStatus(err), err
-		}
-		return res, 0, nil
-	case "send":
-		if !trusted {
-			return nil, http.StatusForbidden, fmt.Errorf("sending needs the dashboard: open the page from corgi agent dashboard, or run corgi idea send %s", a.Slug)
-		}
-		links, err := sendIdea(dir, a.Slug, a.To, a.Workspace, a.Space)
-		if err != nil {
-			return nil, ideaHTTPStatus(err), err
-		}
-		return map[string]any{"sent": links}, 0, nil
-	case "build":
-		if !trusted {
-			return nil, http.StatusForbidden, fmt.Errorf("building needs the dashboard: open the page from corgi agent dashboard, or run corgi idea build %s", a.Slug)
-		}
-		run := a.Run == nil || *a.Run
-		res, err := buildIdea(dir, a.Slug, a.Workspace, "", a.Slots, run)
-		if err != nil {
-			return nil, ideaHTTPStatus(err), err
-		}
-		return res, 0, nil
-	case "edit":
-		if !trusted {
-			return nil, http.StatusForbidden, fmt.Errorf("only the dashboard edits the page itself; comment instead")
-		}
-		id, err := idea.Update(dir, a.Slug, func(id *idea.Idea) error {
-			id.ChangeBy, id.ChangeNote = by, "edited"
-			return id.SetDoc(a.Markdown, now)
-		})
-		if err != nil {
-			return nil, ideaHTTPStatus(err), err
-		}
-		return ideaDocument(dir, id, true, true), 0, nil
-	case "set":
-		if !trusted {
-			return nil, http.StatusForbidden, fmt.Errorf("only the dashboard changes that")
-		}
-		ch := ideaChanges{Name: a.Name, Summary: a.Summary, Workspace: a.Workspace, Type: a.Type}
-		if a.Auto != nil {
-			ch.Auto = map[bool]string{true: "on", false: "off"}[*a.Auto]
-		}
-		if a.Tags != nil {
-			ch.Tags = &a.Tags
-		}
-		id, err := setIdea(dir, a.Slug, ch)
-		if err != nil {
-			return nil, ideaHTTPStatus(err), err
-		}
-		return map[string]any{"idea": id.Meta}, 0, nil
-	case "auto":
-		if !trusted {
-			return nil, http.StatusForbidden, fmt.Errorf("only the dashboard sets that")
-		}
-		id, err := idea.Update(dir, a.Slug, func(id *idea.Idea) error {
-			if a.Auto != nil {
-				id.Meta.Auto = *a.Auto
-			}
-			return nil
-		})
-		if err != nil {
-			return nil, ideaHTTPStatus(err), err
-		}
-		if id.Meta.Auto {
-			scheduleIdeaAnswer(dir, a.Slug)
-		}
-		return map[string]any{"auto": id.Meta.Auto}, 0, nil
-	case "approve":
-		res, err := approveIdea(dir, a.Slug, by, a.Off, false, trusted)
-		if err != nil {
-			return nil, ideaHTTPStatus(err), err
-		}
-		if res.JustApproved && res.Idea.BuildWhenApproved {
-			meta := res.Idea
-			go func() {
-				if _, err := buildIdea(dir, a.Slug, "", "", 1, true); err != nil {
-					ideaNotify(dir, meta, "approved, but not built", err.Error())
-				}
-			}()
-		}
-		if !trusted {
-			res.Idea.Key, res.Idea.Source = "", ""
-		}
-		return res, 0, nil
-	case "delete":
-		if !trusted {
-			return nil, http.StatusForbidden, fmt.Errorf("only the page's owner removes comments")
-		}
-		id, err := idea.Update(dir, a.Slug, func(id *idea.Idea) error { return id.DeleteComment(a.ID) })
-		if err != nil {
-			return nil, ideaHTTPStatus(err), err
-		}
-		return map[string]any{"open": id.Open(), "forAgent": len(id.ForAgent())}, 0, nil
-	case "decide":
-		if !trusted {
-			return nil, http.StatusForbidden, fmt.Errorf("resolving a thread writes its decision; rewording them is for the page's owner")
-		}
-		id, err := idea.Update(dir, a.Slug, func(id *idea.Idea) error {
-			if a.Drop > 0 {
-				return id.Undecide(a.Drop)
-			}
-			_, err := id.Decide(a.Text, by, a.ID, now)
-			return err
-		})
-		if err != nil {
-			return nil, ideaHTTPStatus(err), err
-		}
-		return map[string]any{"decisions": id.Meta.Decisions}, 0, nil
-	case "mock":
-		if !trusted {
-			return nil, http.StatusForbidden, fmt.Errorf("drawing the mockup needs the dashboard: open the page from corgi agent dashboard, or run corgi idea mock %s", a.Slug)
-		}
-		id, err := idea.Load(dir, a.Slug)
-		if err != nil {
-			return nil, ideaHTTPStatus(err), err
-		}
-		if id.Meta.Mocking {
-			return map[string]any{"mocking": true}, 0, nil
-		}
-		scheduleMock(dir, a.Slug, mockNotes(id.Comments.Comments))
-		return map[string]any{"mocking": true}, 0, nil
+	do, ok := ideaPerformers()[a.Do]
+	if !ok {
+		return nil, http.StatusBadRequest, fmt.Errorf("do is comment, reply, status, file, build, edit, auto, send, set, share, approve, decide or mock")
 	}
-	return nil, http.StatusBadRequest, fmt.Errorf("do is comment, reply, status, file, build, edit, auto, send, set, share, approve, decide or mock")
+	res := do(ideaCall{dir: dir, a: a, trusted: trusted, by: by, now: time.Now()})
+	return res.out, res.status, res.err
+}
+
+func commentCounts(id *idea.Idea, out map[string]any) map[string]any {
+	out["open"], out["forAgent"] = id.Open(), len(id.ForAgent())
+	return out
+}
+
+func ideaDoComment(c ideaCall) ideaResult {
+	var made idea.Comment
+	id, err := idea.Update(c.dir, c.a.Slug, func(id *idea.Idea) error {
+		anchor := anchorOrGiven(id.Doc, c.a.Quote, c.a.Prefix, c.a.Suffix, c.a.Heading)
+		var err error
+		made, err = id.AddComment(idea.KindComment, c.by, c.a.Text, anchor, ownFiles(id, c.a.Files), c.a.Links, c.now)
+		if err == nil && !c.trusted {
+			id.MarkGuest(made.ID, 0)
+			made.Guest = true
+		}
+		return err
+	})
+	if err != nil {
+		return ideaFailed(err)
+	}
+	ideaNotify(c.dir, id.Meta, "comment by "+c.by, clipTitle(c.a.Text, 160))
+	scheduleIdeaAnswer(c.dir, c.a.Slug)
+	return ideaOK(commentCounts(id, map[string]any{"comment": made}))
+}
+
+func ideaDoReply(c ideaCall) ideaResult {
+	var r idea.Reply
+	id, err := idea.Update(c.dir, c.a.Slug, func(id *idea.Idea) error {
+		var err error
+		r, err = id.Reply(c.a.ID, c.by, c.a.Text, false, ownFiles(id, c.a.Files), c.a.Links, c.now)
+		if err == nil && !c.trusted {
+			id.MarkGuest(c.a.ID, r.ID)
+			r.Guest = true
+		}
+		return err
+	})
+	if err != nil {
+		return ideaFailed(err)
+	}
+	ideaNotify(c.dir, id.Meta, "reply by "+c.by, clipTitle(c.a.Text, 160))
+	scheduleIdeaAnswer(c.dir, c.a.Slug)
+	comment, _ := id.Find(c.a.ID)
+	return ideaOK(commentCounts(id, map[string]any{"reply": r, "comment": comment}))
+}
+
+func ideaDoStatus(c ideaCall) ideaResult {
+	var comment idea.Comment
+	id, err := idea.Update(c.dir, c.a.Slug, func(id *idea.Idea) error {
+		var err error
+		comment, err = id.SetStatus(c.a.ID, c.a.Status, c.now)
+		return err
+	})
+	if err != nil {
+		return ideaFailed(err)
+	}
+	if c.a.Status == idea.StatusOpen {
+		scheduleIdeaAnswer(c.dir, c.a.Slug)
+	}
+	return ideaOK(commentCounts(id, map[string]any{"comment": comment}))
+}
+
+func ideaDoFile(c ideaCall) ideaResult {
+	data, err := base64.StdEncoding.DecodeString(strings.TrimSpace(c.a.Data))
+	if err != nil || len(data) == 0 {
+		return ideaRefused(http.StatusBadRequest, "data is the file, base64")
+	}
+	id, err := idea.Load(c.dir, c.a.Slug)
+	if err != nil {
+		return ideaResult{status: http.StatusNotFound, err: err}
+	}
+	att, err := id.AddFile(c.a.Name, data, firstNonEmpty(c.a.Type, mimeFor(c.a.Name)))
+	if err != nil {
+		return ideaResult{status: http.StatusBadRequest, err: err}
+	}
+	return ideaOK(map[string]any{"file": att})
+}
+
+func ideaDoShare(c ideaCall) ideaResult {
+	if !c.trusted {
+		return ideaRefused(http.StatusForbidden, "only the page's owner opens or closes its link")
+	}
+	if _, err := idea.Load(c.dir, c.a.Slug); err != nil {
+		return ideaFailed(err)
+	}
+	req := shareRequest{Target: c.a.Slug, By: c.by, Off: c.a.Off, Rotate: c.a.Rotate, ReadOnly: c.a.ReadOnly}
+	if strings.TrimSpace(c.a.For) != "" {
+		d, err := parseLinkFor(c.a.For)
+		if err != nil {
+			return ideaResult{status: http.StatusBadRequest, err: err}
+		}
+		req.For = &d
+	}
+	res, err := shareIdea(c.dir, req, c.now)
+	if err != nil {
+		return ideaFailed(err)
+	}
+	return ideaOK(res)
+}
+
+func ideaDoSend(c ideaCall) ideaResult {
+	if !c.trusted {
+		return ideaRefused(http.StatusForbidden, "sending needs the dashboard: open the page from corgi agent dashboard, or run corgi idea send %s", c.a.Slug)
+	}
+	links, err := sendIdea(c.dir, c.a.Slug, c.a.To, c.a.Workspace, c.a.Space)
+	if err != nil {
+		return ideaFailed(err)
+	}
+	return ideaOK(map[string]any{"sent": links})
+}
+
+func ideaDoBuild(c ideaCall) ideaResult {
+	if !c.trusted {
+		return ideaRefused(http.StatusForbidden, "building needs the dashboard: open the page from corgi agent dashboard, or run corgi idea build %s", c.a.Slug)
+	}
+	res, err := buildIdea(c.dir, c.a.Slug, c.a.Workspace, "", c.a.Slots, c.a.Run == nil || *c.a.Run)
+	if err != nil {
+		return ideaFailed(err)
+	}
+	return ideaOK(res)
+}
+
+func ideaDoEdit(c ideaCall) ideaResult {
+	if !c.trusted {
+		return ideaRefused(http.StatusForbidden, "only the dashboard edits the page itself; comment instead")
+	}
+	id, err := idea.Update(c.dir, c.a.Slug, func(id *idea.Idea) error {
+		id.ChangeBy, id.ChangeNote = c.by, "edited"
+		return id.SetDoc(c.a.Markdown, c.now)
+	})
+	if err != nil {
+		return ideaFailed(err)
+	}
+	return ideaOK(ideaDocument(c.dir, id, true, true))
+}
+
+func ideaDoSet(c ideaCall) ideaResult {
+	if !c.trusted {
+		return ideaRefused(http.StatusForbidden, "only the dashboard changes that")
+	}
+	ch := ideaChanges{Name: c.a.Name, Summary: c.a.Summary, Workspace: c.a.Workspace, Type: c.a.Type}
+	if c.a.Auto != nil {
+		ch.Auto = map[bool]string{true: "on", false: "off"}[*c.a.Auto]
+	}
+	if c.a.Tags != nil {
+		ch.Tags = &c.a.Tags
+	}
+	id, err := setIdea(c.dir, c.a.Slug, ch)
+	if err != nil {
+		return ideaFailed(err)
+	}
+	return ideaOK(map[string]any{"idea": id.Meta})
+}
+
+func ideaDoAuto(c ideaCall) ideaResult {
+	if !c.trusted {
+		return ideaRefused(http.StatusForbidden, "only the dashboard sets that")
+	}
+	id, err := idea.Update(c.dir, c.a.Slug, func(id *idea.Idea) error {
+		if c.a.Auto != nil {
+			id.Meta.Auto = *c.a.Auto
+		}
+		return nil
+	})
+	if err != nil {
+		return ideaFailed(err)
+	}
+	if id.Meta.Auto {
+		scheduleIdeaAnswer(c.dir, c.a.Slug)
+	}
+	return ideaOK(map[string]any{"auto": id.Meta.Auto})
+}
+
+func ideaDoApprove(c ideaCall) ideaResult {
+	res, err := approveIdea(c.dir, c.a.Slug, c.by, c.a.Off, false, c.trusted)
+	if err != nil {
+		return ideaFailed(err)
+	}
+	if res.JustApproved && res.Idea.BuildWhenApproved {
+		meta, dir, slug := res.Idea, c.dir, c.a.Slug
+		go func() {
+			if _, err := buildIdea(dir, slug, "", "", 1, true); err != nil {
+				ideaNotify(dir, meta, "approved, but not built", err.Error())
+			}
+		}()
+	}
+	if !c.trusted {
+		res.Idea.Key, res.Idea.Source = "", ""
+	}
+	return ideaOK(res)
+}
+
+func ideaDoDelete(c ideaCall) ideaResult {
+	if !c.trusted {
+		return ideaRefused(http.StatusForbidden, "only the page's owner removes comments")
+	}
+	id, err := idea.Update(c.dir, c.a.Slug, func(id *idea.Idea) error { return id.DeleteComment(c.a.ID) })
+	if err != nil {
+		return ideaFailed(err)
+	}
+	return ideaOK(commentCounts(id, map[string]any{}))
+}
+
+func ideaDoDecide(c ideaCall) ideaResult {
+	if !c.trusted {
+		return ideaRefused(http.StatusForbidden, "resolving a thread writes its decision; rewording them is for the page's owner")
+	}
+	id, err := idea.Update(c.dir, c.a.Slug, func(id *idea.Idea) error {
+		if c.a.Drop > 0 {
+			return id.Undecide(c.a.Drop)
+		}
+		_, err := id.Decide(c.a.Text, c.by, c.a.ID, c.now)
+		return err
+	})
+	if err != nil {
+		return ideaFailed(err)
+	}
+	return ideaOK(map[string]any{"decisions": id.Meta.Decisions})
+}
+
+func ideaDoMock(c ideaCall) ideaResult {
+	if !c.trusted {
+		return ideaRefused(http.StatusForbidden, "drawing the mockup needs the dashboard: open the page from corgi agent dashboard, or run corgi idea mock %s", c.a.Slug)
+	}
+	id, err := idea.Load(c.dir, c.a.Slug)
+	if err != nil {
+		return ideaFailed(err)
+	}
+	if !id.Meta.Mocking {
+		scheduleMock(c.dir, c.a.Slug, mockNotes(id.Comments.Comments))
+	}
+	return ideaOK(map[string]any{"mocking": true})
 }
 
 // ownFiles keeps only attachments that are this page's files, so a
