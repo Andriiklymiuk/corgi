@@ -130,6 +130,10 @@ func (g *Gate) now() time.Time {
 
 // Allow reserves one send of text to target, or says why not. The send is
 // counted whether or not it then reaches the other side.
+type sendCounts struct {
+	perTarget, perFamily, perDay int
+}
+
 func (g *Gate) Allow(family, target, text string) error {
 	return g.update(func(l *ledger, now time.Time) error {
 		lim := g.Limits
@@ -137,36 +141,44 @@ func (g *Gate) Allow(family, target, text string) error {
 			return fmt.Errorf("%w: %s is paused until %s after it pushed back", ErrThrottled, family, until.Format(time.Kitchen))
 		}
 		hash := digest(family, target, text)
-		perTarget, perFamily, perDay := 0, 0, 0
-		for _, s := range l.Sends {
-			if s.Family != family {
-				continue
-			}
-			age := now.Sub(s.At)
-			if s.Hash == hash && age < lim.DuplicateWithin {
-				return fmt.Errorf("%w: the same message went to %s %s ago", ErrThrottled, target, age.Round(time.Second))
-			}
-			if age < lim.Window {
-				perFamily++
-				if s.Target == target {
-					perTarget++
-				}
-			}
-			if age < 24*time.Hour {
-				perDay++
-			}
+		n, err := countSends(l.Sends, lim, send{At: now, Family: family, Target: target, Hash: hash})
+		if err != nil {
+			return err
 		}
 		switch {
-		case lim.PerTarget > 0 && perTarget >= lim.PerTarget:
-			return fmt.Errorf("%w: %d sends to %s in the last %s", ErrThrottled, perTarget, target, lim.Window)
-		case lim.PerFamily > 0 && perFamily >= lim.PerFamily:
-			return fmt.Errorf("%w: %d %s sends in the last %s", ErrThrottled, perFamily, family, lim.Window)
-		case lim.PerDay > 0 && perDay >= lim.PerDay:
-			return fmt.Errorf("%w: %d %s sends today", ErrThrottled, perDay, family)
+		case lim.PerTarget > 0 && n.perTarget >= lim.PerTarget:
+			return fmt.Errorf("%w: %d sends to %s in the last %s", ErrThrottled, n.perTarget, target, lim.Window)
+		case lim.PerFamily > 0 && n.perFamily >= lim.PerFamily:
+			return fmt.Errorf("%w: %d %s sends in the last %s", ErrThrottled, n.perFamily, family, lim.Window)
+		case lim.PerDay > 0 && n.perDay >= lim.PerDay:
+			return fmt.Errorf("%w: %d %s sends today", ErrThrottled, n.perDay, family)
 		}
 		l.Sends = append(l.Sends, send{At: now, Family: family, Target: target, Hash: hash})
 		return nil
 	})
+}
+
+func countSends(sends []send, lim Limits, next send) (sendCounts, error) {
+	var n sendCounts
+	for _, s := range sends {
+		if s.Family != next.Family {
+			continue
+		}
+		age := next.At.Sub(s.At)
+		if s.Hash == next.Hash && age < lim.DuplicateWithin {
+			return n, fmt.Errorf("%w: the same message went to %s %s ago", ErrThrottled, next.Target, age.Round(time.Second))
+		}
+		if age < lim.Window {
+			n.perFamily++
+			if s.Target == next.Target {
+				n.perTarget++
+			}
+		}
+		if age < 24*time.Hour {
+			n.perDay++
+		}
+	}
+	return n, nil
 }
 
 // Pause stops a whole family, as when the API answered 429; the wait is

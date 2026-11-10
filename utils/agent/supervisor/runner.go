@@ -217,12 +217,10 @@ func (r *Runner) stopRequested() bool {
 
 func (r *Runner) Run(ctx context.Context) error {
 	defer r.WakeLock.Release()
-
 	alwaysAwake := r.Config.WakeLockMode() == WakeLockAlways
 	if alwaysAwake {
 		_ = r.WakeLock.Acquire(os.Getpid())
 	}
-
 	var s streak
 	for {
 		if ctx.Err() != nil {
@@ -231,34 +229,38 @@ func (r *Runner) Run(ctx context.Context) error {
 		if r.stopRequested() {
 			return nil
 		}
-
-		exit, startErr := r.runOnce(ctx, alwaysAwake)
-		if r.retryWithoutUnsupportedFlag(exit) {
-			continue
+		if done, err := r.cycle(ctx, alwaysAwake, &s); done {
+			return err
 		}
-		if exit.Uptime >= r.longRun() {
-			s = streak{}
-		}
-		decision := Decide(exit, s.attempt, s.startupFailures)
-		healthy := decision.Cause != CauseStartupFailure
-		waiting := decision.Cause == CauseOffline || decision.Cause == CauseServedElsewhere
-		if !waiting {
-			s.observe(healthy)
-		}
-
-		r.record(decision, exit.Output, decision.Disable)
-		r.announce(decision, r.captureSessionEnd(decision))
-
-		if !decision.Restart {
-			return stopReason(decision, startErr, ctx)
-		}
-		// Only a long run earns the short delay back: a crash a minute in,
-		// over and over through an outage, backs off like any other failure.
-		if !waiting {
-			s.advance(healthy && exit.Uptime >= r.longRun())
-		}
-		r.sleepUnlessStopped(ctx, decision.Delay)
 	}
+}
+
+func (r *Runner) cycle(ctx context.Context, alwaysAwake bool, s *streak) (bool, error) {
+	exit, startErr := r.runOnce(ctx, alwaysAwake)
+	if r.retryWithoutUnsupportedFlag(exit) {
+		return false, nil
+	}
+	if exit.Uptime >= r.longRun() {
+		*s = streak{}
+	}
+	decision := Decide(exit, s.attempt, s.startupFailures)
+	healthy := decision.Cause != CauseStartupFailure
+	waiting := decision.Cause == CauseOffline || decision.Cause == CauseServedElsewhere
+	if !waiting {
+		s.observe(healthy)
+	}
+	r.record(decision, exit.Output, decision.Disable)
+	r.announce(decision, r.captureSessionEnd(decision))
+	if !decision.Restart {
+		return true, stopReason(decision, startErr, ctx)
+	}
+	// Only a long run earns the short delay back: a crash a minute in,
+	// over and over through an outage, backs off like any other failure.
+	if !waiting {
+		s.advance(healthy && exit.Uptime >= r.longRun())
+	}
+	r.sleepUnlessStopped(ctx, decision.Delay)
+	return false, nil
 }
 
 type streak struct {

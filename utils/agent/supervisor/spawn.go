@@ -259,28 +259,24 @@ func BuildEnv(c SpawnConfig, parentEnv []string) []string {
 	configVar := kind.ConfigDirEnv
 	prefixVar := kind.SessionPrefixEnv
 	prefix := sanitizePrefix(c.SessionNamePrefix)
-
+	replaced := map[string]bool{}
+	if configVar != "" && c.ConfigDir != "" {
+		replaced[configVar] = true
+	}
+	if prefixVar != "" && prefix != "" {
+		replaced[prefixVar] = true
+	}
 	keep := make([]string, 0, len(parentEnv))
 	for _, entry := range parentEnv {
 		key, _, ok := strings.Cut(entry, "=")
-		if !ok {
-			continue
+		if ok && !replaced[key] && !isStrippedCredential(kind, key, c) {
+			keep = append(keep, entry)
 		}
-		if isStrippedCredential(kind, key, c) {
-			continue
-		}
-		if configVar != "" && key == configVar && c.ConfigDir != "" {
-			continue
-		}
-		if prefixVar != "" && key == prefixVar && prefix != "" {
-			continue
-		}
-		keep = append(keep, entry)
 	}
-	if c.ConfigDir != "" && configVar != "" {
+	if replaced[configVar] {
 		keep = append(keep, configVar+"="+expandHome(c.ConfigDir))
 	}
-	if prefix != "" && prefixVar != "" {
+	if replaced[prefixVar] {
 		keep = append(keep, prefixVar+"="+prefix)
 	}
 	if c.WaitOutLimits && isClaudeKind(c.Kind) {

@@ -140,49 +140,53 @@ func parse(line []byte) []Entry {
 	if (r.Type != "user" && r.Type != "assistant") || r.IsMeta || r.IsSidechain || len(r.Message.Content) == 0 {
 		return nil
 	}
-	var out []Entry
 	var text string
 	if json.Unmarshal(r.Message.Content, &text) == nil {
 		if e, ok := textEntry(r, "user", text); ok {
-			out = append(out, e)
+			return []Entry{e}
 		}
-		return out
+		return nil
 	}
 	var blocks []block
 	if json.Unmarshal(r.Message.Content, &blocks) != nil {
 		return nil
 	}
+	var out []Entry
 	for i, b := range blocks {
 		id := r.UUID
 		if i > 0 {
 			id = r.UUID + "/" + itoa(i)
 		}
-		switch b.Type {
-		case "text":
-			kind := "assistant"
-			if r.Type == "user" {
-				kind = "user"
-			}
-			if e, ok := textEntry(r, kind, b.Text); ok {
-				e.ID = id
-				out = append(out, e)
-			}
-		case "tool_use":
-			out = append(out, Entry{ID: id, Kind: "tool", At: r.Timestamp, Tool: b.Name, Subject: Scrub(subjectOf(b.Name, b.Input)), ToolID: b.ID})
-		case "tool_result":
-			t, truncated := clip(Scrub(resultText(b.Content)))
-			e := Entry{ID: id, Kind: "result", At: r.Timestamp, Text: t, ToolID: b.ToolUse, Truncated: truncated}
-			if mime := resultPictureType(b.Content); mime != "" {
-				e.Picture, e.PictureType = id, mime
-			}
+		if e, ok := blockEntry(r, b, id); ok {
 			out = append(out, e)
-		case "image":
-			if r.Type == "user" {
-				out = append(out, Entry{ID: id, Kind: "user", At: r.Timestamp, Text: "🖼 image"})
-			}
 		}
 	}
 	return out
+}
+
+func blockEntry(r row, b block, id string) (Entry, bool) {
+	switch b.Type {
+	case "text":
+		kind := "assistant"
+		if r.Type == "user" {
+			kind = "user"
+		}
+		e, ok := textEntry(r, kind, b.Text)
+		e.ID = id
+		return e, ok
+	case "tool_use":
+		return Entry{ID: id, Kind: "tool", At: r.Timestamp, Tool: b.Name, Subject: Scrub(subjectOf(b.Name, b.Input)), ToolID: b.ID}, true
+	case "tool_result":
+		t, truncated := clip(Scrub(resultText(b.Content)))
+		e := Entry{ID: id, Kind: "result", At: r.Timestamp, Text: t, ToolID: b.ToolUse, Truncated: truncated}
+		if mime := resultPictureType(b.Content); mime != "" {
+			e.Picture, e.PictureType = id, mime
+		}
+		return e, true
+	case "image":
+		return Entry{ID: id, Kind: "user", At: r.Timestamp, Text: "🖼 image"}, r.Type == "user"
+	}
+	return Entry{}, false
 }
 
 func textEntry(r row, kind, text string) (Entry, bool) {

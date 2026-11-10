@@ -104,78 +104,113 @@ func (s Session) Facts(pull *PullFacts) Facts {
 
 const gateStrikes = 3
 
+var standingChecks = []func(Facts) (Standing, bool){
+	pullOverStanding,
+	attentionStanding,
+	pullTroubleStanding,
+	brokenStanding,
+	pullStanding,
+	statusStanding,
+}
+
 func StandingOf(f Facts) Standing {
-	if f.Pull != nil {
-		switch f.Pull.State {
-		case "merged":
-			return Standing{Word: StandMerged}
-		case "closed":
-			return Standing{Word: StandClosed}
+	for _, check := range standingChecks {
+		if st, ok := check(f); ok {
+			return st
 		}
-	}
-	if f.Blocked != "" {
-		return Standing{Word: StandBlocked, Why: f.Blocked}
-	}
-	if f.Pending != nil {
-		why := "allow " + strings.TrimSpace(f.Pending.Tool+" "+f.Pending.Subject) + "?"
-		return Standing{Word: StandNeedsYou, Why: why}
-	}
-	if f.Status == StatusNeedsInput {
-		return Standing{Word: StandNeedsYou, Why: "waiting for a word"}
-	}
-	if f.Gate != nil && !f.Gate.OK && f.Gate.Fails >= gateStrikes {
-		return Standing{Word: StandNeedsYou, Why: "gate red " + strconv.Itoa(f.Gate.Fails) + "× · " + f.Gate.Cmd}
-	}
-	if f.Status == StatusLimited {
-		return Standing{Word: StandLimited, Why: string(f.Limit)}
-	}
-	if f.Pull != nil {
-		if f.Pull.Checks == "failing" {
-			return Standing{Word: StandChecksRed, Why: pullParts(*f.Pull)}
-		}
-		if f.Pull.Review == "changes" {
-			return Standing{Word: StandChanges, Why: pullParts(*f.Pull)}
-		}
-	}
-	if f.Behind != nil && len(f.Behind.Conflicts) > 0 {
-		return Standing{Word: StandConflicts, Why: BehindLine(f.Behind)}
-	}
-	if f.Gate != nil && !f.Gate.OK {
-		return Standing{Word: StandTestsRed, Why: strings.TrimSpace("gate ✗ " + f.Gate.Cmd)}
-	}
-	if f.Tests != nil && !f.Tests.OK {
-		return Standing{Word: StandTestsRed, Why: TestsLine(f.Tests)}
-	}
-	if f.Pull != nil {
-		switch {
-		case PullReady(*f.Pull):
-			return Standing{Word: StandReady, Why: pullParts(*f.Pull)}
-		case f.Pull.Review == "approved":
-			return Standing{Word: StandApproved, Why: pullParts(*f.Pull)}
-		case f.Pull.State == "draft":
-			return Standing{Word: StandDraft, Why: pullParts(*f.Pull)}
-		case f.Pull.State == "open":
-			return Standing{Word: StandReview, Why: pullParts(*f.Pull)}
-		}
-	}
-	if f.PR != "" {
-		return Standing{Word: StandPROpen}
-	}
-	if f.Stuck {
-		return Standing{Word: StandStuck, Why: "working, silent " + strconv.Itoa(int(StuckAfter.Minutes())) + " min"}
-	}
-	switch f.Status {
-	case StatusWorking:
-		return Standing{Word: StandWorking}
-	case StatusDone:
-		return Standing{Word: StandDone}
-	case StatusStale:
-		return Standing{Word: StandIdle}
-	case StatusGone:
-		return Standing{Word: StandGone}
 	}
 	if f.Handoff != "" {
 		return Standing{Word: StandHandoff, Why: f.Handoff}
 	}
 	return Standing{Word: StandNew}
+}
+
+func pullOverStanding(f Facts) (Standing, bool) {
+	if f.Pull == nil {
+		return Standing{}, false
+	}
+	switch f.Pull.State {
+	case "merged":
+		return Standing{Word: StandMerged}, true
+	case "closed":
+		return Standing{Word: StandClosed}, true
+	}
+	return Standing{}, false
+}
+
+func attentionStanding(f Facts) (Standing, bool) {
+	switch {
+	case f.Blocked != "":
+		return Standing{Word: StandBlocked, Why: f.Blocked}, true
+	case f.Pending != nil:
+		return Standing{Word: StandNeedsYou, Why: "allow " + strings.TrimSpace(f.Pending.Tool+" "+f.Pending.Subject) + "?"}, true
+	case f.Status == StatusNeedsInput:
+		return Standing{Word: StandNeedsYou, Why: "waiting for a word"}, true
+	case f.Gate != nil && !f.Gate.OK && f.Gate.Fails >= gateStrikes:
+		return Standing{Word: StandNeedsYou, Why: "gate red " + strconv.Itoa(f.Gate.Fails) + "× · " + f.Gate.Cmd}, true
+	case f.Status == StatusLimited:
+		return Standing{Word: StandLimited, Why: string(f.Limit)}, true
+	}
+	return Standing{}, false
+}
+
+func pullTroubleStanding(f Facts) (Standing, bool) {
+	if f.Pull == nil {
+		return Standing{}, false
+	}
+	switch {
+	case f.Pull.Checks == "failing":
+		return Standing{Word: StandChecksRed, Why: pullParts(*f.Pull)}, true
+	case f.Pull.Review == "changes":
+		return Standing{Word: StandChanges, Why: pullParts(*f.Pull)}, true
+	}
+	return Standing{}, false
+}
+
+func brokenStanding(f Facts) (Standing, bool) {
+	switch {
+	case f.Behind != nil && len(f.Behind.Conflicts) > 0:
+		return Standing{Word: StandConflicts, Why: BehindLine(f.Behind)}, true
+	case f.Gate != nil && !f.Gate.OK:
+		return Standing{Word: StandTestsRed, Why: strings.TrimSpace("gate ✗ " + f.Gate.Cmd)}, true
+	case f.Tests != nil && !f.Tests.OK:
+		return Standing{Word: StandTestsRed, Why: TestsLine(f.Tests)}, true
+	}
+	return Standing{}, false
+}
+
+func pullStanding(f Facts) (Standing, bool) {
+	if f.Pull != nil {
+		switch {
+		case PullReady(*f.Pull):
+			return Standing{Word: StandReady, Why: pullParts(*f.Pull)}, true
+		case f.Pull.Review == "approved":
+			return Standing{Word: StandApproved, Why: pullParts(*f.Pull)}, true
+		case f.Pull.State == "draft":
+			return Standing{Word: StandDraft, Why: pullParts(*f.Pull)}, true
+		case f.Pull.State == "open":
+			return Standing{Word: StandReview, Why: pullParts(*f.Pull)}, true
+		}
+	}
+	if f.PR != "" {
+		return Standing{Word: StandPROpen}, true
+	}
+	return Standing{}, false
+}
+
+func statusStanding(f Facts) (Standing, bool) {
+	if f.Stuck {
+		return Standing{Word: StandStuck, Why: "working, silent " + strconv.Itoa(int(StuckAfter.Minutes())) + " min"}, true
+	}
+	switch f.Status {
+	case StatusWorking:
+		return Standing{Word: StandWorking}, true
+	case StatusDone:
+		return Standing{Word: StandDone}, true
+	case StatusStale:
+		return Standing{Word: StandIdle}, true
+	case StatusGone:
+		return Standing{Word: StandGone}, true
+	}
+	return Standing{}, false
 }
