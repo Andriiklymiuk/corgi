@@ -191,29 +191,7 @@ func threadsText(row prThreads) string {
 		return b.String()
 	}
 	for _, t := range row.Threads {
-		state := "open"
-		if t.Resolved {
-			state = "resolved"
-		}
-		switch t.Kind {
-		case "review":
-			fmt.Fprintf(&b, "-- review (%s)\n", t.State)
-		case "comment":
-			fmt.Fprintf(&b, "-- comment  discussion %s\n", t.ID)
-		default:
-			where := t.Path
-			if t.Line > 0 {
-				where += ":" + strconv.Itoa(t.Line)
-			}
-			if t.Outdated {
-				state += ", outdated"
-			}
-			reply := ""
-			if len(t.Notes) > 0 {
-				reply = "  reply-to " + t.Notes[0].ID
-			}
-			fmt.Fprintf(&b, "-- %s  [%s]  thread %s%s\n", where, state, t.ID, reply)
-		}
+		b.WriteString(threadHeading(t))
 		for _, n := range t.Notes {
 			fmt.Fprintf(&b, "   %s %s:\n", n.Author, n.At.Local().Format("2006-01-02 15:04"))
 			for _, line := range strings.Split(strings.TrimSpace(n.Body), "\n") {
@@ -223,6 +201,31 @@ func threadsText(row prThreads) string {
 	}
 	b.WriteString("\n")
 	return b.String()
+}
+
+func threadHeading(t watch.ReviewThread) string {
+	switch t.Kind {
+	case "review":
+		return fmt.Sprintf("-- review (%s)\n", t.State)
+	case "comment":
+		return fmt.Sprintf("-- comment  discussion %s\n", t.ID)
+	}
+	state := "open"
+	if t.Resolved {
+		state = "resolved"
+	}
+	if t.Outdated {
+		state += ", outdated"
+	}
+	where := t.Path
+	if t.Line > 0 {
+		where += ":" + strconv.Itoa(t.Line)
+	}
+	reply := ""
+	if len(t.Notes) > 0 {
+		reply = "  reply-to " + t.Notes[0].ID
+	}
+	return fmt.Sprintf("-- %s  [%s]  thread %s%s\n", where, state, t.ID, reply)
 }
 
 func init() {

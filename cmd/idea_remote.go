@@ -333,27 +333,31 @@ func followChanges(before, after followDoc) []followEvent {
 	}
 	for _, c := range after.Comments {
 		o, seen := old[c.ID]
-		if !seen {
-			e := followEvent{Event: "comment", Page: page, Comment: c.ID, By: c.By, Text: c.Text, Status: c.Status}
-			if c.Anchor != nil {
-				e.Quote = c.Anchor.Quote
-			}
-			out = append(out, e)
-		}
-		for i, r := range c.Replies {
-			if i >= len(o.Replies) {
-				out = append(out, followEvent{Event: "reply", Page: page, Comment: c.ID, By: r.By, Text: r.Text})
-			}
-		}
-		if seen && o.Status != c.Status {
-			out = append(out, followEvent{Event: "status", Page: page, Comment: c.ID, Status: c.Status})
-		}
+		out = append(out, commentChanges(page, c, o, seen)...)
 	}
 	if after.Approved && !before.Approved {
 		out = append(out, followEvent{Event: "approved", Page: page, Text: strings.Join(after.Approvers, ", ")})
 	}
 	for i := len(before.Idea.Decisions); i < len(after.Idea.Decisions); i++ {
 		out = append(out, followEvent{Event: "decided", Page: page, Text: after.Idea.Decisions[i].Text})
+	}
+	return out
+}
+
+func commentChanges(page string, c, o idea.Comment, seen bool) []followEvent {
+	var out []followEvent
+	if !seen {
+		e := followEvent{Event: "comment", Page: page, Comment: c.ID, By: c.By, Text: c.Text, Status: c.Status}
+		if c.Anchor != nil {
+			e.Quote = c.Anchor.Quote
+		}
+		out = append(out, e)
+	}
+	for _, r := range c.Replies[min(len(o.Replies), len(c.Replies)):] {
+		out = append(out, followEvent{Event: "reply", Page: page, Comment: c.ID, By: r.By, Text: r.Text})
+	}
+	if seen && o.Status != c.Status {
+		out = append(out, followEvent{Event: "status", Page: page, Comment: c.ID, Status: c.Status})
 	}
 	return out
 }

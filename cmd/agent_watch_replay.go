@@ -36,15 +36,7 @@ type replayRow struct {
 	Why   string `json:"why,omitempty"`
 }
 
-func runAgentWatchReplay(cmd *cobra.Command, _ []string) {
-	dir := mustAgentDir()
-	sinceFlag, _ := cmd.Flags().GetString("since")
-	dur, err := time.ParseDuration(sinceFlag)
-	if err != nil {
-		exitWithError("agent_watch_replay", fmt.Errorf("--since takes a duration like 168h, not %q", sinceFlag), 2)
-	}
-	since := time.Now().Add(-dur)
-
+func replaySpecs(cmd *cobra.Command, dir string) map[string]daemon.WatchSpec {
 	specs, err := loadWatchSpecs(dir)
 	if err != nil {
 		exitWithError("agent_watch_replay", err, 1)
@@ -53,40 +45,58 @@ func runAgentWatchReplay(cmd *cobra.Command, _ []string) {
 	for _, s := range specs {
 		byWorkspace[s.Workspace] = s
 	}
-	if raw, _ := cmd.Flags().GetString(watchFlagAutoFor); cmd.Flags().Changed(watchFlagAutoFor) {
-		kinds, err := parseAutoFor(raw)
-		if err != nil {
-			exitWithError("agent_watch_replay", err, 2)
-		}
-		for id, s := range byWorkspace {
-			s.FixKinds = kinds
-			s.Action = "fix"
-			byWorkspace[id] = s
-		}
+	if !cmd.Flags().Changed(watchFlagAutoFor) {
+		return byWorkspace
 	}
+	raw, _ := cmd.Flags().GetString(watchFlagAutoFor)
+	kinds, err := parseAutoFor(raw)
+	if err != nil {
+		exitWithError("agent_watch_replay", err, 2)
+	}
+	for id, s := range byWorkspace {
+		s.FixKinds = kinds
+		s.Action = "fix"
+		byWorkspace[id] = s
+	}
+	return byWorkspace
+}
 
+func replayRowFor(spec daemon.WatchSpec, e watch.Event) replayRow {
+	row := replayRow{Ref: firstNonEmptyString(e.Ref, e.Key), Kind: string(e.Kind)}
+	switch why := spec.Rules.Why(e); {
+	case why != "":
+		row.Would, row.Why = "ignored", why
+	case spec.FixesKind(e.Kind):
+		row.Would = "worked on"
+	default:
+		row.Would = "reported"
+	}
+	return row
+}
+
+func runAgentWatchReplay(cmd *cobra.Command, _ []string) {
+	dir := mustAgentDir()
+	sinceFlag, _ := cmd.Flags().GetString("since")
+	dur, err := time.ParseDuration(sinceFlag)
+	if err != nil {
+		exitWithError("agent_watch_replay", fmt.Errorf("--since takes a duration like 168h, not %q", sinceFlag), 2)
+	}
+	since := time.Now().Add(-dur)
+	byWorkspace := replaySpecs(cmd, dir)
 	rows := map[string][]replayRow{}
 	for _, e := range watch.EventsSince(dir, since) {
-		spec, ok := byWorkspace[e.Workspace]
-		if !ok {
-			continue
+		if spec, ok := byWorkspace[e.Workspace]; ok {
+			rows[e.Workspace] = append(rows[e.Workspace], replayRowFor(spec, e))
 		}
-		row := replayRow{Ref: firstNonEmptyString(e.Ref, e.Key), Kind: string(e.Kind)}
-		switch why := spec.Rules.Why(e); {
-		case why != "":
-			row.Would, row.Why = "ignored", why
-		case spec.FixesKind(e.Kind):
-			row.Would = "worked on"
-		default:
-			row.Would = "reported"
-		}
-		rows[e.Workspace] = append(rows[e.Workspace], row)
 	}
-
 	if utils.JSONOutput {
 		utils.PrintJSON(map[string]any{"since": since, "workspaces": rows})
 		return
 	}
+	printReplay(rows, since)
+}
+
+func printReplay(rows map[string][]replayRow, since time.Time) {
 	if len(rows) == 0 {
 		fmt.Printf("Nothing recorded since %s - the watch has seen no events to replay.\n",
 			since.Local().Format("Mon 2 Jan 15:04"))
@@ -97,10 +107,9 @@ func runAgentWatchReplay(cmd *cobra.Command, _ []string) {
 		list := rows[id]
 		fmt.Printf("\n%s - %s\n", id, replayTally(list))
 		for _, r := range list {
-			if r.Would == "ignored" {
-				continue
+			if r.Would != "ignored" {
+				fmt.Printf("  %-10s %-14s %s\n", r.Would, r.Kind, r.Ref)
 			}
-			fmt.Printf("  %-10s %-14s %s\n", r.Would, r.Kind, r.Ref)
 		}
 		if n := countWould(list, "ignored"); n > 0 {
 			fmt.Printf("  %-10s %d - run with --json to see each reason\n", "ignored", n)

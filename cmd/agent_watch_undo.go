@@ -43,7 +43,6 @@ func runAgentWatchUndo(cmd *cobra.Command, args []string) {
 		}
 		exitWithError("agent_watch_undo", fmt.Errorf("nothing to undo - no unattended run has finished"), 2)
 	}
-
 	back := ""
 	if st, ok := watch.LoadStateLog(dir).Get(run.Key); ok {
 		back = st.Was
@@ -53,9 +52,22 @@ func runAgentWatchUndo(cmd *cobra.Command, args []string) {
 		reportUndo(plan, nil)
 		return
 	}
-
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
+	problems := undoPulls(ctx, dir, run, &plan)
+	if back != "" && run.Ref != "" {
+		problems = append(problems, undoMove(ctx, dir, run, back, &plan)...)
+	}
+	if run.Branch != "" {
+		problems = append(problems, undoWorktrees(dir, run, &plan)...)
+	}
+	st := watch.LoadState(dir)
+	st.Unsee(run.Key)
+	_ = st.Unignore(run.Key)
+	reportUndo(plan, problems)
+}
+
+func undoPulls(ctx context.Context, dir string, run watch.FixRecord, plan *undoPlan) []string {
 	var problems []string
 	secrets := watch.LoadSecretsFor(dir, run.Workspace)
 	for _, pr := range run.PRs {
@@ -65,34 +77,38 @@ func runAgentWatchUndo(cmd *cobra.Command, args []string) {
 		}
 		plan.Closed = append(plan.Closed, pr)
 	}
-	if back != "" && run.Ref != "" {
-		w, _, err := watchWriter(dir, run.Workspace)
-		if err != nil {
-			problems = append(problems, err.Error())
-		} else if err := w.Move(ctx, run.Ref, back); err != nil {
-			problems = append(problems, firstLineOf(err.Error()))
-		} else {
-			plan.Moved = true
-			_ = watch.LoadStateLog(dir).Set(run.Key, back, time.Now())
-		}
+	return problems
+}
+
+func undoMove(ctx context.Context, dir string, run watch.FixRecord, back string, plan *undoPlan) []string {
+	w, _, err := watchWriter(dir, run.Workspace)
+	if err != nil {
+		return []string{err.Error()}
 	}
-	if run.Branch != "" {
-		if registry, err := workspace.Load(agentRegistryPath(dir)); err == nil {
-			ws, _ := registry.Find(run.Workspace)
-			removed, kept, err := releaseFixWorktrees(ws.AbsPath, run.Branch)
-			if err != nil {
-				problems = append(problems, firstLineOf(err.Error()))
-			}
-			plan.WorktreesRemoved = removed
-			for _, k := range kept {
-				problems = append(problems, "kept "+k+": it has uncommitted work")
-			}
-		}
+	if err := w.Move(ctx, run.Ref, back); err != nil {
+		return []string{firstLineOf(err.Error())}
 	}
-	st := watch.LoadState(dir)
-	st.Unsee(run.Key)
-	_ = st.Unignore(run.Key)
-	reportUndo(plan, problems)
+	plan.Moved = true
+	_ = watch.LoadStateLog(dir).Set(run.Key, back, time.Now())
+	return nil
+}
+
+func undoWorktrees(dir string, run watch.FixRecord, plan *undoPlan) []string {
+	registry, err := workspace.Load(agentRegistryPath(dir))
+	if err != nil {
+		return nil
+	}
+	var problems []string
+	ws, _ := registry.Find(run.Workspace)
+	removed, kept, err := releaseFixWorktrees(ws.AbsPath, run.Branch)
+	if err != nil {
+		problems = append(problems, firstLineOf(err.Error()))
+	}
+	plan.WorktreesRemoved = removed
+	for _, k := range kept {
+		problems = append(problems, "kept "+k+": it has uncommitted work")
+	}
+	return problems
 }
 
 type undoPlan struct {
