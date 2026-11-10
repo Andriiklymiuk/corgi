@@ -104,14 +104,46 @@ var agentServeCmd = &cobra.Command{
 
 func runAgentServe(cmd *cobra.Command, _ []string) {
 	utils.NonInteractive = true
-
 	dir, err := agentDir()
 	if err != nil {
 		exitWithError("agent_data_dir", err, 1)
 	}
-
 	foreground, _ := cmd.Flags().GetBool("foreground")
+	refuseSecondDaemon(dir)
+	configs, err := loadSpawnConfigs(dir, foreground)
+	if err != nil {
+		exitWithError("agent_config", err, 1)
+	}
+	d := daemon.New(APP_VERSION, dir)
+	d.CaptureBrief = captureWorkspaceBrief
+	d.Sessions.Resolve = workspaceResolver(dir)
+	d.Sessions.ProfileFor = profileResolver(dir)
+	d.Sessions.PullFor = pullResolver(dir)
+	user, uerr := config.LoadUser(agentUserConfigPath(dir))
+	if uerr != nil {
+		user = nil
+	}
+	if user != nil {
+		applyUserToDaemon(d, dir, user)
+	}
+	d.AccountDirs = func() []string { return accountDirs(dir) }
+	d.ResolveWorkspace = remoteResolver(dir, foreground)
+	if specs, werr := loadWatchSpecs(dir); werr == nil {
+		d.Watches = specs
+	} else {
+		utils.Infof("agent: watch config: %v\n", werr)
+	}
+	wireTrackers(d, dir)
+	wirePush(d, dir)
+	wireNotify(d)
+	if user != nil && user.NotifyUrl != "" {
+		addWebhookNotify(d, user.NotifyUrl)
+	}
+	printStartupDiagnostics(configs)
+	serveDaemon(d, dir, user, configs)
+}
 
+func refuseSecondDaemon(dir string) {
 	if info, err := daemon.ReadInfo(dir); err == nil && info != nil {
 		exitWithError("agent_already_running",
 			fmt.Errorf("corgi agent is already running (pid %d) - `corgi agent stop` first", info.PID), 1)
@@ -120,60 +152,61 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 		exitWithError("agent_already_running",
 			fmt.Errorf("corgi agent is already running (pid %d) without its record - `corgi agent restart` replaces it", strays[0]), 1)
 	}
+}
 
-	configs, err := loadSpawnConfigs(dir, foreground)
-	if err != nil {
-		exitWithError("agent_config", err, 1)
+func applyUserToDaemon(d *daemon.Daemon, dir string, user *config.UserConfig) {
+	if strings.TrimSpace(user.DigestAt) != "" {
+		d.DigestAt = strings.TrimSpace(user.DigestAt)
+		d.Digest = func(now time.Time) string { return digestText(dir, now) }
 	}
-
-	d := daemon.New(APP_VERSION, dir)
-	d.CaptureBrief = captureWorkspaceBrief
-	d.Sessions.Resolve = workspaceResolver(dir)
-	d.Sessions.ProfileFor = profileResolver(dir)
-	d.Sessions.PullFor = pullResolver(dir)
-	if user, uerr := config.LoadUser(agentUserConfigPath(dir)); uerr == nil && user != nil {
-		if strings.TrimSpace(user.DigestAt) != "" {
-			d.DigestAt = strings.TrimSpace(user.DigestAt)
-			d.Digest = func(now time.Time) string { return digestText(dir, now) }
-		}
-		d.AutoContinue = user.AutoContinue
-		d.Lid = strings.TrimSpace(user.Lid)
-		d.HeatPause = user.Heat
-		d.Hotspot = strings.TrimSpace(user.Hotspot)
-		d.LearnHotspot = func(ssid string) {
-			_ = writeUserConfigLine(agentUserConfigPath(dir), hotspotLine, "hotspot: "+strconv.Quote(ssid))
-		}
-		d.HotspotBudget = hotspotBudgetOf(user.HotspotBudget)
-		d.Sessions.AutoContinue = user.AutoContinue
-		supervisor.KeepDisplay = user.KeepDisplay
-		d.SessionCap = user.SessionCap
-		d.PulseURL = user.PulseUrl
+	d.AutoContinue = user.AutoContinue
+	d.Lid = strings.TrimSpace(user.Lid)
+	d.HeatPause = user.Heat
+	d.Hotspot = strings.TrimSpace(user.Hotspot)
+	d.LearnHotspot = func(ssid string) {
+		_ = writeUserConfigLine(agentUserConfigPath(dir), hotspotLine, "hotspot: "+strconv.Quote(ssid))
 	}
-	d.AccountDirs = func() []string {
-		profiles, err := loadProfiles(dir)
-		if err != nil {
-			return nil
-		}
-		var dirs []string
-		for _, name := range sortedProfileNames(profiles) {
-			if cfg := strings.TrimSpace(profiles[name].ConfigDir); cfg != "" {
-				dirs = append(dirs, expandTilde(cfg))
-			}
-		}
-		return dirs
-	}
-	if user, uerr := config.LoadUser(agentUserConfigPath(dir)); uerr == nil && user != nil && user.TrackSlots > 0 {
+	d.HotspotBudget = hotspotBudgetOf(user.HotspotBudget)
+	d.Sessions.AutoContinue = user.AutoContinue
+	supervisor.KeepDisplay = user.KeepDisplay
+	d.SessionCap = user.SessionCap
+	d.PulseURL = user.PulseUrl
+	if user.TrackSlots > 0 {
 		d.Sessions.Resize(user.TrackSlots)
 	}
-	d.ResolveWorkspace = remoteResolver(dir, foreground)
-	if specs, werr := loadWatchSpecs(dir); werr == nil {
-		d.Watches = specs
-	} else {
-		utils.Infof("agent: watch config: %v\n", werr)
+}
+
+func accountDirs(dir string) []string {
+	profiles, err := loadProfiles(dir)
+	if err != nil {
+		return nil
 	}
-	d.Pickup = func(workspaceID string, e watch.Event) {
-		markPickedUp(d.Dir, []watch.Event{e})
+	var dirs []string
+	for _, name := range sortedProfileNames(profiles) {
+		if cfg := strings.TrimSpace(profiles[name].ConfigDir); cfg != "" {
+			dirs = append(dirs, expandTilde(cfg))
+		}
 	}
+	return dirs
+}
+
+func postToChat(ctx context.Context, dir, workspaceID string, target watch.SlackTarget, text, emoji string) error {
+	poster := watch.NewSlackPoster(watch.LoadSecretsFor(dir, workspaceID))
+	poster.Team = watch.LoadState(dir).SourceIdentity("slack", "team")
+	poster.Gate = sendgate.For(dir)
+	if strings.TrimSpace(text) != "" {
+		if _, err := poster.Post(ctx, target, text); err != nil {
+			return err
+		}
+	}
+	if strings.TrimSpace(emoji) != "" {
+		return poster.React(ctx, target, emoji)
+	}
+	return nil
+}
+
+func wireTrackers(d *daemon.Daemon, dir string) {
+	d.Pickup = func(workspaceID string, e watch.Event) { markPickedUp(d.Dir, []watch.Event{e}) }
 	d.ClaimTicket = func(workspaceID string, e watch.Event) (bool, string, error) {
 		return claimTicket(d.Dir, workspaceID, e)
 	}
@@ -183,18 +216,7 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 	d.Reconcile = reconcileBoard(dir)
 	d.Carry = autoCarry(dir)
 	d.Chat = func(ctx context.Context, workspaceID string, target watch.SlackTarget, text, emoji string) error {
-		poster := watch.NewSlackPoster(watch.LoadSecretsFor(dir, workspaceID))
-		poster.Team = watch.LoadState(dir).SourceIdentity("slack", "team")
-		poster.Gate = sendgate.For(dir)
-		if strings.TrimSpace(text) != "" {
-			if _, err := poster.Post(ctx, target, text); err != nil {
-				return err
-			}
-		}
-		if strings.TrimSpace(emoji) != "" {
-			return poster.React(ctx, target, emoji)
-		}
-		return nil
+		return postToChat(ctx, dir, workspaceID, target, text, emoji)
 	}
 	d.MergePull = func(ctx context.Context, workspaceID, link string) error {
 		return watch.MergePR(ctx, watch.LoadSecretsFor(dir, workspaceID), link)
@@ -218,28 +240,27 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 	d.RerunCI = func(ctx context.Context, workspaceID, repo string, since time.Time) (watch.Rerun, error) {
 		return rerunRedBuildOn(ctx, dir, watch.LoadSecretsFor(dir, workspaceID), repo, since)
 	}
-	d.Policy = func(s sessions.Session) daemon.Policy {
-		return policyFor(dir, s.Cwd)
-	}
+	d.Policy = func(s sessions.Session) daemon.Policy { return policyFor(dir, s.Cwd) }
+	d.Workpad = func(workspaceID, ref, section, text string) { writeWorkpad(d.Dir, workspaceID, ref, section, text) }
+	d.Delivered = func(workspaceID string, e watch.Event, prs []string) { markDelivered(d.Dir, workspaceID, e, prs) }
+}
+
+func wirePush(d *daemon.Daemon, dir string) {
 	pushStore := push.Load(dir)
 	d.Push = func(m push.Message) {
 		err := pushStore.Send(context.Background(), m)
-		if err == nil {
-			return
-		}
-		if watch.IsNetworkError(err) {
+		switch {
+		case err == nil:
+		case watch.IsNetworkError(err):
 			d.HoldPush(m)
 			utils.Infof("agent: push held until the link is back: %s\n", m.Title)
-			return
+		default:
+			utils.Infof("agent: push: %v\n", err)
 		}
-		utils.Infof("agent: push: %v\n", err)
 	}
-	d.Workpad = func(workspaceID, ref, section, text string) {
-		writeWorkpad(d.Dir, workspaceID, ref, section, text)
-	}
-	d.Delivered = func(workspaceID string, e watch.Event, prs []string) {
-		markDelivered(d.Dir, workspaceID, e, prs)
-	}
+}
+
+func wireNotify(d *daemon.Daemon) {
 	d.LinkFor = func(workspaceID string) string {
 		if url := d.SessionURLFor(workspaceID); url != "" {
 			return url
@@ -252,53 +273,50 @@ func runAgentServe(cmd *cobra.Command, _ []string) {
 	d.NotifyFocus = func(title, body, sessionID, link string) {
 		utils.NotifyWithCommand(title, body, focusCommand(sessionID), preferLocalLink(link))
 	}
-	if user, uerr := config.LoadUser(agentUserConfigPath(dir)); uerr == nil && user != nil && user.NotifyUrl != "" {
-		hook := webhookNotifier(user.NotifyUrl, nil)
-		linked := webhookLinkNotifier(user.NotifyUrl, nil)
-		if hook == nil || linked == nil {
-			utils.Infof("⚠ notifyUrl %q is not a usable http(s) URL - webhook notifications are off\n", user.NotifyUrl)
-		} else {
-			if n := combinedNotifier(d.Notify, hook); n != nil {
-				d.Notify = n
-			}
-			desktop := d.NotifyWithLink
-			d.NotifyWithLink = func(title, body, link string) {
-				if desktop != nil {
-					desktop(title, body, link)
-				}
-				linked(title, body, link)
-			}
-			focus := d.NotifyFocus
-			d.NotifyFocus = func(title, body, sessionID, link string) {
-				focus(title, body, sessionID, link)
-				linked(title, body, link)
-			}
-		}
-	}
-	printStartupDiagnostics(configs)
+}
 
+func addWebhookNotify(d *daemon.Daemon, url string) {
+	hook := webhookNotifier(url, nil)
+	linked := webhookLinkNotifier(url, nil)
+	if hook == nil || linked == nil {
+		utils.Infof("⚠ notifyUrl %q is not a usable http(s) URL - webhook notifications are off\n", url)
+		return
+	}
+	if n := combinedNotifier(d.Notify, hook); n != nil {
+		d.Notify = n
+	}
+	desktop := d.NotifyWithLink
+	d.NotifyWithLink = func(title, body, link string) {
+		if desktop != nil {
+			desktop(title, body, link)
+		}
+		linked(title, body, link)
+	}
+	focus := d.NotifyFocus
+	d.NotifyFocus = func(title, body, sessionID, link string) {
+		focus(title, body, sessionID, link)
+		linked(title, body, link)
+	}
+}
+
+func serveDaemon(d *daemon.Daemon, dir string, user *config.UserConfig, configs []supervisor.SpawnConfig) {
 	d.AwakePolicy = awakePolicy(dir)
 	if hold, _ := d.AwakePolicy(); hold && !supervisor.Supported() {
 		utils.Infof("⚠ stayAwake is set but no wake lock exists on %s\n", runtime.GOOS)
 	}
 	letTheLidClose(dir, d.AwakePolicy)
 	defer undoLidClose(dir)
-
 	restoreUpAtLogin(dir)
-
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-
 	if supervisor.Supported() {
 		d.Awake = supervisor.NewWakeLock(supervisor.WakeLockAlways)
 		go d.HoldAwakeWhileWorking(ctx, d.Awake)
 	}
-
 	telegramDone := make(<-chan struct{})
-	if user, uerr := config.LoadUser(agentUserConfigPath(dir)); uerr == nil && user != nil {
+	if user != nil {
 		telegramDone = startTelegramControl(ctx, user.NotifyUrl, dir)
 	}
-
 	runErr := d.Run(ctx, configs)
 	select {
 	case <-telegramDone:
