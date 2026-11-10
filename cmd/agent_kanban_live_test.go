@@ -81,7 +81,7 @@ func TestPlansAreFeaturesWithAnOrder(t *testing.T) {
 	_, _ = tasks.Move("TASK-1", "Done", now)
 	_, _ = tasks.Move("TASK-2", "Doing", now)
 	plans := watch.LoadPlans(dir)
-	p, err := plans.Add("Ship the thing", "", "api", "", "cli", []watch.PlanTask{{ID: 1}, {ID: 2, After: []int{1}}, {ID: 3, After: []int{1}}, {ID: 4, After: []int{2, 3}}}, 2, now)
+	p, err := plans.Add(watch.Plan{Goal: "Ship the thing", Workspace: "api", By: "cli", Tasks: []watch.PlanTask{{ID: 1}, {ID: 2, After: []int{1}}, {ID: 3, After: []int{1}}, {ID: 4, After: []int{2, 3}}}, Slots: 2}, now)
 	if err != nil {
 		t.Fatal(err)
 	}

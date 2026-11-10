@@ -14,13 +14,13 @@ func TestAPlanKeepsItsTasksInOrderAndSaysWhichCanStart(t *testing.T) {
 	c, _ := tasks.Add("Web", "", "acme", "you", now)
 
 	plans := LoadPlans(dir)
-	if _, err := plans.Add(" ", "", "acme", "", "you", []PlanTask{{ID: a.ID}}, 1, now); err == nil {
+	if _, err := plans.Add(Plan{Goal: " ", Workspace: "acme", By: "you", Tasks: []PlanTask{{ID: a.ID}}, Slots: 1}, now); err == nil {
 		t.Fatal("a plan without a goal is refused")
 	}
-	if _, err := plans.Add("Ship it", "", "acme", "", "you", nil, 1, now); err == nil {
+	if _, err := plans.Add(Plan{Goal: "Ship it", Workspace: "acme", By: "you", Slots: 1}, now); err == nil {
 		t.Fatal("a plan without tasks is refused")
 	}
-	p, err := plans.Add(" Ship it ", " three steps ", "acme", "sonnet", "you", []PlanTask{{ID: a.ID}, {ID: b.ID, After: []int{a.ID}}, {ID: c.ID, After: []int{b.ID}}, {ID: 99}}, 0, now)
+	p, err := plans.Add(Plan{Goal: " Ship it ", Summary: " three steps ", Workspace: "acme", Model: "sonnet", By: "you", Tasks: []PlanTask{{ID: a.ID}, {ID: b.ID, After: []int{a.ID}}, {ID: c.ID, After: []int{b.ID}}, {ID: 99}}, Slots: 0}, now)
 	if err != nil || p.Ref() != "P-1" || p.Goal != "Ship it" || p.Summary != "three steps" || p.Slots != 1 || p.State != PlanPlanned {
 		t.Fatalf("added: %+v %v", p, err)
 	}
@@ -59,7 +59,7 @@ func TestAPlanKeepsItsTasksInOrderAndSaysWhichCanStart(t *testing.T) {
 	if _, err := again.SetState(7, PlanRunning, now); err == nil {
 		t.Fatal("no plan P-7")
 	}
-	_, _ = again.Add("Second", "", "acme", "", "you", []PlanTask{{ID: a.ID}}, 2, now)
+	_, _ = again.Add(Plan{Goal: "Second", Workspace: "acme", By: "you", Tasks: []PlanTask{{ID: a.ID}}, Slots: 2}, now)
 	if running := again.Running(); len(running) != 1 || running[0].ID != 1 {
 		t.Fatalf("running: %+v", running)
 	}

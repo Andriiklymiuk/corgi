@@ -302,7 +302,7 @@ daemon to run anything.`,
 			planTasks = append(planTasks, watch.PlanTask{ID: made[i].ID, After: after})
 		}
 		plans := watch.LoadPlans(dir)
-		p, err := plans.Add(goal, ans.Summary, ws, model, "cli", planTasks, slots, now)
+		p, err := plans.Add(watch.Plan{Goal: goal, Summary: ans.Summary, Workspace: ws, Model: model, By: "cli", Tasks: planTasks, Slots: slots}, now)
 		if err != nil {
 			exitWithError("agent_plan", err, 1)
 		}

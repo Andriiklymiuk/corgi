@@ -677,7 +677,7 @@ func buildIdea(dir, slug, ws, model string, slots int, run bool) (ideaBuild, err
 		planTasks = append(planTasks, watch.PlanTask{ID: made[i].ID, After: after})
 	}
 	plans := watch.LoadPlans(dir)
-	p, err := plans.Add(firstNonEmpty(id.Meta.Name, id.Meta.Title)+": "+id.Meta.Title, ans.Summary, ws, model, "idea", planTasks, slots, now)
+	p, err := plans.Add(watch.Plan{Goal: firstNonEmpty(id.Meta.Name, id.Meta.Title) + ": " + id.Meta.Title, Summary: ans.Summary, Workspace: ws, Model: model, By: "idea", Tasks: planTasks, Slots: slots}, now)
 	if err != nil {
 		return res, err
 	}

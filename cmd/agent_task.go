@@ -240,10 +240,20 @@ func workspaceIDForDir(agentD, cwd string) string {
 // addTaskOnPeer puts a task on another machine's board: the workspace is there,
 // and so is the run. The peer checks the workspace and whether it can run.
 func addTaskOnPeer(ctx context.Context, dir, name, title, body, ws string, run bool) (string, error) {
-	return sendTaskToPeer(ctx, dir, name, title, body, ws, run, nil)
+	return sendTaskToPeer(ctx, dir, peerTask{Peer: name, Title: title, Body: body, Workspace: ws, Run: run})
 }
 
-func sendTaskToPeer(ctx context.Context, dir, name, title, body, ws string, run bool, comments []watch.TaskComment) (string, error) {
+type peerTask struct {
+	Peer      string
+	Title     string
+	Body      string
+	Workspace string
+	Run       bool
+	Comments  []watch.TaskComment
+}
+
+func sendTaskToPeer(ctx context.Context, dir string, task peerTask) (string, error) {
+	name, title, body, ws, run, comments := task.Peer, task.Title, task.Body, task.Workspace, task.Run, task.Comments
 	store, err := peers.Load(peers.Path(dir))
 	if err != nil {
 		return "", err
@@ -302,7 +312,7 @@ var agentTaskSendCmd = &cobra.Command{
 		if why := taskSendRefusal(dir, t); why != "" {
 			exitWithError("agent_task", fmt.Errorf("%s", why), 2)
 		}
-		ref, err := sendTaskToPeer(context.Background(), dir, to, t.Title, t.Body, t.Workspace, run || t.WantsRun(), t.Comments)
+		ref, err := sendTaskToPeer(context.Background(), dir, peerTask{Peer: to, Title: t.Title, Body: t.Body, Workspace: t.Workspace, Run: run || t.WantsRun(), Comments: t.Comments})
 		if err != nil {
 			exitWithError("agent_task", err, 1)
 		}

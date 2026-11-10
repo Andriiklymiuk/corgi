@@ -33,17 +33,25 @@ var judgeScenario = func(ctx context.Context, dir, model, prompt string, allow [
 	})
 }
 
-func runScenarios(ctx context.Context, scenarios []watch.Scenario, dir, model, ref string, times int, allow []string, now func() time.Time) []watch.ScenarioResult {
-	out := make([]watch.ScenarioResult, 0, len(scenarios)*times)
+type scenarioRun struct {
+	Dir   string
+	Model string
+	Ref   string
+	Times int
+	Allow []string
+}
+
+func runScenarios(ctx context.Context, scenarios []watch.Scenario, run scenarioRun, now func() time.Time) []watch.ScenarioResult {
+	out := make([]watch.ScenarioResult, 0, len(scenarios)*run.Times)
 	for _, s := range scenarios {
-		for range times {
+		for range run.Times {
 			prompt := fmt.Sprintf("Scenario %s:\n\n%s", s.Name, s.Text)
-			text, err := judgeScenario(ctx, dir, model, prompt, allow)
+			text, err := judgeScenario(ctx, run.Dir, run.Model, prompt, run.Allow)
 			satisfied, why := watch.ParseVerdict(text)
 			if err != nil {
 				satisfied, why = false, "the judge did not finish: "+err.Error()
 			}
-			out = append(out, watch.ScenarioResult{Scenario: s.Name, Satisfied: satisfied, Why: why, Ref: ref, At: now()})
+			out = append(out, watch.ScenarioResult{Scenario: s.Name, Satisfied: satisfied, Why: why, Ref: run.Ref, At: now()})
 		}
 	}
 	return out
@@ -58,7 +66,7 @@ func judgeCheckout(ctx context.Context, agentDir, workspace, checkout, ref strin
 	}
 	ctx, cancel := context.WithTimeout(ctx, scenarioTimeout*time.Duration(len(list)))
 	defer cancel()
-	results := runScenarios(ctx, list, checkout, "", ref, 1, nil, time.Now)
+	results := runScenarios(ctx, list, scenarioRun{Dir: checkout, Ref: ref, Times: 1}, time.Now)
 	if err := watch.AppendScenarioResults(agentDir, workspace, results); err != nil {
 		utils.Infof("could not keep the results: %v\n", err)
 	}
@@ -186,7 +194,7 @@ var agentScenarioRunCmd = &cobra.Command{
 		allow, _ := cmd.Flags().GetStringSlice("allow")
 		ctx, cancel := context.WithTimeout(context.Background(), scenarioTimeout*time.Duration(len(list)*times))
 		defer cancel()
-		results := runScenarios(ctx, list, dir, model, ref, times, allow, time.Now)
+		results := runScenarios(ctx, list, scenarioRun{Dir: dir, Model: model, Ref: ref, Times: times, Allow: allow}, time.Now)
 		if err := watch.AppendScenarioResults(agentDir, ws, results); err != nil {
 			utils.Infof("could not keep the results: %v\n", err)
 		}

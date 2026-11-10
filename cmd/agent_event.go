@@ -98,7 +98,7 @@ is unaffected whatever corgi's state is.`,
 				message = firstNonEmpty(message, in.Message)
 			}
 		}
-		ev, ok := agentEvent(name, agent, session, cwd, tool, input, message, os.Getenv, os.Getppid())
+		ev, ok := agentEvent(agentHook{Name: name, Agent: agent, Session: session, Cwd: cwd, Tool: tool, Input: input, Message: message}, os.Getenv, os.Getppid())
 		if !ok {
 			return
 		}
@@ -109,7 +109,18 @@ is unaffected whatever corgi's state is.`,
 	},
 }
 
-func agentEvent(name, agent, session, cwd, tool, input, message string, getenv func(string) string, parent int) (sessions.Event, bool) {
+type agentHook struct {
+	Name    string
+	Agent   string
+	Session string
+	Cwd     string
+	Tool    string
+	Input   string
+	Message string
+}
+
+func agentEvent(hook agentHook, getenv func(string) string, parent int) (sessions.Event, bool) {
+	name, agent, session, cwd, tool, input, message := hook.Name, hook.Agent, hook.Session, hook.Cwd, hook.Tool, hook.Input, hook.Message
 	chain := proc.Ancestors(parent)
 	if proc.HasCorgi(chain) {
 		return sessions.Event{}, false

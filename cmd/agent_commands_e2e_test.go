@@ -199,7 +199,7 @@ func TestPlanStatusAndStopWorkOnAPlanOnDisk(t *testing.T) {
 	tasks := watch.LoadTasks(dir)
 	a, _ := tasks.Add("Schema", "", "acme-stack", "you", time.Now())
 	b, _ := tasks.Add("API", "", "acme-stack", "you", time.Now())
-	if _, err := watch.LoadPlans(dir).Add("Ship limits", "two steps", "acme-stack", "", "you", []watch.PlanTask{{ID: a.ID}, {ID: b.ID, After: []int{a.ID}}}, 1, time.Now()); err != nil {
+	if _, err := watch.LoadPlans(dir).Add(watch.Plan{Goal: "Ship limits", Summary: "two steps", Workspace: "acme-stack", By: "you", Tasks: []watch.PlanTask{{ID: a.ID}, {ID: b.ID, After: []int{a.ID}}}, Slots: 1}, time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	if out, code := cli(t, "agent", "plan", "status"); code != 0 || !strings.Contains(out, "P-1") || !strings.Contains(out, "Ship limits") {

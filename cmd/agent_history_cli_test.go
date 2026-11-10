@@ -34,7 +34,7 @@ func TestTheBoardIsReconciledFromTheCommandLineAndTheHistoryTellsIt(t *testing.T
 		}
 	}
 	_, _ = tasks.Move("TASK-1", "Done", now)
-	if _, err := watch.LoadPlans(dir).Add("Ship it", "", "acme-stack", "", "cli", []watch.PlanTask{{ID: 1}, {ID: 2, After: []int{1}}}, 1, now); err != nil {
+	if _, err := watch.LoadPlans(dir).Add(watch.Plan{Goal: "Ship it", Workspace: "acme-stack", By: "cli", Tasks: []watch.PlanTask{{ID: 1}, {ID: 2, After: []int{1}}}, Slots: 1}, now); err != nil {
 		t.Fatal(err)
 	}
 
@@ -122,7 +122,7 @@ func TestThePhoneReadsFeaturesAndTheHistory(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, _ = tasks.Move("TASK-1", "Done", now)
-	if _, err := watch.LoadPlans(dir).Add("Goal", "", "api", "", "cli", []watch.PlanTask{{ID: 1}}, 1, now); err != nil {
+	if _, err := watch.LoadPlans(dir).Add(watch.Plan{Goal: "Goal", Workspace: "api", By: "cli", Tasks: []watch.PlanTask{{ID: 1}}, Slots: 1}, now); err != nil {
 		t.Fatal(err)
 	}
 	_ = watch.LoadArchive(dir).Put(watch.Archived{Key: "k", Ref: "ABC-7", Workspace: "api", Column: ColInbox, Why: "quiet", At: now})

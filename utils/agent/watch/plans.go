@@ -93,21 +93,19 @@ func (l *PlanLog) save() error {
 	return atomicfile.Write(l.path, data, 0o600)
 }
 
-func (l *PlanLog) Add(goal, summary, workspace, model, by string, tasks []PlanTask, slots int, now time.Time) (Plan, error) {
-	goal = strings.TrimSpace(goal)
+func (l *PlanLog) Add(draft Plan, now time.Time) (Plan, error) {
+	goal := strings.TrimSpace(draft.Goal)
 	if goal == "" {
 		return Plan{}, fmt.Errorf("a plan needs a goal")
 	}
-	if len(tasks) == 0 {
+	if len(draft.Tasks) == 0 {
 		return Plan{}, fmt.Errorf("a plan needs at least one task")
 	}
-	if slots < 1 {
-		slots = 1
-	}
+	slots := max(draft.Slots, 1)
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	p := Plan{ID: l.Next, Goal: goal, Summary: strings.TrimSpace(summary), Workspace: workspace, Model: model, Tasks: tasks,
-		Slots: slots, State: PlanPlanned, By: by, CreatedAt: now, UpdatedAt: now}
+	p := Plan{ID: l.Next, Goal: goal, Summary: strings.TrimSpace(draft.Summary), Workspace: draft.Workspace, Model: draft.Model, Tasks: draft.Tasks,
+		Slots: slots, State: PlanPlanned, By: draft.By, CreatedAt: now, UpdatedAt: now}
 	l.Next++
 	l.Plans = append(l.Plans, p)
 	return p, l.save()

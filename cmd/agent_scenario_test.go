@@ -25,7 +25,7 @@ func TestScenariosAreJudgedOncePerRunAndAFailedJudgeIsAMiss(t *testing.T) {
 		return "", errors.New("timed out")
 	}
 	list := []watch.Scenario{{Name: "a", Text: "pay"}, {Name: "b", Text: "refund"}, {Name: "c", Text: "other"}}
-	got := runScenarios(context.Background(), list, "/tmp", "sonnet", "ABC-1", 2, nil, time.Now)
+	got := runScenarios(context.Background(), list, scenarioRun{Dir: "/tmp", Model: "sonnet", Ref: "ABC-1", Times: 2}, time.Now)
 	if len(got) != 6 || len(prompts) != 6 {
 		t.Fatalf("got %d results from %d prompts", len(got), len(prompts))
 	}

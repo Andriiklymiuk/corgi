@@ -23,8 +23,8 @@ func TestAPlanIsWorkedThroughInOrder(t *testing.T) {
 	b, _ := tasks.Add("wire the middleware", "use the limiter on /api", "acme", "plan", now)
 	c, _ := tasks.Add("docs", "write it up", "acme", "plan", now)
 	plans := watch.LoadPlans(d.Dir)
-	p, err := plans.Add("rate limits", "limiter first", "acme", "sonnet", "test",
-		[]watch.PlanTask{{ID: a.ID}, {ID: b.ID, After: []int{a.ID}}, {ID: c.ID, After: []int{a.ID, b.ID}}}, 1, now)
+	p, err := plans.Add(watch.Plan{Goal: "rate limits", Summary: "limiter first", Workspace: "acme", Model: "sonnet", By: "test",
+		Tasks: []watch.PlanTask{{ID: a.ID}, {ID: b.ID, After: []int{a.ID}}, {ID: c.ID, After: []int{a.ID, b.ID}}}, Slots: 1}, now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +68,7 @@ func TestAPlanDoesNotRetryATaskWhoseRunEnded(t *testing.T) {
 	tasks := watch.LoadTasks(d.Dir)
 	a, _ := tasks.Add("one", "do one", "acme", "plan", now)
 	plans := watch.LoadPlans(d.Dir)
-	p, _ := plans.Add("goal", "", "acme", "sonnet", "test", []watch.PlanTask{{ID: a.ID}}, 1, now)
+	p, _ := plans.Add(watch.Plan{Goal: "goal", Workspace: "acme", Model: "sonnet", By: "test", Tasks: []watch.PlanTask{{ID: a.ID}}, Slots: 1}, now)
 	_, _ = plans.SetState(p.ID, watch.PlanRunning, now)
 	d.advancePlans(context.Background())
 	collectNotes(t, notes, "fixed "+a.Ref())
