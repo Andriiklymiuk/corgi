@@ -35,25 +35,10 @@ func markPickedUp(agentD string, events []watch.Event) {
 	ctx, cancel := context.WithTimeout(context.Background(), pickupTimeout)
 	defer cancel()
 	for _, e := range events {
-		if e.Kind != watch.KindIssueNew && e.Kind != watch.KindIssueComment {
+		if !pickupMoves(agentD, workspaceID, e, status) {
 			continue
 		}
 		ref := strings.TrimSpace(e.Ref)
-		if ref == "" || strings.EqualFold(strings.TrimSpace(e.State), status) {
-			continue
-		}
-		current := e.State
-		if known, ok := watch.LoadStateLog(agentD).Get(e.Key); ok && known.Status != "" {
-			current = known.Status
-		}
-		if over := watch.FinishedState(current); over != "" {
-			utils.Infof("corgi: %s is %s - not moving it to %s\n", ref, over, status)
-			continue
-		}
-		if e.Kind == watch.KindIssueComment && pastPickup(agentD, workspaceID, current) {
-			utils.Infof("corgi: %s is already %s - a comment does not move it back to %s\n", ref, current, status)
-			continue
-		}
 		if err := w.Move(ctx, ref, status); err != nil {
 			utils.Infof(stayedWhereItWasFormat, ref, err)
 			continue
@@ -61,6 +46,29 @@ func markPickedUp(agentD string, events []watch.Event) {
 		_ = watch.LoadStateLog(agentD).SetFrom(e.Key, status, e.State, time.Now())
 		utils.Infof("corgi: %s → %s\n", ref, status)
 	}
+}
+
+func pickupMoves(agentD, workspaceID string, e watch.Event, status string) bool {
+	if e.Kind != watch.KindIssueNew && e.Kind != watch.KindIssueComment {
+		return false
+	}
+	ref := strings.TrimSpace(e.Ref)
+	if ref == "" || strings.EqualFold(strings.TrimSpace(e.State), status) {
+		return false
+	}
+	current := e.State
+	if known, ok := watch.LoadStateLog(agentD).Get(e.Key); ok && known.Status != "" {
+		current = known.Status
+	}
+	if over := watch.FinishedState(current); over != "" {
+		utils.Infof("corgi: %s is %s - not moving it to %s\n", ref, over, status)
+		return false
+	}
+	if e.Kind == watch.KindIssueComment && pastPickup(agentD, workspaceID, current) {
+		utils.Infof("corgi: %s is already %s - a comment does not move it back to %s\n", ref, current, status)
+		return false
+	}
+	return true
 }
 
 func pickupStatusFor(agentD, workspaceID string) string {

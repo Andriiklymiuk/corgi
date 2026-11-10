@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"os"
@@ -193,6 +194,38 @@ func feedsInOrder(set map[string]bool) []string {
 	return out
 }
 
+type streamWriter struct {
+	w       http.ResponseWriter
+	flusher http.Flusher
+	key     []byte
+	path    string
+}
+
+func (s streamWriter) write(event string, frame streamFrame) bool {
+	data, err := json.Marshal(frame)
+	if err != nil {
+		return false
+	}
+	if s.key != nil {
+		if data, err = pairing.Seal(s.key, http.MethodGet, s.path, data, time.Now()); err != nil {
+			return false
+		}
+	}
+	if _, err := s.w.Write([]byte("event: " + event + "\ndata: " + string(data) + "\n\n")); err != nil {
+		return false
+	}
+	s.flusher.Flush()
+	return true
+}
+
+func (s streamWriter) ping() bool {
+	if _, err := s.w.Write([]byte(": ping\n\n")); err != nil {
+		return false
+	}
+	s.flusher.Flush()
+	return true
+}
+
 func launchStream(token, storePath string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		setLaunchHeaders(w)
@@ -217,32 +250,14 @@ func launchStream(token, storePath string) http.Handler {
 		watch := changeWatchFor(dir)
 		sub := watch.subscribe()
 		defer watch.unsubscribe(sub)
-
-		w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
-		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set(headerContentType, "text/event-stream; charset=utf-8")
+		w.Header().Set(headerCacheControl, "no-cache")
 		w.Header().Set("X-Accel-Buffering", "no")
 		if id.key != nil {
 			w.Header().Set(pairing.E2EHeader, "1")
 		}
 		w.WriteHeader(http.StatusOK)
-
-		write := func(event string, frame streamFrame) bool {
-			data, err := json.Marshal(frame)
-			if err != nil {
-				return false
-			}
-			if id.key != nil {
-				if data, err = pairing.Seal(id.key, http.MethodGet, r.URL.Path, data, time.Now()); err != nil {
-					return false
-				}
-			}
-			if _, err := w.Write([]byte("event: " + event + "\ndata: " + string(data) + "\n\n")); err != nil {
-				return false
-			}
-			flusher.Flush()
-			return true
-		}
-
+		out := streamWriter{w: w, flusher: flusher, key: id.key, path: r.URL.Path}
 		watch.mu.Lock()
 		now := watch.seq
 		watch.mu.Unlock()
@@ -250,25 +265,27 @@ func launchStream(token, storePath string) http.Handler {
 		if after, err := strconv.ParseUint(r.URL.Query().Get("after"), 10, 64); err == nil && after != now {
 			hello.What = append([]string(nil), allFeeds...)
 		}
-		if !write("hello", hello) {
-			return
-		}
-		ping := time.NewTicker(streamPing)
-		defer ping.Stop()
-		for {
-			select {
-			case <-r.Context().Done():
-				return
-			case <-sub.signal:
-				if frame, ok := sub.take(); ok && !write("change", frame) {
-					return
-				}
-			case <-ping.C:
-				if _, err := w.Write([]byte(": ping\n\n")); err != nil {
-					return
-				}
-				flusher.Flush()
-			}
+		if out.write("hello", hello) {
+			streamChanges(r.Context(), out, sub)
 		}
 	})
+}
+
+func streamChanges(ctx context.Context, out streamWriter, sub *streamSub) {
+	ping := time.NewTicker(streamPing)
+	defer ping.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-sub.signal:
+			if frame, ok := sub.take(); ok && !out.write("change", frame) {
+				return
+			}
+		case <-ping.C:
+			if !out.ping() {
+				return
+			}
+		}
+	}
 }

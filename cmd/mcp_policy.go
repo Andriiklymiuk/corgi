@@ -129,20 +129,44 @@ func mcpWatchSet(r mcp.CallToolRequest) (any, error) {
 	if wc == nil {
 		wc = &config.WatchConfig{}
 	}
-	args := r.GetArguments()
+	if err := applyWatchSwitches(wc, r.GetArguments()); err != nil {
+		return nil, err
+	}
+	entry.Watch = wc
+	user.Workspaces[ws.ID] = entry
+	if err := writeUserConfig(path, user); err != nil {
+		return nil, err
+	}
+	return map[string]any{"done": "saved", "watch": switchesOf(ws.ID, wc), "takesEffect": "next round, no restart"}, nil
+}
+
+func applyWatchPolicies(wc *config.WatchConfig, args map[string]any) error {
 	if v, ok := args["autoAllow"].(string); ok {
 		policy, err := config.ParseAutoAllow(v)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		wc.AutoAllow = policy
 	}
 	if v, ok := args["planReview"].(string); ok {
 		policy, err := config.ParsePlanReview(v)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		wc.PlanReview = policy
+	}
+	if v, ok := args["compactAt"].(float64); ok {
+		if v < 0 || v > 100 {
+			return fmt.Errorf("compactAt is a percent, 0 to 100")
+		}
+		wc.CompactAt = int(v)
+	}
+	return nil
+}
+
+func applyWatchSwitches(wc *config.WatchConfig, args map[string]any) error {
+	if err := applyWatchPolicies(wc, args); err != nil {
+		return err
 	}
 	if v, ok := args["doneWhen"].([]any); ok {
 		wc.DoneWhen = nil
@@ -152,23 +176,12 @@ func mcpWatchSet(r mcp.CallToolRequest) (any, error) {
 			}
 		}
 	}
-	if v, ok := args["compactAt"].(float64); ok {
-		if v < 0 || v > 100 {
-			return nil, fmt.Errorf("compactAt is a percent, 0 to 100")
-		}
-		wc.CompactAt = int(v)
-	}
 	for key, dst := range map[string]*bool{"rebase": &wc.Rebase, "lessons": &wc.Lessons, "handOver": &wc.HandOver, "autoMerge": &wc.AutoMerge, "approve": &wc.Approve, "autoCarry": &wc.AutoCarry, "rerunCI": &wc.RerunCI, "headless": &wc.Headless, "nightShift": &wc.NightShift} {
 		if v, ok := args[key].(bool); ok {
 			*dst = v
 		}
 	}
-	entry.Watch = wc
-	user.Workspaces[ws.ID] = entry
-	if err := writeUserConfig(path, user); err != nil {
-		return nil, err
-	}
-	return map[string]any{"done": "saved", "watch": switchesOf(ws.ID, wc), "takesEffect": "next round, no restart"}, nil
+	return nil
 }
 
 func mcpMute(word string) (any, error) {

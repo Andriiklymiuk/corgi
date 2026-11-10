@@ -256,39 +256,47 @@ func printVocabHuman(answer any) {
 		}
 		fmt.Printf("%s (%s)\n  %s\n  fix: %s\n", a.Code, kind, a.Meaning, a.Fix)
 	case vocabField:
-		for _, p := range a.Places {
-			fmt.Printf("%s  %s\n", p.Path, p.Type)
-			if p.Description != "" {
-				fmt.Printf("  %s\n", p.Description)
-			}
-			if len(p.Enum) > 0 {
-				fmt.Printf("  one of: %s\n", strings.Join(p.Enum, ", "))
-			}
-		}
+		printVocabField(a)
 	case vocabCommand:
-		fmt.Printf("%s - %s\n  usage: %s\n", a.Command, a.Short, a.Usage)
-		if len(a.Aliases) > 0 {
-			fmt.Printf("  aliases: %s\n", strings.Join(a.Aliases, ", "))
-		}
-		for _, f := range a.Flags {
-			name := f.Name
-			if f.Shorthand != "" {
-				name = "-" + f.Shorthand + ", " + name
-			}
-			def := ""
-			if f.Default != "" {
-				def = " (default " + f.Default + ")"
-			}
-			fmt.Printf("  %-28s %s%s\n", name+" "+f.Type, vocabFirstLine(f.Usage), def)
-		}
-		if len(a.Subcommands) > 0 {
-			fmt.Printf("  subcommands: %s\n", strings.Join(a.Subcommands, " · "))
-		}
-		for _, p := range a.AlsoField {
-			fmt.Printf("  also a compose key: %s  %s\n", p.Path, p.Type)
-		}
+		printVocabCommand(a)
 	case vocabFlagOwners:
 		fmt.Printf("%s %s - %s\n  taken by: %s\n", a.Flag.Name, a.Flag.Type, vocabFirstLine(a.Flag.Usage), strings.Join(a.Commands, ", "))
+	}
+}
+
+func printVocabField(a vocabField) {
+	for _, p := range a.Places {
+		fmt.Printf("%s  %s\n", p.Path, p.Type)
+		if p.Description != "" {
+			fmt.Printf("  %s\n", p.Description)
+		}
+		if len(p.Enum) > 0 {
+			fmt.Printf("  one of: %s\n", strings.Join(p.Enum, ", "))
+		}
+	}
+}
+
+func printVocabCommand(a vocabCommand) {
+	fmt.Printf("%s - %s\n  usage: %s\n", a.Command, a.Short, a.Usage)
+	if len(a.Aliases) > 0 {
+		fmt.Printf("  aliases: %s\n", strings.Join(a.Aliases, ", "))
+	}
+	for _, f := range a.Flags {
+		name := f.Name
+		if f.Shorthand != "" {
+			name = "-" + f.Shorthand + ", " + name
+		}
+		def := ""
+		if f.Default != "" {
+			def = " (default " + f.Default + ")"
+		}
+		fmt.Printf("  %-28s %s%s\n", name+" "+f.Type, vocabFirstLine(f.Usage), def)
+	}
+	if len(a.Subcommands) > 0 {
+		fmt.Printf("  subcommands: %s\n", strings.Join(a.Subcommands, " · "))
+	}
+	for _, p := range a.AlsoField {
+		fmt.Printf("  also a compose key: %s  %s\n", p.Path, p.Type)
 	}
 }
 

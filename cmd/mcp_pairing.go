@@ -69,22 +69,13 @@ func (p *pairWindow) get() (*pairing.Session, string) {
 func pairingHandlerFor(window *pairWindow, storePath string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		session, role := window.get()
-		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set(headerCacheControl, "no-store")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
-
 		if r.Method == http.MethodGet {
-			w.Header().Set(headerContentType, "text/html; charset=utf-8")
-			if !session.Open() {
-				w.WriteHeader(http.StatusForbidden)
-				_, _ = fmt.Fprint(w, pairClosedHTML)
-				return
-			}
-			_, _ = fmt.Fprint(w, pairPageHTML)
+			servePairPage(w, session.Open())
 			return
 		}
-
 		w.Header().Set(headerContentType, mimeJSON)
-
 		if r.Method != http.MethodPost {
 			writePairError(w, http.StatusMethodNotAllowed, "POST a {code, device} body to pair")
 			return
@@ -93,50 +84,58 @@ func pairingHandlerFor(window *pairWindow, storePath string) http.Handler {
 			writePairError(w, http.StatusForbidden, "pairing is not open - run `corgi mcp --http --pair` on the machine")
 			return
 		}
-
 		var req pairRequest
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxPairBodyBytes)).Decode(&req); err != nil {
 			writePairError(w, http.StatusBadRequest, "could not read the pairing request")
 			return
 		}
-
-		serverPub := ""
-		if strings.TrimSpace(req.PubKey) != "" {
-			server, kerr := pairing.LoadOrCreateServerKey(pairing.ServerKeyPath(filepath.Dir(storePath)))
-			if kerr != nil {
-				utils.Infof("pairing: e2e key: %v\n", kerr)
-				writePairError(w, http.StatusInternalServerError, "pairing failed on the machine - check its output")
-				return
-			}
-			serverPub = pairing.PublicKeyString(server.PublicKey())
-		}
-		token, err := pairing.PairWithRole(storePath, session, req.Code, req.Device, req.PubKey, role)
-		if err != nil {
-			if errors.Is(err, pairing.ErrBadRequest) {
-				writePairError(w, http.StatusForbidden, err.Error())
-				return
-			}
-			utils.Infof("pairing failed: %v\n", err)
-			writePairError(w, http.StatusInternalServerError, "pairing failed on the machine - check its output")
+		resp, status, msg := pairDevice(storePath, session, role, req)
+		if status != 0 {
+			writePairError(w, status, msg)
 			return
 		}
-
-		host, _ := os.Hostname()
-		if role != "" {
-			utils.Infof("paired device %q as %s\n", strings.TrimSpace(req.Device), role)
-		} else {
-			utils.Infof("paired device %q\n", strings.TrimSpace(req.Device))
-		}
-		_ = json.NewEncoder(w).Encode(pairResponse{
-			Token:        token,
-			Daemon:       host,
-			Device:       strings.TrimSpace(req.Device),
-			Version:      APP_VERSION,
-			ServerPubKey: serverPub,
-			Role:         role,
-			PublicURL:    strings.TrimSuffix(launcherURL(), "/app"),
-		})
+		_ = json.NewEncoder(w).Encode(resp)
 	})
+}
+
+func servePairPage(w http.ResponseWriter, open bool) {
+	w.Header().Set(headerContentType, htmlContentType)
+	if !open {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = fmt.Fprint(w, pairClosedHTML)
+		return
+	}
+	_, _ = fmt.Fprint(w, pairPageHTML)
+}
+
+func pairDevice(storePath string, session *pairing.Session, role string, req pairRequest) (pairResponse, int, string) {
+	const failed = "pairing failed on the machine - check its output"
+	serverPub := ""
+	if strings.TrimSpace(req.PubKey) != "" {
+		server, err := pairing.LoadOrCreateServerKey(pairing.ServerKeyPath(filepath.Dir(storePath)))
+		if err != nil {
+			utils.Infof("pairing: e2e key: %v\n", err)
+			return pairResponse{}, http.StatusInternalServerError, failed
+		}
+		serverPub = pairing.PublicKeyString(server.PublicKey())
+	}
+	token, err := pairing.PairWithRole(storePath, session, req.Code, req.Device, req.PubKey, role)
+	if err != nil {
+		if errors.Is(err, pairing.ErrBadRequest) {
+			return pairResponse{}, http.StatusForbidden, err.Error()
+		}
+		utils.Infof("pairing failed: %v\n", err)
+		return pairResponse{}, http.StatusInternalServerError, failed
+	}
+	device := strings.TrimSpace(req.Device)
+	if role != "" {
+		utils.Infof("paired device %q as %s\n", device, role)
+	} else {
+		utils.Infof("paired device %q\n", device)
+	}
+	host, _ := os.Hostname()
+	return pairResponse{Token: token, Daemon: host, Device: device, Version: APP_VERSION, ServerPubKey: serverPub,
+		Role: role, PublicURL: strings.TrimSuffix(launcherURL(), "/app")}, 0, ""
 }
 
 const pairClosedHTML = `<!doctype html>
