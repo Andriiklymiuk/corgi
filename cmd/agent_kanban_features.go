@@ -30,39 +30,7 @@ func kanbanFeatures(cards []KanbanCard) []KanbanFeature {
 			byID[id] = f
 			order = append(order, id)
 		}
-		if f.Title == "" {
-			f.Title = c.Feature.Title
-		}
-		f.Cards = append(f.Cards, c.Ref)
-		f.Total++
-		switch c.Column {
-		case ColDone:
-			f.Done++
-		case ColRunning:
-			f.Running++
-		case ColReview:
-			f.Review++
-		case ColBlocked:
-			f.Blocked++
-		}
-		if c.Cost != nil {
-			if f.Cost == nil {
-				f.Cost = &CardCost{}
-			}
-			f.Cost.USD += c.Cost.USD
-			f.Cost.Tokens += c.Cost.Tokens
-			f.Cost.Runs += c.Cost.Runs
-			f.Cost.Sessions += c.Cost.Sessions
-			for _, m := range c.Cost.Models {
-				f.Cost.Models = appendFold(f.Cost.Models, m)
-			}
-			for _, a := range c.Cost.Agents {
-				f.Cost.Agents = appendFold(f.Cost.Agents, a)
-			}
-		}
-		if c.UpdatedAt.After(f.UpdatedAt) {
-			f.UpdatedAt = c.UpdatedAt
-		}
+		f.add(c)
 	}
 	out := make([]KanbanFeature, 0, len(order))
 	for _, id := range order {
@@ -75,6 +43,53 @@ func kanbanFeatures(cards []KanbanCard) []KanbanFeature {
 	return out
 }
 
+func (f *KanbanFeature) add(c KanbanCard) {
+	f.Title = firstNonEmpty(f.Title, c.Feature.Title)
+	f.Cards = append(f.Cards, c.Ref)
+	f.Total++
+	switch c.Column {
+	case ColDone:
+		f.Done++
+	case ColRunning:
+		f.Running++
+	case ColReview:
+		f.Review++
+	case ColBlocked:
+		f.Blocked++
+	}
+	if c.Cost != nil {
+		f.addCost(*c.Cost)
+	}
+	if c.UpdatedAt.After(f.UpdatedAt) {
+		f.UpdatedAt = c.UpdatedAt
+	}
+}
+
+func (f *KanbanFeature) addCost(c CardCost) {
+	if f.Cost == nil {
+		f.Cost = &CardCost{}
+	}
+	f.Cost.USD += c.USD
+	f.Cost.Tokens += c.Tokens
+	f.Cost.Runs += c.Runs
+	f.Cost.Sessions += c.Sessions
+	for _, m := range c.Models {
+		f.Cost.Models = appendFold(f.Cost.Models, m)
+	}
+	for _, a := range c.Agents {
+		f.Cost.Agents = appendFold(f.Cost.Agents, a)
+	}
+}
+
+func cardReady(card KanbanCard, refs []string, placed map[string]bool) bool {
+	for _, dep := range card.After {
+		if containsFold(refs, dep) && !placed[strings.ToLower(dep)] {
+			return false
+		}
+	}
+	return true
+}
+
 func featureWaves(refs []string, byRef map[string]KanbanCard, ws string) [][]string {
 	placed := map[string]bool{}
 	var waves [][]string
@@ -82,14 +97,7 @@ func featureWaves(refs []string, byRef map[string]KanbanCard, ws string) [][]str
 	for len(remaining) > 0 {
 		var wave, rest []string
 		for _, ref := range remaining {
-			ready := true
-			for _, dep := range byRef[ws+"/"+ref].After {
-				if containsFold(refs, dep) && !placed[strings.ToLower(dep)] {
-					ready = false
-					break
-				}
-			}
-			if ready {
+			if cardReady(byRef[ws+"/"+ref], refs, placed) {
 				wave = append(wave, ref)
 			} else {
 				rest = append(rest, ref)

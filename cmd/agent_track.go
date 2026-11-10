@@ -74,7 +74,7 @@ var agentTrackDisableCmd = &cobra.Command{
 	Run:   runAgentTrackDisable,
 }
 
-var trackedEvents = []struct {
+type trackedEvent struct {
 	Event   string
 	Matcher string
 	Title   bool
@@ -82,7 +82,9 @@ var trackedEvents = []struct {
 	Scope   bool
 	Budget  bool
 	NoEmit  bool
-}{
+}
+
+var trackedEvents = []trackedEvent{
 	{Event: "SessionStart", Matcher: "startup|resume|clear|fork", Context: true},
 	{Event: "UserPromptSubmit", Title: true},
 	{Event: "PreToolUse", Matcher: promptingTools},
@@ -250,6 +252,26 @@ func hookCommand(bin, hook string) string {
 	return bin + " " + rest
 }
 
+func trackingHandlers(ev trackedEvent, bin string, tabTitle bool) []any {
+	var handlers []any
+	if !ev.NoEmit {
+		handlers = append(handlers, map[string]any{"type": "command", "command": hookCommand(bin, hookEmit), "async": true})
+	}
+	if ev.Title && tabTitle {
+		handlers = append(handlers, map[string]any{"type": "command", "command": hookCommand(bin, hookTabTitle)})
+	}
+	for _, extra := range []struct {
+		on      bool
+		hook    string
+		timeout int
+	}{{ev.Context, hookContext, 5}, {ev.Scope, hookScope, 5}, {ev.Budget, hookBudget, 15}} {
+		if extra.on {
+			handlers = append(handlers, map[string]any{"type": "command", "command": hookCommand(bin, extra.hook), "timeout": extra.timeout})
+		}
+	}
+	return handlers
+}
+
 func enableTrackingIn(path, bin string, tabTitle bool) error {
 	settings, err := readUserSettings(path)
 	if err != nil {
@@ -268,23 +290,7 @@ func enableTrackingIn(path, bin string, tabTitle bool) error {
 		} else {
 			entries, _ = hooks[ev.Event].([]any)
 		}
-		var handlers []any
-		if !ev.NoEmit {
-			handlers = append(handlers, map[string]any{"type": "command", "command": hookCommand(bin, hookEmit), "async": true})
-		}
-		if ev.Title && tabTitle {
-			handlers = append(handlers, map[string]any{"type": "command", "command": hookCommand(bin, hookTabTitle)})
-		}
-		if ev.Context {
-			handlers = append(handlers, map[string]any{"type": "command", "command": hookCommand(bin, hookContext), "timeout": 5})
-		}
-		if ev.Scope {
-			handlers = append(handlers, map[string]any{"type": "command", "command": hookCommand(bin, hookScope), "timeout": 5})
-		}
-		if ev.Budget {
-			handlers = append(handlers, map[string]any{"type": "command", "command": hookCommand(bin, hookBudget), "timeout": 15})
-		}
-		entry := map[string]any{"hooks": handlers}
+		entry := map[string]any{"hooks": trackingHandlers(ev, bin, tabTitle)}
 		if ev.Matcher != "" {
 			entry["matcher"] = ev.Matcher
 		}
@@ -518,7 +524,22 @@ func runEmitHookAs(agent string, stdin io.Reader, getenv func(string) string, pa
 		// auto_review or bypass nobody is asked, so it is work, not a wait.
 		in.Event = "PreToolUse"
 	}
-	ev := sessions.Event{
+	ev := hookEvent(in, agent, getenv)
+	addTranscriptFacts(&ev, in)
+	switch in.Event {
+	case "SessionStart", "UserPromptSubmit", "Stop", "CwdChanged":
+		ev.Branch = sessions.Branch(in.Cwd)
+	}
+	chain := proc.Ancestors(parent)
+	if proc.HasCorgi(chain) {
+		return sessions.Event{}, false
+	}
+	addProcessFacts(&ev, chain)
+	return ev, true
+}
+
+func hookEvent(in hookInput, agent string, getenv func(string) string) sessions.Event {
+	return sessions.Event{
 		Name: in.Event, SessionID: in.SessionID, Cwd: in.Cwd, Agent: agent,
 		ConfigDir: getenv("CLAUDE_CONFIG_DIR"), Source: in.Source, Reason: in.Reason,
 		Tool: in.Tool, Notification: in.NotificationType, Message: truncateLine(in.errorMessage(), 160),
@@ -532,46 +553,51 @@ func runEmitHookAs(agent string, stdin io.Reader, getenv func(string) string, pa
 		Risk:        riskOf(in.Tool, in.ToolInput),
 		At:          time.Now().UTC(),
 	}
-	if wantContext, wantTitle := in.readsTranscript(); in.TranscriptPath != "" && (wantContext || wantTitle) {
-		if wantContext {
-			if c, ok := usage.ContextOf(in.TranscriptPath); ok {
-				ev.Context = &c
-			}
-		}
-		if wantTitle {
-			ev.Title = usage.TitleOf(in.TranscriptPath)
-		}
-		if in.Event == "Stop" {
-			ev.Background = usage.BackgroundOf(in.TranscriptPath)
-			if sum, ok := usage.SummaryOf(in.TranscriptPath); ok {
-				ev.Summary, ev.PR = sum.Line, sum.PR
-			}
-		}
+}
+
+func addTranscriptFacts(ev *sessions.Event, in hookInput) {
+	if in.TranscriptPath != "" {
+		readTranscriptFacts(ev, in)
 	}
 	if in.Event == "Stop" && ev.Summary == "" && strings.TrimSpace(in.LastAssistantMessage) != "" {
 		sum := usage.SummaryOfText(in.LastAssistantMessage)
 		ev.Summary, ev.PR = sum.Line, sum.PR
 	}
-	switch in.Event {
-	case "SessionStart", "UserPromptSubmit", "Stop", "CwdChanged":
-		ev.Branch = sessions.Branch(in.Cwd)
-	}
-	chain := proc.Ancestors(parent)
-	if proc.HasCorgi(chain) {
-		return sessions.Event{}, false
-	}
-	ev.Ancestors = proc.PIDs(chain)
-	ev.Names = proc.Names(chain)
-	if owner, ok := proc.Owner(chain); ok {
-		ev.ClaudePID = owner.PID
-		ev.TTY = owner.TTY
-		if ev.Agent == "" {
-			if h := proc.HarnessOf(owner); h != "" && h != "claude" {
-				ev.Agent = h
-			}
+}
+
+func readTranscriptFacts(ev *sessions.Event, in hookInput) {
+	wantContext, wantTitle := in.readsTranscript()
+	if wantContext {
+		if c, ok := usage.ContextOf(in.TranscriptPath); ok {
+			ev.Context = &c
 		}
 	}
-	return ev, true
+	if wantTitle {
+		ev.Title = usage.TitleOf(in.TranscriptPath)
+	}
+	if in.Event != "Stop" || (!wantContext && !wantTitle) {
+		return
+	}
+	ev.Background = usage.BackgroundOf(in.TranscriptPath)
+	if sum, ok := usage.SummaryOf(in.TranscriptPath); ok {
+		ev.Summary, ev.PR = sum.Line, sum.PR
+	}
+}
+
+func addProcessFacts(ev *sessions.Event, chain []proc.Process) {
+	ev.Ancestors = proc.PIDs(chain)
+	ev.Names = proc.Names(chain)
+	owner, ok := proc.Owner(chain)
+	if !ok {
+		return
+	}
+	ev.ClaudePID = owner.PID
+	ev.TTY = owner.TTY
+	if ev.Agent == "" {
+		if h := proc.HarnessOf(owner); h != "" && h != "claude" {
+			ev.Agent = h
+		}
+	}
 }
 
 func deliverEvent(ev sessions.Event) {

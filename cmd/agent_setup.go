@@ -780,54 +780,66 @@ var gitConfigEmail = func(dir string) string {
 	return strings.TrimSpace(string(out))
 }
 
-func checkUnattended(dir string) []agentCheck {
-	registry, _ := mustLoadRegistry()
-	user, _ := config.LoadUser(agentUserConfigPath(dir))
-	var dirs []string
-	fixing := map[string]bool{}
-	codexFixes, codexAnywhere := false, false
+type unattendedPicture struct {
+	dirs          []string
+	fixing        map[string]bool
+	codexFixes    bool
+	codexAnywhere bool
+}
+
+func pictureUnattended(registry *workspace.Registry, user *config.UserConfig) unattendedPicture {
+	p := unattendedPicture{fixing: map[string]bool{}}
 	for _, ws := range registry.Sorted() {
 		if ws.AbsPath != "" {
-			dirs = append(dirs, ws.AbsPath)
+			p.dirs = append(p.dirs, ws.AbsPath)
 		}
 		if user == nil {
 			continue
 		}
 		if containsFold(config.Resolve(ws.ID, nil, user).AgentOrder(), harness.Codex) {
-			codexAnywhere = true
+			p.codexAnywhere = true
 		}
 		if wc, ok := user.Workspaces[ws.ID]; ok && wc.Watch != nil && wc.Watch.Enabled && wc.Watch.Action == "fix" {
-			fixing[claudeConfigDirOf(wc.ConfigDir)] = true
-			if wc.Kind == "codex" || containsFold(wc.Agents, "codex") {
-				codexFixes = true
-			}
+			p.fixing[claudeConfigDirOf(wc.ConfigDir)] = true
+			p.codexFixes = p.codexFixes || wc.Kind == "codex" || containsFold(wc.Agents, "codex")
 		}
 	}
-	if len(dirs) == 0 {
+	return p
+}
+
+func missingPluginDirs(fixing map[string]bool) []string {
+	var missing []string
+	for configDir := range fixing {
+		data, _ := os.ReadFile(filepath.Join(configDir, "plugins", "installed_plugins.json"))
+		if !pluginInstalled(data, "corgi") {
+			missing = append(missing, configDir)
+		}
+	}
+	sort.Strings(missing)
+	return missing
+}
+
+func checkUnattended(dir string) []agentCheck {
+	registry, _ := mustLoadRegistry()
+	user, _ := config.LoadUser(agentUserConfigPath(dir))
+	p := pictureUnattended(registry, user)
+	if len(p.dirs) == 0 {
 		return nil
 	}
 	secrets := watch.LoadSecrets(dir)
 	_, haveGH := lookPathOK("gh")
 	_, haveGlab := lookPathOK("glab")
 	checks := []agentCheck{
-		gitIdentityCheck(gitIdentityMissing(dirs, gitConfigEmail)),
+		gitIdentityCheck(gitIdentityMissing(p.dirs, gitConfigEmail)),
 		forgeCLICheck(haveGH, haveGlab, secrets.GitHub != "", secrets.GitLab != ""),
 	}
-	if len(fixing) > 0 {
-		var missing []string
-		for configDir := range fixing {
-			data, _ := os.ReadFile(filepath.Join(configDir, "plugins", "installed_plugins.json"))
-			if !pluginInstalled(data, "corgi") {
-				missing = append(missing, configDir)
-			}
-		}
-		sort.Strings(missing)
-		checks = append(checks, pluginCheck(missing))
+	if len(p.fixing) > 0 {
+		checks = append(checks, pluginCheck(missingPluginDirs(p.fixing)))
 	}
-	if codexFixes {
+	if p.codexFixes {
 		checks = append(checks, codexSkillsCheck())
 	}
-	if codexAnywhere {
+	if p.codexAnywhere {
 		checks = append(checks, codexNotifyCheck())
 	}
 	checks = append(checks, autoMergeTokenChecks(dir, registry, user)...)
@@ -837,6 +849,28 @@ func checkUnattended(dir string) []agentCheck {
 
 // slackTokenChecks: a dead Slack token fails only at the first post, after
 // the work it was meant to announce is done.
+type slackTokenCase struct {
+	voice, token, machine, flag string
+}
+
+func slackTokenCheck(ws string, t slackTokenCase, works func(context.Context, string) error) agentCheck {
+	name, where := "slack "+t.voice+" token · "+ws, " --workspace "+ws
+	if t.token == t.machine {
+		name, where = "slack "+t.voice+" token", ""
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	err := works(ctx, t.token)
+	cancel()
+	switch {
+	case err == nil:
+		return agentCheck{Name: name, OK: true, Detail: "Slack accepts it"}
+	case strings.Contains(err.Error(), "token_revoked"), strings.Contains(err.Error(), "invalid_auth"), strings.Contains(err.Error(), "account_inactive"):
+		return agentCheck{Name: name, Detail: "Slack refuses it (" + err.Error() + ") - announces and replies fail",
+			Fix: "corgi agent watch auth slack " + t.flag + " <new token>" + where}
+	}
+	return agentCheck{Name: name, OK: true, Detail: "could not ask Slack (" + err.Error() + ")"}
+}
+
 func slackTokenChecks(dir string, registry *workspace.Registry, user *config.UserConfig, works func(context.Context, string) error) []agentCheck {
 	if user == nil || registry == nil {
 		return nil
@@ -850,29 +884,13 @@ func slackTokenChecks(dir string, registry *workspace.Registry, user *config.Use
 			continue
 		}
 		secrets := watch.LoadSecretsFor(dir, ws.ID)
-		for _, t := range []struct{ voice, token, machine, flag string }{
+		for _, t := range []slackTokenCase{
 			{"user", secrets.SlackUser, machine.SlackUser, "--token"},
 			{"bot", secrets.SlackBot, machine.SlackBot, "--bot"},
 		} {
-			if t.token == "" || seen[t.token] {
-				continue
-			}
-			seen[t.token] = true
-			name, where := "slack "+t.voice+" token · "+ws.ID, " --workspace "+ws.ID
-			if t.token == t.machine {
-				name, where = "slack "+t.voice+" token", ""
-			}
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			err := works(ctx, t.token)
-			cancel()
-			switch {
-			case err == nil:
-				checks = append(checks, agentCheck{Name: name, OK: true, Detail: "Slack accepts it"})
-			case strings.Contains(err.Error(), "token_revoked"), strings.Contains(err.Error(), "invalid_auth"), strings.Contains(err.Error(), "account_inactive"):
-				checks = append(checks, agentCheck{Name: name, Detail: "Slack refuses it (" + err.Error() + ") - announces and replies fail",
-					Fix: "corgi agent watch auth slack " + t.flag + " <new token>" + where})
-			default:
-				checks = append(checks, agentCheck{Name: name, OK: true, Detail: "could not ask Slack (" + err.Error() + ")"})
+			if t.token != "" && !seen[t.token] {
+				seen[t.token] = true
+				checks = append(checks, slackTokenCheck(ws.ID, t, works))
 			}
 		}
 	}
