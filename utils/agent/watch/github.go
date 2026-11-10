@@ -48,10 +48,12 @@ func NewGitHub(s Secrets, repos []string) *GitHub {
 
 func (g *GitHub) Name() string { return "github" }
 
-var githubReasons = map[string]struct {
+type githubReason struct {
 	kind Kind
 	mine bool
-}{
+}
+
+var githubReasons = map[string]githubReason{
 	"review_requested": {KindReviewRequested, false},
 	"mention":          {KindPRComment, true},
 	"author":           {KindPRComment, true},
@@ -86,24 +88,12 @@ func (g *GitHub) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 	if cursor == nil {
 		cursor = Cursor{}
 	}
+	g.Me = firstOr(g.Me, cursor["me"])
 	if g.Me == "" {
-		g.Me = cursor["me"]
-	}
-	if g.Me == "" {
-		var user struct {
-			Login string `json:"login"`
-		}
-		resp, err := g.get(ctx, "/user", "")
-		if err != nil {
+		if err := g.learnLogin(ctx); err != nil {
 			return nil, cursor, err
 		}
-		err = githubDecode(resp, &user)
-		if err != nil {
-			return nil, cursor, err
-		}
-		g.Me = user.Login
 	}
-
 	resp, err := g.get(ctx, "/notifications?all=false&participating=true", cursor["lastModified"])
 	if err != nil {
 		return nil, cursor, err
@@ -116,7 +106,6 @@ func (g *GitHub) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 	if err := githubDecode(resp, &threads); err != nil {
 		return nil, cursor, err
 	}
-
 	next := Cursor{}
 	for k, v := range cursor {
 		next[k] = v
@@ -128,78 +117,117 @@ func (g *GitHub) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 	if pi := resp.Header.Get("X-Poll-Interval"); pi != "" {
 		next["pollInterval"] = pi
 	}
-
 	var events []Event
 	pulls := map[string]githubPullInfo{}
 	for _, t := range threads {
-		if !g.wantsRepo(t.Repository.FullName) {
-			continue
+		if e, ok := g.threadEvent(ctx, t, pulls); ok {
+			events = append(events, e)
 		}
-		r, ok := githubReasons[t.Reason]
-		if !ok {
-			continue
-		}
-		if r.kind == KindCIFailed {
-			if t.Subject.Type != "CheckSuite" {
-				continue
-			}
-			at, _ := time.Parse(time.RFC3339, t.UpdatedAt)
-			events = append(events, Event{
-				Key:    "github:ci:" + t.Repository.FullName + ":" + t.ID + ":" + t.UpdatedAt,
-				Source: g.Name(),
-				Kind:   KindCIFailed,
-				Ref:    t.Repository.FullName,
-				Title:  firstNonEmptyText(t.Subject.Title, "a workflow run failed"),
-				URL:    "https://github.com/" + t.Repository.FullName + "/actions",
-				Mine:   true,
-				At:     at,
-			})
-			continue
-		}
-		if t.Subject.Type != "PullRequest" {
-			continue
-		}
-		number := t.Subject.URL[strings.LastIndex(t.Subject.URL, "/")+1:]
-		ref := t.Repository.FullName + "#" + number
-		at, _ := time.Parse(time.RFC3339, t.UpdatedAt)
-		pull := g.pull(ctx, pulls, t.Subject.URL)
-		author, body, bot, hasComment := g.latestComment(ctx, t.Subject.LatestCommentURL, t.Subject.URL)
-		kind, review := r.kind, ""
-		key := githubKeyPrefix + ref + ":" + t.ID + ":" + t.UpdatedAt
-		if id := githubCommentKey(t.Subject.LatestCommentURL); id != "" {
-			key = githubKeyPrefix + ref + ":" + id
-		}
-		if !hasComment && r.kind == KindPRComment {
-			// A review submitted with a body and nothing after it leaves the thread's
-			// latest_comment_url pointing at the pull request itself, so the review that
-			// raised the thread has to be read off the pull request. Its key is the one
-			// the webhook gives the same review, so the two are one event.
-			if rv, ok := g.reviewBehind(ctx, t.Repository.FullName, number, at); ok {
-				author, body, bot, hasComment = rv.author, rv.body, rv.bot, true
-				kind, review = KindPRReview, rv.state
-				key = githubKeyPrefix + ref + ":r" + rv.id
-			}
-		}
-		if r.kind == KindPRComment && (!hasComment || (author != "" && strings.EqualFold(author, g.Me))) {
-			continue
-		}
-		events = append(events, Event{
-			Key:    key,
-			Source: g.Name(),
-			Kind:   kind,
-			Ref:    ref,
-			Title:  t.Subject.Title,
-			Body:   body,
-			URL:    "https://github.com/" + t.Repository.FullName + "/pull/" + number,
-			Author: author,
-			Mine:   r.mine && isMe(g.Me, pull.author),
-			Bot:    bot,
-			State:  pull.state,
-			Review: review,
-			At:     at,
-		})
 	}
 	return events, next, nil
+}
+
+func (g *GitHub) learnLogin(ctx context.Context) error {
+	var user struct {
+		Login string `json:"login"`
+	}
+	resp, err := g.get(ctx, "/user", "")
+	if err != nil {
+		return err
+	}
+	if err := githubDecode(resp, &user); err != nil {
+		return err
+	}
+	g.Me = user.Login
+	return nil
+}
+
+func (g *GitHub) threadEvent(ctx context.Context, t githubThread, pulls map[string]githubPullInfo) (Event, bool) {
+	if !g.wantsRepo(t.Repository.FullName) {
+		return Event{}, false
+	}
+	r, ok := githubReasons[t.Reason]
+	if !ok {
+		return Event{}, false
+	}
+	if r.kind == KindCIFailed {
+		return g.ciThreadEvent(t)
+	}
+	if t.Subject.Type != "PullRequest" {
+		return Event{}, false
+	}
+	return g.pullThreadEvent(ctx, t, r, pulls)
+}
+
+func (g *GitHub) ciThreadEvent(t githubThread) (Event, bool) {
+	if t.Subject.Type != "CheckSuite" {
+		return Event{}, false
+	}
+	at, _ := time.Parse(time.RFC3339, t.UpdatedAt)
+	return Event{
+		Key:    "github:ci:" + t.Repository.FullName + ":" + t.ID + ":" + t.UpdatedAt,
+		Source: g.Name(),
+		Kind:   KindCIFailed,
+		Ref:    t.Repository.FullName,
+		Title:  firstNonEmptyText(t.Subject.Title, "a workflow run failed"),
+		URL:    "https://github.com/" + t.Repository.FullName + "/actions",
+		Mine:   true,
+		At:     at,
+	}, true
+}
+
+type threadComment struct {
+	author, body, review string
+	bot, has             bool
+	kind                 Kind
+	key                  string
+}
+
+func (g *GitHub) pullThreadEvent(ctx context.Context, t githubThread, r githubReason, pulls map[string]githubPullInfo) (Event, bool) {
+	number := t.Subject.URL[strings.LastIndex(t.Subject.URL, "/")+1:]
+	ref := t.Repository.FullName + "#" + number
+	at, _ := time.Parse(time.RFC3339, t.UpdatedAt)
+	pull := g.pull(ctx, pulls, t.Subject.URL)
+	c := g.threadComment(ctx, t, r, ref, number, at)
+	if r.kind == KindPRComment && (!c.has || (c.author != "" && strings.EqualFold(c.author, g.Me))) {
+		return Event{}, false
+	}
+	return Event{
+		Key:    c.key,
+		Source: g.Name(),
+		Kind:   c.kind,
+		Ref:    ref,
+		Title:  t.Subject.Title,
+		Body:   c.body,
+		URL:    "https://github.com/" + t.Repository.FullName + "/pull/" + number,
+		Author: c.author,
+		Mine:   r.mine && isMe(g.Me, pull.author),
+		Bot:    c.bot,
+		State:  pull.state,
+		Review: c.review,
+		At:     at,
+	}, true
+}
+
+func (g *GitHub) threadComment(ctx context.Context, t githubThread, r githubReason, ref, number string, at time.Time) threadComment {
+	c := threadComment{kind: r.kind, key: githubKeyPrefix + ref + ":" + t.ID + ":" + t.UpdatedAt}
+	c.author, c.body, c.bot, c.has = g.latestComment(ctx, t.Subject.LatestCommentURL, t.Subject.URL)
+	if id := githubCommentKey(t.Subject.LatestCommentURL); id != "" {
+		c.key = githubKeyPrefix + ref + ":" + id
+	}
+	if c.has || r.kind != KindPRComment {
+		return c
+	}
+	// A review submitted with a body and nothing after it leaves the thread's
+	// latest_comment_url pointing at the pull request itself, so the review that
+	// raised the thread has to be read off the pull request. Its key is the one
+	// the webhook gives the same review, so the two are one event.
+	if rv, ok := g.reviewBehind(ctx, t.Repository.FullName, number, at); ok {
+		c.author, c.body, c.bot, c.has = rv.author, rv.body, rv.bot, true
+		c.kind, c.review = KindPRReview, rv.state
+		c.key = githubKeyPrefix + ref + ":r" + rv.id
+	}
+	return c
 }
 
 func (g *GitHub) latestComment(ctx context.Context, commentURL, subjectURL string) (author, body string, bot, hasComment bool) {
@@ -413,67 +441,85 @@ func (g *GitHub) PullStatus(ctx context.Context, ref string) (PullStatus, bool) 
 	if out.State != "open" && out.State != "draft" {
 		return out, true
 	}
-
-	var reviews []struct {
-		State       string           `json:"state"`
-		SubmittedAt time.Time        `json:"submitted_at"`
-		User        gitHubPullPrUser `json:"user"`
-	}
-	if resp, err := g.get(ctx, reposSegment+repo+pullsSegment+num+reviewsPageQuery, ""); err == nil && githubDecode(resp, &reviews) == nil {
-		last := map[string]string{}
-		for _, r := range reviews {
-			if g.Me != "" && strings.EqualFold(r.User.Login, g.Me) && r.SubmittedAt.After(out.MyReviewAt) {
-				out.MyReviewAt = r.SubmittedAt
-			}
-			switch r.State {
-			case "APPROVED", "CHANGES_REQUESTED", "DISMISSED":
-				last[r.User.Login] = r.State
-			}
-		}
-		out.Review = "none"
-		for _, st := range last {
-			if st == "APPROVED" && out.Review != "changes" {
-				out.Review = "approved"
-			}
-			if st == "CHANGES_REQUESTED" {
-				out.Review = "changes"
-			}
-		}
-		if out.Review == "none" && len(pr.RequestedReviewers) > 0 {
-			out.Review = "pending"
-		}
-	}
-
+	g.addReviews(ctx, reposSegment+repo+pullsSegment+num+reviewsPageQuery, len(pr.RequestedReviewers) > 0, &out)
 	var conclusions []string
 	running := 0
 	if pr.Head.SHA != "" {
-		var runs struct {
-			CheckRuns []gitHubPullStatusRunsCheckRuns `json:"check_runs"`
-		}
-		if resp, err := g.get(ctx, reposSegment+repo+commitsSegment+pr.Head.SHA+"/check-runs?per_page=100", ""); err == nil && githubDecode(resp, &runs) == nil {
-			for _, r := range runs.CheckRuns {
-				if r.Status != "completed" {
-					running++
-					continue
-				}
-				conclusions = append(conclusions, r.Conclusion)
-			}
-		}
-		var combined struct {
-			Statuses []gitHubPullStatusCombinedStatuses `json:"statuses"`
-		}
-		if resp, err := g.get(ctx, reposSegment+repo+commitsSegment+pr.Head.SHA+"/status", ""); err == nil && githubDecode(resp, &combined) == nil {
-			for _, s := range combined.Statuses {
-				if s.State == "pending" {
-					running++
-					continue
-				}
-				conclusions = append(conclusions, s.State)
-			}
-		}
+		conclusions, running = g.checksOn(ctx, reposSegment+repo+commitsSegment+pr.Head.SHA)
 	}
 	out.Checks = checksVerdict(conclusions, running)
 	return out, true
+}
+
+type githubReviewRow struct {
+	State       string           `json:"state"`
+	SubmittedAt time.Time        `json:"submitted_at"`
+	User        gitHubPullPrUser `json:"user"`
+}
+
+func (g *GitHub) addReviews(ctx context.Context, path string, requested bool, out *PullStatus) {
+	var reviews []githubReviewRow
+	resp, err := g.get(ctx, path, "")
+	if err != nil || githubDecode(resp, &reviews) != nil {
+		return
+	}
+	last := map[string]string{}
+	for _, r := range reviews {
+		if g.Me != "" && strings.EqualFold(r.User.Login, g.Me) && r.SubmittedAt.After(out.MyReviewAt) {
+			out.MyReviewAt = r.SubmittedAt
+		}
+		switch r.State {
+		case "APPROVED", "CHANGES_REQUESTED", "DISMISSED":
+			last[r.User.Login] = r.State
+		}
+	}
+	out.Review = reviewVerdict(last, requested)
+}
+
+func reviewVerdict(last map[string]string, requested bool) string {
+	verdict := "none"
+	for _, st := range last {
+		if st == "APPROVED" && verdict != "changes" {
+			verdict = "approved"
+		}
+		if st == "CHANGES_REQUESTED" {
+			verdict = "changes"
+		}
+	}
+	if verdict == "none" && requested {
+		return "pending"
+	}
+	return verdict
+}
+
+func (g *GitHub) checksOn(ctx context.Context, commit string) ([]string, int) {
+	var conclusions []string
+	running := 0
+	var runs struct {
+		CheckRuns []gitHubPullStatusRunsCheckRuns `json:"check_runs"`
+	}
+	if resp, err := g.get(ctx, commit+"/check-runs?per_page=100", ""); err == nil && githubDecode(resp, &runs) == nil {
+		for _, r := range runs.CheckRuns {
+			if r.Status != "completed" {
+				running++
+				continue
+			}
+			conclusions = append(conclusions, r.Conclusion)
+		}
+	}
+	var combined struct {
+		Statuses []gitHubPullStatusCombinedStatuses `json:"statuses"`
+	}
+	if resp, err := g.get(ctx, commit+"/status", ""); err == nil && githubDecode(resp, &combined) == nil {
+		for _, s := range combined.Statuses {
+			if s.State == "pending" {
+				running++
+				continue
+			}
+			conclusions = append(conclusions, s.State)
+		}
+	}
+	return conclusions, running
 }
 
 type gitHubPullStatusPrHead struct {
@@ -522,30 +568,33 @@ func (g *GitHub) MyReviewSince(ctx context.Context, ref string, since time.Time)
 		return ReviewOutcome{}, false
 	}
 	for _, r := range reviews {
-		if r.User.Login != me || trackerTime(r.SubmittedAt).Before(since) {
-			continue
-		}
-		switch r.State {
-		case "APPROVED":
-			out.Approved = true
-		case "CHANGES_REQUESTED":
-			out.ChangesRequested = true
+		if r.User.Login == me && !trackerTime(r.SubmittedAt).Before(since) {
+			out.Approved = out.Approved || r.State == "APPROVED"
+			out.ChangesRequested = out.ChangesRequested || r.State == "CHANGES_REQUESTED"
 		}
 	}
 	for _, path := range []string{reposSegment + repo + pullsSegment + num + "/comments?per_page=100", reposSegment + repo + "/issues/" + num + "/comments?per_page=100"} {
-		var comments []struct {
-			CreatedAt string           `json:"created_at"`
-			User      gitHubPullPrUser `json:"user"`
-		}
-		if resp, err := g.get(ctx, path, ""); err == nil && githubDecode(resp, &comments) == nil {
-			for _, c := range comments {
-				if c.User.Login == me && !trackerTime(c.CreatedAt).Before(since) {
-					out.Comments++
-				}
-			}
-		}
+		out.Comments += g.myCommentsSince(ctx, path, me, since)
 	}
 	return out, true
+}
+
+func (g *GitHub) myCommentsSince(ctx context.Context, path, me string, since time.Time) int {
+	var comments []struct {
+		CreatedAt string           `json:"created_at"`
+		User      gitHubPullPrUser `json:"user"`
+	}
+	resp, err := g.get(ctx, path, "")
+	if err != nil || githubDecode(resp, &comments) != nil {
+		return 0
+	}
+	n := 0
+	for _, c := range comments {
+		if c.User.Login == me && !trackerTime(c.CreatedAt).Before(since) {
+			n++
+		}
+	}
+	return n
 }
 
 // AnsweredSince is the Answerer for a pull request: a comment of mine after

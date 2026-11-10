@@ -84,88 +84,28 @@ func (g *GitLab) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 	if g.Token == "" {
 		return nil, cursor, ErrNoToken
 	}
-	base := g.URL
-	if base == "" {
-		base = gitlabDefaultBase
-	}
-	if g.Me == "" {
-		g.Me = cursor["me"]
-	}
-	if g.MeID == "" {
-		g.MeID = cursor["meId"]
-	}
+	base := strings.TrimRight(firstOr(g.URL, gitlabDefaultBase), "/")
+	g.Me = firstOr(g.Me, cursor["me"])
+	g.MeID = firstOr(g.MeID, cursor["meId"])
 	if g.Me == "" || g.MeID == "" {
-		var user struct {
-			ID       int64  `json:"id"`
-			Username string `json:"username"`
-		}
-		if err := g.getInto(ctx, strings.TrimRight(base, "/")+"/api/v4/user", &user); err == nil {
-			g.Me = firstOr(g.Me, user.Username)
-			if user.ID > 0 {
-				g.MeID = strconv.FormatInt(user.ID, 10)
-			}
-		}
+		g.learnMe(ctx, base)
 	}
-	path := "/api/v4/todos?state=pending&per_page=50"
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(base, "/")+path, nil)
+	todos, err := g.pendingTodos(ctx, base)
 	if err != nil {
-		return nil, cursor, fmt.Errorf("gitlab todos: %v", err)
+		return nil, cursor, err
 	}
-	req.Header.Set("PRIVATE-TOKEN", g.Token)
-	client := g.Client
-	if client == nil {
-		client = &http.Client{Timeout: 30 * time.Second}
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, cursor, fmt.Errorf("gitlab todos: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 120))
-		return nil, cursor, fmt.Errorf("gitlab todos: HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
-	}
-	var todos []gitlabTodo
-	if err := json.NewDecoder(resp.Body).Decode(&todos); err != nil {
-		return nil, cursor, fmt.Errorf("gitlab todos: decoding: %v", err)
-	}
-
 	lastID, _ := strconv.ParseInt(cursor["lastId"], 10, 64)
 	maxID := lastID
 	var events []Event
 	for _, t := range todos {
 		maxID = max(maxID, t.ID)
-		if t.ID <= lastID || t.TargetType != "MergeRequest" {
+		if t.ID <= lastID {
 			continue
 		}
-		kind, ok := gitlabActions[t.ActionName]
-		if !ok {
-			continue
+		if e, ok := g.todoEvent(t); ok {
+			events = append(events, e)
 		}
-		if kind == KindPRComment && isMe(g.Me, t.Author.Username) {
-			continue
-		}
-		at, _ := time.Parse(time.RFC3339, t.CreatedAt)
-		body := t.Body
-		if kind == KindCIFailed {
-			body = ""
-		}
-		events = append(events, Event{
-			Key:    "gitlab:todo:" + strconv.FormatInt(t.ID, 10),
-			Source: g.Name(),
-			Kind:   kind,
-			Ref:    t.Project.PathWithNamespace + "!" + strconv.FormatInt(t.Target.IID, 10),
-			Title:  t.Target.Title,
-			Body:   gitlabTruncate(body, 200),
-			URL:    t.TargetURL,
-			Author: t.Author.Username,
-			Mine:   kind != KindReviewRequested && isMe(g.Me, t.Target.Author.Username),
-			Bot:    kind == KindPRComment && gitlabBot(t.Author.Username, t.Author.Bot),
-			State:  t.Target.State,
-			At:     at,
-		})
 	}
-
 	next := Cursor{}
 	for k, v := range cursor {
 		next[k] = v
@@ -178,13 +118,82 @@ func (g *GitLab) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 	}
 	if g.Me != "" {
 		next["me"] = g.Me
-		notes, since := g.notesOnMyMRs(ctx, strings.TrimRight(base, "/"), cursor["notesSince"])
+		notes, since := g.notesOnMyMRs(ctx, base, cursor["notesSince"])
 		events = append(events, notes...)
 		if since != "" {
 			next["notesSince"] = since
 		}
 	}
 	return events, next, nil
+}
+
+func (g *GitLab) learnMe(ctx context.Context, base string) {
+	var user struct {
+		ID       int64  `json:"id"`
+		Username string `json:"username"`
+	}
+	if err := g.getInto(ctx, base+"/api/v4/user", &user); err != nil {
+		return
+	}
+	g.Me = firstOr(g.Me, user.Username)
+	if user.ID > 0 {
+		g.MeID = strconv.FormatInt(user.ID, 10)
+	}
+}
+
+func (g *GitLab) pendingTodos(ctx context.Context, base string) ([]gitlabTodo, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/api/v4/todos?state=pending&per_page=50", nil)
+	if err != nil {
+		return nil, fmt.Errorf("gitlab todos: %v", err)
+	}
+	req.Header.Set(gitlabTokenHeader, g.Token)
+	client := g.Client
+	if client == nil {
+		client = &http.Client{Timeout: 30 * time.Second}
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("gitlab todos: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 120))
+		return nil, fmt.Errorf("gitlab todos: HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+	var todos []gitlabTodo
+	if err := json.NewDecoder(resp.Body).Decode(&todos); err != nil {
+		return nil, fmt.Errorf("gitlab todos: decoding: %v", err)
+	}
+	return todos, nil
+}
+
+func (g *GitLab) todoEvent(t gitlabTodo) (Event, bool) {
+	if t.TargetType != "MergeRequest" {
+		return Event{}, false
+	}
+	kind, ok := gitlabActions[t.ActionName]
+	if !ok || (kind == KindPRComment && isMe(g.Me, t.Author.Username)) {
+		return Event{}, false
+	}
+	at, _ := time.Parse(time.RFC3339, t.CreatedAt)
+	body := t.Body
+	if kind == KindCIFailed {
+		body = ""
+	}
+	return Event{
+		Key:    "gitlab:todo:" + strconv.FormatInt(t.ID, 10),
+		Source: g.Name(),
+		Kind:   kind,
+		Ref:    t.Project.PathWithNamespace + "!" + strconv.FormatInt(t.Target.IID, 10),
+		Title:  t.Target.Title,
+		Body:   gitlabTruncate(body, 200),
+		URL:    t.TargetURL,
+		Author: t.Author.Username,
+		Mine:   kind != KindReviewRequested && isMe(g.Me, t.Target.Author.Username),
+		Bot:    kind == KindPRComment && gitlabBot(t.Author.Username, t.Author.Bot),
+		State:  t.Target.State,
+		At:     at,
+	}, true
 }
 
 type gitlabMyMR struct {
@@ -224,6 +233,20 @@ func (g *GitLab) notesOnMyMRs(ctx context.Context, base, since string) ([]Event,
 		return nil, since
 	}
 	sinceAt, _ := time.Parse(time.RFC3339, since)
+	next := latestMRUpdate(mrs, sinceAt).UTC().Format(time.RFC3339Nano)
+	if since == "" {
+		return nil, next
+	}
+	var events []Event
+	for _, mr := range mrs {
+		if e, ok := g.newestNoteOn(ctx, base, mr, sinceAt); ok {
+			events = append(events, e)
+		}
+	}
+	return events, next
+}
+
+func latestMRUpdate(mrs []gitlabMyMR, sinceAt time.Time) time.Time {
 	latest := sinceAt
 	for _, mr := range mrs {
 		if at, err := time.Parse(time.RFC3339, mr.UpdatedAt); err == nil && at.After(latest) {
@@ -231,48 +254,40 @@ func (g *GitLab) notesOnMyMRs(ctx context.Context, base, since string) ([]Event,
 		}
 	}
 	if latest.IsZero() {
-		latest = time.Now()
+		return time.Now()
 	}
-	next := latest.UTC().Format(time.RFC3339Nano)
-	if since == "" {
-		return nil, next
+	return latest
+}
+
+func (g *GitLab) newestNoteOn(ctx context.Context, base string, mr gitlabMyMR, sinceAt time.Time) (Event, bool) {
+	var notes []gitlabNote
+	notesURL := fmt.Sprintf("%s/api/v4/projects/%d/merge_requests/%d/notes?sort=desc&order_by=created_at&per_page=20", base, mr.ProjectID, mr.IID)
+	if err := g.getInto(ctx, notesURL, &notes); err != nil {
+		return Event{}, false
 	}
-	var events []Event
-	for _, mr := range mrs {
-		var notes []gitlabNote
-		notesURL := fmt.Sprintf("%s/api/v4/projects/%d/merge_requests/%d/notes?sort=desc&order_by=created_at&per_page=20", base, mr.ProjectID, mr.IID)
-		if err := g.getInto(ctx, notesURL, &notes); err != nil {
+	for _, n := range notes {
+		at, _ := time.Parse(time.RFC3339, n.CreatedAt)
+		if !at.After(sinceAt) {
+			return Event{}, false
+		}
+		if n.System || isMe(g.Me, n.Author.Username) || gitlabBot(n.Author.Username, n.Author.Bot) || strings.TrimSpace(n.Body) == "" {
 			continue
 		}
-		for _, n := range notes {
-			at, _ := time.Parse(time.RFC3339, n.CreatedAt)
-			if !at.After(sinceAt) {
-				break
-			}
-			if n.System || isMe(g.Me, n.Author.Username) || gitlabBot(n.Author.Username, n.Author.Bot) || strings.TrimSpace(n.Body) == "" {
-				continue
-			}
-			ref := mr.Refs.Full
-			if ref == "" {
-				ref = gitlabRefFromURL(mr.WebURL, mr.IID)
-			}
-			events = append(events, Event{
-				Key:    "gitlab:note:" + strconv.FormatInt(n.ID, 10),
-				Source: g.Name(),
-				Kind:   KindPRComment,
-				Ref:    ref,
-				Title:  mr.Title,
-				Body:   gitlabTruncate(n.Body, 200),
-				URL:    mr.WebURL,
-				Author: n.Author.Username,
-				Mine:   true,
-				State:  mr.State,
-				At:     at,
-			})
-			break
-		}
+		return Event{
+			Key:    "gitlab:note:" + strconv.FormatInt(n.ID, 10),
+			Source: g.Name(),
+			Kind:   KindPRComment,
+			Ref:    firstOr(mr.Refs.Full, gitlabRefFromURL(mr.WebURL, mr.IID)),
+			Title:  mr.Title,
+			Body:   gitlabTruncate(n.Body, 200),
+			URL:    mr.WebURL,
+			Author: n.Author.Username,
+			Mine:   true,
+			State:  mr.State,
+			At:     at,
+		}, true
 	}
-	return events, next
+	return Event{}, false
 }
 
 func gitlabRefFromURL(webURL string, iid int64) string {
@@ -384,23 +399,25 @@ func (g *GitLab) MyReviewSince(ctx context.Context, ref string, since time.Time)
 	}
 	var out ReviewOutcome
 	for _, n := range notes {
-		if !isMe(g.Me, n.Author.Username) {
-			continue
-		}
-		if t, err := time.Parse(time.RFC3339, n.CreatedAt); err != nil || t.Before(since) {
-			continue
-		}
-		body := strings.ToLower(strings.TrimSpace(n.Body))
-		switch {
-		case n.System && strings.HasPrefix(body, "approved this merge request"):
-			out.Approved = true
-		case n.System && strings.HasPrefix(body, "requested changes"):
-			out.ChangesRequested = true
-		case !n.System:
-			out.Comments++
+		if isMe(g.Me, n.Author.Username) {
+			if t, err := time.Parse(time.RFC3339, n.CreatedAt); err == nil && !t.Before(since) {
+				countMyNote(&out, n)
+			}
 		}
 	}
 	return out, true
+}
+
+func countMyNote(out *ReviewOutcome, n gitlabNote) {
+	body := strings.ToLower(strings.TrimSpace(n.Body))
+	switch {
+	case n.System && strings.HasPrefix(body, "approved this merge request"):
+		out.Approved = true
+	case n.System && strings.HasPrefix(body, "requested changes"):
+		out.ChangesRequested = true
+	case !n.System:
+		out.Comments++
+	}
 }
 
 func (g *GitLab) getInto(ctx context.Context, endpoint string, out any) error {
@@ -429,10 +446,7 @@ func (g *GitLab) PullStatus(ctx context.Context, ref string) (PullStatus, bool) 
 	if !ok || g.Token == "" {
 		return PullStatus{}, false
 	}
-	base := g.URL
-	if base == "" {
-		base = gitlabDefaultBase
-	}
+	base := firstOr(g.URL, gitlabDefaultBase)
 	var mr struct {
 		State        string                          `json:"state"`
 		Draft        bool                            `json:"draft"`
@@ -443,45 +457,51 @@ func (g *GitLab) PullStatus(ctx context.Context, ref string) (PullStatus, bool) 
 	if err := g.getInto(ctx, endpoint, &mr); err != nil {
 		return PullStatus{}, false
 	}
-	out := PullStatus{State: mr.State, At: time.Now(), Mine: g.Me != "" && isMe(g.Me, mr.Author.Username)}
-	if mr.State == "opened" {
-		out.State = "open"
-	}
-	if mr.Draft && out.State == "open" {
-		out.State = "draft"
-	}
+	out := PullStatus{State: gitlabMRState(mr.State, mr.Draft), At: time.Now(), Mine: g.Me != "" && isMe(g.Me, mr.Author.Username)}
 	if out.State != "open" && out.State != "draft" {
 		return out, true
 	}
 	out.Checks = "none"
 	if mr.HeadPipeline != nil {
-		switch mr.HeadPipeline.Status {
-		case "success":
-			out.Checks = "passing"
-		case "failed":
-			out.Checks = "failing"
-		case "running", "pending", "created", "waiting_for_resource", "preparing", "scheduled":
-			out.Checks = "pending"
-		}
+		out.Checks = firstOr(gitlabPipelineChecks[mr.HeadPipeline.Status], out.Checks)
 	}
+	g.addApprovals(ctx, endpoint, &out)
+	return out, true
+}
+
+var gitlabPipelineChecks = map[string]string{
+	"success": "passing", "failed": "failing",
+	"running": "pending", "pending": "pending", "created": "pending", "waiting_for_resource": "pending", "preparing": "pending", "scheduled": "pending",
+}
+
+func gitlabMRState(state string, draft bool) string {
+	if state == "opened" {
+		state = "open"
+	}
+	if draft && state == "open" {
+		return "draft"
+	}
+	return state
+}
+
+func (g *GitLab) addApprovals(ctx context.Context, endpoint string, out *PullStatus) {
 	var approvals struct {
 		Approved   bool                                  `json:"approved"`
 		ApprovedBy []gitLabPullStatusApprovalsApprovedBy `json:"approved_by"`
 	}
-	if err := g.getInto(ctx, endpoint+"/approvals", &approvals); err == nil {
-		if approvals.Approved || len(approvals.ApprovedBy) > 0 {
-			out.Review = "approved"
-		} else {
-			out.Review = "pending"
-		}
-		for _, a := range approvals.ApprovedBy {
-			if isMe(g.Me, a.User.Username) {
-				// GitLab gives an approval no time: seen now is when it counts from.
-				out.MyReviewAt = out.At
-			}
+	if err := g.getInto(ctx, endpoint+"/approvals", &approvals); err != nil {
+		return
+	}
+	out.Review = "pending"
+	if approvals.Approved || len(approvals.ApprovedBy) > 0 {
+		out.Review = "approved"
+	}
+	for _, a := range approvals.ApprovedBy {
+		if isMe(g.Me, a.User.Username) {
+			// GitLab gives an approval no time: seen now is when it counts from.
+			out.MyReviewAt = out.At
 		}
 	}
-	return out, true
 }
 
 type gitLabPullStatusMrHeadPipeline struct {

@@ -57,39 +57,63 @@ func LeftFor(output string) []LeftItem {
 	var out []LeftItem
 	inList := false
 	for _, line := range strings.Split(rest, "\n") {
-		if strings.TrimSpace(line) == "" {
-			if inList {
-				break
-			}
-			continue
-		}
-		if anyHeading.MatchString(line) || strings.HasPrefix(strings.TrimSpace(line), "===") {
-			break
-		}
-		m := bulletLine.FindStringSubmatch(line)
-		if m == nil {
-			if inList && strings.HasPrefix(line, "  ") {
-				continue
-			}
-			if inList {
-				break
-			}
-			if text := strings.TrimSpace(line); !nothingLeft.MatchString(strings.ReplaceAll(text, "**", "")) {
-				out = append(out, newLeft(text))
+		item, step := leftLine(line, inList)
+		if step == leftStop {
+			if item != "" {
+				out = append(out, newLeft(item))
 			}
 			break
 		}
-		inList = true
-		text := strings.TrimSpace(m[1])
-		if nothingLeft.MatchString(strings.ReplaceAll(text, "**", "")) {
+		if step == leftBullet {
+			inList = true
+		}
+		if item == "" {
 			continue
 		}
-		out = append(out, newLeft(text))
+		out = append(out, newLeft(item))
 		if len(out) == leftMax {
 			break
 		}
 	}
 	return out
+}
+
+type leftStep int
+
+const (
+	leftSkip leftStep = iota
+	leftBullet
+	leftStop
+)
+
+func leftItemText(text string) string {
+	if nothingLeft.MatchString(strings.ReplaceAll(text, "**", "")) {
+		return ""
+	}
+	return text
+}
+
+func leftLine(line string, inList bool) (string, leftStep) {
+	if strings.TrimSpace(line) == "" {
+		if inList {
+			return "", leftStop
+		}
+		return "", leftSkip
+	}
+	if anyHeading.MatchString(line) || strings.HasPrefix(strings.TrimSpace(line), "===") {
+		return "", leftStop
+	}
+	m := bulletLine.FindStringSubmatch(line)
+	if m != nil {
+		return leftItemText(strings.TrimSpace(m[1])), leftBullet
+	}
+	if inList && strings.HasPrefix(line, "  ") {
+		return "", leftSkip
+	}
+	if inList {
+		return "", leftStop
+	}
+	return leftItemText(strings.TrimSpace(line)), leftStop
 }
 
 func newLeft(text string) LeftItem {
@@ -170,28 +194,32 @@ func (l *FixLog) SweepLeft(pulls map[string]PullStatus, now time.Time) int {
 		if !r.HasOpenLeft() {
 			continue
 		}
-		merged, at, settled := pullsSettled(*r, pulls)
-		if !settled {
-			continue
-		}
-		why := "closed"
-		if merged {
-			why = "merged"
-		}
-		for j := range r.Left {
-			item := &r.Left[j]
-			if !item.DoneAt.IsZero() {
-				continue
-			}
-			if merged && followUpWords.MatchString(item.Text) && now.Sub(r.FinishedAt) < leftFollowUpKeep {
-				continue
-			}
-			item.DoneAt, item.DoneBy = at, why
-			ticked++
+		if merged, at, settled := pullsSettled(*r, pulls); settled {
+			ticked += tickSettledLeft(r, merged, at, now)
 		}
 	}
 	if ticked > 0 {
 		_ = l.save()
+	}
+	return ticked
+}
+
+func tickSettledLeft(r *FixRecord, merged bool, at, now time.Time) int {
+	why := "closed"
+	if merged {
+		why = "merged"
+	}
+	ticked := 0
+	for j := range r.Left {
+		item := &r.Left[j]
+		if !item.DoneAt.IsZero() {
+			continue
+		}
+		if merged && followUpWords.MatchString(item.Text) && now.Sub(r.FinishedAt) < leftFollowUpKeep {
+			continue
+		}
+		item.DoneAt, item.DoneBy = at, why
+		ticked++
 	}
 	return ticked
 }
@@ -248,23 +276,28 @@ func LeftRows(records []FixRecord, ticked map[string]LeftTick, since, now time.T
 		if len(r.Left) == 0 || now.Sub(r.FinishedAt) > leftKeepOpen {
 			continue
 		}
-		url := r.URL
-		if len(r.PRs) > 0 {
-			url = r.PRs[0]
+		out = append(out, leftRowsOf(r, ticked, since)...)
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].At.After(out[j].At) })
+	return out
+}
+
+func leftRowsOf(r FixRecord, ticked map[string]LeftTick, since time.Time) []LeftRow {
+	url := r.URL
+	if len(r.PRs) > 0 {
+		url = r.PRs[0]
+	}
+	var out []LeftRow
+	for i, item := range r.Left {
+		row := LeftRow{ID: leftID(r.Key, i), Workspace: r.Workspace, Ref: r.Ref, Title: r.Title, URL: url,
+			Text: item.Text, Kind: item.Kind, At: r.FinishedAt, DoneAt: item.DoneAt, DoneBy: item.DoneBy}
+		if t, ok := ticked[row.ID]; ok && row.DoneAt.IsZero() {
+			row.DoneAt, row.DoneBy = t.At, t.By
 		}
-		for i, item := range r.Left {
-			row := LeftRow{ID: leftID(r.Key, i), Workspace: r.Workspace, Ref: r.Ref, Title: r.Title, URL: url,
-				Text: item.Text, Kind: item.Kind, At: r.FinishedAt, DoneAt: item.DoneAt, DoneBy: item.DoneBy}
-			if t, ok := ticked[row.ID]; ok && row.DoneAt.IsZero() {
-				row.DoneAt, row.DoneBy = t.At, t.By
-			}
-			if !row.DoneAt.IsZero() && row.DoneAt.Before(since) {
-				continue
-			}
+		if row.DoneAt.IsZero() || !row.DoneAt.Before(since) {
 			out = append(out, row)
 		}
 	}
-	sort.SliceStable(out, func(i, j int) bool { return out[i].At.After(out[j].At) })
 	return out
 }
 
@@ -354,36 +387,10 @@ func (l *FixLog) Backfill(logOf func(key string) string, pulls map[string]PullSt
 		if !r.Done() || r.Error != "" {
 			continue
 		}
-		if r.Said == "" && !strings.HasPrefix(r.Ref, "routine/") {
-			if said := OutcomeOf(Kind(r.Kind), LastRunOf(logOf(r.Key))); said != "" {
-				r.Said = said
-				filled++
-			}
+		if backfillSaid(r, logOf) {
+			filled++
 		}
-		if len(r.Left) > 0 || len(r.Gaps) > 0 || now.Sub(r.FinishedAt) > leftKeepOpen {
-			continue
-		}
-		run := LastRunOf(logOf(r.Key))
-		if run == "" {
-			continue
-		}
-		r.Left, r.Gaps = LeftFor(run), GapsIn(run)
-		for _, link := range append([]string{r.URL}, r.PRs...) {
-			p, ok := pulls[PullRef(link)]
-			if !ok {
-				continue
-			}
-			for j := range r.Left {
-				item := &r.Left[j]
-				switch {
-				case p.State == "merged" && (item.Kind == LeftCI || item.Kind == LeftMerge):
-					item.DoneAt, item.DoneBy = p.At, "merged"
-				case p.Checks == "passing" && item.Kind == LeftCI:
-					item.DoneAt, item.DoneBy = p.At, "checks ✓"
-				}
-			}
-		}
-		if len(r.Left) > 0 || len(r.Gaps) > 0 {
+		if backfillLeft(r, logOf, pulls, now) {
 			filled++
 		}
 	}
@@ -391,4 +398,42 @@ func (l *FixLog) Backfill(logOf func(key string) string, pulls map[string]PullSt
 		_ = l.save()
 	}
 	return filled
+}
+
+func backfillSaid(r *FixRecord, logOf func(key string) string) bool {
+	if r.Said != "" || strings.HasPrefix(r.Ref, "routine/") {
+		return false
+	}
+	said := OutcomeOf(Kind(r.Kind), LastRunOf(logOf(r.Key)))
+	r.Said = firstOr(r.Said, said)
+	return said != ""
+}
+
+func backfillLeft(r *FixRecord, logOf func(key string) string, pulls map[string]PullStatus, now time.Time) bool {
+	if len(r.Left) > 0 || len(r.Gaps) > 0 || now.Sub(r.FinishedAt) > leftKeepOpen {
+		return false
+	}
+	run := LastRunOf(logOf(r.Key))
+	if run == "" {
+		return false
+	}
+	r.Left, r.Gaps = LeftFor(run), GapsIn(run)
+	for _, link := range append([]string{r.URL}, r.PRs...) {
+		if p, ok := pulls[PullRef(link)]; ok {
+			tickLeftByPull(r.Left, p)
+		}
+	}
+	return len(r.Left) > 0 || len(r.Gaps) > 0
+}
+
+func tickLeftByPull(left []LeftItem, p PullStatus) {
+	for j := range left {
+		item := &left[j]
+		switch {
+		case p.State == "merged" && (item.Kind == LeftCI || item.Kind == LeftMerge):
+			item.DoneAt, item.DoneBy = p.At, "merged"
+		case p.Checks == "passing" && item.Kind == LeftCI:
+			item.DoneAt, item.DoneBy = p.At, "checks ✓"
+		}
+	}
 }

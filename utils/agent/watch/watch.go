@@ -98,103 +98,119 @@ type Rules struct {
 
 func (r Rules) Match(e Event) bool { return r.Why(e) == "" }
 
+var unwatchedKindWhy = map[Kind]string{
+	KindIssueComment:    "issue comments need --comments",
+	KindPRComment:       "PR reviews and comments need --prs",
+	KindPRReview:        "PR reviews and comments need --prs",
+	KindCIFailed:        "red builds need --ci",
+	KindReviewRequested: "review requests need --reviews",
+	KindChatMention:     "chat mentions need --mentions",
+	KindErrorNew:        "errors need --errors",
+	KindChatMessage:     "a channel message needs that channel in --channel",
+}
+
 func (r Rules) Why(e Event) string {
 	if !r.Enabled {
 		return "watch is off here"
 	}
 	if !r.matchesKind(e.Kind) && !r.underMyReviewPost(e) {
-		switch e.Kind {
-		case KindIssueComment:
-			return "issue comments need --comments"
-		case KindPRComment, KindPRReview:
-			return "PR reviews and comments need --prs"
-		case KindCIFailed:
-			return "red builds need --ci"
-		case KindReviewRequested:
-			return "review requests need --reviews"
-		case KindChatMention:
-			return "chat mentions need --mentions"
-		case KindErrorNew:
-			return "errors need --errors"
-		case KindChatMessage:
-			return "a channel message needs that channel in --channel"
+		if why, ok := unwatchedKindWhy[e.Kind]; ok {
+			return why
 		}
 		return "kind " + string(e.Kind) + " is not watched"
 	}
 	switch e.Kind {
 	case KindReviewRequested:
-		if e.Self {
-			return "I posted it - my own pull requests are not mine to review"
-		}
-		if len(r.States) == 0 {
-			if over := finishedState(e.State); over != "" {
-				return itIsPrefix + over + " - there is nothing to review"
-			}
-		}
+		return r.reviewRequestWhy(e)
 	case KindChatMention, KindChatMessage:
-		if e.Self {
-			return "I wrote it"
-		}
-		if e.Bot && !r.Bots {
-			return "it is from a bot; --bots makes those count"
-		}
-		if e.Kind == KindChatMessage && !containsFold(r.Channels, e.State) {
-			return fmt.Sprintf("%s is not a channel this workspace listens to", orNone([]string{e.State}))
-		}
-		if len(r.From) > 0 && !matchesPerson(e.Author, r.From) {
-			return fmt.Sprintf("it is from %s, and you are waiting on %s",
-				orNone([]string{e.Author}), strings.Join(r.From, ", "))
-		}
+		return r.chatWhy(e)
 	case KindCIFailed:
 		if !e.Mine {
 			return "not on something of mine"
 		}
 	case KindPRComment, KindPRReview, KindIssueComment:
-		if !e.Mine {
-			return "not on something of mine"
-		}
-		if len(r.States) == 0 {
-			if over := finishedState(e.State); over != "" {
-				return itIsPrefix + over + " - the comment is not work"
-			}
-		}
-		if e.Kind != KindPRReview && IsAcknowledgement(e.Body) {
-			return "it is a thank-you or a sign-off, not a request"
-		}
-		if approvingVerdict.MatchString(e.Body) {
-			return "it approves - nothing to change"
-		}
-		if e.Kind == KindPRReview && strings.EqualFold(e.Review, "approved") && !mustWords.MatchString(notMust.ReplaceAllString(e.Body, "")) {
-			return "it approves - notes on an approval are optional; an inline comment still counts"
-		}
-		if e.Bot && !r.Bots {
-			return "it is from a bot; --bots makes those count"
-		}
-		if len(r.From) > 0 && !matchesPerson(e.Author, r.From) {
-			return fmt.Sprintf("it is from %s, and you are waiting on %s",
-				orNone([]string{e.Author}), strings.Join(r.From, ", "))
-		}
+		return r.feedbackWhy(e)
 	case KindIssueNew:
-		if dead := finishedState(e.State); dead != "" {
-			if len(r.States) == 0 {
-				return itIsPrefix + dead + " - nobody is going to act on it"
-			}
+		return r.issueWhy(e)
+	}
+	return ""
+}
+
+func (r Rules) reviewRequestWhy(e Event) string {
+	if e.Self {
+		return "I posted it - my own pull requests are not mine to review"
+	}
+	if len(r.States) == 0 {
+		if over := finishedState(e.State); over != "" {
+			return itIsPrefix + over + " - there is nothing to review"
 		}
-		if len(r.States) == 0 && InFlight(e.State) {
-			return "it is in " + strings.TrimSpace(e.State) + " - someone is on it (--states names columns to take anyway)"
+	}
+	return ""
+}
+
+func (r Rules) senderWhy(e Event) string {
+	if e.Bot && !r.Bots {
+		return "it is from a bot; --bots makes those count"
+	}
+	if len(r.From) > 0 && !matchesPerson(e.Author, r.From) {
+		return fmt.Sprintf("it is from %s, and you are waiting on %s",
+			orNone([]string{e.Author}), strings.Join(r.From, ", "))
+	}
+	return ""
+}
+
+func (r Rules) chatWhy(e Event) string {
+	if e.Self {
+		return "I wrote it"
+	}
+	if e.Bot && !r.Bots {
+		return r.senderWhy(e)
+	}
+	if e.Kind == KindChatMessage && !containsFold(r.Channels, e.State) {
+		return fmt.Sprintf("%s is not a channel this workspace listens to", orNone([]string{e.State}))
+	}
+	return r.senderWhy(e)
+}
+
+func (r Rules) feedbackWhy(e Event) string {
+	if !e.Mine {
+		return "not on something of mine"
+	}
+	if len(r.States) == 0 {
+		if over := finishedState(e.State); over != "" {
+			return itIsPrefix + over + " - the comment is not work"
 		}
-		if r.Assignee != "any" && !e.Mine {
-			return "not assigned to me (--assignee any takes every issue)"
-		}
-		if len(e.Subtasks) > 0 {
-			return "its open subtasks are the work: " + strings.Join(e.Subtasks, ", ")
-		}
-		if len(r.Labels) > 0 && !anyFold(e.Labels, r.Labels) {
-			return fmt.Sprintf("none of the labels %s is on it (it has %s)", strings.Join(r.Labels, ", "), orNone(e.Labels))
-		}
-		if len(r.States) > 0 && !containsFold(r.States, e.State) {
-			return fmt.Sprintf("state %q is not one of %s", e.State, strings.Join(r.States, ", "))
-		}
+	}
+	if e.Kind != KindPRReview && IsAcknowledgement(e.Body) {
+		return "it is a thank-you or a sign-off, not a request"
+	}
+	if approvingVerdict.MatchString(e.Body) {
+		return "it approves - nothing to change"
+	}
+	if e.Kind == KindPRReview && strings.EqualFold(e.Review, "approved") && !mustWords.MatchString(notMust.ReplaceAllString(e.Body, "")) {
+		return "it approves - notes on an approval are optional; an inline comment still counts"
+	}
+	return r.senderWhy(e)
+}
+
+func (r Rules) issueWhy(e Event) string {
+	if dead := finishedState(e.State); dead != "" && len(r.States) == 0 {
+		return itIsPrefix + dead + " - nobody is going to act on it"
+	}
+	if len(r.States) == 0 && InFlight(e.State) {
+		return "it is in " + strings.TrimSpace(e.State) + " - someone is on it (--states names columns to take anyway)"
+	}
+	if r.Assignee != "any" && !e.Mine {
+		return "not assigned to me (--assignee any takes every issue)"
+	}
+	if len(e.Subtasks) > 0 {
+		return "its open subtasks are the work: " + strings.Join(e.Subtasks, ", ")
+	}
+	if len(r.Labels) > 0 && !anyFold(e.Labels, r.Labels) {
+		return fmt.Sprintf("none of the labels %s is on it (it has %s)", strings.Join(r.Labels, ", "), orNone(e.Labels))
+	}
+	if len(r.States) > 0 && !containsFold(r.States, e.State) {
+		return fmt.Sprintf("state %q is not one of %s", e.State, strings.Join(r.States, ", "))
 	}
 	return ""
 }
@@ -601,41 +617,51 @@ type Watch struct {
 func (w *Watch) Once(ctx context.Context, now time.Time) int {
 	handed := 0
 	for _, src := range w.Sources {
-		before := w.State.cursor(w.Workspace, src.Name())
-		events, cursor, err := src.Poll(ctx, before)
-		w.State.setCursor(w.Workspace, src.Name(), cursor, now, err)
-		if err != nil {
-			if !IsNetworkError(err) {
-				w.logf("watch %s/%s: %v", w.Workspace, src.Name(), err)
-				continue
-			}
-			if !w.unreachable[src.Name()] {
-				w.logf("watch %s/%s: cannot reach it, trying again quietly: %v", w.Workspace, src.Name(), err)
-			}
-			w.markUnreachable(src.Name(), true)
-			var dns *net.DNSError
-			if errors.As(err, &dns) {
-				break
-			}
-			continue
-		}
-		if w.unreachable[src.Name()] {
-			w.logf("watch %s/%s: reachable again", w.Workspace, src.Name())
-			w.markUnreachable(src.Name(), false)
-		}
-		if len(before) == 0 {
-			if len(events) > 0 {
-				w.logf("watch %s/%s: bookmark set, %d older item(s) skipped", w.Workspace, src.Name(), len(events))
-			}
-			continue
-		}
-		for _, e := range events {
-			if w.Handle(ctx, e) {
-				handed++
-			}
+		n, stop := w.pollOnce(ctx, src, now)
+		handed += n
+		if stop {
+			break
 		}
 	}
 	return handed
+}
+
+func (w *Watch) pollOnce(ctx context.Context, src Source, now time.Time) (handed int, stop bool) {
+	before := w.State.cursor(w.Workspace, src.Name())
+	events, cursor, err := src.Poll(ctx, before)
+	w.State.setCursor(w.Workspace, src.Name(), cursor, now, err)
+	if err != nil {
+		return 0, w.pollFailed(src.Name(), err)
+	}
+	if w.unreachable[src.Name()] {
+		w.logf("watch %s/%s: reachable again", w.Workspace, src.Name())
+		w.markUnreachable(src.Name(), false)
+	}
+	if len(before) == 0 {
+		if len(events) > 0 {
+			w.logf("watch %s/%s: bookmark set, %d older item(s) skipped", w.Workspace, src.Name(), len(events))
+		}
+		return 0, false
+	}
+	for _, e := range events {
+		if w.Handle(ctx, e) {
+			handed++
+		}
+	}
+	return handed, false
+}
+
+func (w *Watch) pollFailed(name string, err error) bool {
+	if !IsNetworkError(err) {
+		w.logf("watch %s/%s: %v", w.Workspace, name, err)
+		return false
+	}
+	if !w.unreachable[name] {
+		w.logf("watch %s/%s: cannot reach it, trying again quietly: %v", w.Workspace, name, err)
+	}
+	w.markUnreachable(name, true)
+	var dns *net.DNSError
+	return errors.As(err, &dns)
 }
 
 func (w *Watch) markUnreachable(source string, down bool) {

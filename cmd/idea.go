@@ -225,29 +225,11 @@ func anchorAt(doc, quote, prefix, suffix string) *idea.Anchor {
 	}
 	best, bestScore := -1, -1
 	for at := strings.Index(doc, quote); at >= 0; {
-		score := 0
-		if p := tail(prefix, 20); p != "" {
-			if strings.HasSuffix(doc[:at], p) {
-				score += 2
-			} else if strings.Contains(doc[max(0, at-40):at], tail(p, 8)) {
-				score++
-			}
-		}
-		if s := head(suffix, 20); s != "" {
-			if strings.HasPrefix(doc[at+len(quote):], s) {
-				score += 2
-			} else if strings.Contains(doc[at+len(quote):min(len(doc), at+len(quote)+40)], head(s, 8)) {
-				score++
-			}
-		}
-		if score > bestScore {
+		if score := anchorScore(doc, at, quote, prefix, suffix); score > bestScore {
 			best, bestScore = at, score
 		}
-		if bestScore >= 4 {
-			break
-		}
 		next := strings.Index(doc[at+1:], quote)
-		if next < 0 {
+		if bestScore >= 4 || next < 0 {
 			break
 		}
 		at += 1 + next
@@ -261,6 +243,26 @@ func anchorAt(doc, quote, prefix, suffix string) *idea.Anchor {
 		a.Suffix = doc[end:min(len(doc), end+40)]
 	}
 	return a
+}
+
+func anchorScore(doc string, at int, quote, prefix, suffix string) int {
+	score := 0
+	if p := tail(prefix, 20); p != "" {
+		if strings.HasSuffix(doc[:at], p) {
+			score += 2
+		} else if strings.Contains(doc[max(0, at-40):at], tail(p, 8)) {
+			score++
+		}
+	}
+	if s := head(suffix, 20); s != "" {
+		end := at + len(quote)
+		if strings.HasPrefix(doc[end:], s) {
+			score += 2
+		} else if strings.Contains(doc[end:min(len(doc), end+40)], head(s, 8)) {
+			score++
+		}
+	}
+	return score
 }
 
 func tail(s string, n int) string {
@@ -463,18 +465,46 @@ func answerIdea(dir, slug, model string) (bool, error) {
 		model = firstNonEmpty(id.Meta.Model, ideaModel)
 	}
 	_, _ = idea.Update(dir, slug, func(id *idea.Idea) error { id.Meta.Answering = true; return nil })
-	clearAnswering := func() {
+	ans, err := askIdeaAgent(id, waiting, model)
+	if err != nil {
 		_, _ = idea.Update(dir, slug, func(id *idea.Idea) error { id.Meta.Answering = false; return nil })
+		return true, err
 	}
+	var result ideaAnswerResult
+	seen := id.Doc
+	updated, err := idea.Update(dir, slug, func(id *idea.Idea) error {
+		result = applyIdeaAnswer(id, ideaAnswerInput{ans: ans, waiting: waiting, seen: seen, now: time.Now()})
+		return nil
+	})
+	if err != nil {
+		return true, err
+	}
+	what := "answered"
+	if result.changed {
+		what = "updated the page and answered"
+	}
+	ideaNotify(dir, updated.Meta, fmt.Sprintf("%s %d comment(s)", what, len(result.told)), firstReplyLine(updated, ans.Answers))
+	if notes := mockNotes(waiting); notes != "" && updated.Meta.Mock != "" {
+		scheduleMock(dir, slug, notes)
+	}
+	nudgeDaemon(dir)
+	return true, nil
+}
+
+func commentIDs(comments []idea.Comment) []string {
+	var ids []string
+	for _, c := range comments {
+		ids = append(ids, strconv.Itoa(c.ID))
+	}
+	return ids
+}
+
+func askIdeaAgent(id *idea.Idea, waiting []idea.Comment, model string) (ideaCommentsAnswer, error) {
 	runIn := ideaWorkspaceRoot(id.Meta.Workspace)
 	if runIn == "" {
 		runIn = mustCwd()
 	}
-	var ids []string
-	for _, c := range waiting {
-		ids = append(ids, strconv.Itoa(c.ID))
-	}
-	prompt := fmt.Sprintf("# The page\n\n%s\n\n# The split into tickets\n\n%s\n# Comments waiting on you: %s\n\n%s", id.Doc, ticketsText(id.Meta.Tickets), strings.Join(ids, ", "), idea.Transcript(waiting))
+	prompt := fmt.Sprintf("# The page\n\n%s\n\n# The split into tickets\n\n%s\n# Comments waiting on you: %s\n\n%s", id.Doc, ticketsText(id.Meta.Tickets), strings.Join(commentIDs(waiting), ", "), idea.Transcript(waiting))
 	if others := otherComments(id, waiting); others != "" {
 		prompt += "# Earlier comments, for context (do not answer these)\n\n" + others
 	}
@@ -485,72 +515,73 @@ func answerIdea(dir, slug, model string) (bool, error) {
 	defer cancel()
 	out, err := runIdeaPrint(ctx, runIn, model, ideaAnswerSoul, prompt)
 	if err != nil {
-		clearAnswering()
-		return true, err
+		return ideaCommentsAnswer{}, err
 	}
-	ans, err := parseIdeaComments(out)
-	if err != nil {
-		clearAnswering()
-		return true, err
+	return parseIdeaComments(out)
+}
+
+type ideaAnswerInput struct {
+	ans     ideaCommentsAnswer
+	waiting []idea.Comment
+	seen    string
+	now     time.Time
+}
+
+type ideaAnswerResult struct {
+	told    []string
+	changed bool
+}
+
+func applyIdeaAnswer(id *idea.Idea, in ideaAnswerInput) ideaAnswerResult {
+	id.Meta.Answering = false
+	id.ChangeBy, id.ChangeNote = idea.Agent, "answered comment(s) "+strings.Join(commentIDs(in.waiting), ", ")
+	changed, stale := applyPageEdit(id, in.ans.Page, in.seen, in.now)
+	answered, told := replyToAnswers(id, in.ans.Answers, changed, stale, in.now)
+	for _, c := range in.waiting {
+		if !answered[c.ID] {
+			_, _ = id.Reply(c.ID, idea.Agent, "I read this but had nothing to add. Say more if you want a change.", false, nil, nil, in.now)
+		}
 	}
-	now := time.Now()
+	for _, p := range in.ans.Proposals {
+		if strings.TrimSpace(p.Text) != "" {
+			_, _ = id.AddComment(idea.KindProposal, idea.Agent, p.Text, anchorFor(id.Doc, p.Quote), nil, nil, in.now)
+		}
+	}
+	if split := ticketsFrom(in.ans.Tickets); len(split) > 0 {
+		id.Meta.Tickets = keepRefs(id.Meta.Tickets, split)
+	}
+	return ideaAnswerResult{told: told, changed: changed}
+}
+
+// applyPageEdit: the page the agent rewrote is the one it read; an edit made
+// meanwhile (an editor, the browser, another tool) wins over it.
+func applyPageEdit(id *idea.Idea, page, seen string, now time.Time) (changed, stale bool) {
+	if page == "" || page == strings.TrimSpace(id.Doc) {
+		return false, false
+	}
+	if id.Doc != seen {
+		return false, true
+	}
+	return id.SetDoc(page+"\n", now) == nil, false
+}
+
+func replyToAnswers(id *idea.Idea, answers []ideaReply, changed, stale bool, now time.Time) (map[int]bool, []string) {
+	answered := map[int]bool{}
 	var told []string
-	changed, stale := false, false
-	seen := id.Doc
-	updated, err := idea.Update(dir, slug, func(id *idea.Idea) error {
-		id.Meta.Answering = false
-		id.ChangeBy, id.ChangeNote = idea.Agent, "answered comment(s) "+strings.Join(ids, ", ")
-		if ans.Page != "" && ans.Page != strings.TrimSpace(id.Doc) {
-			// The page the agent rewrote is the one it read; an edit made
-			// meanwhile (an editor, the browser, another tool) wins over it.
-			if id.Doc != seen {
-				stale = true
-			} else if err := id.SetDoc(ans.Page+"\n", now); err == nil {
-				changed = true
-			}
+	for _, a := range answers {
+		if strings.TrimSpace(a.Reply) == "" {
+			continue
 		}
-		answered := map[int]bool{}
-		for _, a := range ans.Answers {
-			if strings.TrimSpace(a.Reply) == "" {
-				continue
-			}
-			reply := a.Reply
-			if stale && a.Changed {
-				reply += "\n\n(The page changed while I was writing, so I did not apply my edit; say so again and I will redo it on the new page.)"
-			}
-			if _, err := id.Reply(a.ID, idea.Agent, reply, a.Changed && changed, nil, nil, now); err == nil {
-				answered[a.ID] = true
-				told = append(told, fmt.Sprintf("%d", a.ID))
-			}
+		reply := a.Reply
+		if stale && a.Changed {
+			reply += "\n\n(The page changed while I was writing, so I did not apply my edit; say so again and I will redo it on the new page.)"
 		}
-		for _, c := range waiting {
-			if !answered[c.ID] {
-				_, _ = id.Reply(c.ID, idea.Agent, "I read this but had nothing to add. Say more if you want a change.", false, nil, nil, now)
-			}
+		if _, err := id.Reply(a.ID, idea.Agent, reply, a.Changed && changed, nil, nil, now); err == nil {
+			answered[a.ID] = true
+			told = append(told, fmt.Sprintf("%d", a.ID))
 		}
-		for _, p := range ans.Proposals {
-			if strings.TrimSpace(p.Text) != "" {
-				_, _ = id.AddComment(idea.KindProposal, idea.Agent, p.Text, anchorFor(id.Doc, p.Quote), nil, nil, now)
-			}
-		}
-		if split := ticketsFrom(ans.Tickets); len(split) > 0 {
-			id.Meta.Tickets = keepRefs(id.Meta.Tickets, split)
-		}
-		return nil
-	})
-	if err != nil {
-		return true, err
 	}
-	what := "answered"
-	if changed {
-		what = "updated the page and answered"
-	}
-	ideaNotify(dir, updated.Meta, fmt.Sprintf("%s %d comment(s)", what, len(told)), firstReplyLine(updated, ans.Answers))
-	if notes := mockNotes(waiting); notes != "" && updated.Meta.Mock != "" {
-		scheduleMock(dir, slug, notes)
-	}
-	nudgeDaemon(dir)
-	return true, nil
+	return answered, told
 }
 
 func ticketsText(ts []idea.Ticket) string {
@@ -617,9 +648,7 @@ func buildIdea(dir, slug, ws, model string, slots int, run bool) (ideaBuild, err
 	if err != nil {
 		return res, err
 	}
-	if ws == "" {
-		ws = id.Meta.Workspace
-	}
+	ws = firstNonEmpty(ws, id.Meta.Workspace)
 	if ws == "" {
 		return res, fmt.Errorf("say where it is built: corgi idea build %s --workspace <id> (corgi agent init in that folder first)", slug)
 	}
@@ -627,32 +656,62 @@ func buildIdea(dir, slug, ws, model string, slots int, run bool) (ideaBuild, err
 	if err != nil {
 		return res, err
 	}
-	if model == "" {
-		model = firstNonEmpty(id.Meta.Model, planModel)
+	model = firstNonEmpty(model, id.Meta.Model, planModel)
+	slots = max(slots, 1)
+	ans, err := ideaSplit(id, root, model)
+	if err != nil {
+		return res, err
 	}
-	if slots < 1 {
-		slots = 1
+	now := time.Now()
+	made, err := ideaTasks(dir, slug, id, ws, ans, now)
+	if err != nil {
+		return res, err
 	}
+	plans := watch.LoadPlans(dir)
+	p, err := plans.Add(watch.Plan{Goal: firstNonEmpty(id.Meta.Name, id.Meta.Title) + ": " + id.Meta.Title, Summary: ans.Summary, Workspace: ws, Model: model, By: "idea", Tasks: planTasksFor(ans.Tasks, made), Slots: slots}, now)
+	if err != nil {
+		return res, err
+	}
+	writePlanFile(dir, p, made)
+	res.Plan, res.Tasks = p, made
+	if run {
+		startIdeaPlan(dir, ws, slots, plans, &res, now)
+	}
+	note := buildNote(res, slots)
+	_, err = idea.Update(dir, slug, func(id *idea.Idea) error {
+		markIdeaBuilding(id, ws, res.Plan.ID, made, ans, note, now)
+		return nil
+	})
+	if err != nil {
+		return res, err
+	}
+	nudgeDaemon(dir)
+	ideaNotify(dir, id.Meta, fmt.Sprintf("building: %d task(s) as %s", len(made), res.Plan.Ref()), res.Why)
+	return res, nil
+}
+
+// ideaSplit is the page's own split when it has one: what people read and
+// amended, not a fresh guess.
+func ideaSplit(id *idea.Idea, root, model string) (plannerAnswer, error) {
 	var ans plannerAnswer
 	if len(id.Meta.Tickets) > 0 {
-		// The page's own split: what people read and amended, not a fresh guess.
 		for _, t := range id.Meta.Tickets {
 			ans.Tasks = append(ans.Tasks, plannerTask{Title: t.Title, Body: t.Body, After: t.After})
 		}
 		ans.Summary = id.Meta.Summary
-	} else {
-		prompt := fmt.Sprintf("Goal: build what this page describes.\n\nAt most 8 tasks.\n\n%s\n\n--- The page ---\n%s", repoPicture(root), id.Doc)
-		ctx, cancel := context.WithTimeout(context.Background(), ideaTimeout)
-		defer cancel()
-		out, err := runIdeaPrint(ctx, root, model, planSoul, prompt)
-		if err != nil {
-			return res, err
-		}
-		if ans, err = parsePlannerAnswer(out, 8); err != nil {
-			return res, err
-		}
+		return ans, nil
 	}
-	now := time.Now()
+	prompt := fmt.Sprintf("Goal: build what this page describes.\n\nAt most 8 tasks.\n\n%s\n\n--- The page ---\n%s", repoPicture(root), id.Doc)
+	ctx, cancel := context.WithTimeout(context.Background(), ideaTimeout)
+	defer cancel()
+	out, err := runIdeaPrint(ctx, root, model, planSoul, prompt)
+	if err != nil {
+		return ans, err
+	}
+	return parsePlannerAnswer(out, 8)
+}
+
+func ideaTasks(dir, slug string, id *idea.Idea, ws string, ans plannerAnswer, now time.Time) ([]watch.Task, error) {
 	tasks := watch.LoadTasks(dir)
 	for _, t := range tasks.ByIdea(slug) {
 		if t.State == "Todo" {
@@ -663,74 +722,70 @@ func buildIdea(dir, slug, ws, model string, slots int, run bool) (ideaBuild, err
 	for _, pt := range ans.Tasks {
 		t, err := tasks.Add(pt.Title, taskBodyFor(id.Meta, pt.Body), ws, "idea", now)
 		if err != nil {
-			return res, err
+			return nil, err
 		}
 		t, _ = tasks.Tag(t.Key(), slug, id.Meta.Tags, now)
 		made = append(made, t)
 	}
+	return made, nil
+}
+
+func planTasksFor(split []plannerTask, made []watch.Task) []watch.PlanTask {
 	var planTasks []watch.PlanTask
-	for i, pt := range ans.Tasks {
+	for i, pt := range split {
 		var after []int
 		for _, n := range pt.After {
 			after = append(after, made[n-1].ID)
 		}
 		planTasks = append(planTasks, watch.PlanTask{ID: made[i].ID, After: after})
 	}
-	plans := watch.LoadPlans(dir)
-	p, err := plans.Add(watch.Plan{Goal: firstNonEmpty(id.Meta.Name, id.Meta.Title) + ": " + id.Meta.Title, Summary: ans.Summary, Workspace: ws, Model: model, By: "idea", Tasks: planTasks, Slots: slots}, now)
-	if err != nil {
-		return res, err
+	return planTasks
+}
+
+func startIdeaPlan(dir, ws string, slots int, plans *watch.PlanLog, res *ideaBuild, now time.Time) {
+	if why := planWatchReady(dir, ws, slots); why != "" {
+		res.Why = why
+		return
 	}
-	writePlanFile(dir, p, made)
-	res.Plan, res.Tasks = p, made
-	if run {
-		if why := planWatchReady(dir, ws, slots); why != "" {
-			res.Why = why
-		} else {
-			p, _ = plans.SetState(p.ID, watch.PlanRunning, now)
-			res.Plan = p
-			res.Running = nudgePlans(dir)
-			if !res.Running {
-				res.Why = "the daemon is not running - corgi agent up, then corgi agent plan run " + p.Ref()
-			}
-		}
+	res.Plan, _ = plans.SetState(res.Plan.ID, watch.PlanRunning, now)
+	res.Running = nudgePlans(dir)
+	if !res.Running {
+		res.Why = "the daemon is not running - corgi agent up, then corgi agent plan run " + res.Plan.Ref()
 	}
+}
+
+func buildNote(res ideaBuild, slots int) string {
 	var refs []string
-	for _, t := range made {
+	for _, t := range res.Tasks {
 		refs = append(refs, t.Ref()+" "+t.Title)
 	}
-	note := fmt.Sprintf("Handed to the agents as %s: %d task(s) on the board.\n%s", p.Ref(), len(made), strings.Join(refs, "\n"))
+	note := fmt.Sprintf("Handed to the agents as %s: %d task(s) on the board.\n%s", res.Plan.Ref(), len(res.Tasks), strings.Join(refs, "\n"))
 	if res.Why != "" {
-		note += "\n\nNot running yet: " + res.Why
-	} else if res.Running {
+		return note + "\n\nNot running yet: " + res.Why
+	}
+	if res.Running {
 		note += "\n\nRunning now, " + strconv.Itoa(slots) + " at a time."
 	}
-	_, err = idea.Update(dir, slug, func(id *idea.Idea) error {
-		id.Meta.Workspace = ws
-		id.Meta.Status = idea.Building
-		id.Meta.Plan = p.ID
-		id.Meta.Tasks = nil
-		for _, t := range made {
-			id.Meta.Tasks = append(id.Meta.Tasks, t.ID)
-		}
-		id.Meta.Tickets = ticketsFrom(ans.Tasks)
-		for i := range id.Meta.Tickets {
-			if i < len(made) {
-				id.Meta.Tickets[i].Ref, id.Meta.Tickets[i].Task, id.Meta.Tickets[i].State, id.Meta.Tickets[i].URL = made[i].Ref(), made[i].Ref(), made[i].State, ""
-			}
-		}
-		c, err := id.AddComment(idea.KindComment, idea.Agent, note, nil, nil, nil, now)
-		if err == nil {
-			_, _ = id.SetStatus(c.ID, idea.StatusAnswered, now)
-		}
-		return nil
-	})
-	if err != nil {
-		return res, err
+	return note
+}
+
+func markIdeaBuilding(id *idea.Idea, ws string, plan int, made []watch.Task, ans plannerAnswer, note string, now time.Time) {
+	id.Meta.Workspace = ws
+	id.Meta.Status = idea.Building
+	id.Meta.Plan = plan
+	id.Meta.Tasks = nil
+	for _, t := range made {
+		id.Meta.Tasks = append(id.Meta.Tasks, t.ID)
 	}
-	nudgeDaemon(dir)
-	ideaNotify(dir, id.Meta, fmt.Sprintf("building: %d task(s) as %s", len(made), p.Ref()), res.Why)
-	return res, nil
+	id.Meta.Tickets = ticketsFrom(ans.Tasks)
+	for i := range id.Meta.Tickets {
+		if i < len(made) {
+			id.Meta.Tickets[i].Ref, id.Meta.Tickets[i].Task, id.Meta.Tickets[i].State, id.Meta.Tickets[i].URL = made[i].Ref(), made[i].Ref(), made[i].State, ""
+		}
+	}
+	if c, err := id.AddComment(idea.KindComment, idea.Agent, note, nil, nil, nil, now); err == nil {
+		_, _ = id.SetStatus(c.ID, idea.StatusAnswered, now)
+	}
 }
 
 func ideaLink(dir string, m idea.Meta, preferLocal bool) string {
@@ -1409,73 +1464,92 @@ type ideaChanges struct {
 
 // setIdea applies the changes, checking each.
 func setIdea(dir, slug string, ch ideaChanges) (*idea.Idea, error) {
+	build, err := checkIdeaChanges(dir, slug, ch)
+	if err != nil {
+		return nil, err
+	}
+	return idea.Update(dir, slug, func(id *idea.Idea) error {
+		applyIdeaChanges(id, ch, build)
+		return nil
+	})
+}
+
+func checkIdeaChanges(dir, slug string, ch ideaChanges) (bool, error) {
 	if ch.Workspace != "" {
 		if _, err := workspaceRoot(ch.Workspace); err != nil {
-			return nil, err
+			return false, err
 		}
 	}
-	if ch.Type != "" && !idea.ValidType(ch.Type) {
-		ws := ch.Workspace
-		if ws == "" {
-			if id, err := idea.Load(dir, slug); err == nil {
-				ws = id.Meta.Workspace
-			}
-		}
-		if tpl, _ := ideaTemplate(ch.Type, ideaTemplateRoots(ws)); tpl == "" {
-			return nil, fmt.Errorf("--type is one of %s, or a team's own (corgi idea templates)", strings.Join(idea.Types, ", "))
-		}
+	if ch.Type != "" && !idea.ValidType(ch.Type) && !teamTemplateExists(dir, slug, ch) {
+		return false, fmt.Errorf("--type is one of %s, or a team's own (corgi idea templates)", strings.Join(idea.Types, ", "))
 	}
 	if ch.Needed != nil && (*ch.Needed < 1 || *ch.Needed > 20) {
-		return nil, fmt.Errorf("--approvals is 1 to 20")
+		return false, fmt.Errorf("--approvals is 1 to 20")
 	}
 	build := false
 	if ch.BuildWhenApproved != "" {
 		var err error
 		if build, err = parseOnOff(ch.BuildWhenApproved); err != nil {
-			return nil, fmt.Errorf("--build-when-approved: %v", err)
+			return false, fmt.Errorf("--build-when-approved: %v", err)
 		}
 	}
 	switch strings.ToLower(ch.Auto) {
 	case "", "on", "off", "true", "false":
 	default:
-		return nil, fmt.Errorf("--auto is on or off")
+		return false, fmt.Errorf("--auto is on or off")
 	}
-	return idea.Update(dir, slug, func(id *idea.Idea) error {
-		if ch.Name != "" {
-			id.Meta.Name = clipTitle(strings.TrimSpace(ch.Name), 60)
+	return build, nil
+}
+
+func teamTemplateExists(dir, slug string, ch ideaChanges) bool {
+	ws := ch.Workspace
+	if ws == "" {
+		if id, err := idea.Load(dir, slug); err == nil {
+			ws = id.Meta.Workspace
 		}
-		if ch.Summary != "" {
-			id.Meta.Summary = clipTitle(strings.TrimSpace(ch.Summary), 300)
-		}
-		if ch.Tags != nil {
-			id.Meta.Tags = cleanTags(*ch.Tags)
-		}
-		if ch.Workspace != "" {
-			id.Meta.Workspace = ch.Workspace
-		}
-		if ch.Type != "" {
-			id.Meta.Type = ch.Type
-		}
-		switch strings.ToLower(ch.Auto) {
-		case "on", "true":
-			id.Meta.Auto = true
-		case "off", "false":
-			id.Meta.Auto = false
-		}
-		if ch.Needed != nil {
-			id.Meta.Needed = *ch.Needed
-			switch {
-			case id.Meta.Status == idea.Draft && len(id.Meta.Approvals) > 0 && id.Meta.IsApproved():
-				id.Meta.Status = idea.Approved
-			case id.Meta.Status == idea.Approved && !id.Meta.IsApproved():
-				id.Meta.Status = idea.Draft
-			}
-		}
-		if ch.BuildWhenApproved != "" {
-			id.Meta.BuildWhenApproved = build
-		}
-		return nil
-	})
+	}
+	tpl, _ := ideaTemplate(ch.Type, ideaTemplateRoots(ws))
+	return tpl != ""
+}
+
+func applyIdeaChanges(id *idea.Idea, ch ideaChanges, build bool) {
+	if ch.Name != "" {
+		id.Meta.Name = clipTitle(strings.TrimSpace(ch.Name), 60)
+	}
+	if ch.Summary != "" {
+		id.Meta.Summary = clipTitle(strings.TrimSpace(ch.Summary), 300)
+	}
+	if ch.Tags != nil {
+		id.Meta.Tags = cleanTags(*ch.Tags)
+	}
+	if ch.Workspace != "" {
+		id.Meta.Workspace = ch.Workspace
+	}
+	if ch.Type != "" {
+		id.Meta.Type = ch.Type
+	}
+	switch strings.ToLower(ch.Auto) {
+	case "on", "true":
+		id.Meta.Auto = true
+	case "off", "false":
+		id.Meta.Auto = false
+	}
+	if ch.Needed != nil {
+		applyApprovalsNeeded(id, *ch.Needed)
+	}
+	if ch.BuildWhenApproved != "" {
+		id.Meta.BuildWhenApproved = build
+	}
+}
+
+func applyApprovalsNeeded(id *idea.Idea, needed int) {
+	id.Meta.Needed = needed
+	switch {
+	case id.Meta.Status == idea.Draft && len(id.Meta.Approvals) > 0 && id.Meta.IsApproved():
+		id.Meta.Status = idea.Approved
+	case id.Meta.Status == idea.Approved && !id.Meta.IsApproved():
+		id.Meta.Status = idea.Draft
+	}
 }
 
 var ideaSetCmd = &cobra.Command{
@@ -1695,6 +1769,32 @@ const ideaRetryAfter = 15 * time.Minute
 // rides along: the timer starts over so a burst is one run.
 func scheduleIdeaAnswer(dir, slug string) { scheduleIdea(dir, slug, true) }
 
+func answerIdeaNow(dir, slug string) {
+	ideaAnswerTimers.Delete(slug)
+	_, err := answerIdea(dir, slug, "")
+	switch {
+	case err == nil:
+		ideaAnswerFailed.Delete(slug)
+	case errors.Is(err, errAlreadyAnswering):
+	default:
+		ideaAnswerFailed.Store(slug, time.Now())
+		utils.Infof("idea %s: %v\n", slug, err)
+		noteAnswerFailed(dir, slug, "I could not answer just now: "+err.Error())
+	}
+}
+
+func noteAnswerFailed(dir, slug, note string) {
+	_, _ = idea.Update(dir, slug, func(id *idea.Idea) error {
+		if n := len(id.Comments.Comments); n > 0 && id.Comments.Comments[n-1].Text == note {
+			return nil
+		}
+		if c, err := id.AddComment(idea.KindComment, idea.Agent, note, nil, nil, nil, time.Now()); err == nil {
+			_, _ = id.SetStatus(c.ID, idea.StatusAnswered, time.Now())
+		}
+		return nil
+	})
+}
+
 func scheduleIdea(dir, slug string, restart bool) {
 	if !ideaAutoAnswerHere {
 		return
@@ -1712,29 +1812,7 @@ func scheduleIdea(dir, slug string, restart bool) {
 	if _, pending := ideaAnswerTimers.Load(slug); pending && !restart {
 		return
 	}
-	t := time.AfterFunc(ideaAnswerDelay, func() {
-		ideaAnswerTimers.Delete(slug)
-		_, err := answerIdea(dir, slug, "")
-		switch {
-		case err == nil:
-			ideaAnswerFailed.Delete(slug)
-		case errors.Is(err, errAlreadyAnswering):
-		default:
-			ideaAnswerFailed.Store(slug, time.Now())
-			utils.Infof("idea %s: %v\n", slug, err)
-			note := "I could not answer just now: " + err.Error()
-			_, _ = idea.Update(dir, slug, func(id *idea.Idea) error {
-				if n := len(id.Comments.Comments); n > 0 && id.Comments.Comments[n-1].Text == note {
-					return nil
-				}
-				c, err := id.AddComment(idea.KindComment, idea.Agent, note, nil, nil, nil, time.Now())
-				if err == nil {
-					_, _ = id.SetStatus(c.ID, idea.StatusAnswered, time.Now())
-				}
-				return nil
-			})
-		}
-	})
+	t := time.AfterFunc(ideaAnswerDelay, func() { answerIdeaNow(dir, slug) })
 	if old, loaded := ideaAnswerTimers.LoadOrStore(slug, t); loaded {
 		t.Stop()
 		old.(*time.Timer).Reset(ideaAnswerDelay)
