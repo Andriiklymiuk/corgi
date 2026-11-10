@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -218,6 +219,15 @@ func (oa *oauthServer) sweepLocked() {
 			delete(oa.pending, id)
 		}
 	}
+	if oa.sweepFamiliesLocked(now) {
+		_ = oa.saveLocked()
+	}
+	if store, err := pairing.Load(oa.deviceStore); err == nil && store.RevokeExpired(now) > 0 {
+		_ = pairing.Save(oa.deviceStore, store)
+	}
+}
+
+func (oa *oauthServer) sweepFamiliesLocked(now time.Time) bool {
 	changed := false
 	kept := oa.state.Families[:0]
 	for _, f := range oa.state.Families {
@@ -229,20 +239,14 @@ func (oa *oauthServer) sweepLocked() {
 		for _, r := range f.RotatedHashes {
 			if now.Sub(r.At) < rotatedHashKeep {
 				rotated = append(rotated, r)
-			} else {
-				changed = true
 			}
 		}
+		changed = changed || len(rotated) != len(f.RotatedHashes)
 		f.RotatedHashes = rotated
 		kept = append(kept, f)
 	}
 	oa.state.Families = kept
-	if changed {
-		_ = oa.saveLocked()
-	}
-	if store, err := pairing.Load(oa.deviceStore); err == nil && store.RevokeExpired(now) > 0 {
-		_ = pairing.Save(oa.deviceStore, store)
-	}
+	return changed
 }
 
 func (oa *oauthServer) authorizeAccessToken(header string) bool {
@@ -348,22 +352,22 @@ func (oa *oauthServer) revokeHandler(w http.ResponseWriter, r *http.Request) {
 	defer oa.mu.Unlock()
 	oa.sweepLocked()
 	if token != "" {
-		hash := pairing.HashToken(token)
-		if i, _ := oa.familyIndexLocked(hash); i >= 0 {
-			oa.revokeFamilyLocked(oa.state.Families[i].ID)
+		oa.revokeTokenLocked(pairing.HashToken(token))
+	}
+	w.Header().Set(headerCacheControl, "no-store")
+	w.WriteHeader(http.StatusOK)
+}
+
+func (oa *oauthServer) revokeTokenLocked(hash string) {
+	if i, _ := oa.familyIndexLocked(hash); i >= 0 {
+		oa.revokeFamilyLocked(oa.state.Families[i].ID)
+		_ = oa.saveLocked()
+		return
+	}
+	for _, f := range oa.state.Families {
+		if slices.Contains(f.AccessHashes, hash) {
+			oa.revokeFamilyLocked(f.ID)
 			_ = oa.saveLocked()
-		} else {
-			for _, f := range oa.state.Families {
-				for _, a := range f.AccessHashes {
-					if a == hash {
-						oa.revokeFamilyLocked(f.ID)
-						_ = oa.saveLocked()
-						break
-					}
-				}
-			}
 		}
 	}
-	w.Header().Set("Cache-Control", "no-store")
-	w.WriteHeader(http.StatusOK)
 }

@@ -57,56 +57,51 @@ func mcpWatchStatus(args watchStatusArgs) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	state := watch.LoadState(dir)
 	polls := map[string]watch.Summary{}
-	for _, p := range state.Summaries() {
+	for _, p := range watch.LoadState(dir).Summaries() {
 		polls[p.Key] = p
 	}
-
 	out := []watchWorkspaceStatus{}
 	for _, w := range registry.Sorted() {
-		if args.Workspace != "" && w.ID != args.Workspace {
-			continue
+		if args.Workspace == "" || w.ID == args.Workspace {
+			out = append(out, watchStatusRow(dir, w, user, polls))
 		}
-		repo, _ := config.LoadRepo(w.AbsPath)
-		resolved := config.Resolve(w.ID, repo, user)
-		secrets := watch.LoadSecretsFor(dir, w.ID)
-		row := watchWorkspaceStatus{
-			Workspace:  w.ID,
-			Dir:        w.AbsPath,
-			LocalToken: !watch.WorkspaceSecrets(dir, w.ID).IsZero(),
-		}
-		if wc := resolved.Watch; wc != nil {
-			row.Enabled, row.Tracker, row.Project = wc.Enabled, wc.Tracker, wc.Project
-			row.Repos, row.States, row.Labels = wc.Repos, wc.States, wc.Labels
-			row.Comments, row.PRs = wc.Comments, wc.PRs
-			row.Action = wc.Action
-			if row.Action == "" {
-				row.Action = "notify"
-			}
-		}
-		for _, src := range []struct {
-			name  string
-			token string
-		}{
-			{"linear", secrets.Linear},
-			{"jira", secrets.JiraToken},
-			{"github", firstNonEmptyString(secrets.GitHub, githubCLIToken())},
-			{"gitlab", secrets.GitLab},
-		} {
-			s := watchSourceStatus{Name: src.name, HasToken: strings.TrimSpace(src.token) != "", TokenLabel: watch.Fingerprint(src.token)}
-			if p, ok := polls[w.ID+"/"+src.name]; ok {
-				s.LastPoll, s.Error = p.Polled, p.Error
-			}
-			row.Sources = append(row.Sources, s)
-		}
-		row.Suggests = watchGaps(row)
-		out = append(out, row)
 	}
 	if args.Workspace != "" && len(out) == 0 {
 		return nil, fmt.Errorf("%q is not a registered workspace - `corgi agent init` there first", args.Workspace)
 	}
 	return map[string]any{"workspaces": out, "agentDir": dir}, nil
+}
+
+func watchStatusRow(dir string, w workspace.Workspace, user *config.UserConfig, polls map[string]watch.Summary) watchWorkspaceStatus {
+	repo, _ := config.LoadRepo(w.AbsPath)
+	resolved := config.Resolve(w.ID, repo, user)
+	secrets := watch.LoadSecretsFor(dir, w.ID)
+	row := watchWorkspaceStatus{
+		Workspace:  w.ID,
+		Dir:        w.AbsPath,
+		LocalToken: !watch.WorkspaceSecrets(dir, w.ID).IsZero(),
+	}
+	if wc := resolved.Watch; wc != nil {
+		row.Enabled, row.Tracker, row.Project = wc.Enabled, wc.Tracker, wc.Project
+		row.Repos, row.States, row.Labels = wc.Repos, wc.States, wc.Labels
+		row.Comments, row.PRs = wc.Comments, wc.PRs
+		row.Action = firstNonEmpty(wc.Action, "notify")
+	}
+	for _, src := range [][2]string{
+		{"linear", secrets.Linear},
+		{"jira", secrets.JiraToken},
+		{"github", firstNonEmptyString(secrets.GitHub, githubCLIToken())},
+		{"gitlab", secrets.GitLab},
+	} {
+		s := watchSourceStatus{Name: src[0], HasToken: strings.TrimSpace(src[1]) != "", TokenLabel: watch.Fingerprint(src[1])}
+		if p, ok := polls[w.ID+"/"+src[0]]; ok {
+			s.LastPoll, s.Error = p.Polled, p.Error
+		}
+		row.Sources = append(row.Sources, s)
+	}
+	row.Suggests = watchGaps(row)
+	return row
 }
 
 func watchGaps(row watchWorkspaceStatus) []string {
@@ -158,38 +153,60 @@ type watchEnableArgs struct {
 	Action    string
 }
 
+func checkWatchEnable(dir string, args watchEnableArgs) (string, error) {
+	id := strings.TrimSpace(args.Workspace)
+	if id == "" {
+		var err error
+		if id, err = currentWorkspaceID(dir); err != nil {
+			return "", err
+		}
+	}
+	registry, err := workspace.Load(agentRegistryPath(dir))
+	if err != nil {
+		return "", err
+	}
+	if _, ok := registry.Find(id); !ok {
+		return "", fmt.Errorf("%q is not a registered workspace - `corgi agent init` there first", id)
+	}
+	if t := strings.TrimSpace(args.Tracker); t != "" && t != "linear" && t != "jira" {
+		return "", fmt.Errorf("tracker must be linear or jira")
+	}
+	if a := strings.TrimSpace(args.Action); a != "" && a != "notify" && a != "fix" {
+		return "", fmt.Errorf("action must be notify or fix")
+	}
+	return id, nil
+}
+
+func applyWatchEnable(wc *config.WatchConfig, args watchEnableArgs) {
+	wc.Enabled = true
+	setIfNotEmpty(&wc.Tracker, strings.TrimSpace(args.Tracker))
+	setIfNotEmpty(&wc.Project, strings.TrimSpace(args.Project))
+	setIfNotEmpty(&wc.Action, strings.TrimSpace(args.Action))
+	for _, l := range []struct {
+		dst *[]string
+		v   []string
+	}{{&wc.Repos, args.Repos}, {&wc.States, args.States}, {&wc.Labels, args.Labels}} {
+		if len(l.v) > 0 {
+			*l.dst = trimmedList(l.v)
+		}
+	}
+	if args.Comments != nil {
+		wc.Comments = *args.Comments
+	}
+	if args.PRs != nil {
+		wc.PRs = *args.PRs
+	}
+}
+
 func mcpWatchEnable(args watchEnableArgs) (map[string]any, error) {
 	dir, err := agentDir()
 	if err != nil {
 		return nil, err
 	}
-	id := strings.TrimSpace(args.Workspace)
-	if id == "" {
-		if id, err = currentWorkspaceID(dir); err != nil {
-			return nil, err
-		}
-	}
-	registry, err := workspace.Load(agentRegistryPath(dir))
+	id, err := checkWatchEnable(dir, args)
 	if err != nil {
 		return nil, err
 	}
-	known := false
-	for _, w := range registry.Sorted() {
-		if w.ID == id {
-			known = true
-			break
-		}
-	}
-	if !known {
-		return nil, fmt.Errorf("%q is not a registered workspace - `corgi agent init` there first", id)
-	}
-	if t := strings.TrimSpace(args.Tracker); t != "" && t != "linear" && t != "jira" {
-		return nil, fmt.Errorf("tracker must be linear or jira")
-	}
-	if a := strings.TrimSpace(args.Action); a != "" && a != "notify" && a != "fix" {
-		return nil, fmt.Errorf("action must be notify or fix")
-	}
-
 	path := agentUserConfigPath(dir)
 	user, err := config.LoadUser(path)
 	if err != nil {
@@ -200,31 +217,7 @@ func mcpWatchEnable(args watchEnableArgs) (map[string]any, error) {
 	if wc == nil {
 		wc = &config.WatchConfig{}
 	}
-	wc.Enabled = true
-	if v := strings.TrimSpace(args.Tracker); v != "" {
-		wc.Tracker = v
-	}
-	if v := strings.TrimSpace(args.Project); v != "" {
-		wc.Project = v
-	}
-	if len(args.Repos) > 0 {
-		wc.Repos = trimmedList(args.Repos)
-	}
-	if len(args.States) > 0 {
-		wc.States = trimmedList(args.States)
-	}
-	if len(args.Labels) > 0 {
-		wc.Labels = trimmedList(args.Labels)
-	}
-	if args.Comments != nil {
-		wc.Comments = *args.Comments
-	}
-	if args.PRs != nil {
-		wc.PRs = *args.PRs
-	}
-	if v := strings.TrimSpace(args.Action); v != "" {
-		wc.Action = v
-	}
+	applyWatchEnable(wc, args)
 	entry.Watch = wc
 	if user.Workspaces == nil {
 		user.Workspaces = map[string]config.WorkspaceConfig{}
@@ -233,7 +226,6 @@ func mcpWatchEnable(args watchEnableArgs) (map[string]any, error) {
 	if err := writeUserConfig(path, user); err != nil {
 		return nil, err
 	}
-
 	status, err := mcpWatchStatus(watchStatusArgs{Workspace: id})
 	if err != nil {
 		return nil, err
@@ -391,4 +383,10 @@ func mcpWatchMove(workspaceID, ref, status string) (map[string]any, error) {
 		return nil, err
 	}
 	return map[string]any{"workspace": workspaceID, "ref": ref, "done": ref + " → " + status}, nil
+}
+
+func setIfNotEmpty(dst *string, v string) {
+	if v != "" {
+		*dst = v
+	}
 }

@@ -313,25 +313,125 @@ func announceMCPAuth(token, deviceStore string) {
 	}
 }
 
-func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
-	httpSrv := server.NewStreamableHTTPServer(s)
+var launchRoutes = map[string]http.HandlerFunc{
+	"/launch/ideas":        launchIdeasHandler,
+	"/launch/idea":         launchIdeaHandler,
+	"/launch/workspaces":   launchWorkspacesHandler,
+	"/launch/start":        launchStartHandler,
+	"/launch/stop":         launchStopHandler,
+	"/launch/sessions":     launchSessionsHandler,
+	"/launch/info":         launchInfoHandler,
+	"/launch/board":        launchBoardHandler,
+	"/launch/answer":       launchAnswerHandler,
+	"/launch/send":         launchSendHandler,
+	"/launch/interrupt":    launchInterruptHandler,
+	"/launch/new":          launchNewHandler,
+	"/launch/carry":        launchCarryHandler,
+	"/launch/events":       launchEventsHandler,
+	"/launch/inbox/ignore": launchInboxIgnoreHandler,
+	"/launch/preview":      launchPreviewHandler,
+	"/launch/undo":         launchUndoHandler,
+	"/launch/cost":         launchCostHandler,
+	"/launch/scorecard":    launchScorecardHandler,
+	"/launch/left":         launchLeftHandler,
+	"/launch/pull":         launchPullHandler,
+	"/launch/timeline":     launchTimelineHandler,
+	"/launch/plans":        launchPlansHandler,
+	"/launch/watch-status": launchWatchStatusHandler,
+	"/launch/status":       launchStatusHandler,
+	"/launch/kanban":       launchKanbanHandler,
+	"/launch/history":      launchHistoryHandler,
+	"/launch/run":          launchRunHandler,
+	"/launch/fresh":        launchFreshHandler,
+	"/launch/refresh":      launchRefreshHandler,
+	"/launch/push":         launchPushHandler,
+	"/launch/work-on":      launchWorkOnHandler,
+	"/launch/bots":         launchBotsHandler,
+	"/launch/ask":          launchAskHandler,
+	"/launch/transcript":   launchTranscriptHandler,
+	"/launch/picture":      launchPictureHandler,
+	"/launch/diff":         launchDiffHandler,
+	"/launch/watch":        launchWatchHandler,
+	"/launch/brief":        launchBriefHandler,
+	"/launch/card":         launchCardHandler,
+	"/launch/attempts":     launchAttemptsHandler,
+	"/launch/mute":         launchMuteHandler,
+	"/launch/lid":          launchLidHandler,
+	"/launch/stack":        launchStackHandler,
+	"/launch/upload":       launchUploadHandler,
+	"/launch/task":         launchTaskHandler,
+	"/launch/task/comment": launchTaskCommentHandler,
+	"/launch/ticket":       launchTicketHandler,
+	"/launch/profiles":     launchProfilesHandler,
+	"/launch/devices":      launchDevicesHandler,
+	"/launch/connector":    launchConnectorHandler,
+	"/launch/doctor":       launchDoctorHandler,
+	"/launch/peers":        launchPeersHandler,
+	"/launch/peers/invite": launchPeersInviteHandler,
+	"/launch/peers/join":   launchPeersJoinHandler,
+	"/launch/peers/pulse":  launchPeersPulseHandler,
+	"/launch/peers/tasks":  launchPeersTasksHandler,
+}
 
-	deviceStore := resolveDeviceStore(opts)
+func mountLaunchRoutes(mux *http.ServeMux, token, deviceStore string) {
+	mux.HandleFunc("/app", launcherPageHandler)
+	mux.Handle("/launch/stream", launchStream(token, deviceStore))
+	mux.Handle("/launch/preview/", http.HandlerFunc(previewProxyHandler))
+	for path, h := range launchRoutes {
+		mux.Handle(path, launchAuth(token, h, deviceStore))
+	}
+}
 
-	mux := http.NewServeMux()
-	origins := newOriginAllowlist(addr, opts.allowOrigins)
+func mountMCPOAuth(mux *http.ServeMux, addr, token, deviceStore string, opts mcpHTTPOpts, origins *originAllowlist) *oauthServer {
+	if opts.noOAuth || (token == "" && deviceStore == "") {
+		return nil
+	}
+	dir, err := agentDir()
+	if err != nil {
+		return nil
+	}
+	oauthDevices := deviceStore
+	if oauthDevices == "" {
+		oauthDevices = pairing.StorePath(dir)
+	}
+	oa := newOAuthServer(addr, newOAuthClientHosts(opts.oauthHosts, os.Stderr), origins, oauthDevices, oauthStatePath(dir))
+	oa.mount(mux)
+	return oa
+}
 
-	var oa *oauthServer
-	if !opts.noOAuth && (token != "" || deviceStore != "") {
-		if dir, err := agentDir(); err == nil {
-			oauthDevices := deviceStore
-			if oauthDevices == "" {
-				oauthDevices = pairing.StorePath(dir)
-			}
-			oa = newOAuthServer(addr, newOAuthClientHosts(opts.oauthHosts, os.Stderr), origins, oauthDevices, oauthStatePath(dir))
-			oa.mount(mux)
+func mountMCPPairing(mux *http.ServeMux, opts mcpHTTPOpts, deviceStore string) *pairing.Session {
+	if !opts.pair {
+		return nil
+	}
+	if deviceStore == "" {
+		fmt.Fprintln(os.Stderr, "corgi mcp --pair cannot be combined with --insecure, and needs a writable corgi data directory.")
+		exitProcess(2)
+	}
+	session, launched := takePairLaunch(filepath.Dir(deviceStore))
+	if !launched {
+		var err error
+		if session, _, err = pairing.NewSession(); err != nil {
+			fmt.Fprintln(os.Stderr, "could not start pairing:", err)
+			exitProcess(1)
 		}
 	}
+	role := ""
+	if opts.viewer {
+		role = pairing.RoleViewer
+	}
+	window := &pairWindow{}
+	window.set(session, role)
+	mux.Handle("/pair", pairingHandlerFor(window, deviceStore))
+	go watchPairRequests(filepath.Dir(deviceStore), window)
+	return session
+}
+
+func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
+	httpSrv := server.NewStreamableHTTPServer(s)
+	deviceStore := resolveDeviceStore(opts)
+	mux := http.NewServeMux()
+	origins := newOriginAllowlist(addr, opts.allowOrigins)
+	oa := mountMCPOAuth(mux, addr, token, deviceStore, opts, origins)
 	mux.Handle("/mcp", mcpEndpointGuard(origins, bearerAuthWithOAuth(token, httpSrv, deviceStore, oa)))
 
 	// An idea page is open to whoever has its link (the share key rides in
@@ -341,98 +441,15 @@ func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 	ideaAutoAnswerHere = true
 
 	if token != "" || deviceStore != "" {
-		mux.HandleFunc("/app", launcherPageHandler)
-		mux.Handle("/launch/ideas", launchAuth(token, http.HandlerFunc(launchIdeasHandler), deviceStore))
-		mux.Handle("/launch/idea", launchAuth(token, http.HandlerFunc(launchIdeaHandler), deviceStore))
-		mux.Handle("/launch/workspaces", launchAuth(token, http.HandlerFunc(launchWorkspacesHandler), deviceStore))
-		mux.Handle("/launch/start", launchAuth(token, http.HandlerFunc(launchStartHandler), deviceStore))
-		mux.Handle("/launch/stop", launchAuth(token, http.HandlerFunc(launchStopHandler), deviceStore))
-		mux.Handle("/launch/sessions", launchAuth(token, http.HandlerFunc(launchSessionsHandler), deviceStore))
-		mux.Handle("/launch/info", launchAuth(token, http.HandlerFunc(launchInfoHandler), deviceStore))
-		mux.Handle("/launch/board", launchAuth(token, http.HandlerFunc(launchBoardHandler), deviceStore))
-		mux.Handle("/launch/answer", launchAuth(token, http.HandlerFunc(launchAnswerHandler), deviceStore))
-		mux.Handle("/launch/send", launchAuth(token, http.HandlerFunc(launchSendHandler), deviceStore))
-		mux.Handle("/launch/interrupt", launchAuth(token, http.HandlerFunc(launchInterruptHandler), deviceStore))
-		mux.Handle("/launch/new", launchAuth(token, http.HandlerFunc(launchNewHandler), deviceStore))
-		mux.Handle("/launch/carry", launchAuth(token, http.HandlerFunc(launchCarryHandler), deviceStore))
-		mux.Handle("/launch/events", launchAuth(token, http.HandlerFunc(launchEventsHandler), deviceStore))
-		mux.Handle("/launch/inbox/ignore", launchAuth(token, http.HandlerFunc(launchInboxIgnoreHandler), deviceStore))
-		mux.Handle("/launch/stream", launchStream(token, deviceStore))
-		mux.Handle("/launch/preview", launchAuth(token, http.HandlerFunc(launchPreviewHandler), deviceStore))
-		mux.Handle("/launch/undo", launchAuth(token, http.HandlerFunc(launchUndoHandler), deviceStore))
-		mux.Handle("/launch/cost", launchAuth(token, http.HandlerFunc(launchCostHandler), deviceStore))
-		mux.Handle("/launch/scorecard", launchAuth(token, http.HandlerFunc(launchScorecardHandler), deviceStore))
-		mux.Handle("/launch/left", launchAuth(token, http.HandlerFunc(launchLeftHandler), deviceStore))
-		mux.Handle("/launch/pull", launchAuth(token, http.HandlerFunc(launchPullHandler), deviceStore))
-		mux.Handle("/launch/timeline", launchAuth(token, http.HandlerFunc(launchTimelineHandler), deviceStore))
-		mux.Handle("/launch/plans", launchAuth(token, http.HandlerFunc(launchPlansHandler), deviceStore))
-		mux.Handle("/launch/watch-status", launchAuth(token, http.HandlerFunc(launchWatchStatusHandler), deviceStore))
-		mux.Handle("/launch/status", launchAuth(token, http.HandlerFunc(launchStatusHandler), deviceStore))
-		mux.Handle("/launch/preview/", http.HandlerFunc(previewProxyHandler))
-		mux.Handle("/launch/kanban", launchAuth(token, http.HandlerFunc(launchKanbanHandler), deviceStore))
-		mux.Handle("/launch/history", launchAuth(token, http.HandlerFunc(launchHistoryHandler), deviceStore))
-		mux.Handle("/launch/run", launchAuth(token, http.HandlerFunc(launchRunHandler), deviceStore))
-		mux.Handle("/launch/fresh", launchAuth(token, http.HandlerFunc(launchFreshHandler), deviceStore))
-		mux.Handle("/launch/refresh", launchAuth(token, http.HandlerFunc(launchRefreshHandler), deviceStore))
-		mux.Handle("/launch/push", launchAuth(token, http.HandlerFunc(launchPushHandler), deviceStore))
-		mux.Handle("/launch/work-on", launchAuth(token, http.HandlerFunc(launchWorkOnHandler), deviceStore))
-		mux.Handle("/launch/bots", launchAuth(token, http.HandlerFunc(launchBotsHandler), deviceStore))
-		mux.Handle("/launch/ask", launchAuth(token, http.HandlerFunc(launchAskHandler), deviceStore))
-		mux.Handle("/launch/transcript", launchAuth(token, http.HandlerFunc(launchTranscriptHandler), deviceStore))
-		mux.Handle("/launch/picture", launchAuth(token, http.HandlerFunc(launchPictureHandler), deviceStore))
-		mux.Handle("/launch/diff", launchAuth(token, http.HandlerFunc(launchDiffHandler), deviceStore))
-		mux.Handle("/launch/watch", launchAuth(token, http.HandlerFunc(launchWatchHandler), deviceStore))
-		mux.Handle("/launch/brief", launchAuth(token, http.HandlerFunc(launchBriefHandler), deviceStore))
-		mux.Handle("/launch/card", launchAuth(token, http.HandlerFunc(launchCardHandler), deviceStore))
-		mux.Handle("/launch/attempts", launchAuth(token, http.HandlerFunc(launchAttemptsHandler), deviceStore))
-		mux.Handle("/launch/mute", launchAuth(token, http.HandlerFunc(launchMuteHandler), deviceStore))
-		mux.Handle("/launch/lid", launchAuth(token, http.HandlerFunc(launchLidHandler), deviceStore))
-		mux.Handle("/launch/stack", launchAuth(token, http.HandlerFunc(launchStackHandler), deviceStore))
-		mux.Handle("/launch/upload", launchAuth(token, http.HandlerFunc(launchUploadHandler), deviceStore))
-		mux.Handle("/launch/task", launchAuth(token, http.HandlerFunc(launchTaskHandler), deviceStore))
-		mux.Handle("/launch/task/comment", launchAuth(token, http.HandlerFunc(launchTaskCommentHandler), deviceStore))
-		mux.Handle("/launch/ticket", launchAuth(token, http.HandlerFunc(launchTicketHandler), deviceStore))
-		mux.Handle("/launch/profiles", launchAuth(token, http.HandlerFunc(launchProfilesHandler), deviceStore))
-		mux.Handle("/launch/devices", launchAuth(token, http.HandlerFunc(launchDevicesHandler), deviceStore))
-		mux.Handle("/launch/connector", launchAuth(token, http.HandlerFunc(launchConnectorHandler), deviceStore))
-		mux.Handle("/launch/doctor", launchAuth(token, http.HandlerFunc(launchDoctorHandler), deviceStore))
-		mux.Handle("/launch/peers", launchAuth(token, http.HandlerFunc(launchPeersHandler), deviceStore))
-		mux.Handle("/launch/peers/invite", launchAuth(token, http.HandlerFunc(launchPeersInviteHandler), deviceStore))
-		mux.Handle("/launch/peers/join", launchAuth(token, http.HandlerFunc(launchPeersJoinHandler), deviceStore))
-		mux.Handle("/launch/peers/pulse", launchAuth(token, http.HandlerFunc(launchPeersPulseHandler), deviceStore))
-		mux.Handle("/launch/peers/tasks", launchAuth(token, http.HandlerFunc(launchPeersTasksHandler), deviceStore))
+		mountLaunchRoutes(mux, token, deviceStore)
 	}
-
 	for _, source := range []string{"linear", "github", "gitlab", "jira", "coralogix"} {
 		mux.HandleFunc("/hooks/"+source, watchHookHandler(source))
 	}
-
-	var pairSession *pairing.Session
-	if opts.pair {
-		if deviceStore == "" {
-			fmt.Fprintln(os.Stderr, "corgi mcp --pair cannot be combined with --insecure, and needs a writable corgi data directory.")
-			exitProcess(2)
-		}
-		session, launched := takePairLaunch(filepath.Dir(deviceStore))
-		if !launched {
-			var err error
-			if session, _, err = pairing.NewSession(); err != nil {
-				fmt.Fprintln(os.Stderr, "could not start pairing:", err)
-				exitProcess(1)
-			}
-		}
-		pairSession = session
-		role := ""
-		if opts.viewer {
-			role = pairing.RoleViewer
-		}
-		window := &pairWindow{}
-		window.set(session, role)
-		mux.Handle("/pair", pairingHandlerFor(window, deviceStore))
-		defer session.Close()
-		go watchPairRequests(filepath.Dir(deviceStore), window)
+	pairSession := mountMCPPairing(mux, opts, deviceStore)
+	if pairSession != nil {
+		defer pairSession.Close()
 	}
-
 	srv := &http.Server{Addr: addr, Handler: launchCompression(mux)}
 
 	announceMCPAuth(token, deviceStore)
@@ -451,7 +468,10 @@ func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 	if opts.tunnel {
 		tunnelDone = startMCPTunnel(ctx, addr, token, opts, origins, oa)
 	}
+	serveUntilSignal(srv, cancel, tunnelDone)
+}
 
+func serveUntilSignal(srv *http.Server, cancel context.CancelFunc, tunnelDone <-chan struct{}) {
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	defer signal.Stop(sig)
@@ -460,7 +480,6 @@ func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 		cancel()
 		_ = srv.Close()
 	}()
-
 	err := srv.ListenAndServe()
 	cancel()
 	if tunnelDone != nil {
@@ -472,6 +491,23 @@ func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 	if err != nil && err != http.ErrServerClosed {
 		fmt.Fprintln(os.Stderr, "mcp server error:", err)
 		exitProcess(1)
+	}
+}
+
+func tunnelUp(ctx context.Context, url string, hasToken bool, origins *originAllowlist, oa *oauthServer) {
+	mcpPublicTunnelActive.Store(true)
+	if origins != nil {
+		origins.add(url)
+	}
+	if oa != nil {
+		oa.setIssuer(url)
+	}
+	go probeTunnelExposure(ctx, mcpProbeTarget(url), nil)
+	recordPublicURL(url)
+	fmt.Fprintf(os.Stderr, "🌐 ✓ public MCP endpoint: %s/mcp\n", url)
+	printMCPClientConfig(os.Stderr, url+"/mcp", "")
+	if hasToken {
+		fmt.Fprintln(os.Stderr, "token configured; see the local config above for the Authorization header")
 	}
 }
 
@@ -500,24 +536,10 @@ func startMCPTunnel(ctx context.Context, addr, token string, opts mcpHTTPOpts, o
 	go func() {
 		defer close(done)
 		for ev := range events {
-			switch {
-			case ev.Err != nil:
+			if ev.Err != nil {
 				fmt.Fprintf(os.Stderr, "🌐 ✗ tunnel: %s\n", ev.Err)
-			case ev.URL != "":
-				mcpPublicTunnelActive.Store(true)
-				if origins != nil {
-					origins.add(ev.URL)
-				}
-				if oa != nil {
-					oa.setIssuer(ev.URL)
-				}
-				go probeTunnelExposure(ctx, mcpProbeTarget(ev.URL), nil)
-				recordPublicURL(ev.URL)
-				fmt.Fprintf(os.Stderr, "🌐 ✓ public MCP endpoint: %s/mcp\n", ev.URL)
-				printMCPClientConfig(os.Stderr, ev.URL+"/mcp", "")
-				if token != "" {
-					fmt.Fprintln(os.Stderr, "token configured; see the local config above for the Authorization header")
-				}
+			} else if ev.URL != "" {
+				tunnelUp(ctx, ev.URL, token != "", origins, oa)
 			}
 		}
 	}()
