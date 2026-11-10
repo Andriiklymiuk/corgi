@@ -66,6 +66,35 @@ func switchesOf(id string, wc *config.WatchConfig) WatchSwitches {
 	return out
 }
 
+type watchSwitchRequest struct {
+	Workspace  string    `json:"workspace"`
+	Enabled    *bool     `json:"enabled"`
+	Action     *string   `json:"action"`
+	Comments   *bool     `json:"comments"`
+	PRs        *bool     `json:"prs"`
+	Reviews    *bool     `json:"reviews"`
+	CI         *bool     `json:"ci"`
+	Isolate    *bool     `json:"isolate"`
+	Slots      *int      `json:"slots"`
+	Quiet      *string   `json:"quiet"`
+	DaysOff    *[]string `json:"daysOff"`
+	Labels     *[]string `json:"labels"`
+	AutoMerge  *bool     `json:"autoMerge"`
+	Approve    *bool     `json:"approve"`
+	HandOver   *bool     `json:"handOver"`
+	AutoAllow  *string   `json:"autoAllow"`
+	DoneWhen   *[]string `json:"doneWhen"`
+	CompactAt  *int      `json:"compactAt"`
+	Rebase     *bool     `json:"rebase"`
+	Lessons    *bool     `json:"lessons"`
+	AutoCarry  *bool     `json:"autoCarry"`
+	RerunCI    *bool     `json:"rerunCI"`
+	Silent     *bool     `json:"silent"`
+	Headless   *bool     `json:"headless"`
+	NightShift *bool     `json:"nightShift"`
+	PlanReview *string   `json:"planReview"`
+}
+
 func launchWatchHandler(w http.ResponseWriter, r *http.Request) {
 	setLaunchHeaders(w)
 	dir, err := agentDir()
@@ -92,183 +121,164 @@ func launchWatchHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		writeLaunchJSON(w, map[string]any{"workspaces": list})
 	case http.MethodPost:
-		var req struct {
-			Workspace  string    `json:"workspace"`
-			Enabled    *bool     `json:"enabled"`
-			Action     *string   `json:"action"`
-			Comments   *bool     `json:"comments"`
-			PRs        *bool     `json:"prs"`
-			Reviews    *bool     `json:"reviews"`
-			CI         *bool     `json:"ci"`
-			Isolate    *bool     `json:"isolate"`
-			Slots      *int      `json:"slots"`
-			Quiet      *string   `json:"quiet"`
-			DaysOff    *[]string `json:"daysOff"`
-			Labels     *[]string `json:"labels"`
-			AutoMerge  *bool     `json:"autoMerge"`
-			Approve    *bool     `json:"approve"`
-			HandOver   *bool     `json:"handOver"`
-			AutoAllow  *string   `json:"autoAllow"`
-			DoneWhen   *[]string `json:"doneWhen"`
-			CompactAt  *int      `json:"compactAt"`
-			Rebase     *bool     `json:"rebase"`
-			Lessons    *bool     `json:"lessons"`
-			AutoCarry  *bool     `json:"autoCarry"`
-			RerunCI    *bool     `json:"rerunCI"`
-			Silent     *bool     `json:"silent"`
-			Headless   *bool     `json:"headless"`
-			NightShift *bool     `json:"nightShift"`
-			PlanReview *string   `json:"planReview"`
-		}
-		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(&req); err != nil {
-			writeLaunchError(w, http.StatusBadRequest, "could not read the request")
-			return
-		}
-		ws, ok := registry.Find(strings.TrimSpace(req.Workspace))
-		if !ok {
-			writeLaunchError(w, http.StatusNotFound, "no workspace named "+req.Workspace)
-			return
-		}
-		if user.Workspaces == nil {
-			user.Workspaces = map[string]config.WorkspaceConfig{}
-		}
-		entry := user.Workspaces[ws.ID]
-		wc := entry.Watch
-		if wc == nil {
-			wc = &config.WatchConfig{}
-		}
-		restart := false
-		if req.Enabled != nil {
-			wc.Enabled, restart = *req.Enabled, true
-		}
-		if req.Action != nil {
-			if *req.Action != "notify" && *req.Action != "fix" {
-				writeLaunchError(w, http.StatusBadRequest, "action is notify or fix")
-				return
-			}
-			wc.Action, restart = *req.Action, true
-		}
-		if req.Comments != nil {
-			wc.Comments, restart = *req.Comments, true
-		}
-		if req.PRs != nil {
-			wc.PRs, restart = *req.PRs, true
-		}
-		if req.Reviews != nil {
-			wc.Reviews, restart = *req.Reviews, true
-		}
-		if req.CI != nil {
-			wc.CI, restart = *req.CI, true
-		}
-		if req.Isolate != nil {
-			wc.Isolate, restart = *req.Isolate, true
-		}
-		if req.Slots != nil {
-			if *req.Slots < 1 || *req.Slots > 8 {
-				writeLaunchError(w, http.StatusBadRequest, "slots is 1 to 8")
-				return
-			}
-			wc.Slots, restart = *req.Slots, true
-			if wc.Slots > 1 {
-				wc.Isolate = true
-			}
-		}
-		if req.Labels != nil {
-			wc.Labels, restart = *req.Labels, true
-		}
-		if req.Quiet != nil {
-			q := strings.TrimSpace(*req.Quiet)
-			if q != "" {
-				if _, err := daemon.ParseQuiet(q); err != nil {
-					writeLaunchError(w, http.StatusBadRequest, err.Error())
-					return
-				}
-			}
-			wc.Quiet, restart = q, true
-		}
-		if req.DaysOff != nil {
-			days, err := daemon.ParseDaysOff(*req.DaysOff)
-			if err != nil {
-				writeLaunchError(w, http.StatusBadRequest, err.Error())
-				return
-			}
-			wc.DaysOff = nil
-			for _, d := range days {
-				wc.DaysOff = append(wc.DaysOff, strings.ToLower(d.String()[:3]))
-			}
-			restart = true
-		}
-		if req.Approve != nil {
-			wc.Approve = *req.Approve
-		}
-		if req.AutoMerge != nil {
-			wc.AutoMerge = *req.AutoMerge
-		}
-		if req.HandOver != nil {
-			wc.HandOver = *req.HandOver
-		}
-		if req.AutoAllow != nil {
-			policy, err := config.ParseAutoAllow(*req.AutoAllow)
-			if err != nil {
-				writeLaunchError(w, http.StatusBadRequest, err.Error())
-				return
-			}
-			wc.AutoAllow = policy
-		}
-		if req.Rebase != nil {
-			wc.Rebase = *req.Rebase
-		}
-		if req.Lessons != nil {
-			wc.Lessons = *req.Lessons
-		}
-		if req.AutoCarry != nil {
-			wc.AutoCarry = *req.AutoCarry
-		}
-		if req.RerunCI != nil {
-			wc.RerunCI, restart = *req.RerunCI, true
-		}
-		if req.Silent != nil {
-			wc.Silent, restart = *req.Silent, true
-		}
-		if req.NightShift != nil {
-			wc.NightShift = *req.NightShift
-		}
-		if req.Headless != nil {
-			wc.Headless = *req.Headless
-		}
-		if req.PlanReview != nil {
-			policy, err := config.ParsePlanReview(*req.PlanReview)
-			if err != nil {
-				writeLaunchError(w, http.StatusBadRequest, err.Error())
-				return
-			}
-			wc.PlanReview = policy
-		}
-		if req.CompactAt != nil {
-			if *req.CompactAt < 0 || *req.CompactAt > 100 {
-				writeLaunchError(w, http.StatusBadRequest, "compactAt is a percent, 0 to 100")
-				return
-			}
-			wc.CompactAt = *req.CompactAt
-		}
-		if req.DoneWhen != nil {
-			wc.DoneWhen = nil
-			for _, c := range *req.DoneWhen {
-				if c = strings.TrimSpace(c); c != "" {
-					wc.DoneWhen = append(wc.DoneWhen, c)
-				}
-			}
-		}
-		entry.Watch = wc
-		user.Workspaces[ws.ID] = entry
-		if err := writeUserConfig(path, user); err != nil {
-			writeLaunchError(w, http.StatusInternalServerError, "could not write the config")
-			return
-		}
-		writeLaunchJSON(w, map[string]any{"done": "saved", "watch": switchesOf(ws.ID, wc), "restart": restart})
+		flipWatchSwitches(w, r, path, user, registry)
 	default:
 		writeLaunchError(w, http.StatusMethodNotAllowed, "GET the switches, POST {workspace, …} to flip them")
 	}
+}
+
+func flipWatchSwitches(w http.ResponseWriter, r *http.Request, path string, user *config.UserConfig, registry *workspace.Registry) {
+	var req watchSwitchRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(&req); err != nil {
+		writeLaunchError(w, http.StatusBadRequest, requestUnreadableMessage)
+		return
+	}
+	ws, ok := registry.Find(strings.TrimSpace(req.Workspace))
+	if !ok {
+		writeLaunchError(w, http.StatusNotFound, "no workspace named "+req.Workspace)
+		return
+	}
+	if user.Workspaces == nil {
+		user.Workspaces = map[string]config.WorkspaceConfig{}
+	}
+	entry := user.Workspaces[ws.ID]
+	wc := entry.Watch
+	if wc == nil {
+		wc = &config.WatchConfig{}
+	}
+	restart, err := applyWatchRequest(wc, req)
+	if err != nil {
+		writeLaunchError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	entry.Watch = wc
+	user.Workspaces[ws.ID] = entry
+	if err := writeUserConfig(path, user); err != nil {
+		writeLaunchError(w, http.StatusInternalServerError, "could not write the config")
+		return
+	}
+	writeLaunchJSON(w, map[string]any{"done": "saved", "watch": switchesOf(ws.ID, wc), "restart": restart})
+}
+
+func applyWatchRequest(wc *config.WatchConfig, req watchSwitchRequest) (bool, error) {
+	restart := applyWatchToggles(wc, req)
+	for _, step := range []func(*config.WatchConfig, watchSwitchRequest) (bool, error){
+		applyWatchAction, applyWatchSlots, applyWatchCalendar, applyWatchPolicyRequest,
+	} {
+		again, err := step(wc, req)
+		if err != nil {
+			return false, err
+		}
+		restart = restart || again
+	}
+	if req.Labels != nil {
+		wc.Labels, restart = *req.Labels, true
+	}
+	if req.DoneWhen != nil {
+		wc.DoneWhen = nil
+		for _, c := range *req.DoneWhen {
+			if c = strings.TrimSpace(c); c != "" {
+				wc.DoneWhen = append(wc.DoneWhen, c)
+			}
+		}
+	}
+	return restart, nil
+}
+
+func applyWatchToggles(wc *config.WatchConfig, req watchSwitchRequest) bool {
+	restart := false
+	for _, t := range []struct {
+		in      *bool
+		dst     *bool
+		restart bool
+	}{
+		{req.Enabled, &wc.Enabled, true}, {req.Comments, &wc.Comments, true}, {req.PRs, &wc.PRs, true},
+		{req.Reviews, &wc.Reviews, true}, {req.CI, &wc.CI, true}, {req.Isolate, &wc.Isolate, true},
+		{req.RerunCI, &wc.RerunCI, true}, {req.Silent, &wc.Silent, true},
+		{req.Approve, &wc.Approve, false}, {req.AutoMerge, &wc.AutoMerge, false}, {req.HandOver, &wc.HandOver, false},
+		{req.Rebase, &wc.Rebase, false}, {req.Lessons, &wc.Lessons, false}, {req.AutoCarry, &wc.AutoCarry, false},
+		{req.NightShift, &wc.NightShift, false}, {req.Headless, &wc.Headless, false},
+	} {
+		if t.in != nil {
+			*t.dst = *t.in
+			restart = restart || t.restart
+		}
+	}
+	return restart
+}
+
+func applyWatchAction(wc *config.WatchConfig, req watchSwitchRequest) (bool, error) {
+	if req.Action == nil {
+		return false, nil
+	}
+	if *req.Action != "notify" && *req.Action != "fix" {
+		return false, fmt.Errorf("action is notify or fix")
+	}
+	wc.Action = *req.Action
+	return true, nil
+}
+
+func applyWatchSlots(wc *config.WatchConfig, req watchSwitchRequest) (bool, error) {
+	if req.Slots == nil {
+		return false, nil
+	}
+	if *req.Slots < 1 || *req.Slots > 8 {
+		return false, fmt.Errorf("slots is 1 to 8")
+	}
+	wc.Slots = *req.Slots
+	if wc.Slots > 1 {
+		wc.Isolate = true
+	}
+	return true, nil
+}
+
+func applyWatchCalendar(wc *config.WatchConfig, req watchSwitchRequest) (bool, error) {
+	restart := false
+	if req.Quiet != nil {
+		q := strings.TrimSpace(*req.Quiet)
+		if q != "" {
+			if _, err := daemon.ParseQuiet(q); err != nil {
+				return false, err
+			}
+		}
+		wc.Quiet, restart = q, true
+	}
+	if req.DaysOff != nil {
+		days, err := daemon.ParseDaysOff(*req.DaysOff)
+		if err != nil {
+			return false, err
+		}
+		wc.DaysOff = nil
+		for _, d := range days {
+			wc.DaysOff = append(wc.DaysOff, strings.ToLower(d.String()[:3]))
+		}
+		restart = true
+	}
+	return restart, nil
+}
+
+func applyWatchPolicyRequest(wc *config.WatchConfig, req watchSwitchRequest) (bool, error) {
+	if req.AutoAllow != nil {
+		policy, err := config.ParseAutoAllow(*req.AutoAllow)
+		if err != nil {
+			return false, err
+		}
+		wc.AutoAllow = policy
+	}
+	if req.PlanReview != nil {
+		policy, err := config.ParsePlanReview(*req.PlanReview)
+		if err != nil {
+			return false, err
+		}
+		wc.PlanReview = policy
+	}
+	if req.CompactAt != nil {
+		if *req.CompactAt < 0 || *req.CompactAt > 100 {
+			return false, fmt.Errorf("compactAt is a percent, 0 to 100")
+		}
+		wc.CompactAt = *req.CompactAt
+	}
+	return false, nil
 }
 
 func setWorkspaceWatch(dir, id string, edit func(*config.WatchConfig)) error {
