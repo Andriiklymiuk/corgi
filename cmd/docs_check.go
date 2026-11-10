@@ -81,39 +81,44 @@ type docsReport struct {
 
 var pointerRe = regexp.MustCompile(`\b([A-Za-z0-9_./-]+\.(?:go|ts|tsx|js|py|rb|rs|java|kt|swift|sql|ya?ml|md)):(\d+)\b`)
 
-func checkDocs(roots []string, repos []utils.RepoSurface) docsReport {
-	var report docsReport
+func surfaceName(c utils.SurfaceChange) string {
+	switch c.Kind {
+	case "config", "migration":
+		return ""
+	case "route":
+		if i := strings.Index(c.Name, " "); i > 0 {
+			return c.Name[i+1:]
+		}
+	}
+	return c.Name
+}
+
+func surfaceNames(repos []utils.RepoSurface) map[string]utils.SurfaceChange {
 	names := map[string]utils.SurfaceChange{}
 	for _, r := range repos {
 		for _, c := range r.Changes {
-			if c.Kind == "config" || c.Kind == "migration" {
-				continue
-			}
-			name := c.Name
-			if c.Kind == "route" {
-				if i := strings.Index(name, " "); i > 0 {
-					name = name[i+1:]
-				}
-			}
-			if len(name) >= 4 {
+			if name := surfaceName(c); len(name) >= 4 {
 				names[name] = c
 			}
 		}
 	}
+	return names
+}
+
+var skippedDocDirs = map[string]bool{".git": true, "node_modules": true, "vendor": true, "dist": true, "build": true, ".next": true, "corgi_services": true, ".corgi": true}
+
+func checkDocs(roots []string, repos []utils.RepoSurface) docsReport {
+	var report docsReport
+	names := surfaceNames(repos)
 	seen := map[string]bool{}
 	for _, root := range roots {
 		_ = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
-			if err != nil {
+			switch {
+			case err != nil:
 				return nil
-			}
-			if d.IsDir() {
-				switch d.Name() {
-				case ".git", "node_modules", "vendor", "dist", "build", ".next", "corgi_services", ".corgi":
-					return filepath.SkipDir
-				}
-				return nil
-			}
-			if !strings.HasSuffix(d.Name(), ".md") || seen[path] {
+			case d.IsDir() && skippedDocDirs[d.Name()]:
+				return filepath.SkipDir
+			case d.IsDir() || !strings.HasSuffix(d.Name(), ".md") || seen[path]:
 				return nil
 			}
 			seen[path] = true
@@ -138,37 +143,39 @@ func scanDoc(path, dir string, names map[string]utils.SurfaceChange, report *doc
 	}
 	defer f.Close()
 	base := filepath.Base(path)
-	pointerDoc := base == "CLAUDE.md" || base == "AGENTS.md" || strings.Contains(filepath.ToSlash(path), "/.claude/rules/")
+	pointerDoc := base == claudeMemoryFile || base == "AGENTS.md" || strings.Contains(filepath.ToSlash(path), "/.claude/rules/")
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 0, 64<<10), 1<<20)
-	n := 0
-	for sc.Scan() {
-		n++
+	for n := 1; sc.Scan(); n++ {
 		line := sc.Text()
 		for name, c := range names {
 			if strings.Contains(line, name) && wordBounded(line, name) {
 				report.Mentions = append(report.Mentions, docMention{Doc: path, Line: n, Name: c.Name, Kind: c.Kind, Op: c.Op, Path: c.Path})
 			}
 		}
-		if !pointerDoc {
-			continue
-		}
-		for _, m := range pointerRe.FindAllStringSubmatch(line, -1) {
-			target := m[1]
-			want, _ := strconv.Atoi(m[2])
-			abs := target
-			if !filepath.IsAbs(abs) {
-				abs = filepath.Join(dir, target)
-			}
-			total, err := countFileLines(abs)
-			switch {
-			case err != nil:
-				report.StalePointers = append(report.StalePointers, stalePointer{Doc: path, Line: n, Pointer: m[0], Why: "no such file"})
-			case want > total:
-				report.StalePointers = append(report.StalePointers, stalePointer{Doc: path, Line: n, Pointer: m[0], Why: fmt.Sprintf("the file has %d lines", total)})
-			}
+		if pointerDoc {
+			report.StalePointers = append(report.StalePointers, stalePointersIn(line, path, dir, n)...)
 		}
 	}
+}
+
+func stalePointersIn(line, path, dir string, n int) []stalePointer {
+	var out []stalePointer
+	for _, m := range pointerRe.FindAllStringSubmatch(line, -1) {
+		want, _ := strconv.Atoi(m[2])
+		abs := m[1]
+		if !filepath.IsAbs(abs) {
+			abs = filepath.Join(dir, m[1])
+		}
+		total, err := countFileLines(abs)
+		switch {
+		case err != nil:
+			out = append(out, stalePointer{Doc: path, Line: n, Pointer: m[0], Why: "no such file"})
+		case want > total:
+			out = append(out, stalePointer{Doc: path, Line: n, Pointer: m[0], Why: fmt.Sprintf("the file has %d lines", total)})
+		}
+	}
+	return out
 }
 
 func wordBounded(line, name string) bool {

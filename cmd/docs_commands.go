@@ -115,41 +115,59 @@ func checkCommandMentions(files []string) []commandFinding {
 	rootCmd.InitDefaultCompletionCmd()
 	var out []commandFinding
 	for _, file := range files {
-		f, err := os.Open(file)
-		if err != nil {
-			continue
+		out = append(out, checkFileMentions(file)...)
+	}
+	return out
+}
+
+type fenceState struct {
+	inFence, shellFence bool
+}
+
+func (f *fenceState) snippets(line string) []string {
+	if t := strings.TrimSpace(line); strings.HasPrefix(t, "```") {
+		f.inFence = !f.inFence
+		f.shellFence = f.inFence && isShellFence(strings.TrimPrefix(t, "```"))
+		return nil
+	}
+	if f.inFence {
+		if f.shellFence {
+			return []string{stripComment(line)}
 		}
-		sc := bufio.NewScanner(f)
-		sc.Buffer(make([]byte, 0, 64<<10), 1<<20)
-		inFence, shellFence, lineNo := false, false, 0
-		for sc.Scan() {
-			lineNo++
-			line := sc.Text()
-			if t := strings.TrimSpace(line); strings.HasPrefix(t, "```") {
-				inFence = !inFence
-				shellFence = inFence && isShellFence(strings.TrimPrefix(t, "```"))
-				continue
-			}
-			var snippets []string
-			if inFence {
-				if shellFence {
-					snippets = []string{stripComment(line)}
-				}
-			} else {
-				for _, m := range inlineCode.FindAllStringSubmatch(line, -1) {
-					snippets = append(snippets, m[1])
-				}
-			}
-			for _, s := range snippets {
-				for _, m := range corgiCall.FindAllStringSubmatch(s, -1) {
-					if fd, bad := checkInvocation(shellWords(m[1])); bad {
-						fd.File, fd.Line = file, lineNo
-						out = append(out, fd)
-					}
-				}
-			}
+		return nil
+	}
+	var snippets []string
+	for _, m := range inlineCode.FindAllStringSubmatch(line, -1) {
+		snippets = append(snippets, m[1])
+	}
+	return snippets
+}
+
+func checkFileMentions(file string) []commandFinding {
+	f, err := os.Open(file)
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 0, 64<<10), 1<<20)
+	var out []commandFinding
+	var fence fenceState
+	for lineNo := 1; sc.Scan(); lineNo++ {
+		for _, s := range fence.snippets(sc.Text()) {
+			out = append(out, checkSnippet(s, file, lineNo)...)
 		}
-		f.Close()
+	}
+	return out
+}
+
+func checkSnippet(s, file string, lineNo int) []commandFinding {
+	var out []commandFinding
+	for _, m := range corgiCall.FindAllStringSubmatch(s, -1) {
+		if fd, bad := checkInvocation(shellWords(m[1])); bad {
+			fd.File, fd.Line = file, lineNo
+			out = append(out, fd)
+		}
 	}
 	return out
 }
@@ -211,6 +229,17 @@ func stripComment(line string) string {
 // checks each --flag against the command it reached. Placeholders, comments and
 // anything after a -- or a quoted argument end the walk, so prose stays legal.
 func checkInvocation(words []string) (commandFinding, bool) {
+	c, i, fd, bad := walkSubcommands(words)
+	if bad {
+		return fd, true
+	}
+	if c.DisableFlagParsing {
+		return commandFinding{}, false
+	}
+	return checkFlags(c, words[i:])
+}
+
+func walkSubcommands(words []string) (*cobra.Command, int, commandFinding, bool) {
 	c := rootCmd
 	path := []string{"corgi"}
 	i := skipGlobalFlags(words)
@@ -222,41 +251,44 @@ func checkInvocation(words []string) (commandFinding, bool) {
 		}
 		next := subcommand(c, w)
 		if next == nil {
-			if i+1 < len(words) && looksLikeProse(words[i+1]) {
-				break
-			}
-			if c == rootCmd && i == start {
-				near := utils.Nearest(w, commandNames(rootCmd))
-				return commandFinding{Mention: corgiCommandPrefix + w, Problem: "no such command", Fix: suggestion(near, corgiCommandPrefix)}, true
-			}
-			if len(c.Commands()) > 0 && !c.Runnable() {
-				near := utils.Nearest(w, commandNames(c))
-				return commandFinding{Mention: strings.Join(append(path, w), " "), Problem: "no such subcommand", Fix: suggestion(near, c.CommandPath()+" ")}, true
-			}
-			break
+			fd, bad := unknownSubcommand(c, path, words, i, start)
+			return c, i, fd, bad
 		}
 		c = next
 		path = append(path, w)
 	}
-	if c.DisableFlagParsing {
+	return c, i, commandFinding{}, false
+}
+
+func unknownSubcommand(c *cobra.Command, path, words []string, i, start int) (commandFinding, bool) {
+	w := words[i]
+	switch {
+	case i+1 < len(words) && looksLikeProse(words[i+1]):
 		return commandFinding{}, false
+	case c == rootCmd && i == start:
+		near := utils.Nearest(w, commandNames(rootCmd))
+		return commandFinding{Mention: corgiCommandPrefix + w, Problem: "no such command", Fix: suggestion(near, corgiCommandPrefix)}, true
+	case len(c.Commands()) > 0 && !c.Runnable():
+		near := utils.Nearest(w, commandNames(c))
+		return commandFinding{Mention: strings.Join(append(path, w), " "), Problem: "no such subcommand", Fix: suggestion(near, c.CommandPath()+" ")}, true
 	}
-	for ; i < len(words); i++ {
-		w := words[i]
-		if w == "--" || w == "#" || strings.HasPrefix(w, "#") {
+	return commandFinding{}, false
+}
+
+func checkFlags(c *cobra.Command, words []string) (commandFinding, bool) {
+	for _, w := range words {
+		if w == "--" || strings.HasPrefix(w, "#") {
 			break
 		}
 		if !strings.HasPrefix(w, "--") || len(w) < 3 {
 			continue
 		}
-		name := strings.TrimPrefix(w, "--")
-		name, _, _ = strings.Cut(name, "=")
+		name, _, _ := strings.Cut(strings.TrimPrefix(w, "--"), "=")
 		name = strings.TrimRight(name, ".,:'\"`]")
 		if name == "" || !isFlagName(name) || takesFlag(c, name) {
 			continue
 		}
-		accepted := acceptedFlags(c)
-		return commandFinding{Mention: c.CommandPath() + " --" + name, Problem: "the command takes no such flag", Fix: suggestion(utils.Nearest("--"+name, accepted), "")}, true
+		return commandFinding{Mention: c.CommandPath() + " --" + name, Problem: "the command takes no such flag", Fix: suggestion(utils.Nearest("--"+name, acceptedFlags(c)), "")}, true
 	}
 	return commandFinding{}, false
 }

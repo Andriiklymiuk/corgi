@@ -75,95 +75,99 @@ type agentUpResult struct {
 
 func runAgentUp(cmd *cobra.Command, _ []string) {
 	fresh, _ := cmd.Flags().GetBool("fresh")
-
 	dir, err := agentDir()
 	if err != nil {
 		exitWithError("agent_data_dir", err, 1)
 	}
-
-	cur := upSettingsFromFlags(cmd)
-	settings, reused := mergeUpSettings(cur, cmd.Flags().Changed, loadUpSettings(dir))
-	if reused != "" {
-		utils.Infof("using saved settings from the last up: %s (pass the flags to change them)\n", reused)
-	}
-	addr := settings.HTTP
-	if addr == "" {
-		addr = defaultMCPAddr
-	}
-
-	tunnel, err := tunnelArgs(settings.Provider, settings.TunnelName, settings.TunnelHostname)
-	if viewer, _ := cmd.Flags().GetBool("viewer"); viewer && err == nil {
-		tunnel = append(tunnel, "--viewer")
-	}
-	if err != nil {
-		exitWithError("agent_up_tunnel", err, 2)
-	}
-	if err := tunnelPreflight(settings.Provider, settings.TunnelName, settings.TunnelHostname); err != nil {
-		exitWithError("agent_up_tunnel", err, 2)
-	}
-
+	settings, addr, tunnel := upPlan(cmd, dir)
 	release, err := acquireUpLock(dir)
 	if err != nil {
 		exitWithError("agent_up_locked", err, 1)
 	}
 	defer release()
 
-	var res agentUpResult
-	res.TunnelHostname = strings.TrimSpace(settings.TunnelHostname)
-	res.MCPAddr = addr
-
+	res := agentUpResult{TunnelHostname: strings.TrimSpace(settings.TunnelHostname), MCPAddr: addr}
 	res.Workspace, res.Registered = registerCwdWorkspace()
 	if res.Workspace != "" {
 		if absPath, cfgDir, ok := workspaceSessionTarget(res.Workspace, runningProfile(res.Workspace)); ok {
 			warnIfUntrusted(cfgDir, absPath)
 		}
 	}
-
 	info, err := ensureDaemon(dir)
 	if err != nil {
 		exitWithError("agent_up_daemon", err, 1)
 	}
 	res.DaemonPID = info.PID
-
 	ensureAtLogin(dir, cmd, &settings)
 	res.AtLogin = settings.AtLogin
-
 	res.LogPath = filepath.Join(dir, mcpLogName)
-	if mcpListening(addr) {
-		if !fresh {
-			if pid, ok := readAgentPidFile(filepath.Join(dir, mcpPidName)); ok && utils.PidAlive(pid, "") {
-				if data, rerr := os.ReadFile(res.LogPath); rerr == nil {
-					if parsed, _ := parseMCPLog(string(data)); parsed.publicURL != "" {
-						res.PublicURL = parsed.publicURL
-					}
-				}
-				res.Hint = "MCP + tunnel already running. To pair a NEW device (fresh pairing window + tunnel), rerun with --fresh."
-			} else {
-				res.Hint = fmt.Sprintf(
-					"%s is held by a server corgi did not record starting. If it is a leftover corgi MCP, "+
-						"rerun `corgi agent up --fresh` to replace it (or `corgi agent down` to stop it); "+
-						"anything else, free the port or pass --http with a free one. Log: %s",
-					addr, res.LogPath)
-			}
-			printAgentUp(res)
-			return
-		}
-		found, freed := reclaimCorgiMCP(addr)
-		switch {
-		case freed:
-			_ = os.Remove(filepath.Join(dir, mcpPidName))
-		case found:
-			exitWithError("agent_up_mcp", fmt.Errorf(
-				"a corgi MCP on %s did not release the port within 5s - stop it manually (`corgi agent down`, or kill the pid lsof names) and rerun", addr), 1)
-		default:
-			res.Hint = fmt.Sprintf(
-				"%s is already in use by something that is not corgi's MCP server. "+
-					"Free the port (or pass --http with a free one) and rerun `corgi agent up`.", addr)
-			printAgentUp(res)
-			return
+	if mcpListening(addr) && !clearMCPPort(dir, addr, fresh, &res) {
+		printAgentUp(res)
+		return
+	}
+	startUpMCP(cmd, dir, addr, tunnel, &settings, &res)
+	printAgentUp(res)
+}
+
+func upPlan(cmd *cobra.Command, dir string) (upSettings, string, []string) {
+	settings, reused := mergeUpSettings(upSettingsFromFlags(cmd), cmd.Flags().Changed, loadUpSettings(dir))
+	if reused != "" {
+		utils.Infof("using saved settings from the last up: %s (pass the flags to change them)\n", reused)
+	}
+	addr := firstNonEmpty(settings.HTTP, defaultMCPAddr)
+	tunnel, err := tunnelArgs(settings.Provider, settings.TunnelName, settings.TunnelHostname)
+	if err != nil {
+		exitWithError("agent_up_tunnel", err, 2)
+	}
+	if viewer, _ := cmd.Flags().GetBool("viewer"); viewer {
+		tunnel = append(tunnel, "--viewer")
+	}
+	if err := tunnelPreflight(settings.Provider, settings.TunnelName, settings.TunnelHostname); err != nil {
+		exitWithError("agent_up_tunnel", err, 2)
+	}
+	return settings, addr, tunnel
+}
+
+// clearMCPPort says whether a fresh MCP may start on addr; when it may not,
+// res carries the hint that says why.
+func clearMCPPort(dir, addr string, fresh bool, res *agentUpResult) bool {
+	if !fresh {
+		res.Hint = heldPortHint(dir, addr, res)
+		return false
+	}
+	found, freed := reclaimCorgiMCP(addr)
+	switch {
+	case freed:
+		_ = os.Remove(filepath.Join(dir, mcpPidName))
+		return true
+	case found:
+		exitWithError("agent_up_mcp", fmt.Errorf(
+			"a corgi MCP on %s did not release the port within 5s - stop it manually (`corgi agent down`, or kill the pid lsof names) and rerun", addr), 1)
+	}
+	res.Hint = fmt.Sprintf(
+		"%s is already in use by something that is not corgi's MCP server. "+
+			"Free the port (or pass --http with a free one) and rerun `corgi agent up`.", addr)
+	return false
+}
+
+func heldPortHint(dir, addr string, res *agentUpResult) string {
+	pid, ok := readAgentPidFile(filepath.Join(dir, mcpPidName))
+	if !ok || !utils.PidAlive(pid, "") {
+		return fmt.Sprintf(
+			"%s is held by a server corgi did not record starting. If it is a leftover corgi MCP, "+
+				"rerun `corgi agent up --fresh` to replace it (or `corgi agent down` to stop it); "+
+				"anything else, free the port or pass --http with a free one. Log: %s",
+			addr, res.LogPath)
+	}
+	if data, rerr := os.ReadFile(res.LogPath); rerr == nil {
+		if parsed, _ := parseMCPLog(string(data)); parsed.publicURL != "" {
+			res.PublicURL = parsed.publicURL
 		}
 	}
+	return "MCP + tunnel already running. To pair a NEW device (fresh pairing window + tunnel), rerun with --fresh."
+}
 
+func startUpMCP(cmd *cobra.Command, dir, addr string, tunnel []string, settings *upSettings, res *agentUpResult) {
 	if code, _ := cmd.Flags().GetString("pair-code"); strings.TrimSpace(code) != "" {
 		ttl, _ := cmd.Flags().GetDuration("pair-ttl")
 		if err := writePairLaunch(dir, code, ttl); err != nil {
@@ -174,25 +178,21 @@ func runAgentUp(cmd *cobra.Command, _ []string) {
 		exitWithError("agent_up_mcp", err, 1)
 	}
 	res.MCPStarted = true
-
 	parsed, err := awaitMCPLog(res.LogPath, 90*time.Second)
 	if err != nil {
 		exitWithError("agent_up_mcp", fmt.Errorf("%w - see %s", err, res.LogPath), 1)
 	}
-	res.PublicURL = parsed.publicURL
-	res.PairCode = parsed.pairCode
-	if res.PublicURL != "" && settings.LastPublicURL != "" && settings.LastPublicURL != res.PublicURL {
-		announceNewAddress(dir, res.PublicURL)
-	}
+	res.PublicURL, res.PairCode = parsed.publicURL, parsed.pairCode
 	if res.PublicURL != "" {
+		if settings.LastPublicURL != "" && settings.LastPublicURL != res.PublicURL {
+			announceNewAddress(dir, res.PublicURL)
+		}
 		settings.LastPublicURL = res.PublicURL
 	}
-	_ = saveUpSettings(dir, settings)
+	_ = saveUpSettings(dir, *settings)
 	if res.PublicURL != "" && res.PairCode != "" {
 		res.PairURL = res.PublicURL + "/pair#" + res.PairCode
 	}
-
-	printAgentUp(res)
 }
 
 func registerCwdWorkspace() (string, bool) {
@@ -723,52 +723,68 @@ func runAgentDown(_ *cobra.Command, _ []string) {
 	if err != nil {
 		exitWithError("agent_data_dir", err, 1)
 	}
-	stopped := false
-
-	if info, rerr := daemon.ReadInfo(dir); rerr == nil && info != nil {
-		if proc, ferr := os.FindProcess(info.PID); ferr == nil && proc.Signal(syscall.SIGTERM) == nil {
-			if !waitForDaemonExit(dir, 10*time.Second) {
-				killDaemon(proc)
-			}
-			utils.Infof("stopped agent daemon (pid %d)\n", info.PID)
-			stopped = true
-		}
-	}
+	stopped := stopAgentDaemon(dir)
 	if stopStrayServers() > 0 {
 		stopped = true
 	}
-
-	pidPath := filepath.Join(dir, mcpPidName)
-	mcpStopped := false
-	if pid, ok := readAgentPidFile(pidPath); ok {
-		if utils.PidAlive(pid, "") {
-			if proc, ferr := os.FindProcess(pid); ferr == nil && proc.Signal(syscall.SIGTERM) == nil {
-				utils.Infof("stopped MCP + tunnel (pid %d)\n", pid)
-				stopped, mcpStopped = true, true
-			}
-		}
-		_ = os.Remove(pidPath)
+	mcpStopped := stopRecordedMCP(dir)
+	if !mcpStopped && stopMCPOnAddr(dir) {
+		stopped = true
 	}
-	if !mcpStopped {
-		fallbackAddr := defaultMCPAddr
-		if data, rerr := os.ReadFile(filepath.Join(dir, mcpAddrName)); rerr == nil {
-			if a := strings.TrimSpace(string(data)); a != "" {
-				fallbackAddr = a
-			}
-		}
-		for _, pid := range corgiListenerPIDs(fallbackAddr) {
-			if proc, ferr := os.FindProcess(pid); ferr == nil && proc.Signal(syscall.SIGTERM) == nil {
-				utils.Infof("stopped MCP + tunnel on %s (pid %d)\n", fallbackAddr, pid)
-				stopped = true
-			}
-		}
-	}
+	stopped = stopped || mcpStopped
 	_ = os.Remove(filepath.Join(dir, mcpAddrName))
 	_ = os.Remove(filepath.Join(dir, "agent-up.lock"))
-
 	if !stopped {
 		utils.Info("corgi agent is not running")
 	}
+}
+
+func stopAgentDaemon(dir string) bool {
+	info, err := daemon.ReadInfo(dir)
+	if err != nil || info == nil {
+		return false
+	}
+	proc, err := os.FindProcess(info.PID)
+	if err != nil || proc.Signal(syscall.SIGTERM) != nil {
+		return false
+	}
+	if !waitForDaemonExit(dir, 10*time.Second) {
+		killDaemon(proc)
+	}
+	utils.Infof("stopped agent daemon (pid %d)\n", info.PID)
+	return true
+}
+
+func stopRecordedMCP(dir string) bool {
+	pidPath := filepath.Join(dir, mcpPidName)
+	pid, ok := readAgentPidFile(pidPath)
+	if !ok {
+		return false
+	}
+	defer os.Remove(pidPath)
+	if !utils.PidAlive(pid, "") {
+		return false
+	}
+	if proc, err := os.FindProcess(pid); err == nil && proc.Signal(syscall.SIGTERM) == nil {
+		utils.Infof("stopped MCP + tunnel (pid %d)\n", pid)
+		return true
+	}
+	return false
+}
+
+func stopMCPOnAddr(dir string) bool {
+	addr := defaultMCPAddr
+	if data, err := os.ReadFile(filepath.Join(dir, mcpAddrName)); err == nil {
+		addr = firstNonEmpty(strings.TrimSpace(string(data)), addr)
+	}
+	stopped := false
+	for _, pid := range corgiListenerPIDs(addr) {
+		if proc, err := os.FindProcess(pid); err == nil && proc.Signal(syscall.SIGTERM) == nil {
+			utils.Infof("stopped MCP + tunnel on %s (pid %d)\n", addr, pid)
+			stopped = true
+		}
+	}
+	return stopped
 }
 
 var agentRestartCmd = &cobra.Command{
