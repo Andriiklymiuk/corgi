@@ -47,13 +47,18 @@ type historyInputs struct {
 	since   time.Time
 }
 
-func buildHistory(in historyInputs) []HistoryEntry {
+func plansByTask(plans []watch.Plan) map[string]*CardFeature {
 	planOf := map[string]*CardFeature{}
-	for _, p := range in.plans {
+	for _, p := range plans {
 		for _, id := range p.TaskIDs() {
 			planOf[p.Workspace+"/"+fmt.Sprintf("TASK-%d", id)] = &CardFeature{Ref: p.Ref(), Title: firstLineOf(p.Goal)}
 		}
 	}
+	return planOf
+}
+
+func buildHistory(in historyInputs) []HistoryEntry {
+	planOf := plansByTask(in.plans)
 	var out []HistoryEntry
 	for _, r := range in.runs {
 		if e, ok := runHistory(r, in.since, planOf); ok {

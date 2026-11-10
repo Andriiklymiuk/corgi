@@ -36,30 +36,33 @@ type AttemptGroup struct {
 	Attempts []Attempt `json:"attempts"`
 }
 
+func attemptOf(s sessions.Session, ref string) (Attempt, bool) {
+	r, n, ok := strings.Cut(s.Attempt, "/")
+	if !ok || r == "" || (ref != "" && !strings.EqualFold(r, ref)) {
+		return Attempt{}, false
+	}
+	picked := strings.HasPrefix(s.Note, "picked")
+	if s.Status == sessions.StatusGone && !picked {
+		return Attempt{}, false
+	}
+	a := Attempt{Ref: r, N: n, Session: s.ID, Label: firstNonEmpty(s.Display, s.Label), Status: string(s.Status), Branch: s.Branch,
+		Changes: sessions.ChangesLine(s.Changes), Tests: sessions.TestsLine(s.Tests), Spend: sessions.SpendLine(s.Spend), PR: s.PR, Summary: s.Summary,
+		Picked: picked}
+	if s.Gate != nil {
+		a.Gate = "not done: " + s.Gate.Cmd
+		if s.Gate.OK {
+			a.Gate = "done ✓"
+		}
+	}
+	return a, true
+}
+
 func attemptGroups(list []sessions.Session, ref string) []AttemptGroup {
 	byRef := map[string][]Attempt{}
 	for _, s := range list {
-		r, n, ok := strings.Cut(s.Attempt, "/")
-		if !ok || r == "" {
-			continue
+		if a, ok := attemptOf(s, ref); ok {
+			byRef[a.Ref] = append(byRef[a.Ref], a)
 		}
-		if ref != "" && !strings.EqualFold(r, ref) {
-			continue
-		}
-		if s.Status == sessions.StatusGone && !strings.HasPrefix(s.Note, "picked") {
-			continue
-		}
-		a := Attempt{Ref: r, N: n, Session: s.ID, Label: firstNonEmpty(s.Display, s.Label), Status: string(s.Status), Branch: s.Branch,
-			Changes: sessions.ChangesLine(s.Changes), Tests: sessions.TestsLine(s.Tests), Spend: sessions.SpendLine(s.Spend), PR: s.PR, Summary: s.Summary,
-			Picked: strings.HasPrefix(s.Note, "picked")}
-		if s.Gate != nil {
-			if s.Gate.OK {
-				a.Gate = "done ✓"
-			} else {
-				a.Gate = "not done: " + s.Gate.Cmd
-			}
-		}
-		byRef[r] = append(byRef[r], a)
 	}
 	var out []AttemptGroup
 	for r, list := range byRef {

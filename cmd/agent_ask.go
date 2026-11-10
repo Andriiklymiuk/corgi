@@ -84,45 +84,47 @@ func printRun(ctx context.Context, dir, runIn string, p harness.Print) (string, 
 	return strings.TrimSpace(out.String()), nil
 }
 
-func askContext(dir string, now time.Time) map[string]any {
-	ctx := map[string]any{}
-	if rep, err := readBoard(dir); err == nil {
-		list := make([]map[string]any, 0, len(rep.State.Sessions))
-		for _, s := range rep.State.Sessions {
-			if s.Status == sessions.StatusGone {
-				continue
-			}
-			row := map[string]any{"name": firstNonEmpty(s.Display, s.Label), "status": string(s.Status), "workspace": s.Label}
-			add := func(k, v string) {
-				if v != "" {
-					row[k] = v
-				}
-			}
-			add("doing", s.Detail)
-			add("title", s.Title)
-			add("ticket", s.Ticket)
-			add("branch", s.Branch)
-			add("bot", s.Bot)
-			add("changes", sessions.ChangesLine(s.Changes))
-			add("tests", sessions.TestsLine(s.Tests))
-			add("overlap", sessions.OverlapLine(s.Overlap))
-			add("spend", sessions.SpendLine(s.Spend))
-			if s.Pending != nil {
-				row["waitingOn"] = strings.TrimSpace(s.Pending.Tool + " " + s.Pending.Subject)
-			}
-			if len(s.Drift) > 0 {
-				row["drift"] = s.Drift[0]
-			}
-			if s.OverCap {
-				row["overBudget"] = true
-			}
-			if !s.StatusSince.IsZero() {
-				row["since"] = roughAge(now.Sub(s.StatusSince)) + " ago"
-			}
-			list = append(list, row)
+func askSessionRow(s sessions.Session, now time.Time) map[string]any {
+	row := map[string]any{"name": firstNonEmpty(s.Display, s.Label), "status": string(s.Status), "workspace": s.Label}
+	for _, kv := range [][2]string{
+		{"doing", s.Detail}, {"title", s.Title}, {"ticket", s.Ticket}, {"branch", s.Branch}, {"bot", s.Bot},
+		{"changes", sessions.ChangesLine(s.Changes)}, {"tests", sessions.TestsLine(s.Tests)},
+		{"overlap", sessions.OverlapLine(s.Overlap)}, {"spend", sessions.SpendLine(s.Spend)},
+	} {
+		if kv[1] != "" {
+			row[kv[0]] = kv[1]
 		}
-		ctx["sessions"] = list
 	}
+	if s.Pending != nil {
+		row["waitingOn"] = strings.TrimSpace(s.Pending.Tool + " " + s.Pending.Subject)
+	}
+	if len(s.Drift) > 0 {
+		row["drift"] = s.Drift[0]
+	}
+	if s.OverCap {
+		row["overBudget"] = true
+	}
+	if !s.StatusSince.IsZero() {
+		row["since"] = roughAge(now.Sub(s.StatusSince)) + " ago"
+	}
+	return row
+}
+
+func askSessions(dir string, now time.Time) ([]map[string]any, bool) {
+	rep, err := readBoard(dir)
+	if err != nil {
+		return nil, false
+	}
+	list := make([]map[string]any, 0, len(rep.State.Sessions))
+	for _, s := range rep.State.Sessions {
+		if s.Status != sessions.StatusGone {
+			list = append(list, askSessionRow(s, now))
+		}
+	}
+	return list, true
+}
+
+func askInbox(dir string, now time.Time) []map[string]any {
 	state := watch.LoadState(dir)
 	inbox := []map[string]any{}
 	for _, e := range watch.RecentEvents(dir, 40) {
@@ -138,7 +140,10 @@ func askContext(dir string, now time.Time) map[string]any {
 		}
 		inbox = append(inbox, row)
 	}
-	ctx["inbox"] = inbox
+	return inbox
+}
+
+func askKanban(dir string, now time.Time) []map[string]any {
 	cards := []map[string]any{}
 	for _, c := range gatherKanban(dir, "", now) {
 		row := map[string]any{"ref": c.Ref, "column": c.Column, "title": c.Title, "workspace": c.Workspace, "why": c.Why}
@@ -150,7 +155,16 @@ func askContext(dir string, now time.Time) map[string]any {
 		}
 		cards = append(cards, row)
 	}
-	ctx["kanban"] = cards
+	return cards
+}
+
+func askContext(dir string, now time.Time) map[string]any {
+	ctx := map[string]any{}
+	if list, ok := askSessions(dir, now); ok {
+		ctx["sessions"] = list
+	}
+	ctx["inbox"] = askInbox(dir, now)
+	ctx["kanban"] = askKanban(dir, now)
 	if registry, _, err := agentRegistry(); err == nil {
 		names := []string{}
 		for _, ws := range registry.Sorted() {

@@ -2,11 +2,13 @@ package cmd
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/agent/config"
 	"andriiklymiuk/corgi/utils/agent/harness"
+
 	"github.com/spf13/cobra"
 )
 
@@ -21,19 +23,13 @@ func parseAgents(raw []string) ([]string, error) {
 	for _, chunk := range raw {
 		for _, name := range strings.Split(chunk, ",") {
 			name = strings.ToLower(strings.TrimSpace(name))
-			if name == "" {
+			if name == "" || slices.Contains(out, name) {
 				continue
 			}
 			if !harness.Known(name) {
 				return nil, fmt.Errorf("agents are %s, not %q", strings.Join(harness.Names(), ", "), name)
 			}
-			dup := false
-			for _, have := range out {
-				dup = dup || have == name
-			}
-			if !dup {
-				out = append(out, name)
-			}
+			out = append(out, name)
 		}
 	}
 	return out, nil

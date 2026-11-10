@@ -14,29 +14,39 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func claimFor(st sessions.State, ref, cwd string) (sessions.Session, error) {
-	if ref != "" {
-		return findBoardSession(st, ref)
-	}
+func sessionFromEnv(st sessions.State) (sessions.Session, bool) {
 	for _, name := range harness.Names() {
 		env := harness.For(name, "").SessionIDEnv
 		if id := strings.TrimSpace(os.Getenv(env)); env != "" && id != "" {
 			if s, err := findBoardSession(st, id); err == nil {
-				return s, nil
+				return s, true
 			}
 		}
 	}
+	return sessions.Session{}, false
+}
+
+func deepestSessionIn(st sessions.State, cwd string) sessions.Session {
 	var best sessions.Session
 	for _, s := range st.Sessions {
 		if s.Status == sessions.StatusGone || s.Cwd == "" {
 			continue
 		}
-		if samePath(s.Cwd, cwd) || sessions.Within(cwd, s.Cwd) {
-			if best.ID == "" || len(s.Cwd) > len(best.Cwd) {
-				best = s
-			}
+		if (samePath(s.Cwd, cwd) || sessions.Within(cwd, s.Cwd)) && (best.ID == "" || len(s.Cwd) > len(best.Cwd)) {
+			best = s
 		}
 	}
+	return best
+}
+
+func claimFor(st sessions.State, ref, cwd string) (sessions.Session, error) {
+	if ref != "" {
+		return findBoardSession(st, ref)
+	}
+	if s, ok := sessionFromEnv(st); ok {
+		return s, nil
+	}
+	best := deepestSessionIn(st, cwd)
 	if best.ID == "" {
 		return sessions.Session{}, fmt.Errorf("no session on the board for %s - say --session <id>", cwd)
 	}

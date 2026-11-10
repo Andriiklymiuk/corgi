@@ -26,40 +26,44 @@ func awayPlan(user *config.UserConfig, dirs map[string]string) []awayStep {
 		}})
 	}
 	for _, id := range sortedWorkspaceIDs(user) {
-		id := id
-		wc := user.Workspaces[id]
-		if wc.Watch == nil || !wc.Watch.Enabled {
-			continue
+		if wc := user.Workspaces[id]; wc.Watch != nil && wc.Watch.Enabled {
+			steps = append(steps, awayStepsFor(user, id, dirs[id])...)
 		}
-		if !hasRoutine(wc.Routines, "digest") {
-			steps = append(steps, awayStep{What: "digest routine in " + id, Apply: func() error {
-				k, _ := watch.CatalogKind("digest")
-				entry := user.Workspaces[id]
-				entry.Routines = append(entry.Routines, config.Routine{Name: "digest", Kind: k.Name, Schedule: k.Default})
-				user.Workspaces[id] = entry
-				return nil
-			}})
-		}
-		if wc.Watch.Action != "fix" {
-			continue
-		}
-		if !wc.Watch.Isolate || wc.Watch.PruneAfter == "" {
-			steps = append(steps, awayStep{What: "worktrees + prune in " + id, Apply: func() error {
-				entry := user.Workspaces[id]
-				entry.Watch.Isolate = true
-				if entry.Watch.PruneAfter == "" {
-					entry.Watch.PruneAfter = "7d"
-				}
-				user.Workspaces[id] = entry
-				return nil
-			}})
-		}
-		if dir := dirs[id]; dir != "" {
-			steps = append(steps, awayStep{What: "harden " + id, Apply: func() error {
-				_, err := hardenSettings(claudeLocalSettingsPath(dir), corgiCommandPath(), false)
-				return err
-			}})
-		}
+	}
+	return steps
+}
+
+func awayStepsFor(user *config.UserConfig, id, dir string) []awayStep {
+	var steps []awayStep
+	wc := user.Workspaces[id]
+	if !hasRoutine(wc.Routines, "digest") {
+		steps = append(steps, awayStep{What: "digest routine in " + id, Apply: func() error {
+			k, _ := watch.CatalogKind("digest")
+			entry := user.Workspaces[id]
+			entry.Routines = append(entry.Routines, config.Routine{Name: "digest", Kind: k.Name, Schedule: k.Default})
+			user.Workspaces[id] = entry
+			return nil
+		}})
+	}
+	if wc.Watch.Action != "fix" {
+		return steps
+	}
+	if !wc.Watch.Isolate || wc.Watch.PruneAfter == "" {
+		steps = append(steps, awayStep{What: "worktrees + prune in " + id, Apply: func() error {
+			entry := user.Workspaces[id]
+			entry.Watch.Isolate = true
+			if entry.Watch.PruneAfter == "" {
+				entry.Watch.PruneAfter = "7d"
+			}
+			user.Workspaces[id] = entry
+			return nil
+		}})
+	}
+	if dir != "" {
+		steps = append(steps, awayStep{What: "harden " + id, Apply: func() error {
+			_, err := hardenSettings(claudeLocalSettingsPath(dir), corgiCommandPath(), false)
+			return err
+		}})
 	}
 	return steps
 }
