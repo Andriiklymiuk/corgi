@@ -25,7 +25,7 @@ Both exit 0 on success, 1 on failure. Add global `--json` for machine-readable o
 
 ### Driving corgi as an agent
 
-Corgi auto-detects non-interactive mode (CI/agent env vars like `CLAUDECODE`, or no TTY) and errors with exit code 2 instead of prompting; `--interactive` forces prompts back. Global `--json` emits pure JSON on stdout (`doctor`, `status`, `list`, `config`, `ps`, `docs --json-schema`; `run --json` prints a startup summary then streams logs to stderr). Exit codes: 0 success, 1 failure, 2 usage/missing input. Full guide + recipes: `https://github.com/Andriiklymiuk/corgi/blob/main/docs/agents.md`.
+Corgi auto-detects non-interactive mode (CI/agent env vars like `CLAUDECODE`, or no TTY) and errors with exit code 2 instead of prompting; `--interactive` forces prompts back. Global `--json` emits pure JSON on stdout (`doctor`, `status`, `list`, `config`, `ps`, `docs --json-schema`; `run --json` prints a startup summary then streams logs to stderr). Exit codes: 0 success, 1 failure, 2 usage/missing input. Every JSON error carries a `fix` (the next step) - act on it before reading docs. To learn one thing, ask the binary: `corgi vocab <E_CODE|compose key|command|--flag>` (MCP: `corgi_vocab`) instead of loading the schema or a guide. When corgi made you take several tries or a doc was wrong, record it: `corgi feedback note "<what happened>"`. Full guide + recipes: `https://github.com/Andriiklymiuk/corgi/blob/main/docs/agents.md`.
 
 Detached lifecycle (preferred for agents): `corgi run --detach` (starts services that outlive corgi, returns immediately, errors `E_ALREADY_RUNNING` if already running - use `--force`), then `corgi ps`/`status` for real running/crashed status, `corgi stop [--service x]` to tear down, `corgi restart` for full-stack restart. See the "Lifecycle (detached)" section in `https://github.com/Andriiklymiuk/corgi/blob/main/docs/agents.md`.
 
@@ -35,12 +35,14 @@ Detached lifecycle (preferred for agents): `corgi run --detach` (starts services
 
 | Task | Read |
 |------|------|
+| One key, flag, command or error code | `corgi vocab <name>` (`--json`; MCP `corgi_vocab`) - before any reference |
+| A command failed under `--json` | its `fix` field, then `corgi vocab <code>` |
 | Writing a new `corgi-compose.yml` | `references/yml-schema.md` then `references/db-drivers.md` |
 | Service repo has a Dockerfile / own docker-compose (run without `start:` scripts, `--docker` flag, runner options) | `references/yml-schema.md#dockerfile-services-when-start-is-optional` |
 | Picking a db driver (port, image, env prefix) | `references/db-drivers.md` |
 | Adding `healthCheck:` to a service or db | `references/healthchecks.md` |
 | `corgi doctor` or `corgi run` failed | `references/debugging.md` |
-| Explaining / choosing a CLI flag | `references/commands.md` |
+| Explaining / choosing a CLI flag | `corgi vocab <command>` or `corgi vocab --<flag>`; the tour in `references/commands.md` |
 | Setting up webhook tunnels (Stripe/GitHub/e-sign/etc.) | `https://github.com/Andriiklymiuk/corgi/blob/main/docs/tunnel.md` (full) or `references/commands.md#corgi-tunnel-services` |
 | Producing a service map / relation diagram for the project | run `/corgi-describe` (see `references/describe-output.md`) |
 | Running `corgi run` inside an agent loop | `references/long-running.md` |

@@ -18,10 +18,16 @@ func exitWithError(jsonCode string, err error, exitCode int) {
 func exitWithErrorPrefix(jsonCode, stderrPrefix string, err error, exitCode int) {
 	if utils.JSONOutput {
 		utils.JSONError(jsonCode, err.Error())
-	} else if stderrPrefix != "" {
-		fmt.Fprintln(utils.WithMirror(os.Stderr), stderrPrefix, err)
 	} else {
-		fmt.Fprintln(utils.WithMirror(os.Stderr), err)
+		w := utils.WithMirror(os.Stderr)
+		if stderrPrefix != "" {
+			fmt.Fprintln(w, stderrPrefix, err)
+		} else {
+			fmt.Fprintln(w, err)
+		}
+		if fix := utils.FixFor(jsonCode); fix != "" {
+			fmt.Fprintf(w, "→ %s (%s)\n", fix, jsonCode)
+		}
 	}
 	exitProcess(exitCode)
 }

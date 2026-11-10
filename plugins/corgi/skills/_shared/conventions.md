@@ -276,6 +276,34 @@ These fail or get refused, unattended or not, and each one costs a turn:
   within moments. `ls` the folder once, then ask for the picture to be saved to the Desktop. Do not
   try the same path again.
 
+## Ask corgi, not the guide
+
+corgi answers for itself, and the answer is never older than the binary on `PATH`.
+
+- **An error's `fix` is the next step.** Every `--json` error and `corgi validate`
+  finding carries one (`"fix": "did you mean \"healthCheck\"?"`); without `--json` it is
+  the line after the error, starting with `→`. Do it before reading anything.
+- **One fact is one lookup.** `corgi vocab <E_CODE|compose key|command|--flag>` (MCP:
+  `corgi_vocab`) gives a code's fix, a key's place and type, a command's flags or a
+  flag's commands. The references under `../corgi/references/` are for a whole topic,
+  read by the section a routing table names - never front to back.
+- **A refused flag names the right one.** `unknown flag` comes back with the nearest flag
+  and the command's full list; use it, never guess a second spelling.
+- **Wait on a condition, never on time.** `corgi status --until-healthy --timeout 2m`,
+  `corgi logs --service <svc> --wait-for '<regexp>'`, `corgi events --follow --json`:
+  each returns the moment the thing is true, with an exit code that says whether it was.
+- **Verify by running, never by grepping.** A change is done when the stack, the test or
+  the screen shows it, not when the code reads right.
+- **Three rounds on one failure, then stop.** The same check red three fixes in a row
+  means the model of the problem is wrong: stop, say what was tried and what it showed,
+  and hand off (below) rather than a fourth guess.
+- **Record friction where it happened.** A doc that was wrong, a refusal that did not
+  say what to do, a command that took several tries:
+  `corgi feedback note "<what happened>" --command "<the corgi command>"`, unattended
+  too. It stays on the machine; the `improve-skill` retro reads it.
+- **A skill or doc you write names only real commands.** `corgi docs commands <path>`
+  checks every `corgi …` invocation and `--flag` in Markdown against the binary.
+
 ## Stopping with work left
 
 A run that stops part-way - a usage limit, a blocker, the end of the day - leaves a
@@ -302,8 +330,8 @@ there, stop and flag it out of band.
 Skills that read the workspace start with `ls corgi-compose.yml *.corgi-compose.yml` in
 cwd. None → tell the user to open the stack folder (or run `/corgi-new`); never guess a
 layout. Read only the keys you need: `services.<name>.{path,cloneFrom,manualRun,
-depends_on_services}`, `db_services`, `exports` (schema in
-`../corgi/references/yml-schema.md`). `corgi context --json` gives the same picture plus
+depends_on_services}`, `db_services`, `exports` (one key: `corgi vocab <key>`; the
+whole schema: `../corgi/references/yml-schema.md`). `corgi context --json` gives the same picture plus
 each repo's branch, dirty files and service status in one call. Don't render the whole
 project with `/corgi-describe` or `--describe`.
 

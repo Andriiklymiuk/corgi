@@ -71,6 +71,7 @@ var mcpToolMeta = map[string]toolMeta{
 	"corgi_test":                  {Title: "Run service tests", Kind: toolWrite},
 	"corgi_today":                 {Title: "Today's activity", Kind: toolReadOnly},
 	"corgi_up":                    {Title: "Start the stack", Kind: toolWrite},
+	"corgi_vocab":                 {Title: "Explain a code, compose key, command or flag", Kind: toolReadOnly},
 	"corgi_validate":              {Title: "Validate the compose file", Kind: toolReadOnly},
 	"corgi_wait_for_log":          {Title: "Wait for a log line", Kind: toolReadOnly},
 	"corgi_watch_board":           {Title: "Tracker board columns", Kind: toolReadOnly},

@@ -226,6 +226,7 @@ with an authenticated proxy.
 | `corgi_db_snapshot` | `{composePath?, service?, name?, force?}` | `{service, name, archive, sizeBytes, pgVersionMajor, image, arch}` | `utils.RunSnapshot` - postgres-family only, same as `corgi db snapshot` |
 | `corgi_db_restore` | `{composePath?, name, service?, force?}` | `{service, archive}` - **wipes the data volume**, no prompt | `utils.RunRestore`, same as `corgi db restore --yes` |
 | `corgi_schema` | `{}` | the JSON Schema (draft-07) as text | `utils.ComposeJSONSchema` |
+| `corgi_vocab` | `{name}` | `{kind: code\|field\|command\|flag, …}` - one code's fix, one compose key's place and type, one command's flags, or one flag's commands | `resolveVocab`, same as `corgi vocab` |
 | `corgi_context` | `{composePath?, noGit?}` | topology + status + per-repo git state + tier/profiles + validation | `buildContextReport` |
 | `corgi_why` | `{composePath?, service, logLines?}` | `{verdict, detail, dependencies[], port, lastExitCode, env, logTail[], nextStep}` | `diagnoseService` |
 | `corgi_wait_for_log` | `{composePath?, service, pattern, timeoutSec?}` | `{matched, line, waitedMs}` - blocks | `utils.WaitForLogLine` |

@@ -20,6 +20,9 @@ with a clear error (exit code 2) instead of hanging. It is triggered by any of:
 
 Force prompts back on with the global `--interactive` flag.
 
+Under an agent env var corgi also drops the welcome art, the quotes and the
+goodbye line: every byte of output is read by a model, so none of it is decoration.
+
 A compose that sets `useAwsVpn: true` launches the AWS VPN Client GUI in
 preflight, which an agent session cannot click through. On macOS corgi also
 presses Connect on the first profile when Accessibility allows it, then waits -
@@ -64,10 +67,16 @@ stdout is not a single JSON document for the whole run.
 Errors under `--json` have the shape:
 
 ```json
-{"error": {"code": "E_INTERACTIVE_REQUIRED", "message": "..."}}
+{"error": {"code": "E_DOCKER_DOWN", "message": "...",
+           "fix": "start Docker (`corgi doctor --fix` tries), then retry",
+           "lookup": "corgi vocab E_DOCKER_DOWN"}}
 ```
 
 The `code` is a stable string an agent can branch on (see [Error codes](#error-codes)).
+`fix` is the next step: the catalog's for the code, or a specific one where corgi
+knows better (`did you mean "healthCheck"?`). Without `--json` the same fix is the
+line after the error, starting with `→`. `corgi validate --json` puts a `fix` on
+every error and warning too.
 
 ## Lifecycle (detached)
 
@@ -259,6 +268,71 @@ and `--grep` narrow what comes back; `--json` emits one object per line.
 `corgi env <service> --explain <KEY>` prints every source that set the variable, in
 order, with the winner marked.
 
+## Look anything up (`corgi vocab`)
+
+One name, one answer, without reading a guide front to back:
+
+```bash
+corgi vocab E_READINESS_TIMEOUT   # meaning + fix
+corgi vocab depends_on_db         # where the key goes, its type, its description
+corgi vocab driver                # every driver db_services accepts
+corgi vocab agent watch           # a command: usage, every flag, subcommands
+corgi vocab --detach              # a flag: the commands that take it
+corgi vocab                       # the index: every code and command
+```
+
+`--json` returns one object whose `kind` is `code`, `field`, `command` or `flag`.
+Compose keys come from the embedded JSON Schema and commands from the CLI itself,
+so the answer is never older than the binary. An unknown name is refused with the
+closest match (`E_USAGE`, exit 1). Over MCP it is `corgi_vocab {name}` - cheaper
+than loading `corgi_schema` to read one key.
+
+## Refusals that say what to type
+
+A mistyped flag is refused with the nearest one and the full list the command
+takes, exit 2:
+
+```text
+$ corgi status --wach
+Error: unknown flag: --wach
+→ did you mean --watch? `corgi status` takes: --filename --interval --json … (`corgi vocab status`)
+```
+
+Under `--json` (even placed after the bad flag) it is the `E_USAGE` envelope with
+that text in `fix`. Unknown compose keys, unknown drivers and `depends_on` names
+that point nowhere get the same did-you-mean from `corgi validate`.
+
+## Docs and skills that name only real commands
+
+`corgi docs commands [<file or dir>…]` reads every `corgi …` invocation in the code
+of Markdown files (inline code, and shell or untagged fences) and checks the command
+path and each `--flag` against the binary, with the nearest real one for each finding:
+
+```text
+$ corgi docs commands plugins/corgi/skills
+plugins/corgi/skills/stories/SKILL.md:78  corgi logs --errors-only - the command takes no such flag
+1 file(s), 1 finding(s)
+```
+
+Exit 1 on a finding; `--json` returns `{ok, files, findings[]}`. With no paths it
+reads `docs`, `plugins` and `README.md`. corgi's own tests run it over its docs and
+skills, so a renamed flag fails the build instead of teaching agents a dead command.
+Point it at your own `CLAUDE.md`, `AGENTS.md` and project skills too.
+
+## Record friction (`corgi feedback`)
+
+When a doc was wrong, a refusal did not say what to do, or a command took several
+tries, write it down in one line where it happened:
+
+```bash
+corgi feedback note "E_READINESS_TIMEOUT did not say which dependency" --command "run --detach"
+corgi feedback list [--json]
+```
+
+Notes are appended to `~/.corgi/feedback.jsonl` (mode 0600) with corgi's version
+and whether an agent wrote them - never output, code or paths. Nothing is sent
+anywhere; a person reads the list and files what is worth fixing.
+
 ## Undo across repos
 
 ```bash
@@ -317,7 +391,10 @@ rather than skipped - a silently skipped test looks exactly like a passing one.
 ## Error codes
 
 Under `--json`, errors carry a stable `code` string. Branch on the code, not the
-message text (messages may change wording). The catalog:
+message text (messages may change wording). The binary holds this catalog
+(`utils/errcatalog.go`): `corgi vocab <code>` prints an entry, and every JSON
+error's `fix` comes from it. A test fails when a declared code has no entry or
+this table misses one.
 
 | Code | Meaning | Typical fix |
 |------|---------|-------------|

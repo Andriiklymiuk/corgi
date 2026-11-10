@@ -1816,6 +1816,21 @@ func registerMCPTools(s *server.MCPServer) {
 		})
 	}))
 
+	s.AddTool(newCorgiTool("corgi_vocab",
+		mcp.WithDescription("Explain one name without loading the whole schema: an error code (E_PORT_CONFLICT → meaning and fix), a corgi-compose.yml key (depends_on_db → where it goes, its type, description), a CLI command (\"agent watch\" → its flags) or a flag (--detach → the commands that take it). An unknown name errors with the closest match."),
+		mcp.WithString("name", mcp.Required(), mcp.Description("The code, key, command (space-separated for a subcommand) or --flag")),
+	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
+		name := strings.TrimSpace(r.GetString("name", ""))
+		if answer, ok := resolveVocab(strings.Fields(name)); ok {
+			return answer, nil
+		}
+		hint := ""
+		if near := utils.Nearest(name, vocabNames()); near != "" {
+			hint = fmt.Sprintf(" - did you mean %q?", near)
+		}
+		return nil, fmt.Errorf("%s: corgi knows no code, compose field, command or flag named %q%s", utils.ErrUsage, name, hint)
+	}))
+
 	s.AddTool(newCorgiTool("corgi_schema",
 		mcp.WithDescription("Return the JSON Schema (draft-07) for corgi-compose.yml."),
 	), func(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -1831,7 +1846,7 @@ func jsonHandler(core func(mcp.CallToolRequest) (any, error)) server.ToolHandler
 		defer mcpHandlerMu.Unlock()
 		out, err := core(r)
 		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
+			return mcp.NewToolResultError(mcpErrorText(err.Error())), nil
 		}
 		b, err := json.Marshal(out)
 		if err != nil {
@@ -1909,4 +1924,14 @@ func registerMCPResources(s *server.MCPServer) {
 				URI: "corgi://status", MIMEType: mimeJSON, Text: string(b),
 			}}, nil
 		})
+}
+
+// mcpErrorText appends the catalog's fix to an error that leads with a code,
+// so a tool result is as actionable as a --json error.
+func mcpErrorText(msg string) string {
+	code, _, _ := strings.Cut(msg, ":")
+	if fix := utils.FixFor(code); fix != "" && !strings.Contains(msg, fix) {
+		return msg + "\nfix: " + fix
+	}
+	return msg
 }

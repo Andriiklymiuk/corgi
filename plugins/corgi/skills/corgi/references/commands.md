@@ -5,6 +5,8 @@ description: All corgi CLI commands and global flags with aliases, key flags, an
 
 # Corgi CLI commands
 
+Lookup, not reading: `corgi vocab <command>` and `corgi vocab --<flag>` answer from the binary itself, and `corgi docs commands` fails when this file names a command or flag the CLI does not take.
+
 ## Global flags (work on any command)
 
 | Flag | Purpose |
