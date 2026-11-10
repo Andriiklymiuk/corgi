@@ -141,14 +141,8 @@ func codexWindowFromLine(line []byte) (CodexWindow, bool) {
 		return CodexWindow{}, false
 	}
 	var row struct {
-		Timestamp time.Time `json:"timestamp"`
-		Payload   struct {
-			Limits *struct {
-				Primary   *codexLimit `json:"primary"`
-				Secondary *codexLimit `json:"secondary"`
-				Reached   *string     `json:"rate_limit_reached_type"`
-			} `json:"rate_limits"`
-		} `json:"payload"`
+		Timestamp time.Time                  `json:"timestamp"`
+		Payload   codexWindowFromLinePayload `json:"payload"`
 	}
 	if json.Unmarshal(bytes.TrimSpace(line), &row) != nil || row.Payload.Limits == nil {
 		return CodexWindow{}, false
@@ -169,4 +163,14 @@ func codexWindowFromLine(line []byte) (CodexWindow, bool) {
 		}
 	}
 	return w, found
+}
+
+type codexWindowFromLinePayloadLimits struct {
+	Primary   *codexLimit `json:"primary"`
+	Secondary *codexLimit `json:"secondary"`
+	Reached   *string     `json:"rate_limit_reached_type"`
+}
+
+type codexWindowFromLinePayload struct {
+	Limits *codexWindowFromLinePayloadLimits `json:"rate_limits"`
 }

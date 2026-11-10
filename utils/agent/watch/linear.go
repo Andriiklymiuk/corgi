@@ -64,7 +64,7 @@ func (l *Linear) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 }`, issueFilter, graphqlString(commentsSince), strconv.Quote(l.Me))
 
 	var data struct {
-		Issues   struct{ Nodes []linearIssue }
+		Issues   linearPollIssues
 		Comments linearComments
 	}
 	if err := l.query(ctx, query, &data); err != nil {
@@ -133,20 +133,32 @@ func (l *Linear) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 	return events, next, nil
 }
 
+type linearPollIssues struct{ Nodes []linearIssue }
+
 type linearComments struct {
-	Nodes []struct {
-		ID, Body, CreatedAt string
-		User                *struct{ ID, Name string }
-		BotActor            *struct{ Name string }
-		Issue               struct {
-			Identifier, URL, Title string
-			State                  struct{ Name string }
-		}
-	}
-	PageInfo struct {
-		HasNextPage bool
-		EndCursor   string
-	}
+	Nodes    []linearCommentsNodes
+	PageInfo linearCommentsPageInfo
+}
+
+type linearCommentsNodesUser struct{ ID, Name string }
+
+type linearCommentsNodesBotActor struct{ Name string }
+
+type linearCommentsNodesIssue struct {
+	Identifier, URL, Title string
+	State                  linearCommentsNodesBotActor
+}
+
+type linearCommentsNodes struct {
+	ID, Body, CreatedAt string
+	User                *linearCommentsNodesUser
+	BotActor            *linearCommentsNodesBotActor
+	Issue               linearCommentsNodesIssue
+}
+
+type linearCommentsPageInfo struct {
+	HasNextPage bool
+	EndCursor   string
 }
 
 func (l *Linear) query(ctx context.Context, document string, out any) error {
@@ -181,10 +193,8 @@ func (l *Linear) query(ctx context.Context, document string, out any) error {
 		return fmt.Errorf("linear: %s: %s", resp.Status, clip(string(raw), bodyMax))
 	}
 	var envelope struct {
-		Data   json.RawMessage `json:"data"`
-		Errors []struct {
-			Message string `json:"message"`
-		} `json:"errors"`
+		Data   json.RawMessage             `json:"data"`
+		Errors []linearQueryEnvelopeErrors `json:"errors"`
 	}
 	if err := json.Unmarshal(raw, &envelope); err != nil {
 		return fmt.Errorf("linear: bad response: %w", err)
@@ -202,6 +212,10 @@ func (l *Linear) query(ctx context.Context, document string, out any) error {
 		}
 	}
 	return nil
+}
+
+type linearQueryEnvelopeErrors struct {
+	Message string `json:"message"`
 }
 
 func graphqlString(t time.Time) string {
@@ -241,21 +255,33 @@ func later(a, b time.Time) time.Time {
 
 type linearIssue struct {
 	ID, Identifier, Title, Description, URL string
-	State                                   struct{ Name string }
-	Labels                                  struct{ Nodes []struct{ Name string } }
-	Assignee                                *struct{ ID, Name string }
-	Creator                                 *struct{ ID, Name string }
+	State                                   linearCommentsNodesBotActor
+	Labels                                  linearIssueLabels
+	Assignee                                *linearCommentsNodesUser
+	Creator                                 *linearCommentsNodesUser
 	CreatedAt, UpdatedAt                    string
-	Parent                                  *struct{ Identifier, Title string }
-	Children                                struct {
-		Nodes []struct {
-			Identifier string
-			State      struct{ Name string }
-			Assignee   *struct{ ID string }
-		}
-	}
-	History struct{ Nodes []linearHistory }
+	Parent                                  *linearIssueParent
+	Children                                linearIssueChildren
+	History                                 linearIssueHistory
 }
+
+type linearIssueLabels struct{ Nodes []linearCommentsNodesBotActor }
+
+type linearIssueParent struct{ Identifier, Title string }
+
+type linearIssueNodesAssignee struct{ ID string }
+
+type linearIssueChildrenNodes struct {
+	Identifier string
+	State      linearCommentsNodesBotActor
+	Assignee   *linearIssueNodesAssignee
+}
+
+type linearIssueChildren struct {
+	Nodes []linearIssueChildrenNodes
+}
+
+type linearIssueHistory struct{ Nodes []linearHistory }
 
 const linearIssueFields = `id identifier title description url state { name } labels { nodes { name } } assignee { id name } creator { id name } createdAt updatedAt
       parent { identifier title }
@@ -267,7 +293,7 @@ func (l *Linear) resolveMe(ctx context.Context) error {
 		return nil
 	}
 	var viewer struct {
-		Viewer struct{ ID, Name, Email string } `json:"viewer"`
+		Viewer linearResolveMeViewerViewer `json:"viewer"`
 	}
 	if err := l.query(ctx, `{ viewer { id name email } }`, &viewer); err != nil {
 		return err
@@ -278,6 +304,8 @@ func (l *Linear) resolveMe(ctx context.Context) error {
 	l.Me = viewer.Viewer.ID
 	return nil
 }
+
+type linearResolveMeViewerViewer struct{ ID, Name, Email string }
 
 func (l *Linear) issueEvent(n linearIssue, key string, at time.Time) Event {
 	e := Event{
@@ -327,7 +355,7 @@ func (l *Linear) Mine(ctx context.Context) ([]Event, error) {
 	}
 	query := fmt.Sprintf(`{ issues(filter: {%s}, first: 50, sort: [{createdAt: {order: Ascending}}]) { nodes { %s } } }`, filter, linearIssueFields)
 	var data struct {
-		Issues struct{ Nodes []linearIssue }
+		Issues linearPollIssues
 	}
 	if err := l.query(ctx, query, &data); err != nil {
 		return nil, err
@@ -341,9 +369,9 @@ func (l *Linear) Mine(ctx context.Context) ([]Event, error) {
 
 type linearHistory struct {
 	ID, CreatedAt string
-	Actor         *struct{ ID string }
-	ToAssignee    *struct{ ID string }
-	ToState       *struct{ Name string }
+	Actor         *linearIssueNodesAssignee
+	ToAssignee    *linearIssueNodesAssignee
+	ToState       *linearCommentsNodesBotActor
 }
 
 // The newest change since `since` by another person that handed me the issue

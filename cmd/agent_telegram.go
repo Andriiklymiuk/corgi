@@ -96,19 +96,8 @@ func (t *telegramControl) poll(ctx context.Context) []telegramMessage {
 	defer resp.Body.Close()
 
 	var payload struct {
-		OK     bool `json:"ok"`
-		Result []struct {
-			UpdateID int64 `json:"update_id"`
-			Message  struct {
-				Text string `json:"text"`
-				Chat struct {
-					ID int64 `json:"id"`
-				} `json:"chat"`
-				ReplyTo *struct {
-					Text string `json:"text"`
-				} `json:"reply_to_message"`
-			} `json:"message"`
-		} `json:"result"`
+		OK     bool                        `json:"ok"`
+		Result []telegramControlPollResult `json:"result"`
 	}
 	if json.NewDecoder(resp.Body).Decode(&payload) != nil || !payload.OK {
 		return nil
@@ -131,6 +120,25 @@ func (t *telegramControl) poll(ctx context.Context) []telegramMessage {
 		}
 	}
 	return texts
+}
+
+type telegramControlPollMessageChat struct {
+	ID int64 `json:"id"`
+}
+
+type telegramControlPollMessageReplyTo struct {
+	Text string `json:"text"`
+}
+
+type telegramControlPollResultMessage struct {
+	Text    string                             `json:"text"`
+	Chat    telegramControlPollMessageChat     `json:"chat"`
+	ReplyTo *telegramControlPollMessageReplyTo `json:"reply_to_message"`
+}
+
+type telegramControlPollResult struct {
+	UpdateID int64                            `json:"update_id"`
+	Message  telegramControlPollResultMessage `json:"message"`
 }
 
 func (t *telegramControl) handle(text, replyTo string) {

@@ -72,10 +72,7 @@ func (j *Jira) Statuses(ctx context.Context) ([]Status, error) {
 		return nil, fmt.Errorf("jira: no project key to read statuses from")
 	}
 	var out []struct {
-		Statuses []struct {
-			ID   string `json:"id"`
-			Name string `json:"name"`
-		} `json:"statuses"`
+		Statuses []jiraStatusesStatuses `json:"statuses"`
 	}
 	if err := j.get(ctx, "/rest/api/3/project/"+j.Project+"/statuses", nil, &out); err != nil {
 		return nil, err
@@ -93,6 +90,11 @@ func (j *Jira) Statuses(ctx context.Context) ([]Status, error) {
 	return statuses, nil
 }
 
+type jiraStatusesStatuses struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
 func (j *Jira) Whoami(ctx context.Context) (Identity, error) {
 	var me struct {
 		AccountID   string `json:"accountId"`
@@ -106,13 +108,7 @@ func (j *Jira) Whoami(ctx context.Context) (Identity, error) {
 
 func (j *Jira) Move(ctx context.Context, ref, status string) error {
 	var available struct {
-		Transitions []struct {
-			ID   string `json:"id"`
-			Name string `json:"name"`
-			To   struct {
-				Name string `json:"name"`
-			} `json:"to"`
-		} `json:"transitions"`
+		Transitions []jiraMoveAvailableTransitions `json:"transitions"`
 	}
 	if err := j.get(ctx, jiraIssueAPIPath+ref+"/transitions", nil, &available); err != nil {
 		return err
@@ -132,6 +128,16 @@ func (j *Jira) Move(ctx context.Context, ref, status string) error {
 		return fmt.Errorf("jira: %s cannot move anywhere from where it is", ref)
 	}
 	return fmt.Errorf("jira: %s cannot move to %q from where it is - it can go to: %s", ref, status, strings.Join(names, ", "))
+}
+
+type jiraMoveAvailableTransitionsTo struct {
+	Name string `json:"name"`
+}
+
+type jiraMoveAvailableTransitions struct {
+	ID   string                         `json:"id"`
+	Name string                         `json:"name"`
+	To   jiraMoveAvailableTransitionsTo `json:"to"`
 }
 
 func (j *Jira) Assign(ctx context.Context, ref, userID string) error {
@@ -243,13 +249,7 @@ func (l *Linear) Statuses(ctx context.Context) ([]Status, error) {
 		filter = fmt.Sprintf("(filter: {team: {key: {eq: %s}}})", jsonString(l.Team))
 	}
 	var out struct {
-		WorkflowStates struct {
-			Nodes []struct {
-				ID       string  `json:"id"`
-				Name     string  `json:"name"`
-				Position float64 `json:"position"`
-			} `json:"nodes"`
-		} `json:"workflowStates"`
+		WorkflowStates linearStatusesWorkflowStates `json:"workflowStates"`
 	}
 	if err := l.query(ctx, "query { workflowStates"+filter+" { nodes { id name position } } }", &out); err != nil {
 		return nil, err
@@ -261,12 +261,19 @@ func (l *Linear) Statuses(ctx context.Context) ([]Status, error) {
 	return statuses, nil
 }
 
+type linearStatusesWorkflowStatesNodes struct {
+	ID       string  `json:"id"`
+	Name     string  `json:"name"`
+	Position float64 `json:"position"`
+}
+
+type linearStatusesWorkflowStates struct {
+	Nodes []linearStatusesWorkflowStatesNodes `json:"nodes"`
+}
+
 func (l *Linear) Whoami(ctx context.Context) (Identity, error) {
 	var out struct {
-		Viewer struct {
-			ID   string `json:"id"`
-			Name string `json:"name"`
-		} `json:"viewer"`
+		Viewer jiraStatusesStatuses `json:"viewer"`
 	}
 	if err := l.query(ctx, "query { viewer { id name } }", &out); err != nil {
 		return Identity{}, err
@@ -308,9 +315,7 @@ func (l *Linear) commentOn(ctx context.Context, id, ref, body string) error {
 	document := fmt.Sprintf("mutation { commentCreate(input: {issueId: %s, body: %s}) { success } }",
 		jsonString(id), jsonString(body))
 	var out struct {
-		CommentCreate struct {
-			Success bool `json:"success"`
-		} `json:"commentCreate"`
+		CommentCreate linearCommentOnCommentCreate `json:"commentCreate"`
 	}
 	if err := l.query(ctx, document, &out); err != nil {
 		return err
@@ -321,13 +326,15 @@ func (l *Linear) commentOn(ctx context.Context, id, ref, body string) error {
 	return nil
 }
 
+type linearCommentOnCommentCreate struct {
+	Success bool `json:"success"`
+}
+
 func (l *Linear) UpdateComment(ctx context.Context, _, id, body string) error {
 	document := fmt.Sprintf("mutation { commentUpdate(id: %s, input: {body: %s}) { success } }",
 		jsonString(id), jsonString(body))
 	var out struct {
-		CommentUpdate struct {
-			Success bool `json:"success"`
-		} `json:"commentUpdate"`
+		CommentUpdate linearCommentOnCommentCreate `json:"commentUpdate"`
 	}
 	if err := l.query(ctx, document, &out); err != nil {
 		return err
@@ -340,9 +347,7 @@ func (l *Linear) UpdateComment(ctx context.Context, _, id, body string) error {
 
 func (l *Linear) issueID(ctx context.Context, ref string) (string, error) {
 	var out struct {
-		Issue *struct {
-			ID string `json:"id"`
-		} `json:"issue"`
+		Issue *linearIssueIDIssue `json:"issue"`
 	}
 	if err := l.query(ctx, "query { issue(id: "+jsonString(ref)+") { id } }", &out); err != nil {
 		return "", err
@@ -353,6 +358,10 @@ func (l *Linear) issueID(ctx context.Context, ref string) (string, error) {
 	return out.Issue.ID, nil
 }
 
+type linearIssueIDIssue struct {
+	ID string `json:"id"`
+}
+
 func (l *Linear) updateIssue(ctx context.Context, ref, input string) error {
 	id, err := l.issueID(ctx, ref)
 	if err != nil {
@@ -360,9 +369,7 @@ func (l *Linear) updateIssue(ctx context.Context, ref, input string) error {
 	}
 	document := fmt.Sprintf("mutation { issueUpdate(id: %s, input: {%s}) { success } }", jsonString(id), input)
 	var out struct {
-		IssueUpdate struct {
-			Success bool `json:"success"`
-		} `json:"issueUpdate"`
+		IssueUpdate linearCommentOnCommentCreate `json:"issueUpdate"`
 	}
 	if err := l.query(ctx, document, &out); err != nil {
 		return err
@@ -716,14 +723,16 @@ func doGraphQL(req *http.Request, link string) error {
 		return fmt.Errorf("changing %s: HTTP %d: %s", link, resp.StatusCode, clip(string(answer), bodyMax))
 	}
 	var out struct {
-		Errors []struct {
-			Message string `json:"message"`
-		} `json:"errors"`
+		Errors []doGraphQLErrors `json:"errors"`
 	}
 	if json.Unmarshal(answer, &out) == nil && len(out.Errors) > 0 {
 		return fmt.Errorf("changing %s: %s", link, out.Errors[0].Message)
 	}
 	return nil
+}
+
+type doGraphQLErrors struct {
+	Message string `json:"message"`
 }
 
 func MergePR(ctx context.Context, s Secrets, link string) error {
@@ -824,18 +833,7 @@ func (l *Linear) RecentComments(ctx context.Context, ref string, limit int) ([]C
 		"query { issue(id: %s) { comments(last: %d) { nodes { id body createdAt user { name } } } } }",
 		jsonString(ref), limit)
 	var out struct {
-		Issue *struct {
-			Comments struct {
-				Nodes []struct {
-					ID        string `json:"id"`
-					Body      string `json:"body"`
-					CreatedAt string `json:"createdAt"`
-					User      *struct {
-						Name string `json:"name"`
-					} `json:"user"`
-				} `json:"nodes"`
-			} `json:"comments"`
-		} `json:"issue"`
+		Issue *linearRecentCommentsIssue `json:"issue"`
 	}
 	if err := l.query(ctx, document, &out); err != nil {
 		return nil, err
@@ -855,13 +853,24 @@ func (l *Linear) RecentComments(ctx context.Context, ref string, limit int) ([]C
 	return comments, nil
 }
 
+type linearRecentCommentsCommentsNodes struct {
+	ID        string                          `json:"id"`
+	Body      string                          `json:"body"`
+	CreatedAt string                          `json:"createdAt"`
+	User      *jiraMoveAvailableTransitionsTo `json:"user"`
+}
+
+type linearRecentCommentsIssueComments struct {
+	Nodes []linearRecentCommentsCommentsNodes `json:"nodes"`
+}
+
+type linearRecentCommentsIssue struct {
+	Comments linearRecentCommentsIssueComments `json:"comments"`
+}
+
 func (j *Jira) RefState(ctx context.Context, ref string) string {
 	var issue struct {
-		Fields struct {
-			Status struct {
-				Name string `json:"name"`
-			} `json:"status"`
-		} `json:"fields"`
+		Fields jiraRefStateIssueFields `json:"fields"`
 	}
 	params := url.Values{}
 	params.Set("fields", "status")
@@ -871,18 +880,22 @@ func (j *Jira) RefState(ctx context.Context, ref string) string {
 	return issue.Fields.Status.Name
 }
 
+type jiraRefStateIssueFields struct {
+	Status jiraMoveAvailableTransitionsTo `json:"status"`
+}
+
 func (l *Linear) RefState(ctx context.Context, ref string) string {
 	var out struct {
-		Issue *struct {
-			State struct {
-				Name string `json:"name"`
-			} `json:"state"`
-		} `json:"issue"`
+		Issue *linearRefStateIssue `json:"issue"`
 	}
 	if l.query(ctx, "query { issue(id: "+jsonString(ref)+") { state { name } } }", &out) != nil || out.Issue == nil {
 		return ""
 	}
 	return out.Issue.State.Name
+}
+
+type linearRefStateIssue struct {
+	State jiraMoveAvailableTransitionsTo `json:"state"`
 }
 
 const (

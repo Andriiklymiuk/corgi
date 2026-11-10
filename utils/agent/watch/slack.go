@@ -273,10 +273,8 @@ func (s *Slack) conversationsOf(ctx context.Context, types string) ([]slackConve
 			params.Set("cursor", cursor)
 		}
 		var page struct {
-			Channels []slackConversation `json:"channels"`
-			Meta     struct {
-				NextCursor string `json:"next_cursor"`
-			} `json:"response_metadata"`
+			Channels []slackConversation      `json:"channels"`
+			Meta     slackConversationsOfMeta `json:"response_metadata"`
 		}
 		if err := s.api.call(ctx, "conversations.list", params, &page); err != nil {
 			return nil, err
@@ -288,18 +286,24 @@ func (s *Slack) conversationsOf(ctx context.Context, types string) ([]slackConve
 	}
 }
 
+type slackConversationsOfMeta struct {
+	NextCursor string `json:"next_cursor"`
+}
+
 type slackMatch struct {
-	TS        string `json:"ts"`
-	Text      string `json:"text"`
-	User      string `json:"user"`
-	Username  string `json:"username"`
-	BotID     string `json:"bot_id"`
-	Subtype   string `json:"subtype"`
-	Permalink string `json:"permalink"`
-	Channel   struct {
-		ID   string `json:"id"`
-		Name string `json:"name"`
-	} `json:"channel"`
+	TS        string            `json:"ts"`
+	Text      string            `json:"text"`
+	User      string            `json:"user"`
+	Username  string            `json:"username"`
+	BotID     string            `json:"bot_id"`
+	Subtype   string            `json:"subtype"`
+	Permalink string            `json:"permalink"`
+	Channel   slackMatchChannel `json:"channel"`
+}
+
+type slackMatchChannel struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
 }
 
 func (s *Slack) mentions(ctx context.Context, cursor Cursor, me, team string) ([]Event, error) {
@@ -307,13 +311,7 @@ func (s *Slack) mentions(ctx context.Context, cursor Cursor, me, team string) ([
 	var matches []slackMatch
 	for page := 1; page <= 5; page++ {
 		var res struct {
-			Messages struct {
-				Matches []slackMatch `json:"matches"`
-				Paging  struct {
-					Page  int `json:"page"`
-					Pages int `json:"pages"`
-				} `json:"paging"`
-			} `json:"messages"`
+			Messages slackMentionsMessages `json:"messages"`
 		}
 		params := url.Values{
 			"query":    {"<@" + me + ">"},
@@ -354,6 +352,16 @@ func (s *Slack) mentions(ctx context.Context, cursor Cursor, me, team string) ([
 		return nil, nil
 	}
 	return events, nil
+}
+
+type slackMentionsMessagesPaging struct {
+	Page  int `json:"page"`
+	Pages int `json:"pages"`
+}
+
+type slackMentionsMessages struct {
+	Matches []slackMatch                `json:"matches"`
+	Paging  slackMentionsMessagesPaging `json:"paging"`
 }
 
 func (s *Slack) history(ctx context.Context, cursor Cursor, c slackConversation, me, team string) ([]Event, error) {
@@ -479,10 +487,7 @@ func (s *Slack) handle(ctx context.Context, id string) string {
 		return got
 	}
 	var res struct {
-		User struct {
-			Name     string `json:"name"`
-			RealName string `json:"real_name"`
-		} `json:"user"`
+		User slackHandleUser `json:"user"`
 	}
 	err := s.api.call(ctx, "users.info", url.Values{"user": {id}}, &res)
 	if errors.Is(err, sendgate.ErrThrottled) {
@@ -495,6 +500,11 @@ func (s *Slack) handle(ctx context.Context, id string) string {
 	}
 	s.names[id] = "@" + name
 	return s.names[id]
+}
+
+type slackHandleUser struct {
+	Name     string `json:"name"`
+	RealName string `json:"real_name"`
 }
 
 var (

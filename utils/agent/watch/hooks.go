@@ -79,30 +79,9 @@ func ParseHookAs(source string, r *http.Request, body []byte, who HookIdentity) 
 
 func parseLinearHook(body []byte, me string) ([]Event, error) {
 	var p struct {
-		Action string `json:"action"`
-		Type   string `json:"type"`
-		Data   struct {
-			ID         string                  `json:"id"`
-			Identifier string                  `json:"identifier"`
-			Title      string                  `json:"title"`
-			URL        string                  `json:"url"`
-			Body       string                  `json:"body"`
-			CreatedAt  string                  `json:"createdAt"`
-			State      struct{ Name string }   `json:"state"`
-			Labels     []struct{ Name string } `json:"labels"`
-			Assignee   *struct {
-				ID    string `json:"id"`
-				Name  string `json:"name"`
-				Email string `json:"email"`
-			} `json:"assignee"`
-			User  *struct{ ID, Name, Email string } `json:"user"`
-			Issue *struct {
-				Identifier string                            `json:"identifier"`
-				Title      string                            `json:"title"`
-				URL        string                            `json:"url"`
-				Assignee   *struct{ ID, Name, Email string } `json:"assignee"`
-			} `json:"issue"`
-		} `json:"data"`
+		Action string         `json:"action"`
+		Type   string         `json:"type"`
+		Data   linearHookData `json:"data"`
 	}
 	if err := json.Unmarshal(body, &p); err != nil {
 		return nil, err
@@ -137,44 +116,45 @@ func parseLinearHook(body []byte, me string) ([]Event, error) {
 	return nil, nil
 }
 
+type linearHookDataState struct{ Name string }
+
+type linearHookDataAssignee struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Email string `json:"email"`
+}
+
+type linearHookDataUser struct{ ID, Name, Email string }
+
+type linearHookDataIssue struct {
+	Identifier string              `json:"identifier"`
+	Title      string              `json:"title"`
+	URL        string              `json:"url"`
+	Assignee   *linearHookDataUser `json:"assignee"`
+}
+
+type linearHookData struct {
+	ID         string                  `json:"id"`
+	Identifier string                  `json:"identifier"`
+	Title      string                  `json:"title"`
+	URL        string                  `json:"url"`
+	Body       string                  `json:"body"`
+	CreatedAt  string                  `json:"createdAt"`
+	State      linearHookDataState     `json:"state"`
+	Labels     []linearHookDataState   `json:"labels"`
+	Assignee   *linearHookDataAssignee `json:"assignee"`
+	User       *linearHookDataUser     `json:"user"`
+	Issue      *linearHookDataIssue    `json:"issue"`
+}
+
 func parseGitHubHook(event string, body []byte, me string) ([]Event, error) {
 	var p struct {
-		Action string `json:"action"`
-		Repo   struct {
-			FullName string `json:"full_name"`
-		} `json:"repository"`
-		PR *struct {
-			Number  int                    `json:"number"`
-			Title   string                 `json:"title"`
-			HTMLURL string                 `json:"html_url"`
-			User    struct{ Login string } `json:"user"`
-		} `json:"pull_request"`
-		Issue *struct {
-			Number  int                    `json:"number"`
-			Title   string                 `json:"title"`
-			HTMLURL string                 `json:"html_url"`
-			User    struct{ Login string } `json:"user"`
-			PR      *struct{}              `json:"pull_request"`
-		} `json:"issue"`
-		Comment *struct {
-			ID        int64  `json:"id"`
-			Body      string `json:"body"`
-			CreatedAt string `json:"created_at"`
-			User      struct {
-				Login string `json:"login"`
-				Type  string `json:"type"`
-			} `json:"user"`
-		} `json:"comment"`
-		Review *struct {
-			ID          int64  `json:"id"`
-			Body        string `json:"body"`
-			State       string `json:"state"`
-			SubmittedAt string `json:"submitted_at"`
-			User        struct {
-				Login string `json:"login"`
-				Type  string `json:"type"`
-			} `json:"user"`
-		} `json:"review"`
+		Action  string             `json:"action"`
+		Repo    gitHubHookRepo     `json:"repository"`
+		PR      *gitHubHookPR      `json:"pull_request"`
+		Issue   *gitHubHookIssue   `json:"issue"`
+		Comment *gitHubHookComment `json:"comment"`
+		Review  *gitHubHookReview  `json:"review"`
 	}
 	if err := json.Unmarshal(body, &p); err != nil {
 		return nil, err
@@ -212,28 +192,55 @@ func parseGitHubHook(event string, body []byte, me string) ([]Event, error) {
 	return nil, nil
 }
 
+type gitHubHookRepo struct {
+	FullName string `json:"full_name"`
+}
+
+type gitHubHookPRUser struct{ Login string }
+
+type gitHubHookPR struct {
+	Number  int              `json:"number"`
+	Title   string           `json:"title"`
+	HTMLURL string           `json:"html_url"`
+	User    gitHubHookPRUser `json:"user"`
+}
+
+type gitHubHookIssue struct {
+	Number  int              `json:"number"`
+	Title   string           `json:"title"`
+	HTMLURL string           `json:"html_url"`
+	User    gitHubHookPRUser `json:"user"`
+	PR      *struct{}        `json:"pull_request"`
+}
+
+type gitHubHookCommentUser struct {
+	Login string `json:"login"`
+	Type  string `json:"type"`
+}
+
+type gitHubHookComment struct {
+	ID        int64                 `json:"id"`
+	Body      string                `json:"body"`
+	CreatedAt string                `json:"created_at"`
+	User      gitHubHookCommentUser `json:"user"`
+}
+
+type gitHubHookReview struct {
+	ID          int64                 `json:"id"`
+	Body        string                `json:"body"`
+	State       string                `json:"state"`
+	SubmittedAt string                `json:"submitted_at"`
+	User        gitHubHookCommentUser `json:"user"`
+}
+
 func parseGitLabHook(body []byte, who HookIdentity) ([]Event, error) {
 	me := who.Me
 	var p struct {
-		ObjectKind string                    `json:"object_kind"`
-		User       struct{ Username string } `json:"user"`
-		Project    struct {
-			PathWithNamespace string `json:"path_with_namespace"`
-		} `json:"project"`
-		Attrs struct {
-			ID           int64  `json:"id"`
-			Note         string `json:"note"`
-			NoteableType string `json:"noteable_type"`
-			CreatedAt    string `json:"created_at"`
-			URL          string `json:"url"`
-		} `json:"object_attributes"`
-		MR *struct {
-			IID      int    `json:"iid"`
-			Title    string `json:"title"`
-			URL      string `json:"url"`
-			State    string `json:"state"`
-			AuthorID int64  `json:"author_id"`
-		} `json:"merge_request"`
+		ObjectKind string            `json:"object_kind"`
+		User       gitLabHookUser    `json:"user"`
+		Project    gitLabHookProject `json:"project"`
+		Attrs      gitLabHookAttrs   `json:"object_attributes"`
+		MR         *gitLabHookMR     `json:"merge_request"`
 	}
 	if err := json.Unmarshal(body, &p); err != nil {
 		return nil, err
@@ -251,33 +258,33 @@ func parseGitLabHook(body []byte, who HookIdentity) ([]Event, error) {
 		At: hookTime(p.Attrs.CreatedAt)}}, nil
 }
 
+type gitLabHookUser struct{ Username string }
+
+type gitLabHookProject struct {
+	PathWithNamespace string `json:"path_with_namespace"`
+}
+
+type gitLabHookAttrs struct {
+	ID           int64  `json:"id"`
+	Note         string `json:"note"`
+	NoteableType string `json:"noteable_type"`
+	CreatedAt    string `json:"created_at"`
+	URL          string `json:"url"`
+}
+
+type gitLabHookMR struct {
+	IID      int    `json:"iid"`
+	Title    string `json:"title"`
+	URL      string `json:"url"`
+	State    string `json:"state"`
+	AuthorID int64  `json:"author_id"`
+}
+
 func parseJiraHook(body []byte, me string) ([]Event, error) {
 	var p struct {
-		Event string `json:"webhookEvent"`
-		Issue struct {
-			Key    string `json:"key"`
-			Self   string `json:"self"`
-			Fields struct {
-				Summary  string                `json:"summary"`
-				Labels   []string              `json:"labels"`
-				Created  string                `json:"created"`
-				Status   struct{ Name string } `json:"status"`
-				Assignee *struct {
-					AccountID    string `json:"accountId"`
-					EmailAddress string `json:"emailAddress"`
-					DisplayName  string `json:"displayName"`
-				} `json:"assignee"`
-			} `json:"fields"`
-		} `json:"issue"`
-		Comment *struct {
-			ID      string `json:"id"`
-			Created string `json:"created"`
-			Author  struct {
-				AccountID   string `json:"accountId"`
-				DisplayName string `json:"displayName"`
-			} `json:"author"`
-			Body json.RawMessage `json:"body"`
-		} `json:"comment"`
+		Event   string           `json:"webhookEvent"`
+		Issue   jiraHookIssue    `json:"issue"`
+		Comment *jiraHookComment `json:"comment"`
 	}
 	if err := json.Unmarshal(body, &p); err != nil {
 		return nil, err
@@ -306,17 +313,45 @@ func parseJiraHook(body []byte, me string) ([]Event, error) {
 	return nil, nil
 }
 
+type jiraHookFieldsAssignee struct {
+	AccountID    string `json:"accountId"`
+	EmailAddress string `json:"emailAddress"`
+	DisplayName  string `json:"displayName"`
+}
+
+type jiraHookIssueFields struct {
+	Summary  string                  `json:"summary"`
+	Labels   []string                `json:"labels"`
+	Created  string                  `json:"created"`
+	Status   linearHookDataState     `json:"status"`
+	Assignee *jiraHookFieldsAssignee `json:"assignee"`
+}
+
+type jiraHookIssue struct {
+	Key    string              `json:"key"`
+	Self   string              `json:"self"`
+	Fields jiraHookIssueFields `json:"fields"`
+}
+
+type jiraHookCommentAuthor struct {
+	AccountID   string `json:"accountId"`
+	DisplayName string `json:"displayName"`
+}
+
+type jiraHookComment struct {
+	ID      string                `json:"id"`
+	Created string                `json:"created"`
+	Author  jiraHookCommentAuthor `json:"author"`
+	Body    json.RawMessage       `json:"body"`
+}
+
 func jiraText(raw json.RawMessage) string {
 	var s string
 	if json.Unmarshal(raw, &s) == nil {
 		return s
 	}
 	var doc struct {
-		Content []struct {
-			Content []struct {
-				Text string `json:"text"`
-			} `json:"content"`
-		} `json:"content"`
+		Content []jiraTextDocContent `json:"content"`
 	}
 	if json.Unmarshal(raw, &doc) != nil {
 		return ""
@@ -330,6 +365,14 @@ func jiraText(raw json.RawMessage) string {
 		}
 	}
 	return strings.Join(parts, " ")
+}
+
+type jiraTextDocContentContent struct {
+	Text string `json:"text"`
+}
+
+type jiraTextDocContent struct {
+	Content []jiraTextDocContentContent `json:"content"`
 }
 
 func jiraBrowseURL(self, key string) string {

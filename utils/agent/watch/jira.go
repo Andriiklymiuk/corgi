@@ -25,65 +25,82 @@ func NewJira(s Secrets, project string) *Jira {
 func (j *Jira) Name() string { return "jira" }
 
 type jiraIssue struct {
-	Key    string `json:"key"`
-	Fields struct {
-		Summary     string          `json:"summary"`
-		Description json.RawMessage `json:"description"`
-		Labels      []string        `json:"labels"`
-		Status      struct {
-			Name string `json:"name"`
-		} `json:"status"`
-		Assignee *struct {
-			AccountID   string `json:"accountId"`
-			DisplayName string `json:"displayName"`
-		} `json:"assignee"`
-		Creator *struct {
-			AccountID   string `json:"accountId"`
-			DisplayName string `json:"displayName"`
-		} `json:"creator"`
-		Created string `json:"created"`
-		Updated string `json:"updated"`
-		Comment *struct {
-			Total    int           `json:"total"`
-			Comments []jiraComment `json:"comments"`
-		} `json:"comment"`
-		IssueType struct {
-			Subtask bool `json:"subtask"`
-		} `json:"issuetype"`
-		Parent *struct {
-			Key    string `json:"key"`
-			Fields struct {
-				Summary string `json:"summary"`
-			} `json:"fields"`
-		} `json:"parent"`
-		Subtasks []struct {
-			Key    string `json:"key"`
-			Fields struct {
-				Status struct {
-					Name string `json:"name"`
-				} `json:"status"`
-				Assignee *struct {
-					AccountID string `json:"accountId"`
-				} `json:"assignee"`
-			} `json:"fields"`
-		} `json:"subtasks"`
-	} `json:"fields"`
-	Changelog struct {
-		Histories []jiraHistory `json:"histories"`
-	} `json:"changelog"`
+	Key       string             `json:"key"`
+	Fields    jiraIssueFields2   `json:"fields"`
+	Changelog jiraIssueChangelog `json:"changelog"`
+}
+
+type jiraIssueFieldsStatus struct {
+	Name string `json:"name"`
+}
+
+type jiraIssueFieldsAssignee struct {
+	AccountID   string `json:"accountId"`
+	DisplayName string `json:"displayName"`
+}
+
+type jiraIssueFieldsComment struct {
+	Total    int           `json:"total"`
+	Comments []jiraComment `json:"comments"`
+}
+
+type jiraIssueFieldsIssueType struct {
+	Subtask bool `json:"subtask"`
+}
+
+type jiraIssueParentFields struct {
+	Summary string `json:"summary"`
+}
+
+type jiraIssueFieldsParent struct {
+	Key    string                `json:"key"`
+	Fields jiraIssueParentFields `json:"fields"`
+}
+
+type jiraIssueFieldsAssignee2 struct {
+	AccountID string `json:"accountId"`
+}
+
+type jiraIssueSubtasksFields struct {
+	Status   jiraIssueFieldsStatus     `json:"status"`
+	Assignee *jiraIssueFieldsAssignee2 `json:"assignee"`
+}
+
+type jiraIssueFieldsSubtasks struct {
+	Key    string                  `json:"key"`
+	Fields jiraIssueSubtasksFields `json:"fields"`
+}
+
+type jiraIssueFields2 struct {
+	Summary     string                    `json:"summary"`
+	Description json.RawMessage           `json:"description"`
+	Labels      []string                  `json:"labels"`
+	Status      jiraIssueFieldsStatus     `json:"status"`
+	Assignee    *jiraIssueFieldsAssignee  `json:"assignee"`
+	Creator     *jiraIssueFieldsAssignee  `json:"creator"`
+	Created     string                    `json:"created"`
+	Updated     string                    `json:"updated"`
+	Comment     *jiraIssueFieldsComment   `json:"comment"`
+	IssueType   jiraIssueFieldsIssueType  `json:"issuetype"`
+	Parent      *jiraIssueFieldsParent    `json:"parent"`
+	Subtasks    []jiraIssueFieldsSubtasks `json:"subtasks"`
+}
+
+type jiraIssueChangelog struct {
+	Histories []jiraHistory `json:"histories"`
 }
 
 type jiraHistory struct {
-	ID      string `json:"id"`
-	Created string `json:"created"`
-	Author  struct {
-		AccountID string `json:"accountId"`
-	} `json:"author"`
-	Items []struct {
-		Field    string `json:"field"`
-		To       string `json:"to"`
-		ToString string `json:"toString"`
-	} `json:"items"`
+	ID      string                   `json:"id"`
+	Created string                   `json:"created"`
+	Author  jiraIssueFieldsAssignee2 `json:"author"`
+	Items   []jiraHistoryItems       `json:"items"`
+}
+
+type jiraHistoryItems struct {
+	Field    string `json:"field"`
+	To       string `json:"to"`
+	ToString string `json:"toString"`
 }
 
 // The newest change since `since` by somebody else that handed me the ticket
@@ -200,13 +217,10 @@ func (j *Jira) openSubtasksOfMine(issue jiraIssue) []string {
 }
 
 type jiraComment struct {
-	ID     string `json:"id"`
-	Author struct {
-		AccountID   string `json:"accountId"`
-		DisplayName string `json:"displayName"`
-	} `json:"author"`
-	Body    json.RawMessage `json:"body"`
-	Created string          `json:"created"`
+	ID      string                  `json:"id"`
+	Author  jiraIssueFieldsAssignee `json:"author"`
+	Body    json.RawMessage         `json:"body"`
+	Created string                  `json:"created"`
 }
 
 func (j *Jira) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, error) {

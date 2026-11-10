@@ -128,11 +128,8 @@ func (j *Jira) CreatePage(ctx context.Context, space, title, body string) (Creat
 		"body":  map[string]any{"storage": map[string]string{"value": body, "representation": "storage"}},
 	}
 	var out struct {
-		ID    string `json:"id"`
-		Links struct {
-			Base  string `json:"base"`
-			WebUI string `json:"webui"`
-		} `json:"_links"`
+		ID    string              `json:"id"`
+		Links jiraCreatePageLinks `json:"_links"`
 	}
 	if err := j.sendJSON(ctx, http.MethodPost, "/wiki/rest/api/content", payload, &out); err != nil {
 		return Created{}, err
@@ -144,17 +141,18 @@ func (j *Jira) CreatePage(ctx context.Context, space, title, body string) (Creat
 	return Created{ID: out.ID, Ref: "page " + out.ID, URL: strings.TrimRight(base, "/") + out.Links.WebUI}, nil
 }
 
+type jiraCreatePageLinks struct {
+	Base  string `json:"base"`
+	WebUI string `json:"webui"`
+}
+
 // teamID is the Linear team's id for its key.
 func (l *Linear) teamID(ctx context.Context) (string, error) {
 	if l.Team == "" {
 		return "", fmt.Errorf("linear: say which team (its key, as in ABC-123) the tickets go in")
 	}
 	var out struct {
-		Teams struct {
-			Nodes []struct {
-				ID string `json:"id"`
-			} `json:"nodes"`
-		} `json:"teams"`
+		Teams linearTeamIDTeams `json:"teams"`
 	}
 	if err := l.query(ctx, "query { teams(filter: {key: {eq: "+jsonString(l.Team)+"}}) { nodes { id } } }", &out); err != nil {
 		return "", err
@@ -163,6 +161,14 @@ func (l *Linear) teamID(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("linear: no team with key %s", l.Team)
 	}
 	return out.Teams.Nodes[0].ID, nil
+}
+
+type linearTeamIDTeamsNodes struct {
+	ID string `json:"id"`
+}
+
+type linearTeamIDTeams struct {
+	Nodes []linearTeamIDTeamsNodes `json:"nodes"`
 }
 
 // Create makes an issue in the Linear team; a parent makes it a sub-issue.
@@ -179,14 +185,7 @@ func (l *Linear) Create(ctx context.Context, in NewIssue) (Created, error) {
 		input += ", parentId: " + jsonString(in.Parent)
 	}
 	var out struct {
-		IssueCreate struct {
-			Success bool `json:"success"`
-			Issue   struct {
-				ID         string `json:"id"`
-				Identifier string `json:"identifier"`
-				URL        string `json:"url"`
-			} `json:"issue"`
-		} `json:"issueCreate"`
+		IssueCreate linearCreateIssueCreate `json:"issueCreate"`
 	}
 	if err := l.query(ctx, "mutation { issueCreate(input: {"+input+"}) { success issue { id identifier url } } }", &out); err != nil {
 		return Created{}, err
@@ -197,16 +196,24 @@ func (l *Linear) Create(ctx context.Context, in NewIssue) (Created, error) {
 	return Created{ID: out.IssueCreate.Issue.ID, Ref: out.IssueCreate.Issue.Identifier, URL: out.IssueCreate.Issue.URL}, nil
 }
 
+type linearCreateIssueCreateIssue struct {
+	ID         string `json:"id"`
+	Identifier string `json:"identifier"`
+	URL        string `json:"url"`
+}
+
+type linearCreateIssueCreate struct {
+	Success bool                         `json:"success"`
+	Issue   linearCreateIssueCreateIssue `json:"issue"`
+}
+
 // SiteURL is the Atlassian site, for links.
 func (j *Jira) SiteURL() string { return strings.TrimRight(j.URL, "/") }
 
 // ConfluenceSpaces is the spaces the credentials can write to, for a picker.
 func (j *Jira) ConfluenceSpaces(ctx context.Context) ([]Status, error) {
 	var out struct {
-		Results []struct {
-			Key  string `json:"key"`
-			Name string `json:"name"`
-		} `json:"results"`
+		Results []jiraConfluenceSpacesResults `json:"results"`
 	}
 	if err := j.get(ctx, "/wiki/rest/api/space", url.Values{"limit": {"50"}}, &out); err != nil {
 		return nil, err
@@ -216,4 +223,9 @@ func (j *Jira) ConfluenceSpaces(ctx context.Context) ([]Status, error) {
 		spaces = append(spaces, Status{ID: s.Key, Name: s.Name})
 	}
 	return spaces, nil
+}
+
+type jiraConfluenceSpacesResults struct {
+	Key  string `json:"key"`
+	Name string `json:"name"`
 }

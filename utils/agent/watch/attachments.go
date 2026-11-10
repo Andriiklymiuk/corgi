@@ -222,11 +222,7 @@ func (j *Jira) checkUploadLimit(ctx context.Context, files []Attachment) error {
 
 func (j *Jira) attachmentNames(ctx context.Context, ref string) (map[string]bool, error) {
 	var issue struct {
-		Fields struct {
-			Attachment []struct {
-				Filename string `json:"filename"`
-			} `json:"attachment"`
-		} `json:"fields"`
+		Fields jiraAttachmentNamesIssueFields `json:"fields"`
 	}
 	if err := j.get(ctx, "/rest/api/3/issue/"+ref, url.Values{"fields": {"attachment"}}, &issue); err != nil {
 		return nil, err
@@ -236,6 +232,14 @@ func (j *Jira) attachmentNames(ctx context.Context, ref string) (map[string]bool
 		taken[strings.ToLower(a.Filename)] = true
 	}
 	return taken, nil
+}
+
+type jiraAttachmentNamesIssueFieldsAttachment struct {
+	Filename string `json:"filename"`
+}
+
+type jiraAttachmentNamesIssueFields struct {
+	Attachment []jiraAttachmentNamesIssueFieldsAttachment `json:"attachment"`
 }
 
 // Two attachments with one name make !name! point at whichever Jira picks.
@@ -369,17 +373,7 @@ func (l *Linear) upload(ctx context.Context, f Attachment) (string, error) {
 	document := fmt.Sprintf("mutation { fileUpload(contentType: %s, filename: %s, size: %d) { success uploadFile { uploadUrl assetUrl headers { key value } } } }",
 		jsonString(f.ContentType), jsonString(f.Name), f.Size)
 	var out struct {
-		FileUpload struct {
-			Success    bool `json:"success"`
-			UploadFile *struct {
-				UploadURL string `json:"uploadUrl"`
-				AssetURL  string `json:"assetUrl"`
-				Headers   []struct {
-					Key   string `json:"key"`
-					Value string `json:"value"`
-				} `json:"headers"`
-			} `json:"uploadFile"`
-		} `json:"fileUpload"`
+		FileUpload linearUploadFileUpload `json:"fileUpload"`
 	}
 	if err := l.query(ctx, document, &out); err != nil {
 		return "", err
@@ -407,6 +401,22 @@ func (l *Linear) upload(ctx context.Context, f Attachment) (string, error) {
 		return "", err
 	}
 	return upload.AssetURL, nil
+}
+
+type linearUploadUploadFileHeaders struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
+}
+
+type linearUploadFileUploadUploadFile struct {
+	UploadURL string                          `json:"uploadUrl"`
+	AssetURL  string                          `json:"assetUrl"`
+	Headers   []linearUploadUploadFileHeaders `json:"headers"`
+}
+
+type linearUploadFileUpload struct {
+	Success    bool                              `json:"success"`
+	UploadFile *linearUploadFileUploadUploadFile `json:"uploadFile"`
 }
 
 // No client timeout: the caller's context sizes the wait to the files.

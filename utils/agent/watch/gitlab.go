@@ -43,27 +43,35 @@ var gitlabActions = map[string]Kind{
 }
 
 type gitlabTodo struct {
-	ID         int64  `json:"id"`
-	ActionName string `json:"action_name"`
-	TargetType string `json:"target_type"`
-	TargetURL  string `json:"target_url"`
-	Body       string `json:"body"`
-	CreatedAt  string `json:"created_at"`
-	Project    struct {
-		PathWithNamespace string `json:"path_with_namespace"`
-	} `json:"project"`
-	Target struct {
-		IID    int64  `json:"iid"`
-		Title  string `json:"title"`
-		State  string `json:"state"`
-		Author struct {
-			Username string `json:"username"`
-		} `json:"author"`
-	} `json:"target"`
-	Author struct {
-		Username string `json:"username"`
-		Bot      bool   `json:"bot"`
-	} `json:"author"`
+	ID         int64             `json:"id"`
+	ActionName string            `json:"action_name"`
+	TargetType string            `json:"target_type"`
+	TargetURL  string            `json:"target_url"`
+	Body       string            `json:"body"`
+	CreatedAt  string            `json:"created_at"`
+	Project    gitlabTodoProject `json:"project"`
+	Target     gitlabTodoTarget  `json:"target"`
+	Author     gitlabTodoAuthor  `json:"author"`
+}
+
+type gitlabTodoProject struct {
+	PathWithNamespace string `json:"path_with_namespace"`
+}
+
+type gitlabTodoTargetAuthor struct {
+	Username string `json:"username"`
+}
+
+type gitlabTodoTarget struct {
+	IID    int64                  `json:"iid"`
+	Title  string                 `json:"title"`
+	State  string                 `json:"state"`
+	Author gitlabTodoTargetAuthor `json:"author"`
+}
+
+type gitlabTodoAuthor struct {
+	Username string `json:"username"`
+	Bot      bool   `json:"bot"`
 }
 
 var gitlabBotName = regexp.MustCompile(`(?i)^(project|group)_\d+_bot|[_-]bot$|^(ghost|support-bot|alert-bot|security-bot|gitlab-bot)$`)
@@ -180,26 +188,25 @@ func (g *GitLab) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 }
 
 type gitlabMyMR struct {
-	IID       int64  `json:"iid"`
-	ProjectID int64  `json:"project_id"`
-	Title     string `json:"title"`
-	WebURL    string `json:"web_url"`
-	State     string `json:"state"`
-	UpdatedAt string `json:"updated_at"`
-	Refs      struct {
-		Full string `json:"full"`
-	} `json:"references"`
+	IID       int64          `json:"iid"`
+	ProjectID int64          `json:"project_id"`
+	Title     string         `json:"title"`
+	WebURL    string         `json:"web_url"`
+	State     string         `json:"state"`
+	UpdatedAt string         `json:"updated_at"`
+	Refs      gitlabMyMRRefs `json:"references"`
+}
+
+type gitlabMyMRRefs struct {
+	Full string `json:"full"`
 }
 
 type gitlabNote struct {
-	ID        int64  `json:"id"`
-	Body      string `json:"body"`
-	System    bool   `json:"system"`
-	CreatedAt string `json:"created_at"`
-	Author    struct {
-		Username string `json:"username"`
-		Bot      bool   `json:"bot"`
-	} `json:"author"`
+	ID        int64            `json:"id"`
+	Body      string           `json:"body"`
+	System    bool             `json:"system"`
+	CreatedAt string           `json:"created_at"`
+	Author    gitlabTodoAuthor `json:"author"`
 }
 
 // A reviewer's comment on my own merge request makes no to-do item unless it
@@ -427,14 +434,10 @@ func (g *GitLab) PullStatus(ctx context.Context, ref string) (PullStatus, bool) 
 		base = gitlabDefaultBase
 	}
 	var mr struct {
-		State        string `json:"state"`
-		Draft        bool   `json:"draft"`
-		HeadPipeline *struct {
-			Status string `json:"status"`
-		} `json:"head_pipeline"`
-		Author struct {
-			Username string `json:"username"`
-		} `json:"author"`
+		State        string                          `json:"state"`
+		Draft        bool                            `json:"draft"`
+		HeadPipeline *gitLabPullStatusMrHeadPipeline `json:"head_pipeline"`
+		Author       gitlabTodoTargetAuthor          `json:"author"`
 	}
 	endpoint := base + gitlabProjectsAPIPath + url.PathEscape(project) + mergeRequestsPath + num
 	if err := g.getInto(ctx, endpoint, &mr); err != nil {
@@ -462,12 +465,8 @@ func (g *GitLab) PullStatus(ctx context.Context, ref string) (PullStatus, bool) 
 		}
 	}
 	var approvals struct {
-		Approved   bool `json:"approved"`
-		ApprovedBy []struct {
-			User struct {
-				Username string `json:"username"`
-			} `json:"user"`
-		} `json:"approved_by"`
+		Approved   bool                                  `json:"approved"`
+		ApprovedBy []gitLabPullStatusApprovalsApprovedBy `json:"approved_by"`
 	}
 	if err := g.getInto(ctx, endpoint+"/approvals", &approvals); err == nil {
 		if approvals.Approved || len(approvals.ApprovedBy) > 0 {
@@ -483,6 +482,14 @@ func (g *GitLab) PullStatus(ctx context.Context, ref string) (PullStatus, bool) 
 		}
 	}
 	return out, true
+}
+
+type gitLabPullStatusMrHeadPipeline struct {
+	Status string `json:"status"`
+}
+
+type gitLabPullStatusApprovalsApprovedBy struct {
+	User gitlabTodoTargetAuthor `json:"user"`
 }
 
 // TokenScopes asks GitLab what the token may do. A token that reads the

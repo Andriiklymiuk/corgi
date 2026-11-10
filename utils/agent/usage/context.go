@@ -87,12 +87,9 @@ func contextFromTail(data []byte, truncated bool) (Context, bool) {
 			continue
 		}
 		var row struct {
-			Type      string    `json:"type"`
-			Timestamp time.Time `json:"timestamp"`
-			Message   struct {
-				Model string    `json:"model"`
-				Usage *rawUsage `json:"usage"`
-			} `json:"message"`
+			Type      string                 `json:"type"`
+			Timestamp time.Time              `json:"timestamp"`
+			Message   contextFromTailMessage `json:"message"`
 		}
 		if json.Unmarshal(line, &row) != nil || row.Type != "assistant" || row.Message.Usage == nil {
 			continue
@@ -112,20 +109,17 @@ func contextFromTail(data []byte, truncated bool) (Context, bool) {
 	return Context{}, false
 }
 
+type contextFromTailMessage struct {
+	Model string    `json:"model"`
+	Usage *rawUsage `json:"usage"`
+}
+
 // codexContext reads a codex rollout's token_count row: the last turn's
 // tokens against the window codex itself reports.
 func codexContext(line []byte) (Context, bool) {
 	var row struct {
-		Timestamp time.Time `json:"timestamp"`
-		Payload   struct {
-			Type string `json:"type"`
-			Info *struct {
-				Last struct {
-					Total int64 `json:"total_tokens"`
-				} `json:"last_token_usage"`
-				Window int64 `json:"model_context_window"`
-			} `json:"info"`
-		} `json:"payload"`
+		Timestamp time.Time           `json:"timestamp"`
+		Payload   codexContextPayload `json:"payload"`
 	}
 	if json.Unmarshal(line, &row) != nil || row.Payload.Type != "token_count" || row.Payload.Info == nil {
 		return Context{}, false
@@ -140,4 +134,18 @@ func codexContext(line []byte) (Context, bool) {
 		c.Percent = 100
 	}
 	return c, true
+}
+
+type codexContextInfoLast struct {
+	Total int64 `json:"total_tokens"`
+}
+
+type codexContextPayloadInfo struct {
+	Last   codexContextInfoLast `json:"last_token_usage"`
+	Window int64                `json:"model_context_window"`
+}
+
+type codexContextPayload struct {
+	Type string                   `json:"type"`
+	Info *codexContextPayloadInfo `json:"info"`
 }

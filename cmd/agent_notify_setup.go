@@ -235,11 +235,13 @@ func mustFlagString(cmd *cobra.Command, name string) string {
 }
 
 type telegramMe struct {
-	OK     bool `json:"ok"`
-	Result struct {
-		Username string `json:"username"`
-	} `json:"result"`
-	Description string `json:"description"`
+	OK          bool             `json:"ok"`
+	Result      telegramMeResult `json:"result"`
+	Description string           `json:"description"`
+}
+
+type telegramMeResult struct {
+	Username string `json:"username"`
 }
 
 func telegramGetMe(token string) (string, error) {
@@ -254,15 +256,21 @@ func telegramGetMe(token string) (string, error) {
 }
 
 type telegramUpdates struct {
-	OK     bool `json:"ok"`
-	Result []struct {
-		Message struct {
-			Chat struct {
-				ID int64 `json:"id"`
-			} `json:"chat"`
-		} `json:"message"`
-	} `json:"result"`
-	Description string `json:"description"`
+	OK          bool                    `json:"ok"`
+	Result      []telegramUpdatesResult `json:"result"`
+	Description string                  `json:"description"`
+}
+
+type telegramUpdatesMessageChat struct {
+	ID int64 `json:"id"`
+}
+
+type telegramUpdatesResultMessage struct {
+	Chat telegramUpdatesMessageChat `json:"chat"`
+}
+
+type telegramUpdatesResult struct {
+	Message telegramUpdatesResultMessage `json:"message"`
 }
 
 func telegramAwaitChatID(token, bot string, wait time.Duration) (string, error) {

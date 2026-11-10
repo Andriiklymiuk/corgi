@@ -61,18 +61,22 @@ var githubReasons = map[string]struct {
 }
 
 type githubThread struct {
-	ID        string `json:"id"`
-	Reason    string `json:"reason"`
-	UpdatedAt string `json:"updated_at"`
-	Subject   struct {
-		Title            string `json:"title"`
-		URL              string `json:"url"`
-		Type             string `json:"type"`
-		LatestCommentURL string `json:"latest_comment_url"`
-	} `json:"subject"`
-	Repository struct {
-		FullName string `json:"full_name"`
-	} `json:"repository"`
+	ID         string                 `json:"id"`
+	Reason     string                 `json:"reason"`
+	UpdatedAt  string                 `json:"updated_at"`
+	Subject    githubThreadSubject    `json:"subject"`
+	Repository githubThreadRepository `json:"repository"`
+}
+
+type githubThreadSubject struct {
+	Title            string `json:"title"`
+	URL              string `json:"url"`
+	Type             string `json:"type"`
+	LatestCommentURL string `json:"latest_comment_url"`
+}
+
+type githubThreadRepository struct {
+	FullName string `json:"full_name"`
 }
 
 func (g *GitHub) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, error) {
@@ -212,17 +216,19 @@ func (g *GitHub) latestComment(ctx context.Context, commentURL, subjectURL strin
 	}
 	defer resp.Body.Close()
 	var c struct {
-		Body string `json:"body"`
-		User struct {
-			Login string `json:"login"`
-			Type  string `json:"type"`
-		} `json:"user"`
+		Body string                  `json:"body"`
+		User gitHubLatestCommentUser `json:"user"`
 	}
 	if json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&c) != nil {
 		return "", "", false, true
 	}
 	bot = githubBot(c.User.Login, c.User.Type)
 	return c.User.Login, clip(strings.TrimSpace(c.Body), bodyMax), bot, true
+}
+
+type gitHubLatestCommentUser struct {
+	Login string `json:"login"`
+	Type  string `json:"type"`
 }
 
 type githubReview struct {
@@ -237,14 +243,11 @@ type githubReview struct {
 // comments instead.
 func (g *GitHub) reviewBehind(ctx context.Context, repo, num string, at time.Time) (githubReview, bool) {
 	var reviews []struct {
-		ID          int64  `json:"id"`
-		State       string `json:"state"`
-		Body        string `json:"body"`
-		SubmittedAt string `json:"submitted_at"`
-		User        struct {
-			Login string `json:"login"`
-			Type  string `json:"type"`
-		} `json:"user"`
+		ID          int64                   `json:"id"`
+		State       string                  `json:"state"`
+		Body        string                  `json:"body"`
+		SubmittedAt string                  `json:"submitted_at"`
+		User        gitHubLatestCommentUser `json:"user"`
 	}
 	resp, err := g.get(ctx, reposSegment+repo+pullsSegment+num+reviewsPageQuery, "")
 	if err != nil || githubDecode(resp, &reviews) != nil {
@@ -301,12 +304,10 @@ func (g *GitHub) pull(ctx context.Context, cache map[string]githubPullInfo, apiU
 	}
 	defer resp.Body.Close()
 	var pr struct {
-		State  string `json:"state"`
-		Merged bool   `json:"merged"`
-		Draft  bool   `json:"draft"`
-		User   struct {
-			Login string `json:"login"`
-		} `json:"user"`
+		State  string           `json:"state"`
+		Merged bool             `json:"merged"`
+		Draft  bool             `json:"draft"`
+		User   gitHubPullPrUser `json:"user"`
 	}
 	if json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&pr) != nil {
 		return githubPullInfo{}
@@ -320,6 +321,10 @@ func (g *GitHub) pull(ctx context.Context, cache map[string]githubPullInfo, apiU
 	p := githubPullInfo{state: state, author: pr.User.Login}
 	cache[apiURL] = p
 	return p
+}
+
+type gitHubPullPrUser struct {
+	Login string `json:"login"`
 }
 
 func firstNonEmptyText(s, fallback string) string {
@@ -388,18 +393,12 @@ func (g *GitHub) PullStatus(ctx context.Context, ref string) (PullStatus, bool) 
 		return PullStatus{}, false
 	}
 	var pr struct {
-		State  string `json:"state"`
-		Merged bool   `json:"merged"`
-		Draft  bool   `json:"draft"`
-		Head   struct {
-			SHA string `json:"sha"`
-		} `json:"head"`
-		RequestedReviewers []struct {
-			Login string `json:"login"`
-		} `json:"requested_reviewers"`
-		User struct {
-			Login string `json:"login"`
-		} `json:"user"`
+		State              string                 `json:"state"`
+		Merged             bool                   `json:"merged"`
+		Draft              bool                   `json:"draft"`
+		Head               gitHubPullStatusPrHead `json:"head"`
+		RequestedReviewers []gitHubPullPrUser     `json:"requested_reviewers"`
+		User               gitHubPullPrUser       `json:"user"`
 	}
 	resp, err := g.get(ctx, reposSegment+repo+pullsSegment+num, "")
 	if err != nil || githubDecode(resp, &pr) != nil {
@@ -416,11 +415,9 @@ func (g *GitHub) PullStatus(ctx context.Context, ref string) (PullStatus, bool) 
 	}
 
 	var reviews []struct {
-		State       string    `json:"state"`
-		SubmittedAt time.Time `json:"submitted_at"`
-		User        struct {
-			Login string `json:"login"`
-		} `json:"user"`
+		State       string           `json:"state"`
+		SubmittedAt time.Time        `json:"submitted_at"`
+		User        gitHubPullPrUser `json:"user"`
 	}
 	if resp, err := g.get(ctx, reposSegment+repo+pullsSegment+num+reviewsPageQuery, ""); err == nil && githubDecode(resp, &reviews) == nil {
 		last := map[string]string{}
@@ -451,10 +448,7 @@ func (g *GitHub) PullStatus(ctx context.Context, ref string) (PullStatus, bool) 
 	running := 0
 	if pr.Head.SHA != "" {
 		var runs struct {
-			CheckRuns []struct {
-				Status     string `json:"status"`
-				Conclusion string `json:"conclusion"`
-			} `json:"check_runs"`
+			CheckRuns []gitHubPullStatusRunsCheckRuns `json:"check_runs"`
 		}
 		if resp, err := g.get(ctx, reposSegment+repo+commitsSegment+pr.Head.SHA+"/check-runs?per_page=100", ""); err == nil && githubDecode(resp, &runs) == nil {
 			for _, r := range runs.CheckRuns {
@@ -466,9 +460,7 @@ func (g *GitHub) PullStatus(ctx context.Context, ref string) (PullStatus, bool) 
 			}
 		}
 		var combined struct {
-			Statuses []struct {
-				State string `json:"state"`
-			} `json:"statuses"`
+			Statuses []gitHubPullStatusCombinedStatuses `json:"statuses"`
 		}
 		if resp, err := g.get(ctx, reposSegment+repo+commitsSegment+pr.Head.SHA+"/status", ""); err == nil && githubDecode(resp, &combined) == nil {
 			for _, s := range combined.Statuses {
@@ -482,6 +474,19 @@ func (g *GitHub) PullStatus(ctx context.Context, ref string) (PullStatus, bool) 
 	}
 	out.Checks = checksVerdict(conclusions, running)
 	return out, true
+}
+
+type gitHubPullStatusPrHead struct {
+	SHA string `json:"sha"`
+}
+
+type gitHubPullStatusRunsCheckRuns struct {
+	Status     string `json:"status"`
+	Conclusion string `json:"conclusion"`
+}
+
+type gitHubPullStatusCombinedStatuses struct {
+	State string `json:"state"`
 }
 
 func (g *GitHub) login(ctx context.Context) string {
@@ -508,11 +513,9 @@ func (g *GitHub) MyReviewSince(ctx context.Context, ref string, since time.Time)
 	}
 	var out ReviewOutcome
 	var reviews []struct {
-		State       string `json:"state"`
-		SubmittedAt string `json:"submitted_at"`
-		User        struct {
-			Login string `json:"login"`
-		} `json:"user"`
+		State       string           `json:"state"`
+		SubmittedAt string           `json:"submitted_at"`
+		User        gitHubPullPrUser `json:"user"`
 	}
 	resp, err := g.get(ctx, reposSegment+repo+pullsSegment+num+reviewsPageQuery, "")
 	if err != nil || githubDecode(resp, &reviews) != nil {
@@ -531,10 +534,8 @@ func (g *GitHub) MyReviewSince(ctx context.Context, ref string, since time.Time)
 	}
 	for _, path := range []string{reposSegment + repo + pullsSegment + num + "/comments?per_page=100", reposSegment + repo + "/issues/" + num + "/comments?per_page=100"} {
 		var comments []struct {
-			CreatedAt string `json:"created_at"`
-			User      struct {
-				Login string `json:"login"`
-			} `json:"user"`
+			CreatedAt string           `json:"created_at"`
+			User      gitHubPullPrUser `json:"user"`
 		}
 		if resp, err := g.get(ctx, path, ""); err == nil && githubDecode(resp, &comments) == nil {
 			for _, c := range comments {
@@ -559,26 +560,28 @@ func (g *GitHub) AnsweredSince(ctx context.Context, ref string, at time.Time) st
 	}
 	repo, num, _ := strings.Cut(ref, "#")
 	var pr struct {
-		Head struct {
-			SHA string `json:"sha"`
-		} `json:"head"`
+		Head gitHubPullStatusPrHead `json:"head"`
 	}
 	resp, err := g.get(ctx, reposSegment+repo+pullsSegment+num, "")
 	if err != nil || githubDecode(resp, &pr) != nil || pr.Head.SHA == "" {
 		return ""
 	}
 	var c struct {
-		Commit struct {
-			Committer struct {
-				Date string `json:"date"`
-			} `json:"committer"`
-		} `json:"commit"`
+		Commit gitHubAnsweredSinceCommit `json:"commit"`
 	}
 	resp, err = g.get(ctx, reposSegment+repo+commitsSegment+pr.Head.SHA, "")
 	if err != nil || githubDecode(resp, &c) != nil || trackerTime(c.Commit.Committer.Date).Before(at) {
 		return ""
 	}
 	return "you replied and pushed after it"
+}
+
+type gitHubAnsweredSinceCommitCommitter struct {
+	Date string `json:"date"`
+}
+
+type gitHubAnsweredSinceCommit struct {
+	Committer gitHubAnsweredSinceCommitCommitter `json:"committer"`
 }
 
 var githubCommentID = regexp.MustCompile(`/(?:issues/comments|pulls/comments|reviews)/(\d+)$`)

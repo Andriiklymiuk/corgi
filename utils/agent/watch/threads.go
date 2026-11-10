@@ -88,13 +88,15 @@ reviewThreads(first:100){nodes{id isResolved isOutdated path line originalLine c
 reviews(first:50){nodes{databaseId author{login} state submittedAt body}}}}}`
 
 type githubNote struct {
-	DatabaseID  int64                  `json:"databaseId"`
-	Author      struct{ Login string } `json:"author"`
-	CreatedAt   time.Time              `json:"createdAt"`
-	SubmittedAt time.Time              `json:"submittedAt"`
-	State       string                 `json:"state"`
-	Body        string                 `json:"body"`
+	DatabaseID  int64            `json:"databaseId"`
+	Author      githubNoteAuthor `json:"author"`
+	CreatedAt   time.Time        `json:"createdAt"`
+	SubmittedAt time.Time        `json:"submittedAt"`
+	State       string           `json:"state"`
+	Body        string           `json:"body"`
 }
+
+type githubNoteAuthor struct{ Login string }
 
 func (c threadsClient) githubThreads(ctx context.Context, token, owner, repo, number, link string) ([]ReviewThread, error) {
 	var n int
@@ -109,31 +111,8 @@ func (c threadsClient) githubThreads(ctx context.Context, token, owner, repo, nu
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 	var out struct {
-		Data struct {
-			Repository struct {
-				PullRequest *struct {
-					ReviewThreads struct {
-						Nodes []struct {
-							ID           string `json:"id"`
-							IsResolved   bool   `json:"isResolved"`
-							IsOutdated   bool   `json:"isOutdated"`
-							Path         string `json:"path"`
-							Line         int    `json:"line"`
-							OriginalLine int    `json:"originalLine"`
-							Comments     struct {
-								Nodes []githubNote `json:"nodes"`
-							} `json:"comments"`
-						} `json:"nodes"`
-					} `json:"reviewThreads"`
-					Reviews struct {
-						Nodes []githubNote `json:"nodes"`
-					} `json:"reviews"`
-				} `json:"pullRequest"`
-			} `json:"repository"`
-		} `json:"data"`
-		Errors []struct {
-			Message string `json:"message"`
-		} `json:"errors"`
+		Data   threadsClientGithubThreadsData     `json:"data"`
+		Errors []threadsClientGithubThreadsErrors `json:"errors"`
 	}
 	if err := c.do(req, link, &out); err != nil {
 		return nil, err
@@ -167,6 +146,41 @@ func (c threadsClient) githubThreads(ctx context.Context, token, owner, repo, nu
 	return threads, nil
 }
 
+type threadsClientGithubThreadsNodesComments struct {
+	Nodes []githubNote `json:"nodes"`
+}
+
+type threadsClientGithubThreadsReviewThreadsNodes struct {
+	ID           string                                  `json:"id"`
+	IsResolved   bool                                    `json:"isResolved"`
+	IsOutdated   bool                                    `json:"isOutdated"`
+	Path         string                                  `json:"path"`
+	Line         int                                     `json:"line"`
+	OriginalLine int                                     `json:"originalLine"`
+	Comments     threadsClientGithubThreadsNodesComments `json:"comments"`
+}
+
+type threadsClientGithubThreadsPullRequestReviewThreads struct {
+	Nodes []threadsClientGithubThreadsReviewThreadsNodes `json:"nodes"`
+}
+
+type threadsClientGithubThreadsRepositoryPullRequest struct {
+	ReviewThreads threadsClientGithubThreadsPullRequestReviewThreads `json:"reviewThreads"`
+	Reviews       threadsClientGithubThreadsNodesComments            `json:"reviews"`
+}
+
+type threadsClientGithubThreadsDataRepository struct {
+	PullRequest *threadsClientGithubThreadsRepositoryPullRequest `json:"pullRequest"`
+}
+
+type threadsClientGithubThreadsData struct {
+	Repository threadsClientGithubThreadsDataRepository `json:"repository"`
+}
+
+type threadsClientGithubThreadsErrors struct {
+	Message string `json:"message"`
+}
+
 func (c threadsClient) gitlabThreads(ctx context.Context, token, api, link string) ([]ReviewThread, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, api+"/discussions?per_page=100", nil)
 	if err != nil {
@@ -174,24 +188,8 @@ func (c threadsClient) gitlabThreads(ctx context.Context, token, api, link strin
 	}
 	req.Header.Set("PRIVATE-TOKEN", token)
 	var out []struct {
-		ID    string `json:"id"`
-		Notes []struct {
-			ID         int64     `json:"id"`
-			Body       string    `json:"body"`
-			System     bool      `json:"system"`
-			Resolvable bool      `json:"resolvable"`
-			Resolved   bool      `json:"resolved"`
-			CreatedAt  time.Time `json:"created_at"`
-			Author     struct {
-				Username string `json:"username"`
-			} `json:"author"`
-			Position *struct {
-				NewPath string `json:"new_path"`
-				NewLine int    `json:"new_line"`
-				OldPath string `json:"old_path"`
-				OldLine int    `json:"old_line"`
-			} `json:"position"`
-		} `json:"notes"`
+		ID    string                            `json:"id"`
+		Notes []threadsClientGitlabThreadsNotes `json:"notes"`
 	}
 	if err := c.do(req, link, &out); err != nil {
 		return nil, err
@@ -224,6 +222,28 @@ func (c threadsClient) gitlabThreads(ctx context.Context, token, api, link strin
 		threads = append(threads, th)
 	}
 	return threads, nil
+}
+
+type threadsClientGitlabThreadsNotesAuthor struct {
+	Username string `json:"username"`
+}
+
+type threadsClientGitlabThreadsNotesPosition struct {
+	NewPath string `json:"new_path"`
+	NewLine int    `json:"new_line"`
+	OldPath string `json:"old_path"`
+	OldLine int    `json:"old_line"`
+}
+
+type threadsClientGitlabThreadsNotes struct {
+	ID         int64                                    `json:"id"`
+	Body       string                                   `json:"body"`
+	System     bool                                     `json:"system"`
+	Resolvable bool                                     `json:"resolvable"`
+	Resolved   bool                                     `json:"resolved"`
+	CreatedAt  time.Time                                `json:"created_at"`
+	Author     threadsClientGitlabThreadsNotesAuthor    `json:"author"`
+	Position   *threadsClientGitlabThreadsNotesPosition `json:"position"`
 }
 
 func (c threadsClient) do(req *http.Request, link string, out any) error {
