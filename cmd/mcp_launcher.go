@@ -4332,7 +4332,9 @@ func taskRowAction(c ticketCall, do string) {
 	switch do {
 	case "move":
 		t, err = tasks.Move(c.event.Key, c.req.Status, now)
-		out = func(t watch.Task) map[string]any { return map[string]any{"done": t.Ref() + " → " + t.State, "state": t.State} }
+		out = func(t watch.Task) map[string]any {
+			return map[string]any{"done": t.Ref() + " → " + t.State, "state": t.State}
+		}
 	case "close":
 		t, err = tasks.Move(c.event.Key, "Done", now)
 		out = func(t watch.Task) map[string]any { return map[string]any{"done": t.Ref() + " done", "state": t.State} }
