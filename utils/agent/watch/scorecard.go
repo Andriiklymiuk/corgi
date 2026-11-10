@@ -41,26 +41,7 @@ func Scorecard(records []FixRecord, workspace string, since time.Time) []ScoreRo
 			row = &ScoreRow{Workspace: r.Workspace, Kind: r.Kind}
 			rows[key] = row
 		}
-		row.Runs++
-		row.Tokens += r.Tokens
-		row.USD += r.CostUSD
-		switch {
-		case !r.Done():
-			row.Running++
-		case r.Error != "" && !r.Forgiven:
-			row.Failed++
-		case !r.GreenAt.IsZero():
-			row.Green++
-			row.Pushed++
-		case r.Said == "pushed" || (r.Said == "" && len(r.PRs) > 0):
-			row.Pushed++
-		case r.Said == "replied", r.Said == "nothing" && reportingRoutine(r):
-			row.Replied++
-		case r.Said == "nothing":
-			row.Idle++
-		case r.Said == "blocked":
-			row.Blocked++
-		}
+		row.count(r)
 	}
 	out := make([]ScoreRow, 0, len(rows))
 	for _, r := range rows {
@@ -73,6 +54,29 @@ func Scorecard(records []FixRecord, workspace string, since time.Time) []ScoreRo
 		return out[i].Runs > out[j].Runs
 	})
 	return out
+}
+
+func (row *ScoreRow) count(r FixRecord) {
+	row.Runs++
+	row.Tokens += r.Tokens
+	row.USD += r.CostUSD
+	switch {
+	case !r.Done():
+		row.Running++
+	case r.Error != "" && !r.Forgiven:
+		row.Failed++
+	case !r.GreenAt.IsZero():
+		row.Green++
+		row.Pushed++
+	case r.Said == "pushed" || (r.Said == "" && len(r.PRs) > 0):
+		row.Pushed++
+	case r.Said == "replied", r.Said == "nothing" && reportingRoutine(r):
+		row.Replied++
+	case r.Said == "nothing":
+		row.Idle++
+	case r.Said == "blocked":
+		row.Blocked++
+	}
 }
 
 func reportingRoutine(r FixRecord) bool {

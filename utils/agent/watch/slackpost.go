@@ -136,6 +136,25 @@ func (p *SlackPoster) Resolve(ctx context.Context, to, as string) (string, error
 	if !strings.HasPrefix(to, "#") && !strings.HasPrefix(to, "@") {
 		return to, nil
 	}
+	apis := p.resolveAPIs(as)
+	if len(apis) == 0 {
+		return "", ErrNoSlackToken
+	}
+	s, convs, err := firstConversations(ctx, apis)
+	if err != nil {
+		// chat.postMessage takes a channel name; only a DM needs the list.
+		if strings.HasPrefix(to, "#") {
+			return to, nil
+		}
+		return "", err
+	}
+	if id := conversationNamed(ctx, s, convs, to); id != "" {
+		return id, nil
+	}
+	return "", fmt.Errorf("no channel or conversation called %s that this token can see", to)
+}
+
+func (p *SlackPoster) resolveAPIs(as string) []*slackAPI {
 	var apis []*slackAPI
 	if voice, _, err := p.voice(as); err == nil {
 		apis = append(apis, voice)
@@ -145,9 +164,10 @@ func (p *SlackPoster) Resolve(ctx context.Context, to, as string) (string, error
 			apis = append(apis, api)
 		}
 	}
-	if len(apis) == 0 {
-		return "", ErrNoSlackToken
-	}
+	return apis
+}
+
+func firstConversations(ctx context.Context, apis []*slackAPI) (*Slack, []slackConversation, error) {
 	var s *Slack
 	var convs []slackConversation
 	var err error
@@ -157,25 +177,23 @@ func (p *SlackPoster) Resolve(ctx context.Context, to, as string) (string, error
 			break
 		}
 	}
-	if err != nil {
-		// chat.postMessage takes a channel name; only a DM needs the list.
-		if strings.HasPrefix(to, "#") {
-			return to, nil
-		}
-		return "", err
-	}
+	return s, convs, err
+}
+
+func conversationNamed(ctx context.Context, s *Slack, convs []slackConversation, to string) string {
 	want := strings.ToLower(strings.TrimPrefix(strings.TrimPrefix(to, "#"), "@"))
 	for _, c := range convs {
 		if !c.IsIM && strings.ToLower(c.Name) == want {
-			return c.ID, nil
+			return c.ID
 		}
 	}
-	if strings.HasPrefix(to, "@") {
-		for _, c := range convs {
-			if c.IsIM && strings.ToLower(s.handle(ctx, c.User)) == "@"+want {
-				return c.ID, nil
-			}
+	if !strings.HasPrefix(to, "@") {
+		return ""
+	}
+	for _, c := range convs {
+		if c.IsIM && strings.ToLower(s.handle(ctx, c.User)) == "@"+want {
+			return c.ID
 		}
 	}
-	return "", fmt.Errorf("no channel or conversation called %s that this token can see", to)
+	return ""
 }

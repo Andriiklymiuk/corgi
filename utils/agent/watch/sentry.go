@@ -142,43 +142,47 @@ func sentryEvent(issue sentryIssue, at time.Time) Event {
 // parseAlertHook reads an alert a log or monitoring tool posts. Coralogix lets
 // you write the webhook's body, so it takes the common field names.
 // The workspace comes from the URL: /hooks/coralogix?workspace=<id>.
-func parseAlertHook(source string, r *http.Request, body []byte, now time.Time) ([]Event, error) {
-	var raw map[string]any
-	if err := json.Unmarshal(body, &raw); err != nil {
-		return nil, err
-	}
-	field := func(names ...string) string {
-		for _, n := range names {
-			if v, ok := raw[n]; ok && v != nil {
-				if s := strings.TrimSpace(fmt.Sprint(v)); s != "" {
-					return s
-				}
+type alertFields map[string]any
+
+func (raw alertFields) field(names ...string) string {
+	for _, n := range names {
+		if v, ok := raw[n]; ok && v != nil {
+			if s := strings.TrimSpace(fmt.Sprint(v)); s != "" {
+				return s
 			}
 		}
-		return ""
 	}
-	title := field("alert_name", "alertName", "name", "title")
-	if title == "" {
-		return nil, fmt.Errorf("an alert needs a name or a title")
-	}
-	id := field("alert_id", "alertId", "uniqueIdentifier", "id")
-	if id == "" {
-		id = title
-	}
-	link := field("url", "alert_url", "alertUrl", "link", "coralogix_url")
-	if !strings.HasPrefix(link, "https://") {
-		link = ""
-	}
+	return ""
+}
+
+func (raw alertFields) facts() []string {
 	var facts []string
-	for _, f := range []string{field("description", "message", "text"), field("application", "applicationName"), field("subsystem", "subsystemName")} {
+	for _, f := range []string{raw.field("description", "message", "text"), raw.field("application", "applicationName"), raw.field("subsystem", "subsystemName")} {
 		if f != "" {
 			facts = append(facts, f)
 		}
 	}
+	return facts
+}
+
+func parseAlertHook(source string, r *http.Request, body []byte, now time.Time) ([]Event, error) {
+	var raw alertFields
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return nil, err
+	}
+	title := raw.field("alert_name", "alertName", "name", "title")
+	if title == "" {
+		return nil, fmt.Errorf("an alert needs a name or a title")
+	}
+	id := firstOr(raw.field("alert_id", "alertId", "uniqueIdentifier", "id"), title)
+	link := raw.field("url", "alert_url", "alertUrl", "link", "coralogix_url")
+	if !strings.HasPrefix(link, "https://") {
+		link = ""
+	}
 	// Once a day per alert: one that keeps firing is one thing to look at.
 	day := now.UTC().Format("2006-01-02")
 	return []Event{{Key: source + ":" + id + ":" + day, Source: source, Kind: KindErrorNew, Workspace: strings.TrimSpace(r.URL.Query().Get("workspace")),
-		Ref: source + "-" + clipAlertRef(id), Title: title, Body: strings.Join(facts, " · "), URL: link, State: strings.ToLower(field("severity", "priority")), Mine: true, At: now}}, nil
+		Ref: source + "-" + clipAlertRef(id), Title: title, Body: strings.Join(raw.facts(), " · "), URL: link, State: strings.ToLower(raw.field("severity", "priority")), Mine: true, At: now}}, nil
 }
 
 func clipAlertRef(id string) string {

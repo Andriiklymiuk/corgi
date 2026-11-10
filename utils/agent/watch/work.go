@@ -98,35 +98,44 @@ func RunSpendOf(records []FixRecord, pulls map[string]PullStatus, now time.Time)
 			s.Days[i].USD += r.CostUSD
 			s.Days[i].Runs++
 		}
-		if r.StartedAt.Before(weekAgo) {
-			continue
-		}
-		s.WeekRuns++
-		s.WeekUSD += r.CostUSD
-		if r.Error != "" && !r.Forgiven {
-			s.FailedRuns++
-		}
-		if r.Said == "nothing" && Kind(r.Kind) != KindRoutine && Kind(r.Kind) != KindReviewRequested {
-			s.NothingRuns++
-			s.NothingUSD += r.CostUSD
-		}
-		if len(r.Gaps) > 0 {
-			s.SkippedChecks++
-		}
-		for _, link := range append([]string{r.URL}, r.PRs...) {
-			if p, ok := pulls[PullRef(link)]; ok && p.State == "merged" {
-				merged[PullRef(link)] = true
-			}
+		if !r.StartedAt.Before(weekAgo) {
+			addWeekRun(&s, r)
+			markMerged(merged, r, pulls)
 		}
 	}
 	s.MergedPulls = len(merged)
 	if s.MergedPulls > 0 {
-		s.PerMergedPull = math.Round(s.WeekUSD/float64(s.MergedPulls)*100) / 100
+		s.PerMergedPull = roundCents(s.WeekUSD / float64(s.MergedPulls))
 	}
-	s.WeekUSD = math.Round(s.WeekUSD*100) / 100
-	s.NothingUSD = math.Round(s.NothingUSD*100) / 100
+	s.WeekUSD = roundCents(s.WeekUSD)
+	s.NothingUSD = roundCents(s.NothingUSD)
 	for i := range s.Days {
-		s.Days[i].USD = math.Round(s.Days[i].USD*100) / 100
+		s.Days[i].USD = roundCents(s.Days[i].USD)
 	}
 	return s
+}
+
+func roundCents(v float64) float64 { return math.Round(v*100) / 100 }
+
+func addWeekRun(s *sessions.RunSpend, r FixRecord) {
+	s.WeekRuns++
+	s.WeekUSD += r.CostUSD
+	if r.Error != "" && !r.Forgiven {
+		s.FailedRuns++
+	}
+	if r.Said == "nothing" && Kind(r.Kind) != KindRoutine && Kind(r.Kind) != KindReviewRequested {
+		s.NothingRuns++
+		s.NothingUSD += r.CostUSD
+	}
+	if len(r.Gaps) > 0 {
+		s.SkippedChecks++
+	}
+}
+
+func markMerged(merged map[string]bool, r FixRecord, pulls map[string]PullStatus) {
+	for _, link := range append([]string{r.URL}, r.PRs...) {
+		if p, ok := pulls[PullRef(link)]; ok && p.State == "merged" {
+			merged[PullRef(link)] = true
+		}
+	}
 }

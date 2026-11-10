@@ -917,65 +917,73 @@ func ReviewPR(ctx context.Context, s Secrets, link, verdict, body string) error 
 	}
 	switch {
 	case strings.Contains(link, githubHostPrefix):
-		m := githubPRPath.FindStringSubmatch(link)
-		if m == nil {
-			return fmt.Errorf("cannot read a repo and number out of %s", link)
-		}
-		if s.GitHub == "" {
-			return ErrNoToken
-		}
-		event := map[string]string{ReviewApprove: "APPROVE", ReviewRequest: "REQUEST_CHANGES", ReviewComment: "COMMENT"}[verdict]
-		payload, _ := json.Marshal(map[string]string{"event": event, "body": body})
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-			githubReposAPI+m[1]+pullsSegment+m[2]+"/reviews", bytes.NewReader(payload))
-		if err != nil {
-			return err
-		}
-		req.Header.Set("Authorization", bearerPrefix+s.GitHub)
-		req.Header.Set("Accept", githubJSONAccept)
-		req.Header.Set(headerContentType, jsonContentType)
-		return doClose(req, link)
+		return reviewOnGitHub(ctx, s, link, verdict, body)
 	case strings.Contains(link, gitlabMergeRequestsWebPath):
-		if s.GitLab == "" {
-			return ErrNoToken
-		}
-		api, err := gitlabMRAPI(s, link)
-		if err != nil {
-			return err
-		}
-		base := api
-		post := func(endpoint string, payload []byte) error {
-			var rd io.Reader
-			if payload != nil {
-				rd = bytes.NewReader(payload)
-			}
-			req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, rd)
-			if err != nil {
-				return err
-			}
-			req.Header.Set(gitlabTokenHeader, s.GitLab)
-			if payload != nil {
-				req.Header.Set(headerContentType, jsonContentType)
-			}
-			return doClose(req, link)
-		}
-		if body != "" {
-			note := body
-			if verdict == ReviewRequest {
-				note = "Changes requested: " + body
-			}
-			payload, _ := json.Marshal(map[string]string{"body": note})
-			if err := post(base+"/notes", payload); err != nil {
-				return err
-			}
-		}
-		switch verdict {
-		case ReviewApprove:
-			return post(base+"/approve", nil)
-		case ReviewRequest:
-			_ = post(base+"/unapprove", nil)
-		}
-		return nil
+		return reviewOnGitLab(ctx, s, link, verdict, body)
 	}
 	return fmt.Errorf("%s is not a GitHub pull request or a GitLab merge request", link)
+}
+
+func reviewOnGitHub(ctx context.Context, s Secrets, link, verdict, body string) error {
+	m := githubPRPath.FindStringSubmatch(link)
+	if m == nil {
+		return fmt.Errorf("cannot read a repo and number out of %s", link)
+	}
+	if s.GitHub == "" {
+		return ErrNoToken
+	}
+	event := map[string]string{ReviewApprove: "APPROVE", ReviewRequest: "REQUEST_CHANGES", ReviewComment: "COMMENT"}[verdict]
+	payload, _ := json.Marshal(map[string]string{"event": event, "body": body})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		githubReposAPI+m[1]+pullsSegment+m[2]+"/reviews", bytes.NewReader(payload))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", bearerPrefix+s.GitHub)
+	req.Header.Set("Accept", githubJSONAccept)
+	req.Header.Set(headerContentType, jsonContentType)
+	return doClose(req, link)
+}
+
+func gitlabPost(ctx context.Context, token, link, endpoint string, payload []byte) error {
+	var rd io.Reader
+	if payload != nil {
+		rd = bytes.NewReader(payload)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, rd)
+	if err != nil {
+		return err
+	}
+	req.Header.Set(gitlabTokenHeader, token)
+	if payload != nil {
+		req.Header.Set(headerContentType, jsonContentType)
+	}
+	return doClose(req, link)
+}
+
+func reviewOnGitLab(ctx context.Context, s Secrets, link, verdict, body string) error {
+	if s.GitLab == "" {
+		return ErrNoToken
+	}
+	base, err := gitlabMRAPI(s, link)
+	if err != nil {
+		return err
+	}
+	if body != "" {
+		note := body
+		if verdict == ReviewRequest {
+			note = "Changes requested: " + body
+		}
+		payload, _ := json.Marshal(map[string]string{"body": note})
+		if err := gitlabPost(ctx, s.GitLab, link, base+"/notes", payload); err != nil {
+			return err
+		}
+	}
+	switch verdict {
+	case ReviewApprove:
+		return gitlabPost(ctx, s.GitLab, link, base+"/approve", nil)
+	case ReviewRequest:
+		_ = gitlabPost(ctx, s.GitLab, link, base+"/unapprove", nil)
+	}
+	return nil
 }

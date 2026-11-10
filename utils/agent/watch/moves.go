@@ -85,6 +85,32 @@ func (l *Linear) Moves(ctx context.Context, since time.Time) ([]Move, error) {
 	return newestFirst(moves), cutWhen(len(data.Issues.Nodes))
 }
 
+type jiraMoveItem struct {
+	Field      string `json:"field"`
+	FromString string `json:"fromString"`
+	ToString   string `json:"toString"`
+}
+
+type jiraMoveHistory struct {
+	Created string          `json:"created"`
+	Author  jiraDisplayName `json:"author"`
+	Items   []jiraMoveItem  `json:"items"`
+}
+
+type jiraDisplayName struct {
+	DisplayName string `json:"displayName"`
+}
+
+type jiraMoveIssue struct {
+	Key    string `json:"key"`
+	Fields struct {
+		Summary string `json:"summary"`
+	} `json:"fields"`
+	Changelog struct {
+		Histories []jiraMoveHistory `json:"histories"`
+	} `json:"changelog"`
+}
+
 func (j *Jira) Moves(ctx context.Context, since time.Time) ([]Move, error) {
 	if strings.TrimSpace(j.URL) == "" || strings.TrimSpace(j.Email) == "" || strings.TrimSpace(j.Token) == "" {
 		return nil, ErrNoToken
@@ -97,25 +123,7 @@ func (j *Jira) Moves(ctx context.Context, since time.Time) ([]Move, error) {
 		jql = fmt.Sprintf("project = %q AND ", j.Project) + jql
 	}
 	var search struct {
-		Issues []struct {
-			Key    string `json:"key"`
-			Fields struct {
-				Summary string `json:"summary"`
-			} `json:"fields"`
-			Changelog struct {
-				Histories []struct {
-					Created string `json:"created"`
-					Author  struct {
-						DisplayName string `json:"displayName"`
-					} `json:"author"`
-					Items []struct {
-						Field      string `json:"field"`
-						FromString string `json:"fromString"`
-						ToString   string `json:"toString"`
-					} `json:"items"`
-				} `json:"histories"`
-			} `json:"changelog"`
-		} `json:"issues"`
+		Issues []jiraMoveIssue `json:"issues"`
 	}
 	params := url.Values{
 		"jql":        {jql},
@@ -127,22 +135,28 @@ func (j *Jira) Moves(ctx context.Context, since time.Time) ([]Move, error) {
 		return nil, err
 	}
 	var moves []Move
+	browse := strings.TrimRight(j.URL, "/") + "/browse/"
 	for _, issue := range search.Issues {
 		for _, h := range issue.Changelog.Histories {
-			at := trackerTime(h.Created)
-			if !at.After(since) {
-				continue
-			}
-			for _, it := range h.Items {
-				if !strings.EqualFold(it.Field, "status") {
-					continue
-				}
-				moves = append(moves, Move{Ref: issue.Key, Title: issue.Fields.Summary, URL: strings.TrimRight(j.URL, "/") + "/browse/" + issue.Key,
-					From: it.FromString, To: it.ToString, By: h.Author.DisplayName, At: at})
-			}
+			moves = append(moves, statusMoves(issue, h, browse, since)...)
 		}
 	}
 	return newestFirst(moves), cutWhen(len(search.Issues))
+}
+
+func statusMoves(issue jiraMoveIssue, h jiraMoveHistory, browse string, since time.Time) []Move {
+	at := trackerTime(h.Created)
+	if !at.After(since) {
+		return nil
+	}
+	var moves []Move
+	for _, it := range h.Items {
+		if strings.EqualFold(it.Field, "status") {
+			moves = append(moves, Move{Ref: issue.Key, Title: issue.Fields.Summary, URL: browse + issue.Key,
+				From: it.FromString, To: it.ToString, By: h.Author.DisplayName, At: at})
+		}
+	}
+	return moves
 }
 
 func newestFirst(moves []Move) []Move {

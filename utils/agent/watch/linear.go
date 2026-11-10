@@ -70,29 +70,47 @@ func (l *Linear) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 	if err := l.query(ctx, query, &data); err != nil {
 		return nil, cursor, err
 	}
-	comments := data.Comments.Nodes
-	for page := data.Comments; page.PageInfo.HasNextPage && len(comments) < 500; {
+	comments, err := l.allComments(ctx, data.Comments, commentsSince)
+	if err != nil {
+		return nil, cursor, err
+	}
+	events, newestIssue := l.issueEvents(data.Issues.Nodes, issuesSince)
+	more, newestComment := l.commentEvents(comments, commentsSince)
+	events = append(events, more...)
+
+	next := Cursor{"me": l.Me}
+	setCursorTime(next, cursor, "issues", newestIssue, issuesSince)
+	setCursorTime(next, cursor, "comments", newestComment, commentsSince)
+	return events, next, nil
+}
+
+func (l *Linear) allComments(ctx context.Context, first linearComments, since time.Time) ([]linearCommentsNodes, error) {
+	comments := first.Nodes
+	for page := first; page.PageInfo.HasNextPage && len(comments) < 500; {
 		var more struct{ Comments linearComments }
 		q := fmt.Sprintf(`{ comments(filter: {createdAt: {gt: %s}, issue: {assignee: {id: {eq: %s}}}}, first: 50, orderBy: createdAt, after: %s) {
     nodes { id body createdAt user { id name } botActor { name } issue { identifier url title state { name } } }
     pageInfo { hasNextPage endCursor }
-  } }`, graphqlString(commentsSince), strconv.Quote(l.Me), strconv.Quote(page.PageInfo.EndCursor))
+  } }`, graphqlString(since), strconv.Quote(l.Me), strconv.Quote(page.PageInfo.EndCursor))
 		if err := l.query(ctx, q, &more); err != nil {
-			return nil, cursor, err
+			return nil, err
 		}
 		comments = append(comments, more.Comments.Nodes...)
 		page = more.Comments
 	}
+	return comments, nil
+}
 
+func (l *Linear) issueEvents(nodes []linearIssue, since time.Time) ([]Event, time.Time) {
 	var events []Event
-	newestIssue, newestComment := issuesSince, commentsSince
-	for _, n := range data.Issues.Nodes {
+	newest := since
+	for _, n := range nodes {
 		created, updated := trackerTime(n.CreatedAt), trackerTime(n.UpdatedAt)
-		newestIssue = later(newestIssue, updated)
+		newest = later(newest, updated)
 		mine := n.Assignee != nil && isMe(l.Me, n.Assignee.ID)
 		key, at := linearKeyPrefix+n.Identifier, created
-		if !created.After(issuesSince) {
-			h, ok := l.becameMine(n.History.Nodes, issuesSince)
+		if !created.After(since) {
+			h, ok := l.becameMine(n.History.Nodes, since)
 			if !ok || !mine {
 				continue
 			}
@@ -100,16 +118,19 @@ func (l *Linear) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 		}
 		events = append(events, l.issueEvent(n, key, at))
 	}
+	return events, newest
+}
+
+func (l *Linear) commentEvents(comments []linearCommentsNodes, since time.Time) ([]Event, time.Time) {
+	var events []Event
+	newest := since
 	for _, n := range comments {
 		created := trackerTime(n.CreatedAt)
-		newestComment = later(newestComment, created)
-		if !created.After(commentsSince) || (n.User != nil && isMe(l.Me, n.User.ID)) {
+		newest = later(newest, created)
+		if !created.After(since) || n.User == nil || isMe(l.Me, n.User.ID) || n.BotActor != nil {
 			continue
 		}
-		if n.User == nil || n.BotActor != nil {
-			continue
-		}
-		e := Event{
+		events = append(events, Event{
 			Key:    linearKeyPrefix + n.Issue.Identifier + ":c" + n.ID,
 			Source: "linear",
 			Kind:   KindIssueComment,
@@ -119,18 +140,11 @@ func (l *Linear) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 			URL:    n.Issue.URL,
 			State:  n.Issue.State.Name,
 			Mine:   true,
+			Author: n.User.Name,
 			At:     created,
-		}
-		if n.User != nil {
-			e.Author = n.User.Name
-		}
-		events = append(events, e)
+		})
 	}
-
-	next := Cursor{"me": l.Me}
-	setCursorTime(next, cursor, "issues", newestIssue, issuesSince)
-	setCursorTime(next, cursor, "comments", newestComment, commentsSince)
-	return events, next, nil
+	return events, newest
 }
 
 type linearPollIssues struct{ Nodes []linearIssue }

@@ -26,15 +26,15 @@ func (j *Jira) Name() string { return "jira" }
 
 type jiraIssue struct {
 	Key       string             `json:"key"`
-	Fields    jiraIssueFields2   `json:"fields"`
+	Fields    jiraIssueFieldSet  `json:"fields"`
 	Changelog jiraIssueChangelog `json:"changelog"`
 }
 
-type jiraIssueFieldsStatus struct {
+type jiraStatus struct {
 	Name string `json:"name"`
 }
 
-type jiraIssueFieldsAssignee struct {
+type jiraUser struct {
 	AccountID   string `json:"accountId"`
 	DisplayName string `json:"displayName"`
 }
@@ -57,13 +57,13 @@ type jiraIssueFieldsParent struct {
 	Fields jiraIssueParentFields `json:"fields"`
 }
 
-type jiraIssueFieldsAssignee2 struct {
+type jiraAccount struct {
 	AccountID string `json:"accountId"`
 }
 
 type jiraIssueSubtasksFields struct {
-	Status   jiraIssueFieldsStatus     `json:"status"`
-	Assignee *jiraIssueFieldsAssignee2 `json:"assignee"`
+	Status   jiraStatus   `json:"status"`
+	Assignee *jiraAccount `json:"assignee"`
 }
 
 type jiraIssueFieldsSubtasks struct {
@@ -71,13 +71,13 @@ type jiraIssueFieldsSubtasks struct {
 	Fields jiraIssueSubtasksFields `json:"fields"`
 }
 
-type jiraIssueFields2 struct {
+type jiraIssueFieldSet struct {
 	Summary     string                    `json:"summary"`
 	Description json.RawMessage           `json:"description"`
 	Labels      []string                  `json:"labels"`
-	Status      jiraIssueFieldsStatus     `json:"status"`
-	Assignee    *jiraIssueFieldsAssignee  `json:"assignee"`
-	Creator     *jiraIssueFieldsAssignee  `json:"creator"`
+	Status      jiraStatus                `json:"status"`
+	Assignee    *jiraUser                 `json:"assignee"`
+	Creator     *jiraUser                 `json:"creator"`
 	Created     string                    `json:"created"`
 	Updated     string                    `json:"updated"`
 	Comment     *jiraIssueFieldsComment   `json:"comment"`
@@ -91,10 +91,10 @@ type jiraIssueChangelog struct {
 }
 
 type jiraHistory struct {
-	ID      string                   `json:"id"`
-	Created string                   `json:"created"`
-	Author  jiraIssueFieldsAssignee2 `json:"author"`
-	Items   []jiraHistoryItems       `json:"items"`
+	ID      string             `json:"id"`
+	Created string             `json:"created"`
+	Author  jiraAccount        `json:"author"`
+	Items   []jiraHistoryItems `json:"items"`
 }
 
 type jiraHistoryItems struct {
@@ -217,10 +217,10 @@ func (j *Jira) openSubtasksOfMine(issue jiraIssue) []string {
 }
 
 type jiraComment struct {
-	ID      string                  `json:"id"`
-	Author  jiraIssueFieldsAssignee `json:"author"`
-	Body    json.RawMessage         `json:"body"`
-	Created string                  `json:"created"`
+	ID      string          `json:"id"`
+	Author  jiraUser        `json:"author"`
+	Body    json.RawMessage `json:"body"`
+	Created string          `json:"created"`
 }
 
 func (j *Jira) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, error) {
@@ -236,11 +236,9 @@ func (j *Jira) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, error)
 	if err := j.resolveMe(ctx); err != nil {
 		return nil, cursor, err
 	}
-
 	now := time.Now()
 	issuesSince := cursorTime(cursor["issues"], now)
 	commentsSince := cursorTime(cursor["comments"], now)
-
 	jql := fmt.Sprintf("updated >= %q ORDER BY updated ASC", issuesSince.In(j.zone).Format("2006-01-02 15:04"))
 	if j.Project != "" {
 		jql = fmt.Sprintf("project = %q AND ", j.Project) + jql
@@ -257,65 +255,16 @@ func (j *Jira) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, error)
 	if err := j.get(ctx, "/rest/api/3/search/jql", params, &search); err != nil {
 		return nil, cursor, err
 	}
-
-	var events []Event
-	newestIssue, newestComment := issuesSince, commentsSince
-	var mine []jiraIssue
-	for _, issue := range search.Issues {
-		created, updated := trackerTime(issue.Fields.Created), trackerTime(issue.Fields.Updated)
-		newestIssue = later(newestIssue, updated)
-		assignedToMe := issue.Fields.Assignee != nil && isMe(j.Me, issue.Fields.Assignee.AccountID)
-		if assignedToMe {
-			mine = append(mine, issue)
-		}
-		key, at := "jira:"+issue.Key, created
-		if !created.After(issuesSince) {
-			h, ok := j.becameMine(issue, issuesSince)
-			if !ok || !assignedToMe {
-				continue
-			}
-			key, at = key+":h"+h.ID, trackerTime(h.Created)
-		}
-		events = append(events, j.issueEvent(issue, key, at))
-	}
-
+	events, mine, newestIssue := j.issueEvents(search.Issues, issuesSince)
+	newestComment := commentsSince
 	for _, issue := range mine {
-		var page struct {
-			Comments []jiraComment `json:"comments"`
+		more, newest, err := j.commentEvents(ctx, issue, commentsSince)
+		if err != nil {
+			return nil, cursor, err
 		}
-		if c := issue.Fields.Comment; c != nil && c.Total <= len(c.Comments) {
-			page.Comments = c.Comments
-		} else {
-			params := url.Values{"orderBy": {"-created"}, "maxResults": {"20"}}
-			if err := j.get(ctx, "/rest/api/3/issue/"+url.PathEscape(issue.Key)+"/comment", params, &page); err != nil {
-				return nil, cursor, err
-			}
-		}
-		for _, c := range page.Comments {
-			created := trackerTime(c.Created)
-			if !created.After(commentsSince) {
-				continue
-			}
-			newestComment = later(newestComment, created)
-			if isMe(j.Me, c.Author.AccountID) {
-				continue
-			}
-			events = append(events, Event{
-				Key:    "jira:" + issue.Key + ":c" + c.ID,
-				Source: "jira",
-				Kind:   KindIssueComment,
-				Ref:    issue.Key,
-				Title:  issue.Fields.Summary,
-				Body:   clip(jiraText(c.Body), bodyMax),
-				URL:    strings.TrimRight(j.URL, "/") + "/browse/" + issue.Key,
-				Author: c.Author.DisplayName,
-				State:  issue.Fields.Status.Name,
-				Mine:   true,
-				At:     created,
-			})
-		}
+		events = append(events, more...)
+		newestComment = later(newestComment, newest)
 	}
-
 	next := Cursor{"me": j.Me}
 	if j.zone != time.UTC {
 		next["zone"] = j.zone.String()
@@ -323,6 +272,75 @@ func (j *Jira) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, error)
 	setCursorTime(next, cursor, "issues", newestIssue, issuesSince)
 	setCursorTime(next, cursor, "comments", newestComment, commentsSince)
 	return events, next, nil
+}
+
+func (j *Jira) issueEvents(issues []jiraIssue, since time.Time) ([]Event, []jiraIssue, time.Time) {
+	var events []Event
+	var mine []jiraIssue
+	newest := since
+	for _, issue := range issues {
+		created, updated := trackerTime(issue.Fields.Created), trackerTime(issue.Fields.Updated)
+		newest = later(newest, updated)
+		assignedToMe := issue.Fields.Assignee != nil && isMe(j.Me, issue.Fields.Assignee.AccountID)
+		if assignedToMe {
+			mine = append(mine, issue)
+		}
+		key, at := "jira:"+issue.Key, created
+		if !created.After(since) {
+			h, ok := j.becameMine(issue, since)
+			if !ok || !assignedToMe {
+				continue
+			}
+			key, at = key+":h"+h.ID, trackerTime(h.Created)
+		}
+		events = append(events, j.issueEvent(issue, key, at))
+	}
+	return events, mine, newest
+}
+
+func (j *Jira) issueComments(ctx context.Context, issue jiraIssue) ([]jiraComment, error) {
+	if c := issue.Fields.Comment; c != nil && c.Total <= len(c.Comments) {
+		return c.Comments, nil
+	}
+	var page struct {
+		Comments []jiraComment `json:"comments"`
+	}
+	params := url.Values{"orderBy": {"-created"}, "maxResults": {"20"}}
+	err := j.get(ctx, jiraIssueAPIPath+url.PathEscape(issue.Key)+"/comment", params, &page)
+	return page.Comments, err
+}
+
+func (j *Jira) commentEvents(ctx context.Context, issue jiraIssue, since time.Time) ([]Event, time.Time, error) {
+	comments, err := j.issueComments(ctx, issue)
+	if err != nil {
+		return nil, since, err
+	}
+	var events []Event
+	newest := since
+	for _, c := range comments {
+		created := trackerTime(c.Created)
+		if !created.After(since) {
+			continue
+		}
+		newest = later(newest, created)
+		if isMe(j.Me, c.Author.AccountID) {
+			continue
+		}
+		events = append(events, Event{
+			Key:    "jira:" + issue.Key + ":c" + c.ID,
+			Source: "jira",
+			Kind:   KindIssueComment,
+			Ref:    issue.Key,
+			Title:  issue.Fields.Summary,
+			Body:   clip(jiraText(c.Body), bodyMax),
+			URL:    strings.TrimRight(j.URL, "/") + "/browse/" + issue.Key,
+			Author: c.Author.DisplayName,
+			State:  issue.Fields.Status.Name,
+			Mine:   true,
+			At:     created,
+		})
+	}
+	return events, newest, nil
 }
 
 func (j *Jira) get(ctx context.Context, path string, params url.Values, out any) error {

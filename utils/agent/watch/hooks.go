@@ -116,7 +116,7 @@ func parseLinearHook(body []byte, me string) ([]Event, error) {
 	return nil, nil
 }
 
-type linearHookDataState struct{ Name string }
+type linearHookName struct{ Name string }
 
 type linearHookDataAssignee struct {
 	ID    string `json:"id"`
@@ -140,8 +140,8 @@ type linearHookData struct {
 	URL        string                  `json:"url"`
 	Body       string                  `json:"body"`
 	CreatedAt  string                  `json:"createdAt"`
-	State      linearHookDataState     `json:"state"`
-	Labels     []linearHookDataState   `json:"labels"`
+	State      linearHookName          `json:"state"`
+	Labels     []linearHookName        `json:"labels"`
 	Assignee   *linearHookDataAssignee `json:"assignee"`
 	User       *linearHookDataUser     `json:"user"`
 	Issue      *linearHookDataIssue    `json:"issue"`
@@ -196,41 +196,41 @@ type gitHubHookRepo struct {
 	FullName string `json:"full_name"`
 }
 
-type gitHubHookPRUser struct{ Login string }
+type gitHubHookLogin struct{ Login string }
 
 type gitHubHookPR struct {
-	Number  int              `json:"number"`
-	Title   string           `json:"title"`
-	HTMLURL string           `json:"html_url"`
-	User    gitHubHookPRUser `json:"user"`
+	Number  int             `json:"number"`
+	Title   string          `json:"title"`
+	HTMLURL string          `json:"html_url"`
+	User    gitHubHookLogin `json:"user"`
 }
 
 type gitHubHookIssue struct {
-	Number  int              `json:"number"`
-	Title   string           `json:"title"`
-	HTMLURL string           `json:"html_url"`
-	User    gitHubHookPRUser `json:"user"`
-	PR      *struct{}        `json:"pull_request"`
+	Number  int             `json:"number"`
+	Title   string          `json:"title"`
+	HTMLURL string          `json:"html_url"`
+	User    gitHubHookLogin `json:"user"`
+	PR      *struct{}       `json:"pull_request"`
 }
 
-type gitHubHookCommentUser struct {
+type gitHubHookActor struct {
 	Login string `json:"login"`
 	Type  string `json:"type"`
 }
 
 type gitHubHookComment struct {
-	ID        int64                 `json:"id"`
-	Body      string                `json:"body"`
-	CreatedAt string                `json:"created_at"`
-	User      gitHubHookCommentUser `json:"user"`
+	ID        int64           `json:"id"`
+	Body      string          `json:"body"`
+	CreatedAt string          `json:"created_at"`
+	User      gitHubHookActor `json:"user"`
 }
 
 type gitHubHookReview struct {
-	ID          int64                 `json:"id"`
-	Body        string                `json:"body"`
-	State       string                `json:"state"`
-	SubmittedAt string                `json:"submitted_at"`
-	User        gitHubHookCommentUser `json:"user"`
+	ID          int64           `json:"id"`
+	Body        string          `json:"body"`
+	State       string          `json:"state"`
+	SubmittedAt string          `json:"submitted_at"`
+	User        gitHubHookActor `json:"user"`
 }
 
 func parseGitLabHook(body []byte, who HookIdentity) ([]Event, error) {
@@ -323,7 +323,7 @@ type jiraHookIssueFields struct {
 	Summary  string                  `json:"summary"`
 	Labels   []string                `json:"labels"`
 	Created  string                  `json:"created"`
-	Status   linearHookDataState     `json:"status"`
+	Status   linearHookName          `json:"status"`
 	Assignee *jiraHookFieldsAssignee `json:"assignee"`
 }
 

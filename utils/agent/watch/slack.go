@@ -407,30 +407,15 @@ func (s *Slack) history(ctx context.Context, cursor Cursor, c slackConversation,
 func (s *Slack) event(ctx context.Context, cursor Cursor, m slackMessage, c slackConversation, me, team string, kind Kind) Event {
 	author := s.handle(ctx, m.User)
 	where := "#" + c.Name
-	if c.IsIM {
-		where = "DM"
-	}
-	body := s.render(ctx, m.Text)
-	links := PullLinks(body)
-	parentTS := m.ThreadTS
-	parentMine := false
-	if parentTS != "" && parentTS != m.TS {
-		if parent, ok := s.parent(ctx, c.ID, parentTS); ok {
-			parentBody := s.render(ctx, parent.Text)
-			body = "In reply to " + s.handle(ctx, parent.User) + ": " + parentBody + "\n\n" + body
-			links = append(links, PullLinks(parentBody)...)
-			parentMine = parent.User != "" && parent.User == me
-		}
-	}
-	links = uniqueLinks(links)
-
-	key := "slack:" + c.ID + ":" + m.TS
-	if parentTS != "" && parentTS != m.TS {
-		cursor["thread:"+key] = parentTS
-	}
 	title := author + " in " + where
 	if c.IsIM {
-		title = "DM from " + author
+		where, title = "DM", "DM from "+author
+	}
+	inThread := m.ThreadTS != "" && m.ThreadTS != m.TS
+	body, links, parentMine := s.withParent(ctx, c.ID, m, me, inThread)
+	key := "slack:" + c.ID + ":" + m.TS
+	if inThread {
+		cursor["thread:"+key] = m.ThreadTS
 	}
 	if first := firstTextLine(body); first != "" {
 		title += ": " + first
@@ -448,7 +433,7 @@ func (s *Slack) event(ctx context.Context, cursor Cursor, m slackMessage, c slac
 		Ref:    "slack-" + tsSeconds(m.TS),
 		Title:  title,
 		Body:   body,
-		URL:    slackPermalink(team, c.ID, m.TS, parentTS),
+		URL:    slackPermalink(team, c.ID, m.TS, m.ThreadTS),
 		Author: author,
 		State:  where,
 		Links:  links,
@@ -457,6 +442,22 @@ func (s *Slack) event(ctx context.Context, cursor Cursor, m slackMessage, c slac
 		Mine:   kind == KindChatMention || kind == KindReviewRequested,
 		At:     slackTSTime(m.TS),
 	}
+}
+
+func (s *Slack) withParent(ctx context.Context, channel string, m slackMessage, me string, inThread bool) (string, []string, bool) {
+	body := s.render(ctx, m.Text)
+	links := PullLinks(body)
+	if !inThread {
+		return body, uniqueLinks(links), false
+	}
+	parent, ok := s.parent(ctx, channel, m.ThreadTS)
+	if !ok {
+		return body, uniqueLinks(links), false
+	}
+	parentBody := s.render(ctx, parent.Text)
+	body = "In reply to " + s.handle(ctx, parent.User) + ": " + parentBody + "\n\n" + body
+	links = append(links, PullLinks(parentBody)...)
+	return body, uniqueLinks(links), parent.User != "" && parent.User == me
 }
 
 func (s *Slack) isReviewChannel(c slackConversation) bool {

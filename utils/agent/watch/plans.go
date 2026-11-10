@@ -192,35 +192,38 @@ func (p Plan) Progress(tasks *TaskLog) PlanProgress {
 		}
 		state[t.ID] = task.State
 		byID[t.ID] = task
-		switch task.State {
-		case "Todo":
-			out.Todo++
-		case "Doing":
-			out.Doing++
-		case "Review":
-			out.Review++
-		case "Done":
-			out.Done++
-		case "Canceled":
-			out.Canceled++
-		}
+		out.count(task.State)
 	}
 	for _, t := range p.Tasks {
-		if state[t.ID] != "Todo" {
-			continue
-		}
-		ready := true
-		for _, dep := range t.After {
-			if s, ok := state[dep]; ok && !taskFinished(s) {
-				ready = false
-				break
-			}
-		}
-		if ready {
+		if state[t.ID] == "Todo" && depsFinished(t.After, state) {
 			out.Ready = append(out.Ready, byID[t.ID])
 		}
 	}
 	return out
+}
+
+func (out *PlanProgress) count(state string) {
+	switch state {
+	case "Todo":
+		out.Todo++
+	case "Doing":
+		out.Doing++
+	case "Review":
+		out.Review++
+	case "Done":
+		out.Done++
+	case "Canceled":
+		out.Canceled++
+	}
+}
+
+func depsFinished(after []int, state map[int]string) bool {
+	for _, dep := range after {
+		if s, ok := state[dep]; ok && !taskFinished(s) {
+			return false
+		}
+	}
+	return true
 }
 
 func (pr PlanProgress) Over() bool { return pr.Todo == 0 && pr.Doing == 0 }

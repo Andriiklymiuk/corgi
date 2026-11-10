@@ -21,52 +21,68 @@ var gapFix = map[Gap]string{
 	GapTestsSkip:  "corgi agent watch enable --done-when \"<test command>\" makes the checks part of every stop",
 }
 
+type selfCheckTally struct {
+	runs       int
+	gaps       map[Gap]int
+	env        map[string]int
+	failed     int
+	nothing    int
+	nothingUSD float64
+}
+
+func (t *selfCheckTally) add(r FixRecord) {
+	if strings.HasPrefix(r.Error, EnvironmentPrefix) {
+		t.env[strings.TrimPrefix(r.Error, EnvironmentPrefix)]++
+		return
+	}
+	if !countedRun(r) || !r.Done() {
+		return
+	}
+	t.runs++
+	for _, g := range r.Gaps {
+		t.gaps[g]++
+	}
+	if r.Error != "" && !r.Forgiven {
+		t.failed++
+	}
+	if r.Said == "nothing" && Kind(r.Kind) != KindRoutine && Kind(r.Kind) != KindReviewRequested {
+		t.nothing++
+		t.nothingUSD += r.CostUSD
+	}
+}
+
+func (t selfCheckTally) envLine() string {
+	if len(t.env) == 0 {
+		return ""
+	}
+	var parts []string
+	for cause, n := range t.env {
+		parts = append(parts, fmt.Sprintf("%s %d", cause, n))
+	}
+	sort.Strings(parts)
+	return "runs that never started because of the machine: " + strings.Join(parts, ", ") + " - they were tried again on their own"
+}
+
 func SelfCheckOf(records []FixRecord, ticked map[string]LeftTick, now time.Time, days int) SelfCheck {
 	since := now.AddDate(0, 0, -days)
-	out := SelfCheck{Days: days}
-	gaps := map[Gap]int{}
-	env := map[string]int{}
-	failed := 0
-	nothingUSD, nothing := 0.0, 0
+	t := selfCheckTally{gaps: map[Gap]int{}, env: map[string]int{}}
 	for _, r := range records {
-		if r.StartedAt.Before(since) {
-			continue
-		}
-		if strings.HasPrefix(r.Error, EnvironmentPrefix) {
-			env[strings.TrimPrefix(r.Error, EnvironmentPrefix)]++
-			continue
-		}
-		if !countedRun(r) || !r.Done() {
-			continue
-		}
-		out.Runs++
-		for _, g := range r.Gaps {
-			gaps[g]++
-		}
-		if r.Error != "" && !r.Forgiven {
-			failed++
-		}
-		if r.Said == "nothing" && Kind(r.Kind) != KindRoutine && Kind(r.Kind) != KindReviewRequested {
-			nothing++
-			nothingUSD += r.CostUSD
+		if !r.StartedAt.Before(since) {
+			t.add(r)
 		}
 	}
-	for _, g := range sortedGaps(gaps) {
-		out.Lines = append(out.Lines, fmt.Sprintf("%d %s skipped a check: %s - %s", gaps[g], runsWord(gaps[g]), g, gapFix[g]))
+	out := SelfCheck{Days: days, Runs: t.runs}
+	for _, g := range sortedGaps(t.gaps) {
+		out.Lines = append(out.Lines, fmt.Sprintf("%d %s skipped a check: %s - %s", t.gaps[g], runsWord(t.gaps[g]), g, gapFix[g]))
 	}
-	if len(env) > 0 {
-		var parts []string
-		for cause, n := range env {
-			parts = append(parts, fmt.Sprintf("%s %d", cause, n))
-		}
-		sort.Strings(parts)
-		out.Lines = append(out.Lines, "runs that never started because of the machine: "+strings.Join(parts, ", ")+" - they were tried again on their own")
+	if line := t.envLine(); line != "" {
+		out.Lines = append(out.Lines, line)
 	}
-	if failed > 0 {
-		out.Lines = append(out.Lines, fmt.Sprintf("%d %s failed on the work itself - corgi agent scorecard --days %d", failed, runsWord(failed), days))
+	if t.failed > 0 {
+		out.Lines = append(out.Lines, fmt.Sprintf("%d %s failed on the work itself - corgi agent scorecard --days %d", t.failed, runsWord(t.failed), days))
 	}
-	if nothing > 0 {
-		out.Lines = append(out.Lines, fmt.Sprintf("$%.2f on %d %s that found nothing to do - corgi agent scorecard names the kind worth turning off", nothingUSD, nothing, runsWord(nothing)))
+	if t.nothing > 0 {
+		out.Lines = append(out.Lines, fmt.Sprintf("$%.2f on %d %s that found nothing to do - corgi agent scorecard names the kind worth turning off", t.nothingUSD, t.nothing, runsWord(t.nothing)))
 	}
 	if open := OpenLeft(LeftRows(records, ticked, now, now)); len(open) > 0 {
 		oldest := open[len(open)-1].At
