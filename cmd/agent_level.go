@@ -71,6 +71,53 @@ func factoryLevel(f factoryFacts) int {
 	return 5
 }
 
+func factoryWarnings(f factoryFacts) []string {
+	var warnings []string
+	if (f.AutoMerge || f.MergeUnread) && f.DoneWhen == 0 {
+		warnings = append(warnings, "it merges by itself with no checks of its own: add --done-when, or turn --auto-merge off")
+	}
+	if f.AutoMerge && !f.MergeUnread && f.Scenarios == 0 {
+		warnings = append(warnings, "it merges by itself and its only exam is one it can read: add scenarios before trusting that")
+	}
+	if f.MergeUnread && f.Scenarios == 0 {
+		warnings = append(warnings, "with no scenarios nothing passes the gate: every pull request waits for you. corgi agent scenario add <name> --text ...")
+	}
+	if f.Fix && !f.Capped {
+		warnings = append(warnings, "unattended runs have no cap: one bad loop spends the whole window")
+	}
+	return warnings
+}
+
+func levelFourNext(f factoryFacts, flag string) []string {
+	var next []string
+	if f.Routines == 0 {
+		next = append(next, "corgi agent routine add retro", "corgi agent routine add ratchet")
+	}
+	if f.Scenarios == 0 {
+		next = append(next, `corgi agent scenario add <name> --text "what a person does and sees"`, "corgi agent routine add scenarios")
+	}
+	if f.Scenarios > 0 && !f.MergeUnread {
+		next = append(next, "when `corgi agent scorecard` and the scenarios have earned it: corgi agent level 5 "+flag)
+	}
+	return next
+}
+
+func factoryNext(level int, f factoryFacts, flag string) []string {
+	switch level {
+	case 1:
+		return []string{fmt.Sprintf("corgi agent level 2 %s", flag), "corgi agent restart"}
+	case 2:
+		return []string{fmt.Sprintf("corgi agent level 3 %s", flag), "add one trigger at a time; read every pull request it opens"}
+	case 3:
+		return []string{fmt.Sprintf(`corgi agent level 4 %s --done-when "<test command>"`, flag)}
+	case 4:
+		return levelFourNext(f, flag)
+	case 5:
+		return []string{"keep the loop honest: corgi agent scorecard, corgi agent selfcheck, corgi agent routine add retro"}
+	}
+	return nil
+}
+
 func factoryReportFor(ws string, f factoryFacts) factoryReport {
 	level := factoryLevel(f)
 	rung := factoryLadder[level-1]
@@ -83,38 +130,8 @@ func factoryReportFor(ws string, f factoryFacts) factoryReport {
 		{"a cap on runs and spend", f.Capped, fmt.Sprintf("corgi agent watch enable %s --max-per-day 10 --limit-ceiling 80", flag)},
 		{"a person reads what merges", !f.MergeUnread, fmt.Sprintf("corgi agent watch enable %s --merge-unread=false", flag)},
 	}
-	if (f.AutoMerge || f.MergeUnread) && f.DoneWhen == 0 {
-		r.Warnings = append(r.Warnings, "it merges by itself with no checks of its own: add --done-when, or turn --auto-merge off")
-	}
-	if f.AutoMerge && !f.MergeUnread && f.Scenarios == 0 {
-		r.Warnings = append(r.Warnings, "it merges by itself and its only exam is one it can read: add scenarios before trusting that")
-	}
-	if f.MergeUnread && f.Scenarios == 0 {
-		r.Warnings = append(r.Warnings, "with no scenarios nothing passes the gate: every pull request waits for you. corgi agent scenario add <name> --text ...")
-	}
-	if f.Fix && !f.Capped {
-		r.Warnings = append(r.Warnings, "unattended runs have no cap: one bad loop spends the whole window")
-	}
-	switch level {
-	case 1:
-		r.Next = []string{fmt.Sprintf("corgi agent level 2 %s", flag), "corgi agent restart"}
-	case 2:
-		r.Next = []string{fmt.Sprintf("corgi agent level 3 %s", flag), "add one trigger at a time; read every pull request it opens"}
-	case 3:
-		r.Next = []string{fmt.Sprintf(`corgi agent level 4 %s --done-when "<test command>"`, flag)}
-	case 4:
-		if f.Routines == 0 {
-			r.Next = append(r.Next, "corgi agent routine add retro", "corgi agent routine add ratchet")
-		}
-		if f.Scenarios == 0 {
-			r.Next = append(r.Next, `corgi agent scenario add <name> --text "what a person does and sees"`, "corgi agent routine add scenarios")
-		}
-		if f.Scenarios > 0 && !f.MergeUnread {
-			r.Next = append(r.Next, "when `corgi agent scorecard` and the scenarios have earned it: corgi agent level 5 "+flag)
-		}
-	case 5:
-		r.Next = []string{"keep the loop honest: corgi agent scorecard, corgi agent selfcheck, corgi agent routine add retro"}
-	}
+	r.Warnings = factoryWarnings(f)
+	r.Next = factoryNext(level, f, flag)
 	return r
 }
 

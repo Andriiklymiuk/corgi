@@ -29,45 +29,77 @@ func timelineFor(dir string, s sessions.Session, limit int) []TimelineItem {
 	if !s.StartedAt.IsZero() {
 		items = append(items, TimelineItem{At: s.StartedAt, Kind: "start", Text: "session started in " + firstNonEmpty(s.Label, s.Cwd)})
 	}
-	if path := transcriptPathFor(s); path != "" && transcript.Exists(path) {
-		entries, _, err := transcript.Read(path, 0, transcript.MaxEntries)
-		if err == nil {
-			var burst *TimelineItem
-			flush := func() {
-				if burst != nil {
-					items = append(items, *burst)
-					burst = nil
-				}
-			}
-			for _, e := range entries {
-				switch e.Kind {
-				case "user":
-					flush()
-					if t := strings.TrimSpace(e.Text); t != "" {
-						items = append(items, TimelineItem{At: e.At, Kind: "prompt", Text: clipTitle(strings.ReplaceAll(t, "\n", " "), 160)})
-					}
-				case "assistant":
-					flush()
-					if t := strings.TrimSpace(e.Text); t != "" {
-						items = append(items, TimelineItem{At: e.At, Kind: "said", Text: clipTitle(strings.ReplaceAll(t, "\n", " "), 160)})
-					}
-				case "tool":
-					subject := strings.TrimSpace(e.Tool + " " + e.Subject)
-					if burst == nil {
-						burst = &TimelineItem{At: e.At, Kind: "tools", Text: subject, N: 0}
-					}
-					burst.N++
-					if burst.N > 1 {
-						burst.Text = clipTitle(burst.Text, 120)
-						if !strings.Contains(burst.Text, "…") && len(burst.Text) < 100 {
-							burst.Text += " · " + subject
-						}
-					}
-				}
-			}
-			flush()
+	items = append(items, transcriptTimeline(s)...)
+	items = append(items, checksTimeline(s)...)
+	if s.PR != "" {
+		items = append(items, pullTimeline(dir, s)...)
+	}
+	sort.SliceStable(items, func(i, j int) bool { return items[i].At.Before(items[j].At) })
+	if limit > 0 && len(items) > limit {
+		items = items[len(items)-limit:]
+	}
+	return items
+}
+
+type toolBurst struct {
+	items []TimelineItem
+	burst *TimelineItem
+}
+
+func (t *toolBurst) flush() {
+	if t.burst != nil {
+		t.items = append(t.items, *t.burst)
+		t.burst = nil
+	}
+}
+
+func (t *toolBurst) said(e transcript.Entry, kind string) {
+	t.flush()
+	if text := strings.TrimSpace(e.Text); text != "" {
+		t.items = append(t.items, TimelineItem{At: e.At, Kind: kind, Text: clipTitle(strings.ReplaceAll(text, "\n", " "), 160)})
+	}
+}
+
+func (t *toolBurst) tool(e transcript.Entry) {
+	subject := strings.TrimSpace(e.Tool + " " + e.Subject)
+	if t.burst == nil {
+		t.burst = &TimelineItem{At: e.At, Kind: "tools", Text: subject, N: 0}
+	}
+	t.burst.N++
+	if t.burst.N > 1 {
+		t.burst.Text = clipTitle(t.burst.Text, 120)
+		if !strings.Contains(t.burst.Text, "…") && len(t.burst.Text) < 100 {
+			t.burst.Text += " · " + subject
 		}
 	}
+}
+
+func transcriptTimeline(s sessions.Session) []TimelineItem {
+	path := transcriptPathFor(s)
+	if path == "" || !transcript.Exists(path) {
+		return nil
+	}
+	entries, _, err := transcript.Read(path, 0, transcript.MaxEntries)
+	if err != nil {
+		return nil
+	}
+	var t toolBurst
+	for _, e := range entries {
+		switch e.Kind {
+		case "user":
+			t.said(e, "prompt")
+		case "assistant":
+			t.said(e, "said")
+		case "tool":
+			t.tool(e)
+		}
+	}
+	t.flush()
+	return t.items
+}
+
+func checksTimeline(s sessions.Session) []TimelineItem {
+	var items []TimelineItem
 	if s.Tests != nil && !s.Tests.At.IsZero() {
 		ok := s.Tests.OK
 		items = append(items, TimelineItem{At: s.Tests.At, Kind: "tests", Text: s.Tests.Cmd, OK: &ok})
@@ -79,55 +111,68 @@ func timelineFor(dir string, s sessions.Session, limit int) []TimelineItem {
 	if s.Headless != nil && !s.Headless.At.IsZero() {
 		items = append(items, TimelineItem{At: s.Headless.At, Kind: "headless", Text: fmt.Sprintf("%d headless turn(s) after the terminal was gone", s.Headless.Turns)})
 	}
-	if s.PR != "" {
-		ref := watch.PullRef(s.PR)
-		if st, ok := watch.LoadPullLog(dir).Get(s.PR); ok {
-			kind, text := "pr", "pull request "+st.State
-			if line := st.Line(); line != "" {
-				text += " · " + line
-			}
-			if st.State == "merged" {
-				kind, text = "merged", "merged"
-			} else if st.State == "closed" {
-				kind, text = "closed", "closed without merging"
-			}
-			items = append(items, TimelineItem{At: st.At, Kind: kind, Text: text, URL: s.PR})
-		} else {
-			items = append(items, TimelineItem{At: s.LastActivity, Kind: "pr", Text: "pull request opened", URL: s.PR})
-		}
-		hands := watch.LoadHands(dir)
-		for _, e := range watch.RecentEvents(dir, 400) {
-			if ref == "" || !strings.EqualFold(e.Ref, ref) {
-				continue
-			}
-			kind, text := "comment", ""
-			switch e.Kind {
-			case watch.KindPRReview:
-				kind, text = "review", "review"
-			case watch.KindPRComment:
-				kind, text = "comment", "comment"
-			case watch.KindCIFailed:
-				kind, text = "ci", "build went red"
-			case watch.KindReviewRequested:
-				kind, text = "review", "review asked"
-			default:
-				continue
-			}
-			if e.Author != "" {
-				text += " by " + e.Author
-			}
-			if b := strings.TrimSpace(e.Body); b != "" {
-				text += ": " + clipTitle(strings.ReplaceAll(b, "\n", " "), 120)
-			}
-			items = append(items, TimelineItem{At: e.At, Kind: kind, Text: text, URL: e.URL})
-			if h, ok := hands.Get(e.Key); ok && h.To == s.ID {
-				items = append(items, TimelineItem{At: h.At, Kind: "handed", Text: "handed to the session" + byWord(h.By)})
-			}
-		}
+	return items
+}
+
+func pullStateItem(dir string, s sessions.Session) TimelineItem {
+	st, ok := watch.LoadPullLog(dir).Get(s.PR)
+	if !ok {
+		return TimelineItem{At: s.LastActivity, Kind: "pr", Text: "pull request opened", URL: s.PR}
 	}
-	sort.SliceStable(items, func(i, j int) bool { return items[i].At.Before(items[j].At) })
-	if limit > 0 && len(items) > limit {
-		items = items[len(items)-limit:]
+	switch st.State {
+	case "merged":
+		return TimelineItem{At: st.At, Kind: "merged", Text: "merged", URL: s.PR}
+	case "closed":
+		return TimelineItem{At: st.At, Kind: "closed", Text: "closed without merging", URL: s.PR}
+	}
+	text := "pull request " + st.State
+	if line := st.Line(); line != "" {
+		text += " · " + line
+	}
+	return TimelineItem{At: st.At, Kind: "pr", Text: text, URL: s.PR}
+}
+
+var pullEventWords = map[watch.Kind][2]string{
+	watch.KindPRReview:        {"review", "review"},
+	watch.KindPRComment:       {"comment", "comment"},
+	watch.KindCIFailed:        {"ci", "build went red"},
+	watch.KindReviewRequested: {"review", "review asked"},
+}
+
+func pullEventItem(e watch.Event) (TimelineItem, bool) {
+	words, ok := pullEventWords[e.Kind]
+	if !ok {
+		return TimelineItem{}, false
+	}
+	text := words[1]
+	if e.Author != "" {
+		text += " by " + e.Author
+	}
+	if b := strings.TrimSpace(e.Body); b != "" {
+		text += ": " + clipTitle(strings.ReplaceAll(b, "\n", " "), 120)
+	}
+	return TimelineItem{At: e.At, Kind: words[0], Text: text, URL: e.URL}, true
+}
+
+func pullTimeline(dir string, s sessions.Session) []TimelineItem {
+	items := []TimelineItem{pullStateItem(dir, s)}
+	ref := watch.PullRef(s.PR)
+	if ref == "" {
+		return items
+	}
+	hands := watch.LoadHands(dir)
+	for _, e := range watch.RecentEvents(dir, 400) {
+		if !strings.EqualFold(e.Ref, ref) {
+			continue
+		}
+		item, ok := pullEventItem(e)
+		if !ok {
+			continue
+		}
+		items = append(items, item)
+		if h, ok := hands.Get(e.Key); ok && h.To == s.ID {
+			items = append(items, TimelineItem{At: h.At, Kind: "handed", Text: "handed to the session" + byWord(h.By)})
+		}
 	}
 	return items
 }

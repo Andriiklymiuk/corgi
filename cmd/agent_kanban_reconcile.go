@@ -50,28 +50,28 @@ func cardLastAt(c KanbanCard) time.Time {
 	return last
 }
 
-func staleWhy(c KanbanCard, keep time.Duration, now time.Time) (string, bool) {
+func cardBusy(c KanbanCard, now time.Time) bool {
 	if c.Key == "" || c.Session != nil || (c.Fix != nil && c.Fix.Running) || c.Column == ColRunning || c.Column == ColBlocked {
-		return "", false
+		return true
 	}
-	if c.Picked != nil && now.Sub(c.Picked.At) <= watch.PickFresh {
+	return c.Picked != nil && now.Sub(c.Picked.At) <= watch.PickFresh
+}
+
+func staleWhy(c KanbanCard, keep time.Duration, now time.Time) (string, bool) {
+	if cardBusy(c, now) {
 		return "", false
 	}
 	age := now.Sub(cardLastAt(c))
-	days := func() string { return roughAge(age) + " ago" }
 	switch c.Column {
 	case ColDone:
 		return c.Why, true
 	case ColReview:
-		if c.Pull != nil && pullOver(c.Pull.State) == "" {
-			return "", false
-		}
-		if age > keep {
-			return "in review with nothing open since " + days(), true
+		if (c.Pull == nil || pullOver(c.Pull.State) != "") && age > keep {
+			return "in review with nothing open since " + roughAge(age) + " ago", true
 		}
 	default:
 		if c.Fix != nil && len(c.Fix.PRs) == 0 && age > keep {
-			return "a run answered " + days() + " and nothing happened since", true
+			return "a run answered " + roughAge(age) + " ago and nothing happened since", true
 		}
 		if c.Fix == nil && c.Handoff == nil && age > 2*keep {
 			return "nothing happened on it for " + roughAge(age), true

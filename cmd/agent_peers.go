@@ -443,6 +443,37 @@ func launchPeersPulseHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // peersText is the one-screen summary Telegram and the doctor share.
+func peerState(p peers.Peer, now time.Time) string {
+	if p.Alive(now) {
+		return "awake"
+	}
+	if !p.SeenAt.IsZero() {
+		return "silent since " + ago(now.Sub(p.SeenAt))
+	}
+	return "silent"
+}
+
+func writePeer(b *strings.Builder, p peers.Peer, now time.Time) {
+	fmt.Fprintf(b, "%s%s · %s", p.Name, leadWord(p.Lead), peerState(p, now))
+	if p.Budget > 0 {
+		fmt.Fprintf(b, " · %d%% free", p.Budget)
+	}
+	if p.Unwell != "" {
+		fmt.Fprintf(b, " · ⚠ %s", p.Unwell)
+	}
+	b.WriteString("\n")
+	for _, s := range p.Sessions {
+		if s.Status == "working" || s.Status == "needs_input" {
+			fmt.Fprintf(b, "  %s %s%s\n", s.Status, firstNonEmpty(s.Display, s.Label), ticketWord(s.Ticket))
+		}
+	}
+	for _, r := range p.Runs {
+		if r.State == "failed" || r.State == "blocked" {
+			fmt.Fprintf(b, "  %s %s: %s\n", r.State, r.Ref, r.Reason)
+		}
+	}
+}
+
 func peersText(dir string) string {
 	store, err := peers.Load(peers.Path(dir))
 	if err != nil || len(store.Peers) == 0 {
@@ -452,30 +483,7 @@ func peersText(dir string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s%s (this laptop)\n", peers.Me(), leadWord(store.Lead))
 	for _, p := range store.Peers {
-		state := "silent"
-		if p.Alive(now) {
-			state = "awake"
-		} else if !p.SeenAt.IsZero() {
-			state = "silent since " + ago(now.Sub(p.SeenAt))
-		}
-		fmt.Fprintf(&b, "%s%s · %s", p.Name, leadWord(p.Lead), state)
-		if p.Budget > 0 {
-			fmt.Fprintf(&b, " · %d%% free", p.Budget)
-		}
-		if p.Unwell != "" {
-			fmt.Fprintf(&b, " · ⚠ %s", p.Unwell)
-		}
-		b.WriteString("\n")
-		for _, s := range p.Sessions {
-			if s.Status == "working" || s.Status == "needs_input" {
-				fmt.Fprintf(&b, "  %s %s%s\n", s.Status, firstNonEmpty(s.Display, s.Label), ticketWord(s.Ticket))
-			}
-		}
-		for _, r := range p.Runs {
-			if r.State == "failed" || r.State == "blocked" {
-				fmt.Fprintf(&b, "  %s %s: %s\n", r.State, r.Ref, r.Reason)
-			}
-		}
+		writePeer(&b, p, now)
 	}
 	return strings.TrimRight(b.String(), "\n")
 }
