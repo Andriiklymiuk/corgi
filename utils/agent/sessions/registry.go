@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -333,6 +334,26 @@ func (s *Session) visible() visible {
 	return visible{Label: s.Label, Profile: s.Profile, Detail: s.Detail, Tool: s.Tool, Status: s.Status, Host: s.Host, Branch: s.Branch, Summary: s.Summary}
 }
 
+func (r *Registry) applyToolEnd(s *Session, ev Event, now time.Time) {
+	s.Tool, s.Pending = "", nil
+	if strings.HasPrefix(s.Detail, ev.Tool) || s.Status == StatusNeedsInput {
+		s.Detail = ""
+	}
+	subject := ev.Tool + " " + ev.Subject
+	if ev.Tool == "Bash" && IsTestCommand(ev.Subject) {
+		s.Tests = &TestRun{OK: ev.Name == "PostToolUse", At: now, Cmd: ev.Subject}
+	}
+	switch {
+	case ev.Name == "PostToolUseFailure" && subject == s.failSubject:
+		s.FailStreak++
+	case ev.Name == "PostToolUseFailure":
+		s.FailStreak, s.failSubject = 1, subject
+	case subject == s.failSubject:
+		s.FailStreak, s.failSubject = 0, ""
+	}
+	r.setStatus(s, StatusWorking, now)
+}
+
 func (r *Registry) transition(s *Session, ev Event, now time.Time) {
 	switch ev.Name {
 	case "SessionStart":
@@ -347,22 +368,7 @@ func (r *Registry) transition(s *Session, ev Event, now time.Time) {
 	case "PreToolUse":
 		r.applyToolStart(s, ev, now)
 	case "PostToolUse", "PostToolUseFailure":
-		s.Tool, s.Pending = "", nil
-		if strings.HasPrefix(s.Detail, ev.Tool) || s.Status == StatusNeedsInput {
-			s.Detail = ""
-		}
-		subject := ev.Tool + " " + ev.Subject
-		if ev.Tool == "Bash" && IsTestCommand(ev.Subject) {
-			s.Tests = &TestRun{OK: ev.Name == "PostToolUse", At: now, Cmd: ev.Subject}
-		}
-		if ev.Name == "PostToolUseFailure" && subject == s.failSubject {
-			s.FailStreak++
-		} else if ev.Name == "PostToolUseFailure" {
-			s.FailStreak, s.failSubject = 1, subject
-		} else if subject == s.failSubject {
-			s.FailStreak, s.failSubject = 0, ""
-		}
-		r.setStatus(s, StatusWorking, now)
+		r.applyToolEnd(s, ev, now)
 	case "PermissionRequest":
 		s.Tool = ev.Tool
 		s.Detail = "permission: " + toolLine(ev.Tool, ev.Subject)
@@ -509,6 +515,42 @@ func (r *Registry) samePIDLocked(pid int) *Session {
 }
 
 func (r *Registry) refresh(s *Session, ev Event) {
+	r.refreshPlace(s, ev)
+	refreshProcess(s, ev)
+	if ev.Context != nil {
+		c := *ev.Context
+		s.Context = &c
+	}
+	if ev.Model == "" && ev.Context != nil {
+		copyIfSet(&s.Model, ev.Context.Model)
+	}
+	for _, f := range []struct {
+		dst *string
+		v   string
+	}{
+		{&s.Window, ev.Window}, {&s.TermProgram, ev.TermProgram}, {&s.TermSession, ev.TermSession},
+		{&s.TmuxPane, ev.TmuxPane}, {&s.Title, ev.Title}, {&s.Model, ev.Model}, {&s.Branch, ev.Branch},
+		{&s.Bot, ev.Bot}, {&s.Agent, ev.Agent}, {&s.Attempt, ev.Attempt}, {&s.Summary, ev.Summary}, {&s.PR, ev.PR},
+	} {
+		copyIfSet(f.dst, f.v)
+	}
+	if s.Home == "" {
+		s.Home = ev.Cwd
+	}
+	if ev.Ticket != "" {
+		s.Ticket, s.TicketKey = ev.Ticket, ev.TicketKey
+	}
+	s.Stuck = false
+	r.bind(s)
+}
+
+func copyIfSet(dst *string, v string) {
+	if v != "" {
+		*dst = v
+	}
+}
+
+func (r *Registry) refreshPlace(s *Session, ev Event) {
 	if ev.Cwd != "" && ev.Cwd != s.Cwd {
 		s.Cwd = ev.Cwd
 		s.Label, s.Folder = r.resolve(ev.Cwd)
@@ -520,6 +562,9 @@ func (r *Registry) refresh(s *Session, ev Event) {
 		s.ConfigDir = ev.ConfigDir
 		s.Profile = r.profile(ev.ConfigDir)
 	}
+}
+
+func refreshProcess(s *Session, ev Event) {
 	if ev.ClaudePID > 0 {
 		s.ClaudePID = ev.ClaudePID
 	}
@@ -530,56 +575,6 @@ func (r *Registry) refresh(s *Session, ev Event) {
 	if ev.TTY != 0 {
 		s.TTY = ev.TTY
 	}
-	if ev.Window != "" {
-		s.Window = ev.Window
-	}
-	if ev.TermProgram != "" {
-		s.TermProgram = ev.TermProgram
-	}
-	if ev.TermSession != "" {
-		s.TermSession = ev.TermSession
-	}
-	if ev.TmuxPane != "" {
-		s.TmuxPane = ev.TmuxPane
-	}
-	if ev.Context != nil {
-		c := *ev.Context
-		s.Context = &c
-	}
-	if ev.Title != "" {
-		s.Title = ev.Title
-	}
-	if ev.Model != "" {
-		s.Model = ev.Model
-	} else if ev.Context != nil && ev.Context.Model != "" {
-		s.Model = ev.Context.Model
-	}
-	if ev.Branch != "" {
-		s.Branch = ev.Branch
-	}
-	if ev.Bot != "" {
-		s.Bot = ev.Bot
-	}
-	if ev.Agent != "" {
-		s.Agent = ev.Agent
-	}
-	if s.Home == "" && ev.Cwd != "" {
-		s.Home = ev.Cwd
-	}
-	if ev.Ticket != "" {
-		s.Ticket, s.TicketKey = ev.Ticket, ev.TicketKey
-	}
-	if ev.Attempt != "" {
-		s.Attempt = ev.Attempt
-	}
-	if ev.Summary != "" {
-		s.Summary = ev.Summary
-	}
-	if ev.PR != "" {
-		s.PR = ev.PR
-	}
-	s.Stuck = false
-	r.bind(s)
 }
 
 func (r *Registry) resolve(cwd string) (string, string) {
@@ -745,16 +740,7 @@ func (r *Registry) dropClosedPanelsLocked(now time.Time) {
 		if w.ClaudeTabs == nil {
 			continue
 		}
-		var idle []*Session
-		for _, s := range r.sortedLocked() {
-			if s.Host.Kind != HostVSCodePanel || s.Host.WindowID != w.ID {
-				continue
-			}
-			switch s.Status {
-			case StatusDone, StatusStale, StatusUnknown, StatusLimited:
-				idle = append(idle, s)
-			}
-		}
+		idle := r.idlePanelsLocked(w.ID)
 		surplus := len(idle) - *w.ClaudeTabs
 		if surplus <= 0 {
 			continue
@@ -766,28 +752,40 @@ func (r *Registry) dropClosedPanelsLocked(now time.Time) {
 	}
 }
 
+func (r *Registry) idlePanelsLocked(windowID string) []*Session {
+	var idle []*Session
+	for _, s := range r.sortedLocked() {
+		if s.Host.Kind != HostVSCodePanel || s.Host.WindowID != windowID {
+			continue
+		}
+		switch s.Status {
+		case StatusDone, StatusStale, StatusUnknown, StatusLimited:
+			idle = append(idle, s)
+		}
+	}
+	return idle
+}
+
 func sameWindows(a, b map[string]Window) bool {
 	if len(a) != len(b) {
 		return false
 	}
 	for id, w := range a {
-		o, ok := b[id]
-		if !ok || !o.UpdatedAt.Equal(w.UpdatedAt) || o.ExtHostPID != w.ExtHostPID || len(o.Terminals) != len(w.Terminals) {
-			return false
-		}
-		for i := range o.Terminals {
-			if o.Terminals[i] != w.Terminals[i] {
-				return false
-			}
-		}
-		if !o.FocusedAt.Equal(w.FocusedAt) || o.ActiveShellPID != w.ActiveShellPID || o.PanelActive != w.PanelActive || o.ActiveClaudeTab != w.ActiveClaudeTab {
-			return false
-		}
-		if (o.ClaudeTabs == nil) != (w.ClaudeTabs == nil) || (o.ClaudeTabs != nil && *o.ClaudeTabs != *w.ClaudeTabs) {
+		if o, ok := b[id]; !ok || !sameWindow(o, w) {
 			return false
 		}
 	}
 	return true
+}
+
+func sameWindow(o, w Window) bool {
+	if !o.UpdatedAt.Equal(w.UpdatedAt) || o.ExtHostPID != w.ExtHostPID || !slices.Equal(o.Terminals, w.Terminals) {
+		return false
+	}
+	if !o.FocusedAt.Equal(w.FocusedAt) || o.ActiveShellPID != w.ActiveShellPID || o.PanelActive != w.PanelActive || o.ActiveClaudeTab != w.ActiveClaudeTab {
+		return false
+	}
+	return (o.ClaudeTabs == nil) == (w.ClaudeTabs == nil) && (o.ClaudeTabs == nil || *o.ClaudeTabs == *w.ClaudeTabs)
 }
 
 func (r *Registry) bind(s *Session) {
@@ -1017,22 +1015,7 @@ func (r *Registry) MainMovedTold(id string, rebased bool) {
 func (r *Registry) SetHeadless(id string, running bool, errText string, now time.Time) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	var h *Headless
-	if s, exists := r.sessions[id]; exists {
-		if s.Headless == nil {
-			s.Headless = &Headless{}
-		}
-		h = s.Headless
-	} else {
-		for i := range r.ended {
-			if r.ended[i].ID == id {
-				if r.ended[i].Headless == nil {
-					r.ended[i].Headless = &Headless{}
-				}
-				h = r.ended[i].Headless
-			}
-		}
-	}
+	h := r.headlessLocked(id)
 	if h == nil {
 		return
 	}
@@ -1041,6 +1024,26 @@ func (r *Registry) SetHeadless(id string, running bool, errText string, now time
 		h.Turns++
 	}
 	r.touch()
+}
+
+func (r *Registry) headlessLocked(id string) *Headless {
+	if s, exists := r.sessions[id]; exists {
+		if s.Headless == nil {
+			s.Headless = &Headless{}
+		}
+		return s.Headless
+	}
+	var h *Headless
+	for i := range r.ended {
+		if r.ended[i].ID != id {
+			continue
+		}
+		if r.ended[i].Headless == nil {
+			r.ended[i].Headless = &Headless{}
+		}
+		h = r.ended[i].Headless
+	}
+	return h
 }
 
 func (r *Registry) SetGate(id string, ok bool, cmd string, now time.Time) int {
@@ -1197,24 +1200,24 @@ func sameAccounts(a, b []Account) bool {
 		return false
 	}
 	for i := range a {
-		x, y := a[i], b[i]
-		if x.Profile != y.Profile || x.ConfigDir != y.ConfigDir || x.Sessions != y.Sessions {
-			return false
-		}
-		if (x.Limits == nil) != (y.Limits == nil) || (x.Limits != nil && *x.Limits != *y.Limits) {
-			return false
-		}
-		if (x.Forecast == nil) != (y.Forecast == nil) {
-			return false
-		}
-		if x.Forecast != nil && !sameWindowForecast(x.Forecast.FiveHour, y.Forecast.FiveHour) {
-			return false
-		}
-		if x.Forecast != nil && !sameWindowForecast(x.Forecast.SevenDay, y.Forecast.SevenDay) {
+		if !sameAccount(a[i], b[i]) {
 			return false
 		}
 	}
 	return true
+}
+
+func sameAccount(x, y Account) bool {
+	if x.Profile != y.Profile || x.ConfigDir != y.ConfigDir || x.Sessions != y.Sessions {
+		return false
+	}
+	if (x.Limits == nil) != (y.Limits == nil) || (x.Limits != nil && *x.Limits != *y.Limits) {
+		return false
+	}
+	if (x.Forecast == nil) != (y.Forecast == nil) {
+		return false
+	}
+	return x.Forecast == nil || (sameWindowForecast(x.Forecast.FiveHour, y.Forecast.FiveHour) && sameWindowForecast(x.Forecast.SevenDay, y.Forecast.SevenDay))
 }
 
 func sameWindowForecast(a, b *usage.WindowForecast) bool {
@@ -1619,57 +1622,9 @@ func (r *Registry) snapshotLocked(now time.Time) State {
 	}
 	pager := r.board.PagerIndex()
 	for i := 0; i < r.board.Size; i++ {
-		sl := Slot{Index: i, Pinned: r.board.Pinned[i]}
-		if i == pager {
-			sl.Pager, sl.Overflow = true, r.board.Hidden()
-			st.Slots = append(st.Slots, sl)
-			continue
-		}
-		s := r.sessions[r.board.Slots[i]]
-		if s == nil {
-			sl.Empty = true
-			st.Slots = append(st.Slots, sl)
-			continue
-		}
-		sl.SessionID, sl.Label, sl.Profile, sl.Status = s.ID, r.displayLocked(s), s.Profile, s.Status
-		sl.Detail, sl.Host, sl.FocusError, sl.FocusAt = s.Detail, s.Host.Kind, s.FocusError, s.FocusAt
-		sl.Note, sl.Stuck = s.Note, s.Stuck
-		sl.Standing = StandingOf(s.Facts(r.pullFactsLocked(s))).Word
-		sl.Limit, sl.ResumeAt = s.Limit, s.ResumeAt
-		if len(s.Drift) > 0 {
-			sl.Drift = s.Drift[0]
-		}
-		sl.Changes, sl.Tests, sl.Overlap, sl.Behind = ChangesLine(s.Changes), TestsLine(s.Tests), OverlapLine(s.Overlap), BehindLine(s.Behind)
-		sl.Spend, sl.OverCap = SpendLine(s.Spend), s.OverCap
-		sl.Reading = !s.ReadAt.IsZero() && now.Sub(s.ReadAt) < time.Minute
-		sl.Branch, sl.Summary, sl.PR, sl.Ticket = s.Branch, s.Summary, s.PR, s.Ticket
-		if s.Status == StatusWorking && !s.TurnStartedAt.IsZero() && now.After(s.TurnStartedAt) {
-			sl.TurnS = int(now.Sub(s.TurnStartedAt).Seconds())
-		}
-		if s.Context != nil {
-			sl.Context = s.Context.Percent
-		}
-		if s.Pending != nil {
-			sl.Pending, sl.Risk = s.Pending.Tool, s.Pending.Risk
-		}
-		if !s.StatusSince.IsZero() && now.After(s.StatusSince) {
-			sl.ElapsedS = int(now.Sub(s.StatusSince).Seconds())
-		}
-		st.Slots = append(st.Slots, sl)
+		st.Slots = append(st.Slots, r.slotLocked(i, pager, now))
 	}
-	for _, s := range r.groupedLocked() {
-		c := *s
-		c.Display = r.displayLocked(s)
-		standing := StandingOf(s.Facts(r.pullFactsLocked(s)))
-		c.Standing = &standing
-		st.Sessions = append(st.Sessions, c)
-		switch s.Status {
-		case StatusNeedsInput:
-			st.NeedsInput++
-		case StatusWorking:
-			st.Working++
-		}
-	}
+	r.addSessionsLocked(&st)
 	st.Groups = Groups(st.Sessions)
 	st.Windows = r.sortedWindowsLocked()
 	st.Accounts = append([]Account(nil), r.accounts...)
@@ -1683,6 +1638,64 @@ func (r *Registry) snapshotLocked(now time.Time) State {
 		}
 	}
 	return st
+}
+
+func (r *Registry) slotLocked(i, pager int, now time.Time) Slot {
+	sl := Slot{Index: i, Pinned: r.board.Pinned[i]}
+	if i == pager {
+		sl.Pager, sl.Overflow = true, r.board.Hidden()
+		return sl
+	}
+	s := r.sessions[r.board.Slots[i]]
+	if s == nil {
+		sl.Empty = true
+		return sl
+	}
+	sl.SessionID, sl.Label, sl.Profile, sl.Status = s.ID, r.displayLocked(s), s.Profile, s.Status
+	sl.Detail, sl.Host, sl.FocusError, sl.FocusAt = s.Detail, s.Host.Kind, s.FocusError, s.FocusAt
+	sl.Note, sl.Stuck = s.Note, s.Stuck
+	sl.Standing = StandingOf(s.Facts(r.pullFactsLocked(s))).Word
+	sl.Limit, sl.ResumeAt = s.Limit, s.ResumeAt
+	if len(s.Drift) > 0 {
+		sl.Drift = s.Drift[0]
+	}
+	sl.Changes, sl.Tests, sl.Overlap, sl.Behind = ChangesLine(s.Changes), TestsLine(s.Tests), OverlapLine(s.Overlap), BehindLine(s.Behind)
+	sl.Spend, sl.OverCap = SpendLine(s.Spend), s.OverCap
+	sl.Reading = !s.ReadAt.IsZero() && now.Sub(s.ReadAt) < time.Minute
+	sl.Branch, sl.Summary, sl.PR, sl.Ticket = s.Branch, s.Summary, s.PR, s.Ticket
+	fillSlotTimes(&sl, s, now)
+	return sl
+}
+
+func fillSlotTimes(sl *Slot, s *Session, now time.Time) {
+	if s.Status == StatusWorking && !s.TurnStartedAt.IsZero() && now.After(s.TurnStartedAt) {
+		sl.TurnS = int(now.Sub(s.TurnStartedAt).Seconds())
+	}
+	if s.Context != nil {
+		sl.Context = s.Context.Percent
+	}
+	if s.Pending != nil {
+		sl.Pending, sl.Risk = s.Pending.Tool, s.Pending.Risk
+	}
+	if !s.StatusSince.IsZero() && now.After(s.StatusSince) {
+		sl.ElapsedS = int(now.Sub(s.StatusSince).Seconds())
+	}
+}
+
+func (r *Registry) addSessionsLocked(st *State) {
+	for _, s := range r.groupedLocked() {
+		c := *s
+		c.Display = r.displayLocked(s)
+		standing := StandingOf(s.Facts(r.pullFactsLocked(s)))
+		c.Standing = &standing
+		st.Sessions = append(st.Sessions, c)
+		switch s.Status {
+		case StatusNeedsInput:
+			st.NeedsInput++
+		case StatusWorking:
+			st.Working++
+		}
+	}
 }
 
 func (r *Registry) frontWindowLocked() (Window, bool) {
@@ -1710,37 +1723,52 @@ func (r *Registry) frontSessionLocked(w Window) *Session {
 			return s
 		}
 	}
-	var tab, panel, named, latest *Session
+	var c frontCandidates
 	for _, s := range r.sortedLocked() {
-		if s.Host.WindowID != w.ID || s.Status == StatusGone {
-			continue
-		}
-		if w.ActiveShellPID != 0 && s.Host.ShellPID == w.ActiveShellPID {
-			tab = s
-		}
-		if s.Host.Kind == HostVSCodePanel {
-			if panel == nil || s.LastActivity.After(panel.LastActivity) {
-				panel = s
-			}
-			if w.ActiveClaudeTab != "" && titleMatchesTab(s.Title, w.ActiveClaudeTab) && (named == nil || s.LastActivity.After(named.LastActivity)) {
-				named = s
-			}
-		}
-		if latest == nil || s.LastActivity.After(latest.LastActivity) {
-			latest = s
+		if s.Host.WindowID == w.ID && s.Status != StatusGone {
+			c.consider(s, w)
 		}
 	}
+	return c.pick(w)
+}
+
+type frontCandidates struct {
+	tab, panel, named, latest *Session
+}
+
+func newer(s, than *Session) bool {
+	return than == nil || s.LastActivity.After(than.LastActivity)
+}
+
+func (c *frontCandidates) consider(s *Session, w Window) {
+	if w.ActiveShellPID != 0 && s.Host.ShellPID == w.ActiveShellPID {
+		c.tab = s
+	}
+	if s.Host.Kind == HostVSCodePanel {
+		if newer(s, c.panel) {
+			c.panel = s
+		}
+		if w.ActiveClaudeTab != "" && titleMatchesTab(s.Title, w.ActiveClaudeTab) && newer(s, c.named) {
+			c.named = s
+		}
+	}
+	if newer(s, c.latest) {
+		c.latest = s
+	}
+}
+
+func (c frontCandidates) pick(w Window) *Session {
 	switch {
-	case w.PanelActive && named != nil:
-		return named
-	case w.PanelActive && panel != nil:
-		return panel
-	case tab != nil:
-		return tab
-	case panel != nil:
-		return panel
+	case w.PanelActive && c.named != nil:
+		return c.named
+	case w.PanelActive && c.panel != nil:
+		return c.panel
+	case c.tab != nil:
+		return c.tab
+	case c.panel != nil:
+		return c.panel
 	}
-	return latest
+	return c.latest
 }
 
 // titleMatchesTab says a session's title is the chat tab the window shows:

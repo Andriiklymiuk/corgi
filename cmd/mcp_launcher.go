@@ -676,28 +676,33 @@ func fillUnread(list []sessions.Session) {
 		if s.ReadAt.IsZero() || s.Status == sessions.StatusGone || !streamAllowedFor(s.Label) {
 			continue
 		}
-		path := transcriptPathFor(*s)
-		if path == "" || !transcript.Exists(path) {
-			continue
-		}
-		entries, _, err := transcript.Last(path, unreadTail)
-		if err != nil {
-			continue
-		}
-		u := sessions.Unread{Since: s.ReadAt}
-		for _, e := range entries {
-			if e.Kind != "assistant" || !e.At.After(s.ReadAt) {
-				continue
-			}
-			if u.Lines == 0 {
-				u.First = truncateLine(firstLineOf(e.Text), 120)
-			}
-			u.Lines++
-		}
-		if u.Lines > 0 {
-			s.Unread = &u
-		}
+		s.Unread = unreadOf(*s)
 	}
+}
+
+func unreadOf(s sessions.Session) *sessions.Unread {
+	path := transcriptPathFor(s)
+	if path == "" || !transcript.Exists(path) {
+		return nil
+	}
+	entries, _, err := transcript.Last(path, unreadTail)
+	if err != nil {
+		return nil
+	}
+	u := sessions.Unread{Since: s.ReadAt}
+	for _, e := range entries {
+		if e.Kind != "assistant" || !e.At.After(s.ReadAt) {
+			continue
+		}
+		if u.Lines == 0 {
+			u.First = truncateLine(firstLineOf(e.Text), 120)
+		}
+		u.Lines++
+	}
+	if u.Lines == 0 {
+		return nil
+	}
+	return &u
 }
 
 var latestVersion struct {
@@ -3799,108 +3804,101 @@ func launchBoardCommands(w http.ResponseWriter, cmds []command.Command) {
 
 var profileNamePattern = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,64}$`)
 
+type newChatRequest struct {
+	Window    string `json:"window"`
+	Prompt    string `json:"prompt"`
+	Model     string `json:"model"`
+	Profile   string `json:"profile"`
+	Workspace string `json:"workspace"`
+	Isolate   bool   `json:"isolate"`
+	Bot       string `json:"bot"`
+	// Agent opens this harness (claude, codex) instead of the
+	// workspace's first; absent means the workspace decides.
+	Agent string `json:"agent"`
+}
+
 func launchNewHandler(w http.ResponseWriter, r *http.Request) {
 	setLaunchHeaders(w)
 	if r.Method != http.MethodPost {
 		writeLaunchError(w, http.StatusMethodNotAllowed, "POST {window, prompt, model, profile} to open a chat")
 		return
 	}
-	var req struct {
-		Window    string `json:"window"`
-		Prompt    string `json:"prompt"`
-		Model     string `json:"model"`
-		Profile   string `json:"profile"`
-		Workspace string `json:"workspace"`
-		Isolate   bool   `json:"isolate"`
-		Bot       string `json:"bot"`
-		// Agent opens this harness (claude, codex) instead of the
-		// workspace's first; absent means the workspace decides.
-		Agent string `json:"agent"`
-	}
+	var req newChatRequest
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&req); err != nil {
 		writeLaunchError(w, http.StatusBadRequest, requestUnreadableMessage)
 		return
 	}
-	model := strings.TrimSpace(req.Model)
-	if model != "" && !validModel(model) {
-		writeLaunchError(w, http.StatusBadRequest, modelNameRuleMessage)
+	agent, cmd, no := newChatCommand(req)
+	if no != nil {
+		writeLaunchError(w, no.status, no.msg)
 		return
+	}
+	launchBoardCommand(w, command.Command{Action: command.ActionNew, WindowID: strings.TrimSpace(req.Window), Command: daemon.NewSessionCommandFor(agent, cmd...), Source: "phone"})
+}
+
+func newChatCommand(req newChatRequest) (string, []string, *launchRefusal) {
+	model, profile, no := launchModelAndProfile(req.Model, req.Profile)
+	if no != nil {
+		return "", nil, no
 	}
 	agent := strings.ToLower(strings.TrimSpace(req.Agent))
 	if agent != "" && !harness.Known(agent) {
-		writeLaunchError(w, http.StatusBadRequest, "agent is one of "+strings.Join(harness.Names(), ", "))
-		return
-	}
-	profile := strings.TrimSpace(req.Profile)
-	if profile != "" && profile != "default" {
-		if !profileNamePattern.MatchString(profile) || !containsString(launchProfileNames(), profile) {
-			writeLaunchError(w, http.StatusBadRequest, noSuchProfileMessage)
-			return
-		}
-	} else {
-		profile = ""
+		return "", nil, refuse(http.StatusBadRequest, "agent is one of "+strings.Join(harness.Names(), ", "))
 	}
 	dir, err := agentDir()
 	if err != nil {
-		writeLaunchError(w, http.StatusInternalServerError, err.Error())
-		return
+		return "", nil, refuse(http.StatusInternalServerError, err.Error())
 	}
-	window := strings.TrimSpace(req.Window)
-	if window != "" {
-		rep, err := readBoard(dir)
+	if no := knownWindow(dir, strings.TrimSpace(req.Window)); no != nil {
+		return "", nil, no
+	}
+	args, no := newChatTargets(req)
+	if no != nil {
+		return "", nil, no
+	}
+	args = append(args, sessionFlags{profile: profile, model: model, isolate: req.Isolate}.args()...)
+	if prompt := strings.TrimSpace(req.Prompt); prompt != "" {
+		id, err := savePrompt(dir, prompt)
 		if err != nil {
-			writeLaunchError(w, http.StatusInternalServerError, err.Error())
-			return
+			return "", nil, refuse(http.StatusInternalServerError, err.Error())
 		}
-		known := false
-		for _, win := range rep.Windows {
-			if win.ID == window {
-				known = true
-				break
-			}
-		}
-		if !known {
-			writeLaunchError(w, http.StatusNotFound, "that editor window is not connected any more")
-			return
-		}
+		args = append(args, "--prompt-id", id)
 	}
+	return agent, args, nil
+}
+
+func knownWindow(dir, window string) *launchRefusal {
+	if window == "" {
+		return nil
+	}
+	rep, err := readBoard(dir)
+	if err != nil {
+		return refuse(http.StatusInternalServerError, err.Error())
+	}
+	if !windowConnected(rep, window) {
+		return refuse(http.StatusNotFound, "that editor window is not connected any more")
+	}
+	return nil
+}
+
+func newChatTargets(req newChatRequest) ([]string, *launchRefusal) {
 	args := []string{}
 	if bot := strings.TrimSpace(req.Bot); bot != "" {
 		if !bots.ValidName(bot) {
-			writeLaunchError(w, http.StatusBadRequest, "not a bot name")
-			return
+			return nil, refuse(http.StatusBadRequest, "not a bot name")
 		}
 		if _, err := loadBot(bot); err != nil {
-			writeLaunchError(w, http.StatusNotFound, err.Error())
-			return
+			return nil, refuse(http.StatusNotFound, err.Error())
 		}
 		args = append(args, "--bot", bot)
 	}
 	if ws := strings.TrimSpace(req.Workspace); ws != "" {
 		if _, err := workspaceRoot(ws); err != nil {
-			writeLaunchError(w, http.StatusNotFound, err.Error())
-			return
+			return nil, refuse(http.StatusNotFound, err.Error())
 		}
 		args = append(args, "--workspace", ws)
 	}
-	if profile != "" {
-		args = append(args, "--profile", profile)
-	}
-	if model != "" {
-		args = append(args, "--model", model)
-	}
-	if req.Isolate {
-		args = append(args, "--isolate")
-	}
-	if prompt := strings.TrimSpace(req.Prompt); prompt != "" {
-		id, err := savePrompt(dir, prompt)
-		if err != nil {
-			writeLaunchError(w, http.StatusInternalServerError, err.Error())
-			return
-		}
-		args = append(args, "--prompt-id", id)
-	}
-	launchBoardCommand(w, command.Command{Action: command.ActionNew, WindowID: window, Command: daemon.NewSessionCommandFor(agent, args...), Source: "phone"})
+	return args, nil
 }
 
 func containsString(list []string, s string) bool {
@@ -3913,6 +3911,29 @@ func containsString(list []string, s string) bool {
 }
 
 const watchBatchMax = 10
+
+func addRunRecord(out map[string]any, rec watch.FixRecord) {
+	out["ref"] = firstNonEmptyString(rec.Ref, rec.Key)
+	out["workspace"] = rec.Workspace
+	out["running"] = !rec.Done()
+	out["startedAt"] = rec.StartedAt
+	out["outcome"] = rec.Outcome()
+	if len(rec.PRs) > 0 {
+		out["prs"] = rec.PRs
+	}
+	if rec.Handover != "" {
+		out["handover"] = rec.Handover
+	}
+	if rec.SpentPercent > 0 {
+		out["spentPercent"] = rec.SpentPercent
+	}
+	if rec.Tokens > 0 {
+		out["tokens"], out["costUSD"] = rec.Tokens, rec.CostUSD
+	}
+	if rec.Branch != "" {
+		out["branch"] = rec.Branch
+	}
+}
 
 func launchRunHandler(w http.ResponseWriter, r *http.Request) {
 	dir, err := agentDir()
@@ -3931,30 +3952,10 @@ func launchRunHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	out := map[string]any{"key": key}
 	for _, rec := range watch.LoadFixLog(dir).RecentFixes("", 200) {
-		if rec.Key != key {
-			continue
+		if rec.Key == key {
+			addRunRecord(out, rec)
+			break
 		}
-		out["ref"] = firstNonEmptyString(rec.Ref, rec.Key)
-		out["workspace"] = rec.Workspace
-		out["running"] = !rec.Done()
-		out["startedAt"] = rec.StartedAt
-		out["outcome"] = rec.Outcome()
-		if len(rec.PRs) > 0 {
-			out["prs"] = rec.PRs
-		}
-		if rec.Handover != "" {
-			out["handover"] = rec.Handover
-		}
-		if rec.SpentPercent > 0 {
-			out["spentPercent"] = rec.SpentPercent
-		}
-		if rec.Tokens > 0 {
-			out["tokens"], out["costUSD"] = rec.Tokens, rec.CostUSD
-		}
-		if rec.Branch != "" {
-			out["branch"] = rec.Branch
-		}
-		break
 	}
 	log := daemon.RunLog(dir, key, tail)
 	if _, known := out["ref"]; !known && log == "" {
@@ -4029,6 +4030,43 @@ func launchKanbanHandler(w http.ResponseWriter, r *http.Request) {
 	writeLaunchJSON(w, map[string]any{"columns": kanbanColumns, "cards": cards, "boards": boards, "features": kanbanFeatures(cards)})
 }
 
+type inboxRow struct {
+	Key        string            `json:"key"`
+	Kind       string            `json:"kind"`
+	Ref        string            `json:"ref"`
+	Title      string            `json:"title"`
+	URL        string            `json:"url,omitempty"`
+	Workspace  string            `json:"workspace,omitempty"`
+	At         time.Time         `json:"at"`
+	Actionable bool              `json:"actionable"`
+	State      string            `json:"state,omitempty"`
+	Blocked    string            `json:"blocked,omitempty"`
+	BlockedBy  string            `json:"blockedBy,omitempty"`
+	Priority   int               `json:"priority"`
+	Author     string            `json:"author,omitempty"`
+	Body       string            `json:"body,omitempty"`
+	Session    *CardSess         `json:"session,omitempty"`
+	Picked     *CardPick         `json:"picked,omitempty"`
+	Columns    []string          `json:"columns,omitempty"`
+	PR         string            `json:"pr,omitempty"`
+	Pull       *watch.PullStatus `json:"pull,omitempty"`
+	Handed     *watch.Hand       `json:"handed,omitempty"`
+	Standing   sessions.Standing `json:"standing"`
+}
+
+type inboxSources struct {
+	dir      string
+	onTicket map[string]*CardSess
+	picks    *watch.PickLog
+	pulls    *watch.PullLog
+	hands    *watch.HandLog
+	moved    *watch.StateLog
+	state    *watch.State
+	fixLog   *watch.FixLog
+	doneLog  *watch.DoneLog
+	now      time.Time
+}
+
 func launchEventsHandler(w http.ResponseWriter, r *http.Request) {
 	setLaunchHeaders(w)
 	if r.Method != http.MethodGet {
@@ -4040,76 +4078,59 @@ func launchEventsHandler(w http.ResponseWriter, r *http.Request) {
 		writeLaunchError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	type row struct {
-		Key        string            `json:"key"`
-		Kind       string            `json:"kind"`
-		Ref        string            `json:"ref"`
-		Title      string            `json:"title"`
-		URL        string            `json:"url,omitempty"`
-		Workspace  string            `json:"workspace,omitempty"`
-		At         time.Time         `json:"at"`
-		Actionable bool              `json:"actionable"`
-		State      string            `json:"state,omitempty"`
-		Blocked    string            `json:"blocked,omitempty"`
-		BlockedBy  string            `json:"blockedBy,omitempty"`
-		Priority   int               `json:"priority"`
-		Author     string            `json:"author,omitempty"`
-		Body       string            `json:"body,omitempty"`
-		Session    *CardSess         `json:"session,omitempty"`
-		Picked     *CardPick         `json:"picked,omitempty"`
-		Columns    []string          `json:"columns,omitempty"`
-		PR         string            `json:"pr,omitempty"`
-		Pull       *watch.PullStatus `json:"pull,omitempty"`
-		Handed     *watch.Hand       `json:"handed,omitempty"`
-		Standing   sessions.Standing `json:"standing"`
-	}
-	out := []row{}
-	onTicket := sessionsOnTickets(dir)
-	picks := watch.LoadPicks(dir)
-	pulls := watch.LoadPullLog(dir)
-	hands := watch.LoadHands(dir)
-	now := time.Now()
-	moved := watch.LoadStateLog(dir)
-	state := watch.LoadState(dir)
-	fixLog := watch.LoadFixLog(dir)
-	doneLog := watch.LoadDoneLog(dir)
+	src := inboxSources{dir: dir, onTicket: sessionsOnTickets(dir), picks: watch.LoadPicks(dir), pulls: watch.LoadPullLog(dir),
+		hands: watch.LoadHands(dir), moved: watch.LoadStateLog(dir), state: watch.LoadState(dir), fixLog: watch.LoadFixLog(dir),
+		doneLog: watch.LoadDoneLog(dir), now: time.Now()}
+	out := inboxRows(src)
+	sortInboxRows(out)
+	writeLaunchJSON(w, map[string]any{"events": out, "fixes": recentFixRows(dir, src.fixLog), "boards": inboxBoards(dir, out)})
+}
+
+func inboxRows(src inboxSources) []inboxRow {
+	out := []inboxRow{}
 	keeper := watch.NewInboxKeeper(time.Now())
-	for _, e := range watch.RecentEvents(dir, inboxWindow) {
-		if !keeper.Keep(e) || state.IsIgnored(e.Key) {
+	for _, e := range watch.RecentEvents(src.dir, inboxWindow) {
+		if !keeper.Keep(e) || src.state.IsIgnored(e.Key) {
 			continue
 		}
 		current := e.State
-		if now, ok := moved.Get(e.Key); ok {
+		if now, ok := src.moved.Get(e.Key); ok {
 			current = now.Status
 		}
-		if watch.InboxHandled(e, current, pulls, fixLog, doneLog) != "" {
+		if watch.InboxHandled(e, current, src.pulls, src.fixLog, src.doneLog) != "" {
 			continue
 		}
-		r := row{Key: e.Key, Kind: string(e.Kind), Ref: e.Ref, Title: firstLineOf(e.Title),
-			URL: e.URL, Workspace: e.Workspace, At: e.At, Actionable: daemon.FixPrompt(e) != "", State: current, Priority: watch.Priority(e),
-			Author: e.Author, Body: e.Body}
-		if b, ok := fixLog.Blocked(e.Workspace, e.Ref); ok {
-			r.Blocked, r.BlockedBy = b.Reason, b.By
-		}
-		r.Session = onTicket[strings.ToLower(e.Ref)]
-		if p, ok := picks.Get(e.Key); ok && now.Sub(p.At) <= watch.PickFresh {
-			r.Picked = &CardPick{At: p.At, By: p.By}
-		}
-		if e.Kind == watch.KindTask {
-			r.Columns = watch.TaskColumns
-		}
-		r.PR = prLinkFor(dir, e, onTicket)
-		if st, ok := pulls.Get(firstNonEmptyString(r.PR, e.Ref)); ok {
-			p := st
-			r.Pull = &p
-		}
-		if h, ok := hands.Get(e.Key); ok {
-			hh := h
-			r.Handed = &hh
-		}
-		r.Standing = rowStanding(r.Pull, r.PR, r.Blocked, r.Session)
-		out = append(out, r)
+		out = append(out, inboxRowFor(src, e, current))
 	}
+	return out
+}
+
+func inboxRowFor(src inboxSources, e watch.Event, current string) inboxRow {
+	r := inboxRow{Key: e.Key, Kind: string(e.Kind), Ref: e.Ref, Title: firstLineOf(e.Title),
+		URL: e.URL, Workspace: e.Workspace, At: e.At, Actionable: daemon.FixPrompt(e) != "", State: current, Priority: watch.Priority(e),
+		Author: e.Author, Body: e.Body}
+	if b, ok := src.fixLog.Blocked(e.Workspace, e.Ref); ok {
+		r.Blocked, r.BlockedBy = b.Reason, b.By
+	}
+	r.Session = src.onTicket[strings.ToLower(e.Ref)]
+	if p, ok := src.picks.Get(e.Key); ok && src.now.Sub(p.At) <= watch.PickFresh {
+		r.Picked = &CardPick{At: p.At, By: p.By}
+	}
+	if e.Kind == watch.KindTask {
+		r.Columns = watch.TaskColumns
+	}
+	r.PR = prLinkFor(src.dir, e, src.onTicket)
+	if st, ok := src.pulls.Get(firstNonEmptyString(r.PR, e.Ref)); ok {
+		r.Pull = &st
+	}
+	if h, ok := src.hands.Get(e.Key); ok {
+		r.Handed = &h
+	}
+	r.Standing = rowStanding(r.Pull, r.PR, r.Blocked, r.Session)
+	return r
+}
+
+func recentFixRows(dir string, fixLog *watch.FixLog) []map[string]any {
 	fixes := []map[string]any{}
 	for _, r := range fixLog.RecentFixes("", 25) {
 		row := map[string]any{"key": r.Key, "ref": firstNonEmptyString(r.Ref, r.Key), "workspace": r.Workspace,
@@ -4125,6 +4146,10 @@ func launchEventsHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		fixes = append(fixes, row)
 	}
+	return fixes
+}
+
+func inboxBoards(dir string, out []inboxRow) map[string]any {
 	boards := map[string]any{}
 	cache := watch.LoadBoardCache(dir)
 	seen := map[string]bool{}
@@ -4133,14 +4158,20 @@ func launchEventsHandler(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		seen[e.Workspace] = true
-		if info := cache.Get(e.Workspace); info.Has() {
-			names := make([]string, 0, len(info.Statuses))
-			for _, st := range info.Statuses {
-				names = append(names, st.Name)
-			}
-			boards[e.Workspace] = map[string]any{"columns": names, "me": info.Me.Name}
+		info := cache.Get(e.Workspace)
+		if !info.Has() {
+			continue
 		}
+		names := make([]string, 0, len(info.Statuses))
+		for _, st := range info.Statuses {
+			names = append(names, st.Name)
+		}
+		boards[e.Workspace] = map[string]any{"columns": names, "me": info.Me.Name}
 	}
+	return boards
+}
+
+func sortInboxRows(out []inboxRow) {
 	sort.SliceStable(out, func(i, j int) bool {
 		if pi, pj := out[i].Priority, out[j].Priority; pi != pj {
 			return pi < pj
@@ -4151,7 +4182,43 @@ func launchEventsHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		return out[i].At.Before(out[j].At)
 	})
-	writeLaunchJSON(w, map[string]any{"events": out, "fixes": fixes, "boards": boards})
+}
+
+type ticketRequest struct {
+	Key       string `json:"key"`
+	Do        string `json:"do"`
+	Status    string `json:"status"`
+	Title     string `json:"title"`
+	Body      string `json:"body"`
+	Workspace string `json:"workspace"`
+	Ref       string `json:"ref"`
+}
+
+type ticketCall struct {
+	w     http.ResponseWriter
+	r     *http.Request
+	dir   string
+	event watch.Event
+	req   ticketRequest
+}
+
+func (c ticketCall) from() string {
+	return firstNonEmptyString(c.r.URL.Query().Get("from"), "phone")
+}
+
+func (c ticketCall) fail(status int, msg string) {
+	writeLaunchError(c.w, status, msg)
+}
+
+func (c ticketCall) done(out map[string]any) {
+	writeLaunchJSON(c.w, out)
+}
+
+var rowActions = map[string]func(ticketCall){
+	"ignore":   ignoreRow,
+	"handover": handOverRow,
+	"done":     markRowDone,
+	"unblock":  unblockRow,
 }
 
 func launchTicketHandler(w http.ResponseWriter, r *http.Request) {
@@ -4160,15 +4227,7 @@ func launchTicketHandler(w http.ResponseWriter, r *http.Request) {
 		writeLaunchError(w, http.StatusMethodNotAllowed, "POST {key, do, status} to change a ticket")
 		return
 	}
-	var req struct {
-		Key       string `json:"key"`
-		Do        string `json:"do"`
-		Status    string `json:"status"`
-		Title     string `json:"title"`
-		Body      string `json:"body"`
-		Workspace string `json:"workspace"`
-		Ref       string `json:"ref"`
-	}
+	var req ticketRequest
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&req); err != nil {
 		writeLaunchError(w, http.StatusBadRequest, requestUnreadableMessage)
 		return
@@ -4178,203 +4237,236 @@ func launchTicketHandler(w http.ResponseWriter, r *http.Request) {
 		writeLaunchError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	var event watch.Event
-	var ok bool
-	if key := strings.TrimSpace(req.Key); key != "" {
-		event, ok = watch.FindEvent(dir, key)
-	} else {
-		event, ok = watch.FindEventByRef(dir, strings.TrimSpace(req.Ref), strings.TrimSpace(req.Workspace))
-	}
+	event, ok := ticketEventFor(dir, req)
 	if !ok {
 		writeLaunchError(w, http.StatusNotFound, "no such watch event")
 		return
 	}
-	if strings.TrimSpace(req.Do) == "ignore" {
-		_ = watch.LoadState(dir).Ignore(event.Key)
-		writeLaunchJSON(w, map[string]any{"done": "ignored " + firstNonEmptyString(event.Ref, event.Key)})
-		return
-	}
-	if strings.TrimSpace(req.Do) == "handover" {
-		line := watch.HandoverLine(event)
-		if line == "" {
-			writeLaunchError(w, http.StatusBadRequest, "nothing to hand over on a "+string(event.Kind))
-			return
-		}
-		onTicket := sessionsOnTickets(dir)
-		target := onTicket[strings.ToLower(event.Ref)]
-		if target == nil {
-			if link := watch.PullLinkOf(event); link != "" {
-				if rep, err := readBoard(dir); err == nil {
-					for _, s := range rep.Sessions {
-						if s.Status != sessions.StatusGone && s.Status != sessions.StatusStale && s.PR != "" && strings.HasPrefix(s.PR, link) {
-							target = &CardSess{ID: s.ID, Label: firstNonEmpty(s.Display, s.Label), Status: string(s.Status)}
-							break
-						}
-					}
-				}
-			}
-		}
-		if target == nil {
-			writeLaunchError(w, http.StatusNotFound, "no live session is on "+event.Ref+" - Work on it opens one")
-			return
-		}
-		from := firstNonEmptyString(r.URL.Query().Get("from"), "phone")
-		_ = watch.LoadHands(dir).Set(event.Key, watch.Hand{At: time.Now(), To: target.ID, Label: target.Label, By: from})
-		launchBoardCommand(w, command.Command{Action: command.ActionSend, SessionID: target.ID, Text: line, Enter: true, Source: from})
-		return
-	}
-	if strings.TrimSpace(req.Do) == "done" {
-		// This row is handled on this side: a reply went out, the branch was
-		// pushed, it was read. Later rows on the same ticket come in as usual.
-		from := firstNonEmptyString(r.URL.Query().Get("from"), "phone")
-		if err := watch.LoadDoneLog(dir).MarkKey(event.Key, time.Now(), from); err != nil {
-			writeLaunchError(w, http.StatusInternalServerError, err.Error())
-			return
-		}
-		writeLaunchJSON(w, map[string]any{"done": event.Ref + " handled"})
-		return
-	}
-	if strings.TrimSpace(req.Do) == "unblock" {
-		if !watch.LoadFixLog(dir).Unblock(event.Workspace, event.Ref) {
-			writeLaunchError(w, http.StatusBadRequest, event.Ref+" is not blocked")
-			return
-		}
-		if _, _, err := watchWriter(dir, event.Workspace); err == nil {
-			go writeWorkpad(dir, event.Workspace, event.Ref, "Blocked", "")
-		}
-		writeLaunchJSON(w, map[string]any{"done": "unblocked " + event.Ref})
+	call := ticketCall{w: w, r: r, dir: dir, event: event, req: req}
+	do := strings.TrimSpace(req.Do)
+	if act, ok := rowActions[do]; ok {
+		act(call)
 		return
 	}
 	if event.Kind == watch.KindTask {
-		tasks := watch.LoadTasks(dir)
-		now := time.Now()
-		switch strings.TrimSpace(req.Do) {
-		case "move":
-			t, err := tasks.Move(event.Key, req.Status, now)
-			if err != nil {
-				writeLaunchError(w, http.StatusBadRequest, err.Error())
-				return
-			}
-			writeLaunchJSON(w, map[string]any{"done": t.Ref() + " → " + t.State, "state": t.State})
-		case "close":
-			t, err := tasks.Move(event.Key, "Done", now)
-			if err != nil {
-				writeLaunchError(w, http.StatusBadRequest, err.Error())
-				return
-			}
-			writeLaunchJSON(w, map[string]any{"done": t.Ref() + " done", "state": t.State})
-		case "edit":
-			t, err := tasks.Edit(event.Key, req.Title, req.Body, req.Workspace, now)
-			if err != nil {
-				writeLaunchError(w, http.StatusBadRequest, err.Error())
-				return
-			}
-			writeLaunchJSON(w, map[string]any{"done": t.Ref() + " changed"})
-		case "remove":
-			t, err := tasks.Remove(event.Key)
-			if err != nil {
-				writeLaunchError(w, http.StatusBadRequest, err.Error())
-				return
-			}
-			_ = watch.LoadState(dir).Ignore(event.Key)
-			writeLaunchJSON(w, map[string]any{"done": t.Ref() + " removed"})
-		case "assign":
-			writeLaunchJSON(w, map[string]any{"done": event.Ref + " is yours already"})
-		default:
-			writeLaunchError(w, http.StatusBadRequest, "a task takes move, close, edit, remove or ignore")
-		}
+		taskRowAction(call, do)
 		return
 	}
-	if event.Workspace == "" {
-		writeLaunchError(w, http.StatusBadRequest, "that event belongs to no workspace")
+	trackerRowAction(call, do)
+}
+
+func ticketEventFor(dir string, req ticketRequest) (watch.Event, bool) {
+	if key := strings.TrimSpace(req.Key); key != "" {
+		return watch.FindEvent(dir, key)
+	}
+	return watch.FindEventByRef(dir, strings.TrimSpace(req.Ref), strings.TrimSpace(req.Workspace))
+}
+
+func ignoreRow(c ticketCall) {
+	_ = watch.LoadState(c.dir).Ignore(c.event.Key)
+	c.done(map[string]any{"done": "ignored " + firstNonEmptyString(c.event.Ref, c.event.Key)})
+}
+
+func handOverRow(c ticketCall) {
+	line := watch.HandoverLine(c.event)
+	if line == "" {
+		c.fail(http.StatusBadRequest, "nothing to hand over on a "+string(c.event.Kind))
 		return
 	}
-	writer, _, err := watchWriter(dir, event.Workspace)
+	target := sessionsOnTickets(c.dir)[strings.ToLower(c.event.Ref)]
+	if target == nil {
+		target = sessionOnPull(c.dir, watch.PullLinkOf(c.event))
+	}
+	if target == nil {
+		c.fail(http.StatusNotFound, "no live session is on "+c.event.Ref+" - Work on it opens one")
+		return
+	}
+	from := c.from()
+	_ = watch.LoadHands(c.dir).Set(c.event.Key, watch.Hand{At: time.Now(), To: target.ID, Label: target.Label, By: from})
+	launchBoardCommand(c.w, command.Command{Action: command.ActionSend, SessionID: target.ID, Text: line, Enter: true, Source: from})
+}
+
+func sessionOnPull(dir, link string) *CardSess {
+	if link == "" {
+		return nil
+	}
+	rep, err := readBoard(dir)
 	if err != nil {
-		writeLaunchError(w, http.StatusBadRequest, err.Error())
+		return nil
+	}
+	for _, s := range rep.Sessions {
+		if s.Status != sessions.StatusGone && s.Status != sessions.StatusStale && s.PR != "" && strings.HasPrefix(s.PR, link) {
+			return &CardSess{ID: s.ID, Label: firstNonEmpty(s.Display, s.Label), Status: string(s.Status)}
+		}
+	}
+	return nil
+}
+
+// markRowDone: this row is handled on this side: a reply went out, the
+// branch was pushed, it was read. Later rows on the same ticket come in as usual.
+func markRowDone(c ticketCall) {
+	if err := watch.LoadDoneLog(c.dir).MarkKey(c.event.Key, time.Now(), c.from()); err != nil {
+		c.fail(http.StatusInternalServerError, err.Error())
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
-	defer cancel()
-	ref := strings.TrimSpace(event.Ref)
-	switch strings.TrimSpace(req.Do) {
-	case "move":
-		status := strings.TrimSpace(req.Status)
-		if status == "" {
-			writeLaunchError(w, http.StatusBadRequest, "name the column to move it to")
-			return
-		}
-		if err := writer.Move(ctx, ref, status); err != nil {
-			writeLaunchError(w, http.StatusBadGateway, firstLineOf(err.Error()))
-			return
-		}
-		_ = watch.LoadStateLog(dir).SetFrom(event.Key, status, event.State, time.Now())
-		writeLaunchJSON(w, map[string]any{"done": ref + " → " + status, "state": status})
-	case "merge", "close", "ready", "draft", "reopen":
-		link := prLinkFor(dir, event, nil)
-		if link == "" {
-			writeLaunchError(w, http.StatusBadRequest, "no pull request of yours on this")
-			return
-		}
-		secrets := watch.LoadSecretsFor(dir, event.Workspace)
-		var err error
-		var did, state string
-		switch strings.TrimSpace(req.Do) {
-		case "merge":
-			err, did, state = watch.MergePR(ctx, secrets, link), "merged ", "merged"
-		case "ready":
-			err, did, state = watch.ReadyPR(ctx, secrets, link), "ready for review: ", "open"
-		case "draft":
-			err, did, state = watch.DraftPR(ctx, secrets, link), "back to draft: ", "draft"
-		case "reopen":
-			err, did, state = watch.ReopenPR(ctx, secrets, link), "reopened ", "open"
-		default:
-			err, did, state = watch.ClosePR(ctx, secrets, link), "closed ", "closed"
-		}
-		if err != nil {
-			writeLaunchError(w, http.StatusBadGateway, firstLineOf(err.Error()))
-			return
-		}
-		if strings.HasPrefix(string(event.Kind), "pr.") || event.Kind == watch.KindCIFailed || event.Kind == watch.KindReviewRequested {
-			_ = watch.LoadStateLog(dir).SetFrom(event.Key, state, event.State, time.Now())
-		}
-		writeLaunchJSON(w, map[string]any{"done": did + link, "url": link, "state": state})
-	case "approve", "request", "comment":
-		link := event.URL
-		if watch.PullRef(link) == "" {
-			link = prLinkFor(dir, event, nil)
-		}
-		if link == "" {
-			writeLaunchError(w, http.StatusBadRequest, "no pull request on this row")
-			return
-		}
-		if err := watch.ReviewPR(ctx, watch.LoadSecretsFor(dir, event.Workspace), link, req.Do, req.Body); err != nil {
-			writeLaunchError(w, http.StatusBadGateway, firstLineOf(err.Error()))
-			return
-		}
-		did := map[string]string{"approve": "approved ", "request": "changes requested on ", "comment": "commented on "}[strings.TrimSpace(req.Do)]
-		if event.Kind == watch.KindReviewRequested && req.Do != "comment" {
-			_ = watch.LoadStateLog(dir).SetFrom(event.Key, "reviewed", event.State, time.Now())
-		}
-		writeLaunchJSON(w, map[string]any{"done": did + link, "url": link})
-	case "assign":
-		me := watch.LoadBoardCache(dir).Get(event.Workspace).Me
-		if me.ID == "" {
-			got, err := writer.Whoami(ctx)
-			if err != nil {
-				writeLaunchError(w, http.StatusBadGateway, firstLineOf(err.Error()))
-				return
-			}
-			me = got
-		}
-		if err := writer.Assign(ctx, ref, me.ID); err != nil {
-			writeLaunchError(w, http.StatusBadGateway, firstLineOf(err.Error()))
-			return
-		}
-		writeLaunchJSON(w, map[string]any{"done": ref + " is yours"})
-	default:
-		writeLaunchError(w, http.StatusBadRequest, "do is move, assign, merge, close, ready, draft, reopen, approve, request, comment, ignore or unblock")
+	c.done(map[string]any{"done": c.event.Ref + " handled"})
+}
+
+func unblockRow(c ticketCall) {
+	if !watch.LoadFixLog(c.dir).Unblock(c.event.Workspace, c.event.Ref) {
+		c.fail(http.StatusBadRequest, c.event.Ref+" is not blocked")
+		return
 	}
+	if _, _, err := watchWriter(c.dir, c.event.Workspace); err == nil {
+		go writeWorkpad(c.dir, c.event.Workspace, c.event.Ref, "Blocked", "")
+	}
+	c.done(map[string]any{"done": "unblocked " + c.event.Ref})
+}
+
+func taskRowAction(c ticketCall, do string) {
+	tasks := watch.LoadTasks(c.dir)
+	now := time.Now()
+	var t watch.Task
+	var err error
+	var out func(watch.Task) map[string]any
+	switch do {
+	case "move":
+		t, err = tasks.Move(c.event.Key, c.req.Status, now)
+		out = func(t watch.Task) map[string]any { return map[string]any{"done": t.Ref() + " → " + t.State, "state": t.State} }
+	case "close":
+		t, err = tasks.Move(c.event.Key, "Done", now)
+		out = func(t watch.Task) map[string]any { return map[string]any{"done": t.Ref() + " done", "state": t.State} }
+	case "edit":
+		t, err = tasks.Edit(c.event.Key, c.req.Title, c.req.Body, c.req.Workspace, now)
+		out = func(t watch.Task) map[string]any { return map[string]any{"done": t.Ref() + " changed"} }
+	case "remove":
+		t, err = tasks.Remove(c.event.Key)
+		if err == nil {
+			_ = watch.LoadState(c.dir).Ignore(c.event.Key)
+		}
+		out = func(t watch.Task) map[string]any { return map[string]any{"done": t.Ref() + " removed"} }
+	case "assign":
+		c.done(map[string]any{"done": c.event.Ref + " is yours already"})
+		return
+	default:
+		c.fail(http.StatusBadRequest, "a task takes move, close, edit, remove or ignore")
+		return
+	}
+	if err != nil {
+		c.fail(http.StatusBadRequest, err.Error())
+		return
+	}
+	c.done(out(t))
+}
+
+func trackerRowAction(c ticketCall, do string) {
+	if c.event.Workspace == "" {
+		c.fail(http.StatusBadRequest, "that event belongs to no workspace")
+		return
+	}
+	writer, _, err := watchWriter(c.dir, c.event.Workspace)
+	if err != nil {
+		c.fail(http.StatusBadRequest, err.Error())
+		return
+	}
+	ctx, cancel := context.WithTimeout(c.r.Context(), 30*time.Second)
+	defer cancel()
+	switch do {
+	case "move":
+		moveTrackerRow(ctx, c, writer)
+	case "merge", "close", "ready", "draft", "reopen":
+		changePullOnRow(ctx, c, do)
+	case "approve", "request", "comment":
+		reviewPullOnRow(ctx, c, do)
+	case "assign":
+		assignTrackerRow(ctx, c, writer)
+	default:
+		c.fail(http.StatusBadRequest, "do is move, assign, merge, close, ready, draft, reopen, approve, request, comment, ignore or unblock")
+	}
+}
+
+func moveTrackerRow(ctx context.Context, c ticketCall, writer watch.Writer) {
+	ref := strings.TrimSpace(c.event.Ref)
+	status := strings.TrimSpace(c.req.Status)
+	if status == "" {
+		c.fail(http.StatusBadRequest, "name the column to move it to")
+		return
+	}
+	if err := writer.Move(ctx, ref, status); err != nil {
+		c.fail(http.StatusBadGateway, firstLineOf(err.Error()))
+		return
+	}
+	_ = watch.LoadStateLog(c.dir).SetFrom(c.event.Key, status, c.event.State, time.Now())
+	c.done(map[string]any{"done": ref + " → " + status, "state": status})
+}
+
+func pullChange(ctx context.Context, secrets watch.Secrets, link, do string) (did, state string, err error) {
+	switch do {
+	case "merge":
+		return "merged ", "merged", watch.MergePR(ctx, secrets, link)
+	case "ready":
+		return "ready for review: ", "open", watch.ReadyPR(ctx, secrets, link)
+	case "draft":
+		return "back to draft: ", "draft", watch.DraftPR(ctx, secrets, link)
+	case "reopen":
+		return "reopened ", "open", watch.ReopenPR(ctx, secrets, link)
+	}
+	return "closed ", "closed", watch.ClosePR(ctx, secrets, link)
+}
+
+func changePullOnRow(ctx context.Context, c ticketCall, do string) {
+	link := prLinkFor(c.dir, c.event, nil)
+	if link == "" {
+		c.fail(http.StatusBadRequest, "no pull request of yours on this")
+		return
+	}
+	did, state, err := pullChange(ctx, watch.LoadSecretsFor(c.dir, c.event.Workspace), link, do)
+	if err != nil {
+		c.fail(http.StatusBadGateway, firstLineOf(err.Error()))
+		return
+	}
+	if k := c.event.Kind; strings.HasPrefix(string(k), "pr.") || k == watch.KindCIFailed || k == watch.KindReviewRequested {
+		_ = watch.LoadStateLog(c.dir).SetFrom(c.event.Key, state, c.event.State, time.Now())
+	}
+	c.done(map[string]any{"done": did + link, "url": link, "state": state})
+}
+
+func reviewPullOnRow(ctx context.Context, c ticketCall, do string) {
+	link := c.event.URL
+	if watch.PullRef(link) == "" {
+		link = prLinkFor(c.dir, c.event, nil)
+	}
+	if link == "" {
+		c.fail(http.StatusBadRequest, "no pull request on this row")
+		return
+	}
+	if err := watch.ReviewPR(ctx, watch.LoadSecretsFor(c.dir, c.event.Workspace), link, c.req.Do, c.req.Body); err != nil {
+		c.fail(http.StatusBadGateway, firstLineOf(err.Error()))
+		return
+	}
+	did := map[string]string{"approve": "approved ", "request": "changes requested on ", "comment": "commented on "}[do]
+	if c.event.Kind == watch.KindReviewRequested && c.req.Do != "comment" {
+		_ = watch.LoadStateLog(c.dir).SetFrom(c.event.Key, "reviewed", c.event.State, time.Now())
+	}
+	c.done(map[string]any{"done": did + link, "url": link})
+}
+
+func assignTrackerRow(ctx context.Context, c ticketCall, writer watch.Writer) {
+	ref := strings.TrimSpace(c.event.Ref)
+	me := watch.LoadBoardCache(c.dir).Get(c.event.Workspace).Me
+	if me.ID == "" {
+		got, err := writer.Whoami(ctx)
+		if err != nil {
+			c.fail(http.StatusBadGateway, firstLineOf(err.Error()))
+			return
+		}
+		me = got
+	}
+	if err := writer.Assign(ctx, ref, me.ID); err != nil {
+		c.fail(http.StatusBadGateway, firstLineOf(err.Error()))
+		return
+	}
+	c.done(map[string]any{"done": ref + " is yours"})
 }
 
 func prLinkFor(dir string, e watch.Event, onTicket map[string]*CardSess) string {
@@ -4507,99 +4599,157 @@ func workOnCommands(dir string, keys []string, opt workOnOptions, n int, models 
 
 const maxAttempts = 5
 
+type launchRefusal struct {
+	status int
+	msg    string
+}
+
+func refuse(status int, msg string) *launchRefusal {
+	return &launchRefusal{status: status, msg: msg}
+}
+
 func workOnCommand(dir string, keys []string, opt workOnOptions) (command.Command, int, string) {
+	cmd, no := workOnCommandFor(dir, keys, opt)
+	if no != nil {
+		return command.Command{}, no.status, no.msg
+	}
+	return cmd, 0, ""
+}
+
+func workOnCommandFor(dir string, keys []string, opt workOnOptions) (command.Command, *launchRefusal) {
+	events, no := workEvents(dir, keys)
+	if no != nil {
+		return command.Command{}, no
+	}
+	prompt := daemon.BatchPrompt(events)
+	if prompt == "" {
+		return command.Command{}, refuse(http.StatusConflict, "only new issues can be worked on together")
+	}
+	model, profile, no := launchModelAndProfile(opt.Model, opt.Profile)
+	if no != nil {
+		return command.Command{}, no
+	}
+	window, no := workWindow(dir, strings.TrimSpace(opt.Window), events[0].Workspace)
+	if no != nil {
+		return command.Command{}, no
+	}
+	id, err := savePrompt(dir, prompt)
+	if err != nil {
+		return command.Command{}, refuse(http.StatusInternalServerError, err.Error())
+	}
+	go markPickedUp(dir, events)
+	recordWorkPicks(dir, events, opt.Source)
+	args := workOnArgs(events, sessionFlags{profile: profile, model: model, isolate: opt.Isolate, attempt: opt.Attempt})
+	args = append(args, "--prompt-id", id)
+	return command.Command{Action: command.ActionNew, WindowID: window,
+		Command: daemon.NewSessionCommand(args...), Source: opt.Source}, nil
+}
+
+func workEvents(dir string, keys []string) ([]watch.Event, *launchRefusal) {
 	if len(keys) == 0 {
-		return command.Command{}, http.StatusBadRequest, "name the event to work on"
+		return nil, refuse(http.StatusBadRequest, "name the event to work on")
 	}
 	if len(keys) > watchBatchMax {
-		return command.Command{}, http.StatusBadRequest, "too many at once"
+		return nil, refuse(http.StatusBadRequest, "too many at once")
 	}
 	var events []watch.Event
 	for _, key := range keys {
 		event, ok := watch.FindEvent(dir, strings.TrimSpace(key))
 		if !ok {
-			return command.Command{}, http.StatusNotFound, "no such watch event"
+			return nil, refuse(http.StatusNotFound, "no such watch event")
+		}
+		if len(events) > 0 && event.Workspace != events[0].Workspace {
+			return nil, refuse(http.StatusBadRequest, "those are in different workspaces - take one workspace at a time")
 		}
 		events = append(events, event)
 	}
-	for _, e := range events[1:] {
-		if e.Workspace != events[0].Workspace {
-			return command.Command{}, http.StatusBadRequest, "those are in different workspaces - take one workspace at a time"
-		}
-	}
-	prompt := daemon.BatchPrompt(events)
-	if prompt == "" {
-		return command.Command{}, http.StatusConflict, "only new issues can be worked on together"
-	}
-	model := strings.TrimSpace(opt.Model)
+	return events, nil
+}
+
+func launchModelAndProfile(rawModel, rawProfile string) (model, profile string, no *launchRefusal) {
+	model = strings.TrimSpace(rawModel)
 	if model != "" && !validModel(model) {
-		return command.Command{}, http.StatusBadRequest, modelNameRuleMessage
+		return "", "", refuse(http.StatusBadRequest, modelNameRuleMessage)
 	}
-	profile := strings.TrimSpace(opt.Profile)
-	if profile != "" && profile != "default" {
-		if !profileNamePattern.MatchString(profile) || !containsString(launchProfileNames(), profile) {
-			return command.Command{}, http.StatusBadRequest, noSuchProfileMessage
-		}
-	} else {
-		profile = ""
+	profile = strings.TrimSpace(rawProfile)
+	if profile == "" || profile == "default" {
+		return model, "", nil
 	}
-	window := strings.TrimSpace(opt.Window)
+	if !profileNamePattern.MatchString(profile) || !containsString(launchProfileNames(), profile) {
+		return "", "", refuse(http.StatusBadRequest, noSuchProfileMessage)
+	}
+	return model, profile, nil
+}
+
+func workWindow(dir, window, workspace string) (string, *launchRefusal) {
 	rep, boardErr := readBoard(dir)
 	if window != "" {
 		if boardErr != nil {
-			return command.Command{}, http.StatusInternalServerError, boardErr.Error()
+			return "", refuse(http.StatusInternalServerError, boardErr.Error())
 		}
 		if !windowConnected(rep, window) {
-			return command.Command{}, http.StatusNotFound, "that editor window is not connected any more"
+			return "", refuse(http.StatusNotFound, "that editor window is not connected any more")
 		}
 	}
 	if boardErr == nil {
-		if own := windowOnWorkspace(rep, dir, events[0].Workspace); own != "" {
-			window = own
+		if own := windowOnWorkspace(rep, dir, workspace); own != "" {
+			return own, nil
 		}
 	}
-	id, err := savePrompt(dir, prompt)
-	if err != nil {
-		return command.Command{}, http.StatusInternalServerError, err.Error()
-	}
-	go markPickedUp(dir, events)
+	return window, nil
+}
+
+func recordWorkPicks(dir string, events []watch.Event, source string) {
 	now := time.Now()
 	picks := watch.LoadPicks(dir)
 	tasks := watch.LoadTasks(dir)
 	for _, e := range events {
-		_ = picks.Set(e.Key, opt.Source, now)
+		_ = picks.Set(e.Key, source, now)
 		if e.Kind == watch.KindTask {
 			_, _ = tasks.Move(e.Key, "Doing", now)
 		}
 	}
+}
+
+type sessionFlags struct {
+	workspace string
+	profile   string
+	model     string
+	isolate   bool
+	attempt   int
+}
+
+func (f sessionFlags) args() []string {
 	args := []string{}
-	if ws := strings.TrimSpace(events[0].Workspace); ws != "" {
-		args = append(args, "--workspace", ws)
+	for _, kv := range [][2]string{{"--workspace", f.workspace}, {"--profile", f.profile}, {"--model", f.model}} {
+		if kv[1] != "" {
+			args = append(args, kv[0], kv[1])
+		}
 	}
-	if profile != "" {
-		args = append(args, "--profile", profile)
+	if f.isolate {
+		args = append(args, "--isolate")
 	}
-	if model != "" {
-		args = append(args, "--model", model)
+	if f.attempt > 0 {
+		args = append(args, "--attempt", strconv.Itoa(f.attempt))
 	}
+	return args
+}
+
+func workOnArgs(events []watch.Event, flags sessionFlags) []string {
+	flags.workspace = strings.TrimSpace(events[0].Workspace)
 	var refs []string
 	for _, e := range events {
 		if ref := strings.TrimSpace(e.Ref); ref != "" && ticketRefPattern.MatchString(ref) {
 			refs = append(refs, ref)
 		}
 	}
+	isolate, attempt := flags.isolate, flags.attempt
+	flags.isolate, flags.attempt = false, 0
+	args := flags.args()
 	if len(refs) > 0 && ticketKeyPattern.MatchString(events[0].Key) {
 		args = append(args, "--ticket", strings.Join(refs, ","), "--ticket-key", events[0].Key)
 	}
-	if opt.Isolate {
-		args = append(args, "--isolate")
-	}
-	if opt.Attempt > 0 {
-		args = append(args, "--attempt", strconv.Itoa(opt.Attempt))
-	}
-	args = append(args, "--prompt-id", id)
-	return command.Command{Action: command.ActionNew, WindowID: window,
-		Command: daemon.NewSessionCommand(args...), Source: opt.Source}, 0, ""
+	return append(args, sessionFlags{isolate: isolate, attempt: attempt}.args()...)
 }
 
 func windowOnWorkspace(rep boardReport, agentD, workspaceID string) string {
@@ -4740,6 +4890,61 @@ func launchTaskCommentHandler(w http.ResponseWriter, r *http.Request) {
 	writeLaunchJSON(w, map[string]any{"done": "comment on " + t.Ref(), "ref": t.Ref(), "comments": t.Comments})
 }
 
+type addTaskRequest struct {
+	Title     string `json:"title"`
+	Body      string `json:"body"`
+	Workspace string `json:"workspace"`
+	Run       bool   `json:"run"`
+	// The thread of a task another machine sends here.
+	Comments []watch.TaskComment `json:"comments"`
+}
+
+func addTaskRefusal(dir string, r *http.Request, req addTaskRequest) *launchRefusal {
+	if isViewer(r) {
+		return refuse(http.StatusForbidden, "this device may only read")
+	}
+	if req.Run {
+		if why := taskRunRefusal(dir, strings.TrimSpace(req.Workspace)); why != "" {
+			return refuse(http.StatusBadRequest, why)
+		}
+	}
+	if ws := strings.TrimSpace(req.Workspace); ws != "" {
+		if _, err := workspaceRoot(ws); err != nil {
+			return refuse(http.StatusBadRequest, "no such workspace: "+ws)
+		}
+	}
+	return nil
+}
+
+func launchAddTask(w http.ResponseWriter, r *http.Request, dir string) {
+	var req addTaskRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&req); err != nil {
+		writeLaunchError(w, http.StatusBadRequest, requestUnreadableMessage)
+		return
+	}
+	if no := addTaskRefusal(dir, r, req); no != nil {
+		writeLaunchError(w, no.status, no.msg)
+		return
+	}
+	by := "phone"
+	if device, ok := authorizedDeviceFull(pairing.StorePath(dir), r.Header.Get("Authorization")); ok && device.Peer() {
+		by = device.Name
+	}
+	t, err := watch.LoadTasks(dir).Add(req.Title, req.Body, req.Workspace, by, time.Now())
+	if err != nil {
+		writeLaunchError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if len(req.Comments) > 0 && len(req.Comments) <= 200 {
+		t, _ = watch.LoadTasks(dir).WithThreadFrom(t.Ref(), req.Comments, time.Now())
+	}
+	if req.Run {
+		t, _ = watch.LoadTasks(dir).AskRun(t.Ref(), time.Now())
+		nudgePlans(dir)
+	}
+	writeLaunchJSON(w, map[string]any{"done": t.Ref() + " on the board", "key": t.Key(), "ref": t.Ref(), "task": t})
+}
+
 func launchTaskHandler(w http.ResponseWriter, r *http.Request) {
 	setLaunchHeaders(w)
 	dir, err := agentDir()
@@ -4752,51 +4957,7 @@ func launchTaskHandler(w http.ResponseWriter, r *http.Request) {
 		tasks := watch.LoadTasks(dir).Events(time.Now())
 		writeLaunchJSON(w, map[string]any{"tasks": tasks, "columns": watch.TaskColumns})
 	case http.MethodPost:
-		var req struct {
-			Title     string `json:"title"`
-			Body      string `json:"body"`
-			Workspace string `json:"workspace"`
-			Run       bool   `json:"run"`
-			// The thread of a task another machine sends here.
-			Comments []watch.TaskComment `json:"comments"`
-		}
-		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&req); err != nil {
-			writeLaunchError(w, http.StatusBadRequest, requestUnreadableMessage)
-			return
-		}
-		if isViewer(r) {
-			writeLaunchError(w, http.StatusForbidden, "this device may only read")
-			return
-		}
-		if req.Run {
-			if why := taskRunRefusal(dir, strings.TrimSpace(req.Workspace)); why != "" {
-				writeLaunchError(w, http.StatusBadRequest, why)
-				return
-			}
-		}
-		if ws := strings.TrimSpace(req.Workspace); ws != "" {
-			if _, err := workspaceRoot(ws); err != nil {
-				writeLaunchError(w, http.StatusBadRequest, "no such workspace: "+ws)
-				return
-			}
-		}
-		by := "phone"
-		if device, ok := authorizedDeviceFull(pairing.StorePath(dir), r.Header.Get("Authorization")); ok && device.Peer() {
-			by = device.Name
-		}
-		t, err := watch.LoadTasks(dir).Add(req.Title, req.Body, req.Workspace, by, time.Now())
-		if err != nil {
-			writeLaunchError(w, http.StatusBadRequest, err.Error())
-			return
-		}
-		if len(req.Comments) > 0 && len(req.Comments) <= 200 {
-			t, _ = watch.LoadTasks(dir).WithThreadFrom(t.Ref(), req.Comments, time.Now())
-		}
-		if req.Run {
-			t, _ = watch.LoadTasks(dir).AskRun(t.Ref(), time.Now())
-			nudgePlans(dir)
-		}
-		writeLaunchJSON(w, map[string]any{"done": t.Ref() + " on the board", "key": t.Key(), "ref": t.Ref(), "task": t})
+		launchAddTask(w, r, dir)
 	default:
 		writeLaunchError(w, http.StatusMethodNotAllowed, "GET the tasks, or POST {title, body, workspace} to add one")
 	}

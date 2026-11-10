@@ -266,25 +266,32 @@ func (s WatchSpec) runCommand(ctx context.Context, h harness.Harness, dir string
 }
 
 func (d *Daemon) loadWatchFiles() {
-	if d.watchState == nil {
-		d.watchState = watch.LoadState(d.Dir)
-		if keys := d.watchState.Fixes.Interrupted(watch.InterruptedReason, time.Now()); len(keys) > 0 {
-			for _, key := range keys {
-				if d.watchState.Fixes.TimesInterrupted(key) > 1 {
-					utils.Infof("agent: watch: %s was interrupted before; not offered again\n", key)
-					continue
-				}
-				d.watchState.Unsee(key)
-				if strings.HasPrefix(key, "task:") {
-					_, _ = watch.LoadTasks(d.Dir).AskRun(key, time.Now())
-					continue
-				}
-				if e, ok := watch.FindEvent(d.Dir, key); ok {
-					d.watchState.Fixes.Defer(e)
-				}
-			}
-			utils.Infof("agent: watch: %d fix(es) were interrupted; their events will be offered again\n", len(keys))
-		}
+	if d.watchState != nil {
+		return
+	}
+	d.watchState = watch.LoadState(d.Dir)
+	keys := d.watchState.Fixes.Interrupted(watch.InterruptedReason, time.Now())
+	if len(keys) == 0 {
+		return
+	}
+	for _, key := range keys {
+		d.reofferInterrupted(key)
+	}
+	utils.Infof("agent: watch: %d fix(es) were interrupted; their events will be offered again\n", len(keys))
+}
+
+func (d *Daemon) reofferInterrupted(key string) {
+	if d.watchState.Fixes.TimesInterrupted(key) > 1 {
+		utils.Infof("agent: watch: %s was interrupted before; not offered again\n", key)
+		return
+	}
+	d.watchState.Unsee(key)
+	if strings.HasPrefix(key, "task:") {
+		_, _ = watch.LoadTasks(d.Dir).AskRun(key, time.Now())
+		return
+	}
+	if e, ok := watch.FindEvent(d.Dir, key); ok {
+		d.watchState.Fixes.Defer(e)
 	}
 }
 
@@ -346,23 +353,7 @@ func (d *Daemon) handleWatchEvent(ctx context.Context, e watch.Event) {
 		return
 	}
 	if e.Kind == watch.KindRoutine {
-		for _, spec := range d.Watches {
-			if spec.Workspace != e.Workspace || d.watchState == nil {
-				continue
-			}
-			if reason := d.deferral(spec, time.Now()); reason != "" {
-				d.logRoutineWait(spec.Workspace+"/"+e.Title, e.Title, reason)
-				return
-			}
-			if d.peerLeads(spec) != "" {
-				return
-			}
-			if !d.claimFix(spec.Workspace, e.Ref) {
-				return
-			}
-			d.startRoutine(ctx, spec, routineFor(spec, e), e)
-			return
-		}
+		d.handleRoutineEvent(ctx, e)
 		return
 	}
 	for _, spec := range d.Watches {
@@ -378,6 +369,25 @@ func (d *Daemon) handleWatchEvent(ctx context.Context, e watch.Event) {
 		if d.watchers[spec.Workspace].Handle(ctx, e) {
 			return
 		}
+	}
+}
+
+func (d *Daemon) handleRoutineEvent(ctx context.Context, e watch.Event) {
+	if d.watchState == nil {
+		return
+	}
+	for _, spec := range d.Watches {
+		if spec.Workspace != e.Workspace {
+			continue
+		}
+		if reason := d.deferral(spec, time.Now()); reason != "" {
+			d.logRoutineWait(spec.Workspace+"/"+e.Title, e.Title, reason)
+			return
+		}
+		if d.peerLeads(spec) == "" && d.claimFix(spec.Workspace, e.Ref) {
+			d.startRoutine(ctx, spec, routineFor(spec, e), e)
+		}
+		return
 	}
 }
 
@@ -424,60 +434,68 @@ func (d *Daemon) WatchIdentity(source string) string {
 
 func (d *Daemon) watchSink(spec WatchSpec) watch.Sink {
 	return func(ctx context.Context, e watch.Event) {
-		d.appendWatchEvent(e)
-		if d.Events != nil {
-			d.Events.Append(spec.Workspace, events.Event{At: time.Now().UTC(), Kind: "watch", Reason: string(e.Kind) + " " + e.Ref, URL: e.URL})
-		}
-		if d.watchState.SameRefThisRound(spec.Workspace, e) > 0 {
-			if isFeedback(e.Kind) && spec.FixesKind(e.Kind) {
-				d.settleFix(ctx, spec, e)
-			}
-			return
-		}
-		if d.watchState.IsIgnored(e.Key) {
-			return
-		}
-		// Another laptop leads this tracker: it fixes and rings; here the
-		// event is on record and nothing more.
-		if d.peerLeads(spec) != "" {
-			return
-		}
-		body := watchBody(e)
-		if e.Kind == watch.KindCIFailed && spec.RerunCI {
-			if note, ok := d.rerunRedBuild(ctx, spec, e); ok {
-				body += " (" + note + ")"
-				if quietNow(spec, time.Now()) {
-					d.watchState.HoldEvent(spec.Workspace, e.Key, body, time.Now())
-					return
-				}
-				go d.notifyAttentionKey(notifyTitlePrefix+spec.Workspace, body, spec.Workspace, e.URL, e.Key)
-				return
-			}
-		}
-		if spec.FixesKind(e.Kind) {
-			if why := chatRunRefusal(spec, e); why != "" {
-				body += " (no run: " + why + ")"
-			} else if isFeedback(e.Kind) {
-				d.settleFix(ctx, spec, e)
-				body += " (fix starts once the comments settle)"
-			} else if note := d.startFix(ctx, spec, e); note != "" {
-				body += " (" + note + ")"
-			}
-		}
-		d.startBots(ctx, spec, e)
-		if d.handOverEvent(ctx, spec, e) {
-			body += " (handed to the session on it)"
-		}
-		if e.Self && e.Kind == watch.KindIssueNew {
-			utils.Infof("agent: (mine) %s\n", body)
-			return
-		}
-		if quietNow(spec, time.Now()) {
-			d.watchState.HoldEvent(spec.Workspace, e.Key, body, time.Now())
-			return
-		}
-		go d.notifyAttentionKey(notifyTitlePrefix+spec.Workspace, body, spec.Workspace, e.URL, e.Key)
+		d.sinkEvent(ctx, spec, e)
 	}
+}
+
+func (d *Daemon) sinkEvent(ctx context.Context, spec WatchSpec, e watch.Event) {
+	d.appendWatchEvent(e)
+	if d.Events != nil {
+		d.Events.Append(spec.Workspace, events.Event{At: time.Now().UTC(), Kind: "watch", Reason: string(e.Kind) + " " + e.Ref, URL: e.URL})
+	}
+	if d.watchState.SameRefThisRound(spec.Workspace, e) > 0 {
+		if isFeedback(e.Kind) && spec.FixesKind(e.Kind) {
+			d.settleFix(ctx, spec, e)
+		}
+		return
+	}
+	// Another laptop leads this tracker: it fixes and rings; here the
+	// event is on record and nothing more.
+	if d.watchState.IsIgnored(e.Key) || d.peerLeads(spec) != "" {
+		return
+	}
+	body := watchBody(e)
+	if e.Kind == watch.KindCIFailed && spec.RerunCI {
+		if note, ok := d.rerunRedBuild(ctx, spec, e); ok {
+			d.ringOrHold(spec, e, body+" ("+note+")")
+			return
+		}
+	}
+	body += d.fixNote(ctx, spec, e)
+	d.startBots(ctx, spec, e)
+	if d.handOverEvent(ctx, spec, e) {
+		body += " (handed to the session on it)"
+	}
+	if e.Self && e.Kind == watch.KindIssueNew {
+		utils.Infof("agent: (mine) %s\n", body)
+		return
+	}
+	d.ringOrHold(spec, e, body)
+}
+
+func (d *Daemon) fixNote(ctx context.Context, spec WatchSpec, e watch.Event) string {
+	if !spec.FixesKind(e.Kind) {
+		return ""
+	}
+	if why := chatRunRefusal(spec, e); why != "" {
+		return " (no run: " + why + ")"
+	}
+	if isFeedback(e.Kind) {
+		d.settleFix(ctx, spec, e)
+		return " (fix starts once the comments settle)"
+	}
+	if note := d.startFix(ctx, spec, e); note != "" {
+		return " (" + note + ")"
+	}
+	return ""
+}
+
+func (d *Daemon) ringOrHold(spec WatchSpec, e watch.Event, body string) {
+	if quietNow(spec, time.Now()) {
+		d.watchState.HoldEvent(spec.Workspace, e.Key, body, time.Now())
+		return
+	}
+	go d.notifyAttentionKey(notifyTitlePrefix+spec.Workspace, body, spec.Workspace, e.URL, e.Key)
 }
 
 func (d *Daemon) rerunRedBuild(ctx context.Context, spec WatchSpec, e watch.Event) (string, bool) {
@@ -516,21 +534,9 @@ func (d *Daemon) releaseHeld(spec WatchSpec, now time.Time) {
 	moved := watch.LoadStateLog(d.Dir)
 	kept := held[:0]
 	for _, n := range held {
-		if n.Key != "" {
-			if d.watchState.IsIgnored(n.Key) {
-				continue
-			}
-			if e, ok := watch.FindEvent(d.Dir, n.Key); ok {
-				current := e.State
-				if st, ok := moved.Get(n.Key); ok {
-					current = st.Status
-				}
-				if watch.Settled(e, current) != "" {
-					continue
-				}
-			}
+		if d.stillWorthRinging(n.Key, moved) {
+			kept = append(kept, n)
 		}
-		kept = append(kept, n)
 	}
 	if len(kept) == 0 {
 		return
@@ -542,30 +548,30 @@ func (d *Daemon) releaseHeld(spec WatchSpec, now time.Time) {
 	go d.notifyAttention(notifyTitlePrefix+spec.Workspace, body, spec.Workspace)
 }
 
+func (d *Daemon) stillWorthRinging(key string, moved *watch.StateLog) bool {
+	if key == "" {
+		return true
+	}
+	if d.watchState.IsIgnored(key) {
+		return false
+	}
+	e, ok := watch.FindEvent(d.Dir, key)
+	if !ok {
+		return true
+	}
+	current := e.State
+	if st, ok := moved.Get(key); ok {
+		current = st.Status
+	}
+	return watch.Settled(e, current) == ""
+}
+
 func (d *Daemon) retryDeferred(ctx context.Context, spec WatchSpec, now time.Time) {
 	if spec.Action != "fix" || d.watchState == nil || d.peerLeads(spec) != "" {
 		return
 	}
-	var queue []watch.Event
-	for _, e := range d.watchState.Fixes.DeferredEvents() {
-		if e.Workspace != spec.Workspace || now.Before(e.NotBefore) {
-			continue
-		}
-		if spec.NoRetry && !(e.Kind == watch.KindReviewRequested && spec.ReviewDelay > 0) {
-			continue
-		}
-		if _, blocked := d.watchState.Fixes.Blocked(spec.Workspace, e.Ref); blocked {
-			continue
-		}
-		if d.watchState.IsIgnored(e.Key) {
-			continue
-		}
-		queue = append(queue, e)
-	}
-	if len(queue) == 0 {
-		return
-	}
-	if d.deferral(spec, now) != "" {
+	queue := d.deferredQueue(spec, now)
+	if len(queue) == 0 || d.deferral(spec, now) != "" {
 		return
 	}
 	sort.SliceStable(queue, func(i, j int) bool { return watch.Less(queue[i], queue[j]) })
@@ -581,22 +587,45 @@ func (d *Daemon) retryDeferred(ctx context.Context, spec WatchSpec, now time.Tim
 		d.watchState.MarkSeen(e.Key)
 		d.watchState.Fixes.StartFor(e, now)
 		if spec.Batch > 1 && e.Kind == watch.KindIssueNew && e.Source != "slack" {
-			for _, r := range queue[i+1:] {
-				if len(e.Riders) >= spec.Batch-1 {
-					break
-				}
-				if r.Kind != watch.KindIssueNew || r.Source == "slack" || d.stillWorthFixing(ctx, spec, r) != "" || !d.claimFix(spec.Workspace, r.Ref) {
-					continue
-				}
-				d.watchState.MarkSeen(r.Key)
-				d.watchState.Fixes.StartFor(r, now)
-				e.Riders = append(e.Riders, r)
-			}
+			e.Riders = append(e.Riders, d.takeRiders(ctx, spec, queue[i+1:], spec.Batch-1-len(e.Riders), now)...)
 		}
 		utils.Infof("agent: watch %s: deferred fix for %s starts now (%d more waiting)\n", spec.Workspace, e.Ref, len(queue)-i-1-len(e.Riders))
 		d.spawnFix(ctx, spec, e)
 		return
 	}
+}
+
+func (d *Daemon) deferredQueue(spec WatchSpec, now time.Time) []watch.Event {
+	var queue []watch.Event
+	for _, e := range d.watchState.Fixes.DeferredEvents() {
+		if e.Workspace != spec.Workspace || now.Before(e.NotBefore) {
+			continue
+		}
+		if spec.NoRetry && !(e.Kind == watch.KindReviewRequested && spec.ReviewDelay > 0) {
+			continue
+		}
+		if _, blocked := d.watchState.Fixes.Blocked(spec.Workspace, e.Ref); blocked || d.watchState.IsIgnored(e.Key) {
+			continue
+		}
+		queue = append(queue, e)
+	}
+	return queue
+}
+
+func (d *Daemon) takeRiders(ctx context.Context, spec WatchSpec, rest []watch.Event, room int, now time.Time) []watch.Event {
+	var riders []watch.Event
+	for _, r := range rest {
+		if len(riders) >= room {
+			break
+		}
+		if r.Kind != watch.KindIssueNew || r.Source == "slack" || d.stillWorthFixing(ctx, spec, r) != "" || !d.claimFix(spec.Workspace, r.Ref) {
+			continue
+		}
+		d.watchState.MarkSeen(r.Key)
+		d.watchState.Fixes.StartFor(r, now)
+		riders = append(riders, r)
+	}
+	return riders
 }
 
 const maxRedBuildRuns = 3
@@ -616,6 +645,34 @@ func reviewHold(spec WatchSpec, e watch.Event, now time.Time) (time.Time, bool) 
 }
 
 func (d *Daemon) stillWorthFixing(ctx context.Context, spec WatchSpec, e watch.Event) string {
+	if why := ruleOrOwnerRefusal(spec, e); why != "" || e.Ref == "" {
+		return why
+	}
+	if who := d.someoneOnIt(spec, e); who != "" {
+		return who + " is on it now"
+	}
+	states := watch.LoadStateLog(d.Dir)
+	if why := d.settledOrRedTooOften(spec, e, states); why != "" {
+		return why
+	}
+	if !trackerKnowsKind(e.Kind) {
+		return ""
+	}
+	if over := settledOnTracker(ctx, spec, e, states); over != "" {
+		return itIsPrefix + over
+	}
+	if e.Kind == watch.KindReviewRequested && !e.At.IsZero() && !e.NotBefore.IsZero() {
+		if why := reviewedSince(ctx, spec, e); why != "" {
+			return why
+		}
+	}
+	if e.Kind == watch.KindPRComment || e.Kind == watch.KindPRReview {
+		return answeredSince(ctx, spec, e)
+	}
+	return ""
+}
+
+func ruleOrOwnerRefusal(spec WatchSpec, e watch.Event) string {
 	if spec.Rules.Enabled {
 		if why := spec.Rules.Why(e); why != "" {
 			return why
@@ -624,38 +681,49 @@ func (d *Daemon) stillWorthFixing(ctx context.Context, spec WatchSpec, e watch.E
 	if (e.Kind == watch.KindPRReview || e.Kind == watch.KindPRComment) && !e.Mine {
 		return "the pull request is not mine - its author fixes it"
 	}
-	if e.Ref == "" {
-		return ""
-	}
+	return ""
+}
+
+func (d *Daemon) someoneOnIt(spec WatchSpec, e watch.Event) string {
 	if who := d.sessionOnTicket(e.Ref); who != "" {
-		return who + " is on it now"
+		return who
 	}
 	if onOwnPullRequest(e) && !d.fixActiveFor(spec.Workspace, e.Ref) {
-		if who := d.sessionOnPullRequest(e); who != "" {
-			return who + " is on it now"
-		}
+		return d.sessionOnPullRequest(e)
 	}
-	states := watch.LoadStateLog(d.Dir)
+	return ""
+}
+
+func (d *Daemon) settledOrRedTooOften(spec WatchSpec, e watch.Event, states *watch.StateLog) string {
 	if known, ok := states.Get(e.Key); ok {
 		if over := watch.Settled(e, known.Status); over != "" {
 			return itIsPrefix + over
 		}
 	}
-	if e.Kind == watch.KindCIFailed {
-		if over := watch.Settled(e, e.State); over != "" {
-			return itIsPrefix + over
-		}
-		if d.watchState != nil {
-			if n := d.watchState.Fixes.RunsOnSince(spec.Workspace, e.Ref, string(watch.KindCIFailed), time.Now().Add(-24*time.Hour)); n >= maxRedBuildRuns {
-				return fmt.Sprintf("%d runs on this red build in a day already - it needs a person", n)
-			}
-		}
-	}
-	switch e.Kind {
-	case watch.KindIssueNew, watch.KindIssueComment, watch.KindPRComment, watch.KindPRReview, watch.KindReviewRequested, watch.KindCIFailed:
-	default:
+	if e.Kind != watch.KindCIFailed {
 		return ""
 	}
+	if over := watch.Settled(e, e.State); over != "" {
+		return itIsPrefix + over
+	}
+	if d.watchState == nil {
+		return ""
+	}
+	if n := d.watchState.Fixes.RunsOnSince(spec.Workspace, e.Ref, string(watch.KindCIFailed), time.Now().Add(-24*time.Hour)); n >= maxRedBuildRuns {
+		return fmt.Sprintf("%d runs on this red build in a day already - it needs a person", n)
+	}
+	return ""
+}
+
+func trackerKnowsKind(k watch.Kind) bool {
+	switch k {
+	case watch.KindIssueNew, watch.KindIssueComment, watch.KindPRComment, watch.KindPRReview, watch.KindReviewRequested, watch.KindCIFailed:
+		return true
+	}
+	return false
+}
+
+func settledOnTracker(ctx context.Context, spec WatchSpec, e watch.Event, states *watch.StateLog) string {
 	for _, src := range spec.Sources {
 		asker, ok := src.(watch.RefStater)
 		if !ok {
@@ -666,22 +734,16 @@ func (d *Daemon) stillWorthFixing(ctx context.Context, spec WatchSpec, e watch.E
 			continue
 		}
 		_ = states.Set(e.Key, state, time.Now())
-		if over := watch.Settled(e, state); over != "" {
-			return itIsPrefix + over
-		}
-		break
+		return watch.Settled(e, state)
 	}
-	if e.Kind == watch.KindReviewRequested && !e.At.IsZero() && !e.NotBefore.IsZero() {
-		if why := reviewedSince(ctx, spec, e); why != "" {
-			return why
-		}
-	}
-	if e.Kind == watch.KindPRComment || e.Kind == watch.KindPRReview {
-		for _, src := range spec.Sources {
-			if a, ok := src.(watch.Answerer); ok {
-				if why := a.AnsweredSince(ctx, e.Ref, e.At); why != "" {
-					return "already answered: " + why
-				}
+	return ""
+}
+
+func answeredSince(ctx context.Context, spec WatchSpec, e watch.Event) string {
+	for _, src := range spec.Sources {
+		if a, ok := src.(watch.Answerer); ok {
+			if why := a.AnsweredSince(ctx, e.Ref, e.At); why != "" {
+				return "already answered: " + why
 			}
 		}
 	}
@@ -712,6 +774,21 @@ func reviewedSince(ctx context.Context, spec WatchSpec, e watch.Event) string {
 	return ""
 }
 
+func peerSessionOnTicket(p sessions.PeerBoard, want string) string {
+	if !p.Alive {
+		return ""
+	}
+	for _, s := range p.Sessions {
+		if s.Status == string(sessions.StatusGone) || s.Status == string(sessions.StatusStale) {
+			continue
+		}
+		if ticketOf(s.Ticket, "", s.Branch) == want {
+			return p.Name + "'s " + firstNonEmpty(s.Display, s.Label)
+		}
+	}
+	return ""
+}
+
 func (d *Daemon) sessionOnTicket(ref string) string {
 	if d.Sessions == nil || ref == "" {
 		return ""
@@ -726,16 +803,8 @@ func (d *Daemon) sessionOnTicket(ref string) string {
 		}
 	}
 	for _, p := range d.Sessions.Peers() {
-		if !p.Alive {
-			continue
-		}
-		for _, s := range p.Sessions {
-			if s.Status == string(sessions.StatusGone) || s.Status == string(sessions.StatusStale) {
-				continue
-			}
-			if ticketOf(s.Ticket, "", s.Branch) == want {
-				return p.Name + "'s " + firstNonEmpty(s.Display, s.Label)
-			}
+		if who := peerSessionOnTicket(p, want); who != "" {
+			return who
 		}
 	}
 	return ""
@@ -984,6 +1053,20 @@ func (d *Daemon) deferral(spec WatchSpec, now time.Time) string {
 }
 
 func fixDeferral(spec WatchSpec, log *watch.FixLog, now time.Time) string {
+	for _, why := range []func() string{
+		func() string { return capDeferral(spec, log, now) },
+		func() string { return calendarDeferral(spec, now) },
+		func() string { return machineDeferral(spec, now) },
+		func() string { return limitDeferral(spec, log, now) },
+	} {
+		if reason := why(); reason != "" {
+			return reason
+		}
+	}
+	return ""
+}
+
+func capDeferral(spec WatchSpec, log *watch.FixLog, now time.Time) string {
 	perHour, perDay := spec.FixCaps()
 	if log.WorkRunsSince(spec.Workspace, now.Add(-time.Hour)) >= perHour {
 		return fmt.Sprintf("%d/h cap", perHour)
@@ -994,38 +1077,54 @@ func fixDeferral(spec WatchSpec, log *watch.FixLog, now time.Time) string {
 	if spec.MaxFixesTotal > 0 && now.Sub(spec.CapSince) < tripCapLasts && log.StartedSince(spec.Workspace, spec.CapSince) >= spec.MaxFixesTotal {
 		return fmt.Sprintf("%s %d", tripCapReason, spec.MaxFixesTotal)
 	}
+	return ""
+}
+
+func calendarDeferral(spec WatchSpec, now time.Time) string {
 	if dayOff(spec, now) {
 		return "day off"
 	}
 	if q, err := ParseQuiet(spec.Quiet); err == nil && q.Contains(now) && !spec.NightShift {
 		return "quiet hours"
 	}
-	if offline(now) {
-		return "offline"
+	return ""
+}
+
+func machineDeferral(spec WatchSpec, now time.Time) string {
+	checks := []struct {
+		hit func(time.Time) bool
+		why string
+	}{
+		{offline, "offline"},
+		{tooHot, "too hot"},
+		{lowBattery, "low battery"},
+		{hotspotOverBudget, "hotspot data budget"},
 	}
-	if tooHot(now) {
-		return "too hot"
-	}
-	if lowBattery(now) {
-		return "low battery"
-	}
-	if hotspotOverBudget(now) {
-		return "hotspot data budget"
+	for _, c := range checks {
+		if c.hit(now) {
+			return c.why
+		}
 	}
 	if lowDisk(now, firstNonEmpty(spec.AgentDir, ".")) {
 		return "low disk"
 	}
+	return ""
+}
+
+func limitDeferral(spec WatchSpec, log *watch.FixLog, now time.Time) string {
 	ceiling := spec.LimitCeiling
 	if ceiling <= 0 {
 		ceiling = limitRefusePercent
 	}
-	if pct, ok := readUsageLimits(spec.ConfigDir, now); ok && ceiling < 100 && !hasFallback(spec, log, now) {
-		if pct >= ceiling {
-			return fmt.Sprintf("limit %d%%", pct)
-		}
-		if typical := log.TypicalSpend(spec.Workspace); typical > 0 && pct+typical > ceiling {
-			return fmt.Sprintf("a run here costs about %d%% and %d%% is used", typical, pct)
-		}
+	pct, ok := readUsageLimits(spec.ConfigDir, now)
+	if !ok || ceiling >= 100 || hasFallback(spec, log, now) {
+		return ""
+	}
+	if pct >= ceiling {
+		return fmt.Sprintf("limit %d%%", pct)
+	}
+	if typical := log.TypicalSpend(spec.Workspace); typical > 0 && pct+typical > ceiling {
+		return fmt.Sprintf("a run here costs about %d%% and %d%% is used", typical, pct)
 	}
 	return ""
 }
@@ -1434,38 +1533,15 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 	ctx, cancel := context.WithTimeout(ctx, fixTimeoutFor(e))
 	defer cancel()
 
-	logDir := filepath.Join(d.Dir, "watch", "runs")
-	_ = os.MkdirAll(logDir, 0o700)
-	logPath := filepath.Join(logDir, safeName(e.Key)+".log")
-	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	logFile, logPath, err := d.openRunLog(e)
 	if err != nil {
 		utils.Infof("agent: watch fix %s: %v\n", e.Ref, err)
 		return
 	}
 	defer logFile.Close()
 
-	if b, ok := d.watchState.Fixes.Blocked(spec.Workspace, e.Ref); ok && e.Ref != "" {
-		d.watchState.Fixes.Finish(e.Key, nil, "", "not started: blocked ("+b.By+"): "+b.Reason, time.Now())
-		utils.Infof("agent: watch: %s is blocked (%s): %s - corgi agent watch unblock %s\n", e.Ref, b.By, b.Reason, e.Ref)
+	if !d.mayStartFix(spec, e) {
 		return
-	}
-	if kind, runs := d.watchState.Fixes.RecentBlocker(spec.Workspace, blockerWindow, time.Now()); runs >= 2 {
-		d.watchState.Fixes.Defer(e)
-		d.watchState.Fixes.Finish(e.Key, nil, "", "not started: the last "+strconv.Itoa(runs)+" runs here failed on "+kind, time.Now())
-		go d.notifyAttentionAt(notifyTitlePrefix+spec.Workspace,
-			"not working on "+e.Ref+": the last runs failed on "+kind+" - fix that and run corgi agent watch run",
-			spec.Workspace, e.URL)
-		return
-	}
-	if spec.Lease && d.ClaimTicket != nil && e.Ref != "" {
-		switch ok, holder, err := d.ClaimTicket(spec.Workspace, e); {
-		case err != nil:
-			utils.Infof("agent: could not claim %s, going ahead: %v\n", e.Ref, err)
-		case !ok:
-			d.watchState.Fixes.Finish(e.Key, nil, "", notStartedPrefix+holder+" is already on it", time.Now())
-			utils.Infof("agent: %s is already claimed by %s\n", e.Ref, holder)
-			return
-		}
 	}
 	if d.Pickup != nil {
 		d.Pickup(spec.Workspace, e)
@@ -1473,40 +1549,13 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 	env := withForgeShims(d.Dir, headlessEnv(spec.ConfigDir, os.Getenv("CORGI_OMIT")))
 	fmt.Fprintf(logFile, "=== %s %s %s\n", time.Now().Format(time.RFC3339), e.Kind, e.Ref)
 	before, hadBefore := usage.ReadLimits(spec.ConfigDir)
-	handover := d.watchState.Fixes.LastHandover(spec.Workspace, e.Ref)
 	started := time.Now()
-	fix := fixPrint(spec, e, handover)
-	if model := fixModel(spec, e, d.watchState.Fixes.FailedInARow(spec.Workspace, e.Ref)); model != "" {
-		fix.Model = model
-		fmt.Fprintf(logFile, "=== model: %s\n", model)
-		d.watchState.Fixes.SetModel(e.Key, harness.ShortModel(model))
+	fix := d.fixPrintFor(spec, e, logFile)
+	release, ok := d.isolateFix(spec, e, &fix, logFile)
+	if !ok {
+		return
 	}
-	if spec.Isolate && d.Isolate != nil && !watch.ReadOnlyRoutine(e) && e.Kind != watch.KindReviewRequested {
-		branch := FixBranch(e.Ref)
-		trees, err := d.Isolate(spec.Dir, branch)
-		if err != nil {
-			fmt.Fprintf(logFile, "\n=== could not isolate: %v\n", err)
-			d.watchState.Fixes.Finish(e.Key, nil, "", "could not create worktrees: "+err.Error(), time.Now())
-			go d.notifyAttentionAt(notifyTitlePrefix+spec.Workspace,
-				fmt.Sprintf("fix for %s did not start: could not create worktrees: %v", e.Ref, err), spec.Workspace, e.URL)
-			return
-		}
-		d.watchState.Fixes.SetBranch(e.Key, branch)
-		if onOwnPullRequest(e) {
-			fix.Prompt += PullIsolationNote(trees)
-		} else {
-			fix.Prompt += IsolationNote(branch, trees)
-		}
-		fmt.Fprintf(logFile, "=== worktrees on %s: %s\n", branch, strings.Join(trees, ", "))
-		if d.RunStack != nil {
-			if note := d.RunStack(spec.Dir, branch, spec.RunDB); note != "" {
-				fix.Prompt += note
-				if d.ReleaseStack != nil && spec.RunDB != "shared" {
-					defer d.ReleaseStack(spec.Dir, branch)
-				}
-			}
-		}
-	}
+	defer release()
 	h := d.pickHarnessFor(spec)
 	if h.Name != harness.Claude {
 		fmt.Fprintf(logFile, "=== harness: %s\n", h.Name)
@@ -1523,99 +1572,211 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 		d.watchState.Fixes.SetCost(e.Key, receipt.costUSD, receipt.tokens)
 		d.watchState.Fixes.SetModel(e.Key, strings.Join(receipt.models, ", "))
 	}
-	if runErr != nil && daemonCtx.Err() != nil {
+	run := fixRun{spec: spec, e: e, out: string(out), started: started, logPath: logPath}
+	switch {
+	case runErr != nil && daemonCtx.Err() != nil:
 		fmt.Fprintf(logFile, "\n=== interrupted: the daemon stopped mid-run; offered again at the next start\n")
 		if e.Kind == watch.KindRoutine {
 			d.routineAgain(spec, e)
 		}
-		return
+	case runErr != nil:
+		d.fixFailed(ctx, run, runErr, logFile)
+	default:
+		if after, ok := usage.ReadLimits(spec.ConfigDir); ok && hadBefore {
+			d.watchState.Fixes.SetSpent(e.Key, after.FiveHour.Percent-before.FiveHour.Percent)
+		}
+		d.fixDone(ctx, run)
 	}
-	if runErr != nil {
-		fmt.Fprintf(logFile, "\n=== failed: %v\n", runErr)
-		failure := runErr.Error()
-		cause := watch.EnvironmentFailure(string(out))
-		if cause != "" {
-			failure = watch.EnvironmentPrefix + cause
-			fmt.Fprintf(logFile, "=== %s: not the work's fault, tried again in %s\n", cause, retryCrashAfter)
-		}
-		d.watchState.Fixes.Finish(e.Key, nil, "", failure, time.Now())
-		d.replyOnTask(e, "The run failed: "+failure)
-		for _, r := range e.Riders {
-			d.watchState.Fixes.Finish(r.Key, nil, "", failure, time.Now())
-			d.retryLater(spec, r, cause)
-		}
-		if cause == "" {
-			d.watchState.Fixes.SetHandover(e.Key, runHandover(spec.Dir, e.Ref, started, string(out)), time.Now())
-			d.mirrorHandoff(spec, e.Ref, started)
-			d.tripBreaker(spec, e, failure)
-		}
-		if e.Source == "slack" {
-			d.say(ctx, spec, e, chatOutcome(nil, "", failure), "x")
-		}
-		retry := d.retryLater(spec, e, cause)
-		if cause != "" && retry {
-			utils.Infof("agent: %s did not run: %s - again in %s\n", e.Ref, cause, retryCrashAfter)
-			return
-		}
-		if e.Kind == watch.KindRoutine {
-			d.routineReport(spec, e, string(out), errors.New(firstNonEmpty(cause, runErr.Error())), logPath)
-			return
-		}
-		body := fmt.Sprintf("fix for %s failed: %v - log: %s", e.Ref, firstNonEmpty(cause, runErr.Error()), logPath)
-		if retry {
-			body += fmt.Sprintf(" - one retry in %s", retryCrashAfter)
-		}
-		go d.notifyAttentionAt(notifyTitlePrefix+spec.Workspace, body, spec.Workspace, e.URL)
-		return
+}
+
+type fixRun struct {
+	spec    WatchSpec
+	e       watch.Event
+	out     string
+	started time.Time
+	logPath string
+}
+
+func (d *Daemon) openRunLog(e watch.Event) (*os.File, string, error) {
+	logDir := filepath.Join(d.Dir, "watch", "runs")
+	_ = os.MkdirAll(logDir, 0o700)
+	logPath := filepath.Join(logDir, safeName(e.Key)+".log")
+	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	return f, logPath, err
+}
+
+func (d *Daemon) mayStartFix(spec WatchSpec, e watch.Event) bool {
+	if b, ok := d.watchState.Fixes.Blocked(spec.Workspace, e.Ref); ok && e.Ref != "" {
+		d.watchState.Fixes.Finish(e.Key, nil, "", "not started: blocked ("+b.By+"): "+b.Reason, time.Now())
+		utils.Infof("agent: watch: %s is blocked (%s): %s - corgi agent watch unblock %s\n", e.Ref, b.By, b.Reason, e.Ref)
+		return false
 	}
-	links := uniqueStrings(prLink.FindAllString(string(out), -1))
-	note := ""
-	body := "fixed " + strings.Join(e.Refs(), " + ")
+	if kind, runs := d.watchState.Fixes.RecentBlocker(spec.Workspace, blockerWindow, time.Now()); runs >= 2 {
+		d.watchState.Fixes.Defer(e)
+		d.watchState.Fixes.Finish(e.Key, nil, "", "not started: the last "+strconv.Itoa(runs)+" runs here failed on "+kind, time.Now())
+		go d.notifyAttentionAt(notifyTitlePrefix+spec.Workspace,
+			"not working on "+e.Ref+": the last runs failed on "+kind+" - fix that and run corgi agent watch run",
+			spec.Workspace, e.URL)
+		return false
+	}
+	if !spec.Lease || d.ClaimTicket == nil || e.Ref == "" {
+		return true
+	}
+	ok, holder, err := d.ClaimTicket(spec.Workspace, e)
+	switch {
+	case err != nil:
+		utils.Infof("agent: could not claim %s, going ahead: %v\n", e.Ref, err)
+	case !ok:
+		d.watchState.Fixes.Finish(e.Key, nil, "", notStartedPrefix+holder+" is already on it", time.Now())
+		utils.Infof("agent: %s is already claimed by %s\n", e.Ref, holder)
+		return false
+	}
+	return true
+}
+
+func (d *Daemon) fixPrintFor(spec WatchSpec, e watch.Event, logFile *os.File) harness.Print {
+	fix := fixPrint(spec, e, d.watchState.Fixes.LastHandover(spec.Workspace, e.Ref))
+	if model := fixModel(spec, e, d.watchState.Fixes.FailedInARow(spec.Workspace, e.Ref)); model != "" {
+		fix.Model = model
+		fmt.Fprintf(logFile, "=== model: %s\n", model)
+		d.watchState.Fixes.SetModel(e.Key, harness.ShortModel(model))
+	}
+	return fix
+}
+
+func (d *Daemon) isolateFix(spec WatchSpec, e watch.Event, fix *harness.Print, logFile *os.File) (func(), bool) {
+	noop := func() {
+		// nothing to release
+	}
+	if !spec.Isolate || d.Isolate == nil || watch.ReadOnlyRoutine(e) || e.Kind == watch.KindReviewRequested {
+		return noop, true
+	}
+	branch := FixBranch(e.Ref)
+	trees, err := d.Isolate(spec.Dir, branch)
+	if err != nil {
+		fmt.Fprintf(logFile, "\n=== could not isolate: %v\n", err)
+		d.watchState.Fixes.Finish(e.Key, nil, "", "could not create worktrees: "+err.Error(), time.Now())
+		go d.notifyAttentionAt(notifyTitlePrefix+spec.Workspace,
+			fmt.Sprintf("fix for %s did not start: could not create worktrees: %v", e.Ref, err), spec.Workspace, e.URL)
+		return noop, false
+	}
+	d.watchState.Fixes.SetBranch(e.Key, branch)
+	if onOwnPullRequest(e) {
+		fix.Prompt += PullIsolationNote(trees)
+	} else {
+		fix.Prompt += IsolationNote(branch, trees)
+	}
+	fmt.Fprintf(logFile, "=== worktrees on %s: %s\n", branch, strings.Join(trees, ", "))
+	if d.RunStack == nil {
+		return noop, true
+	}
+	note := d.RunStack(spec.Dir, branch, spec.RunDB)
+	if note == "" {
+		return noop, true
+	}
+	fix.Prompt += note
+	if d.ReleaseStack != nil && spec.RunDB != "shared" {
+		return func() { d.ReleaseStack(spec.Dir, branch) }, true
+	}
+	return noop, true
+}
+
+func (d *Daemon) fixFailed(ctx context.Context, run fixRun, runErr error, logFile *os.File) {
+	spec, e := run.spec, run.e
+	fmt.Fprintf(logFile, "\n=== failed: %v\n", runErr)
+	failure := runErr.Error()
+	cause := watch.EnvironmentFailure(run.out)
+	if cause != "" {
+		failure = watch.EnvironmentPrefix + cause
+		fmt.Fprintf(logFile, "=== %s: not the work's fault, tried again in %s\n", cause, retryCrashAfter)
+	}
+	d.watchState.Fixes.Finish(e.Key, nil, "", failure, time.Now())
+	d.replyOnTask(e, "The run failed: "+failure)
 	for _, r := range e.Riders {
-		d.watchState.Fixes.Finish(r.Key, nil, "in one run with "+e.Ref, "", time.Now())
+		d.watchState.Fixes.Finish(r.Key, nil, "", failure, time.Now())
+		d.retryLater(spec, r, cause)
 	}
+	if cause == "" {
+		d.watchState.Fixes.SetHandover(e.Key, runHandover(spec.Dir, e.Ref, run.started, run.out), time.Now())
+		d.mirrorHandoff(spec, e.Ref, run.started)
+		d.tripBreaker(spec, e, failure)
+	}
+	if e.Source == "slack" {
+		d.say(ctx, spec, e, chatOutcome(nil, "", failure), "x")
+	}
+	retry := d.retryLater(spec, e, cause)
+	if cause != "" && retry {
+		utils.Infof("agent: %s did not run: %s - again in %s\n", e.Ref, cause, retryCrashAfter)
+		return
+	}
+	why := firstNonEmpty(cause, runErr.Error())
+	if e.Kind == watch.KindRoutine {
+		d.routineReport(spec, e, run.out, errors.New(why), run.logPath)
+		return
+	}
+	body := fmt.Sprintf("fix for %s failed: %v - log: %s", e.Ref, why, run.logPath)
+	if retry {
+		body += fmt.Sprintf(" - one retry in %s", retryCrashAfter)
+	}
+	go d.notifyAttentionAt(notifyTitlePrefix+spec.Workspace, body, spec.Workspace, e.URL)
+}
+
+func fixDoneBody(e watch.Event, links []string, out string) (body, note string) {
+	body = "fixed " + strings.Join(e.Refs(), " + ")
 	if t := strings.TrimSpace(e.Title); t != "" {
 		body += " - " + t
 	}
 	if len(links) > 0 {
-		body = watch.PullLines(body, links)
-	} else if last := plainLine(lastLine(string(out))); last != "" {
+		return watch.PullLines(body, links), ""
+	}
+	if last := plainLine(lastLine(out)); last != "" {
 		note = clipText(last, 160)
 		body += " - " + note
 	}
+	return body, note
+}
+
+func (d *Daemon) fixDone(ctx context.Context, run fixRun) {
+	spec, e, out := run.spec, run.e, run.out
+	links := uniqueStrings(prLink.FindAllString(out, -1))
+	for _, r := range e.Riders {
+		d.watchState.Fixes.Finish(r.Key, nil, "in one run with "+e.Ref, "", time.Now())
+	}
+	body, note := fixDoneBody(e, links, out)
 	d.watchState.Fixes.Finish(e.Key, links, note, "", time.Now())
 	d.replyOnTask(e, strings.TrimSpace(strings.Join(append(append([]string{}, links...), note), " ")))
-	d.watchState.Fixes.SetOutcome(e.Key, watch.OutcomeOf(e.Kind, string(out)))
-	d.watchState.Fixes.SetLeft(e.Key, watch.LeftFor(string(out)))
-	d.watchState.Fixes.SetGaps(e.Key, watch.GapsIn(string(out)))
-	d.watchState.Fixes.SetHandover(e.Key, runHandover(spec.Dir, e.Ref, started, string(out)), time.Now())
-	d.mirrorHandoff(spec, e.Ref, started)
-	d.blockIfRunSaidSo(spec, e, started)
+	d.watchState.Fixes.SetOutcome(e.Key, watch.OutcomeOf(e.Kind, out))
+	d.watchState.Fixes.SetLeft(e.Key, watch.LeftFor(out))
+	d.watchState.Fixes.SetGaps(e.Key, watch.GapsIn(out))
+	d.watchState.Fixes.SetHandover(e.Key, runHandover(spec.Dir, e.Ref, run.started, out), time.Now())
+	d.mirrorHandoff(spec, e.Ref, run.started)
+	d.blockIfRunSaidSo(spec, e, run.started)
 	if len(links) > 0 && d.Delivered != nil {
 		d.Delivered(spec.Workspace, e, links)
 	}
-	if after, ok := usage.ReadLimits(spec.ConfigDir); ok && hadBefore {
-		d.watchState.Fixes.SetSpent(e.Key, after.FiveHour.Percent-before.FiveHour.Percent)
-	}
 	if e.Source == "slack" {
-		said := chatOutcome(links, note, "")
-		mark := d.chatMark(ctx, spec, e)
-		if lines, outcome, ok := d.chatReviewReply(ctx, spec, e, started); ok {
-			said, mark = lines, reviewMark(outcome)
-		}
-		d.say(ctx, spec, e, said, mark)
+		d.sayFixDone(ctx, run, links, note)
+	}
+	if e.Kind == watch.KindRoutine {
+		// The report is the routine's one notification; a run that opened
+		// pull requests names them there rather than as "fixed routine/x".
+		d.routineReport(spec, e, out, nil, run.logPath, links...)
+		return
 	}
 	target := e.URL
 	if len(links) > 0 {
 		target = links[0]
 	}
-	if e.Kind == watch.KindRoutine {
-		// The report is the routine's one notification; a run that opened
-		// pull requests names them there rather than as "fixed routine/x".
-		d.routineReport(spec, e, string(out), nil, logPath, links...)
-		return
-	}
 	go d.notifyAttentionAt(notifyTitlePrefix+spec.Workspace, body, spec.Workspace, target)
+}
+
+func (d *Daemon) sayFixDone(ctx context.Context, run fixRun, links []string, note string) {
+	said := chatOutcome(links, note, "")
+	mark := d.chatMark(ctx, run.spec, run.e)
+	if lines, outcome, ok := d.chatReviewReply(ctx, run.spec, run.e, run.started); ok {
+		said, mark = lines, reviewMark(outcome)
+	}
+	d.say(ctx, run.spec, run.e, said, mark)
 }
 
 type Probe struct {
@@ -1761,19 +1922,7 @@ func (d *Daemon) refreshInboxStates(ctx context.Context, spec WatchSpec) {
 	now := time.Now()
 	catchUp := 0
 	for i, e := range watch.RecentEvents(d.Dir, 300) {
-		if e.Workspace != spec.Workspace || e.Ref == "" {
-			continue
-		}
-		switch e.Kind {
-		case watch.KindPRComment, watch.KindPRReview, watch.KindReviewRequested,
-			watch.KindIssueNew, watch.KindIssueComment:
-		default:
-			continue
-		}
-		if d.watchState.IsIgnored(e.Key) {
-			continue
-		}
-		if known, ok := states.Get(e.Key); ok && watch.Settled(e, known.Status) != "" {
+		if !d.inboxStateWanted(spec, e, states) {
 			continue
 		}
 		// The newest are asked about every round; older rows take turns.
@@ -1783,18 +1932,36 @@ func (d *Daemon) refreshInboxStates(ctx context.Context, spec WatchSpec) {
 			}
 			catchUp++
 		}
-		for _, src := range spec.Sources {
-			asker, ok := src.(watch.RefStater)
-			if !ok {
-				continue
-			}
-			if state := asker.RefState(ctx, e.Ref); state != "" {
-				_ = states.Set(e.Key, state, time.Now())
-				break
-			}
-		}
+		recordRefState(ctx, spec, e, states)
 	}
 	d.refreshPulls(ctx, spec)
+}
+
+func (d *Daemon) inboxStateWanted(spec WatchSpec, e watch.Event, states *watch.StateLog) bool {
+	if e.Workspace != spec.Workspace || e.Ref == "" || d.watchState.IsIgnored(e.Key) {
+		return false
+	}
+	switch e.Kind {
+	case watch.KindPRComment, watch.KindPRReview, watch.KindReviewRequested,
+		watch.KindIssueNew, watch.KindIssueComment:
+	default:
+		return false
+	}
+	known, ok := states.Get(e.Key)
+	return !ok || watch.Settled(e, known.Status) == ""
+}
+
+func recordRefState(ctx context.Context, spec WatchSpec, e watch.Event, states *watch.StateLog) {
+	for _, src := range spec.Sources {
+		asker, ok := src.(watch.RefStater)
+		if !ok {
+			continue
+		}
+		if state := asker.RefState(ctx, e.Ref); state != "" {
+			_ = states.Set(e.Key, state, time.Now())
+			return
+		}
+	}
 }
 
 const (
@@ -1819,15 +1986,48 @@ func (d *Daemon) askedLately(key string, now time.Time) bool {
 	return false
 }
 
+type pullSet struct {
+	refs  map[string]bool
+	links map[string]string
+}
+
+func (p pullSet) add(link string) {
+	if ref := watch.PullRef(link); ref != "" {
+		p.refs[ref] = true
+		p.links[ref] = watch.PullLink(link)
+	}
+}
+
+func (p pullSet) addAll(links []string) {
+	for _, l := range links {
+		p.add(l)
+	}
+}
+
 func (d *Daemon) refreshPulls(ctx context.Context, spec WatchSpec) {
-	refs := map[string]bool{}
-	links := map[string]string{}
-	add := func(link string) {
-		if ref := watch.PullRef(link); ref != "" {
-			refs[ref] = true
-			links[ref] = watch.PullLink(link)
+	set := pullSet{refs: map[string]bool{}, links: map[string]string{}}
+	d.collectPulls(spec, set)
+	pulls := watch.LoadPullLog(d.Dir)
+	now := time.Now()
+	catchUp := d.catchUpPulls(spec, set, pulls, now)
+	for ref := range set.refs {
+		d.askPull(ctx, spec, pullAsk{ref: ref, link: set.links[ref], catchUpKey: catchUp[ref]}, pulls, now)
+	}
+}
+
+func (d *Daemon) collectPulls(spec WatchSpec, set pullSet) {
+	d.collectEventPulls(spec, set)
+	d.collectFixPulls(spec, set)
+	if d.Sessions != nil {
+		for _, s := range d.Sessions.Sessions() {
+			if s.PR != "" && (s.Label == spec.Workspace || filepath.Base(s.Folder) == spec.Workspace) {
+				set.add(s.PR)
+			}
 		}
 	}
+}
+
+func (d *Daemon) collectEventPulls(spec WatchSpec, set pullSet) {
 	for _, e := range watch.RecentEvents(d.Dir, 40) {
 		if e.Workspace != spec.Workspace || d.watchState.IsIgnored(e.Key) {
 			continue
@@ -1835,75 +2035,69 @@ func (d *Daemon) refreshPulls(ctx context.Context, spec WatchSpec) {
 		switch e.Kind {
 		case watch.KindPRComment, watch.KindPRReview, watch.KindReviewRequested, watch.KindCIFailed:
 			if e.Ref != "" && strings.ContainsAny(e.Ref, "#!") {
-				refs[e.Ref] = true
+				set.refs[e.Ref] = true
 			}
-			add(e.URL)
-			for _, l := range e.Links {
-				add(l)
-			}
+			set.add(e.URL)
+			set.addAll(e.Links)
 		}
 	}
+}
+
+func (d *Daemon) collectFixPulls(spec WatchSpec, set pullSet) {
 	for _, r := range watch.LoadFixLog(d.Dir).RecentFixes("", 50) {
-		if r.Workspace != spec.Workspace {
-			continue
-		}
-		for _, link := range r.PRs {
-			add(link)
+		if r.Workspace == spec.Workspace {
+			set.addAll(r.PRs)
 		}
 	}
-	if d.Sessions != nil {
-		for _, s := range d.Sessions.Sessions() {
-			if s.PR != "" && (s.Label == spec.Workspace || filepath.Base(s.Folder) == spec.Workspace) {
-				add(s.PR)
-			}
-		}
-	}
-	pulls := watch.LoadPullLog(d.Dir)
-	now := time.Now()
 	for _, r := range d.fixLog().Records() {
 		if r.Workspace == spec.Workspace && r.HasOpenLeft() {
-			add(r.URL)
-			for _, link := range r.PRs {
-				add(link)
-			}
+			set.add(r.URL)
+			set.addAll(r.PRs)
 		}
 	}
+}
+
+func (d *Daemon) catchUpPulls(spec WatchSpec, set pullSet, pulls *watch.PullLog, now time.Time) map[string]string {
 	all := pulls.All()
 	catchUp := map[string]string{}
 	for _, ref := range watch.PullsGoneQuiet(all, spec.Workspace, pullQuiet, len(all), now) {
 		if len(catchUp) >= pullsPerRound {
 			break
 		}
-		if key := "pull|" + spec.Workspace + "|" + ref; !refs[ref] && !d.askedLately(key, now) {
-			refs[ref], catchUp[ref] = true, key
+		if key := "pull|" + spec.Workspace + "|" + ref; !set.refs[ref] && !d.askedLately(key, now) {
+			set.refs[ref], catchUp[ref] = true, key
 		}
 	}
-	if len(refs) == 0 {
+	return catchUp
+}
+
+type pullAsk struct {
+	ref        string
+	link       string
+	catchUpKey string
+}
+
+func (d *Daemon) askPull(ctx context.Context, spec WatchSpec, ask pullAsk, pulls *watch.PullLog, now time.Time) {
+	was, known := pulls.Get(ask.ref)
+	if known && (now.Sub(was.At) < pullFresh || was.State == "merged" || was.State == "closed") {
 		return
 	}
-	for ref := range refs {
-		was, known := pulls.Get(ref)
-		if known && now.Sub(was.At) < pullFresh {
+	for _, src := range spec.Sources {
+		asker, ok := src.(watch.PullAsker)
+		if !ok {
 			continue
 		}
-		if known && (was.State == "merged" || was.State == "closed") {
+		st, ok := asker.PullStatus(ctx, ask.ref)
+		if !ok {
 			continue
 		}
-		for _, src := range spec.Sources {
-			asker, ok := src.(watch.PullAsker)
-			if !ok {
-				continue
-			}
-			if st, ok := asker.PullStatus(ctx, ref); ok {
-				st.Carry(was, known, links[ref], spec.Workspace, now)
-				_ = pulls.Set(ref, st)
-				d.askedAt.Delete(catchUp[ref])
-				if !known || now.Sub(was.At) <= pullOldNews {
-					d.pullChanged(ctx, spec, ref, links[ref], was, st, known)
-				}
-				break
-			}
+		st.Carry(was, known, ask.link, spec.Workspace, now)
+		_ = pulls.Set(ask.ref, st)
+		d.askedAt.Delete(ask.catchUpKey)
+		if !known || now.Sub(was.At) <= pullOldNews {
+			d.pullChanged(ctx, spec, ask.ref, ask.link, was, st, known)
 		}
+		return
 	}
 }
 
