@@ -21,6 +21,61 @@ type LogWait struct {
 	Poll    time.Duration
 }
 
+type logFollower struct {
+	logsDir     string
+	wait        LogWait
+	preexisting string
+	skipHistory bool
+	current     *os.File
+	reader      *bufio.Reader
+	openedPath  string
+}
+
+func (f *logFollower) close() {
+	if f.current != nil {
+		_ = f.current.Close()
+	}
+}
+
+func (f *logFollower) follow() error {
+	newest, found := newestRun(f.logsDir, f.wait.Service)
+	if !found || newest == f.openedPath {
+		return nil
+	}
+	f.close()
+	f.current, f.reader = nil, nil
+	file, err := os.Open(newest)
+	if err != nil {
+		return nil
+	}
+	if newest == f.preexisting && f.skipHistory && f.wait.Since.IsZero() {
+		if _, err := file.Seek(0, io.SeekEnd); err != nil {
+			_ = file.Close()
+			return err
+		}
+	}
+	f.current, f.reader, f.openedPath = file, bufio.NewReader(file), newest
+	return nil
+}
+
+func (f *logFollower) step(re *regexp.Regexp) (content string, found, idle bool, err error) {
+	if err := f.follow(); err != nil {
+		return "", false, false, err
+	}
+	if f.reader == nil {
+		return "", false, true, nil
+	}
+	line, readErr := readBoundedLine(f.reader)
+	if line != "" {
+		content = trimLogPrefix(strings.TrimRight(line, "\n"))
+		return content, waitLineAllowed(content, line, f.wait.Since) && re.MatchString(content), false, nil
+	}
+	if readErr != nil && readErr != io.EOF {
+		return "", false, false, readErr
+	}
+	return "", false, true, nil
+}
+
 func WaitForLogLine(logsDir string, wait LogWait) (string, bool, error) {
 	re, err := regexp.Compile(wait.Pattern)
 	if err != nil {
@@ -31,60 +86,22 @@ func WaitForLogLine(logsDir string, wait LogWait) (string, bool, error) {
 		poll = 200 * time.Millisecond
 	}
 	deadline := time.Now().Add(wait.Timeout)
-
 	preexisting, hadRun := newestRun(logsDir, wait.Service)
-	skipHistory := hadRun && isFinishedRun(preexisting)
-
-	var current *os.File
-	var reader *bufio.Reader
-	openedPath := ""
-	defer func() {
-		if current != nil {
-			_ = current.Close()
+	f := &logFollower{logsDir: logsDir, wait: wait, preexisting: preexisting, skipHistory: hadRun && isFinishedRun(preexisting)}
+	defer f.close()
+	for !time.Now().After(deadline) {
+		content, found, idle, err := f.step(re)
+		if err != nil {
+			return "", false, err
 		}
-	}()
-
-	for {
-		if time.Now().After(deadline) {
-			return "", false, nil
+		if found {
+			return content, true, nil
 		}
-
-		newest, found := newestRun(logsDir, wait.Service)
-		if found && newest != openedPath {
-			if current != nil {
-				_ = current.Close()
-			}
-			file, openErr := os.Open(newest)
-			if openErr != nil {
-				time.Sleep(poll)
-				continue
-			}
-			if newest == preexisting && skipHistory && wait.Since.IsZero() {
-				if _, seekErr := file.Seek(0, io.SeekEnd); seekErr != nil {
-					_ = file.Close()
-					return "", false, seekErr
-				}
-			}
-			current, reader, openedPath = file, bufio.NewReader(file), newest
-		}
-		if reader == nil {
+		if idle {
 			time.Sleep(poll)
-			continue
 		}
-
-		line, readErr := readBoundedLine(reader)
-		if line != "" {
-			content := trimLogPrefix(strings.TrimRight(line, "\n"))
-			if waitLineAllowed(content, line, wait.Since) && re.MatchString(content) {
-				return content, true, nil
-			}
-			continue
-		}
-		if readErr != nil && readErr != io.EOF {
-			return "", false, readErr
-		}
-		time.Sleep(poll)
 	}
+	return "", false, nil
 }
 
 func waitLineAllowed(content, raw string, since time.Time) bool {

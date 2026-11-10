@@ -76,37 +76,36 @@ func contextFromTail(data []byte, truncated bool) (Context, bool) {
 		first = 1
 	}
 	for i := len(lines) - 1; i >= first; i-- {
-		line := bytes.TrimSpace(lines[i])
-		if bytes.Contains(line, []byte(`"token_count"`)) {
-			if c, ok := codexContext(line); ok {
-				return c, true
-			}
-			continue
+		if c, ok := contextFromLine(bytes.TrimSpace(lines[i])); ok {
+			return c, true
 		}
-		if len(line) == 0 || !bytes.Contains(line, []byte(`"usage"`)) {
-			continue
-		}
-		var row struct {
-			Type      string                 `json:"type"`
-			Timestamp time.Time              `json:"timestamp"`
-			Message   contextFromTailMessage `json:"message"`
-		}
-		if json.Unmarshal(line, &row) != nil || row.Type != "assistant" || row.Message.Usage == nil {
-			continue
-		}
-		u := row.Message.Usage
-		tokens := u.Input + u.CacheRead + u.CacheWrite
-		if tokens <= 0 {
-			continue
-		}
-		c := Context{Tokens: tokens, Model: row.Message.Model, At: row.Timestamp, Window: WindowFor(row.Message.Model)}
-		c.Percent = int(tokens * 100 / c.Window)
-		if c.Percent > 100 {
-			c.Percent = 100
-		}
-		return c, true
 	}
 	return Context{}, false
+}
+
+func contextFromLine(line []byte) (Context, bool) {
+	if bytes.Contains(line, []byte(`"token_count"`)) {
+		return codexContext(line)
+	}
+	if len(line) == 0 || !bytes.Contains(line, []byte(`"usage"`)) {
+		return Context{}, false
+	}
+	var row struct {
+		Type      string                 `json:"type"`
+		Timestamp time.Time              `json:"timestamp"`
+		Message   contextFromTailMessage `json:"message"`
+	}
+	if json.Unmarshal(line, &row) != nil || row.Type != "assistant" || row.Message.Usage == nil {
+		return Context{}, false
+	}
+	u := row.Message.Usage
+	tokens := u.Input + u.CacheRead + u.CacheWrite
+	if tokens <= 0 {
+		return Context{}, false
+	}
+	c := Context{Tokens: tokens, Model: row.Message.Model, At: row.Timestamp, Window: WindowFor(row.Message.Model)}
+	c.Percent = min(int(tokens*100/c.Window), 100)
+	return c, true
 }
 
 type contextFromTailMessage struct {

@@ -38,75 +38,85 @@ func EnvCheckAll(corgi *CorgiCompose, fileOverride string) ([]EnvCheckRow, error
 	return rows, nil
 }
 
+type envKeyCheck struct {
+	exampleKeys map[string]bool
+	generated   map[string]bool
+}
+
+func (c envKeyCheck) missingFrom(provided map[string]bool) []string {
+	var missing []string
+	for key := range c.exampleKeys {
+		if !provided[key] && !c.generated[key] {
+			missing = append(missing, key)
+		}
+	}
+	sort.Strings(missing)
+	return missing
+}
+
+func (c envKeyCheck) absentSource(row EnvCheckRow, display string) EnvCheckRow {
+	if missing := c.missingFrom(nil); len(missing) > 0 {
+		row.Source = display
+		row.Missing = missing
+		row.SourceAbsent = true
+	}
+	return row
+}
+
 func envCheckService(svc Service, resolved []EnvVar, fileOverride string) (EnvCheckRow, error) {
 	row := EnvCheckRow{Service: svc.ServiceName}
 	if svc.IgnoreEnv {
 		row.Skipped = "ignore_env is set"
 		return row, nil
 	}
-
 	example := exampleEnvFile(svc)
 	if example == "" {
 		row.Skipped = "no .env-example / .env.example in the service repo"
 		return row, nil
 	}
 	row.Example = displayPath(example)
-
 	exampleKeys, err := envFileKeys(example)
 	if err != nil {
 		return row, err
 	}
-	generated := map[string]bool{}
+	check := envKeyCheck{exampleKeys: exampleKeys, generated: map[string]bool{}}
 	for _, e := range resolved {
 		if e.IsGenerated() {
-			generated[e.Key] = true
+			check.generated[e.Key] = true
 		}
 	}
-	missingFrom := func(provided map[string]bool) []string {
-		var missing []string
-		for key := range exampleKeys {
-			if !provided[key] && !generated[key] {
-				missing = append(missing, key)
-			}
-		}
-		sort.Strings(missing)
-		return missing
-	}
-	absentSource := func(display string) EnvCheckRow {
-		if missing := missingFrom(nil); len(missing) > 0 {
-			row.Source = display
-			row.Missing = missing
-			row.SourceAbsent = true
-		}
-		return row
-	}
-
-	var source string
-	if fileOverride != "" {
-		candidate := filepath.Join(svc.AbsolutePath, fileOverride)
-		if !fileExists(candidate) {
-			return absentSource(displayPath(candidate)), nil
-		}
-		source = candidate
-	} else {
-		resolvedSrc := resolveEnvSourceFile(CorgiComposePathDir, svc, "", ActiveTierName, ActiveTierDir)
-		if resolvedSrc == "" || sameFile(resolvedSrc, example) {
-			if svc.CopyEnvFromFilePath == "" {
-				row.Skipped = "no copyEnvFromFilePath - env comes from the example file itself"
-				return row, nil
-			}
-			return absentSource(svc.CopyEnvFromFilePath), nil
-		}
-		source = resolvedSrc
+	source, done := envCheckSource(svc, example, fileOverride, check, &row)
+	if done {
+		return row, nil
 	}
 	row.Source = displayPath(source)
-
 	provided, err := envFileKeys(source)
 	if err != nil {
 		return row, err
 	}
-	row.Missing = missingFrom(provided)
+	row.Missing = check.missingFrom(provided)
 	return row, nil
+}
+
+func envCheckSource(svc Service, example, fileOverride string, check envKeyCheck, row *EnvCheckRow) (string, bool) {
+	if fileOverride != "" {
+		candidate := filepath.Join(svc.AbsolutePath, fileOverride)
+		if !fileExists(candidate) {
+			*row = check.absentSource(*row, displayPath(candidate))
+			return "", true
+		}
+		return candidate, false
+	}
+	resolvedSrc := resolveEnvSourceFile(CorgiComposePathDir, svc, "", ActiveTierName, ActiveTierDir)
+	if resolvedSrc != "" && !sameFile(resolvedSrc, example) {
+		return resolvedSrc, false
+	}
+	if svc.CopyEnvFromFilePath == "" {
+		row.Skipped = "no copyEnvFromFilePath - env comes from the example file itself"
+		return "", true
+	}
+	*row = check.absentSource(*row, svc.CopyEnvFromFilePath)
+	return "", true
 }
 
 func envFileKeys(path string) (map[string]bool, error) {

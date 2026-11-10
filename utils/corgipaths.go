@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
@@ -144,27 +145,34 @@ func runningIn(corgiServicesPath string) []string {
 		return nil
 	}
 	var names []string
-	var ask []string
 	byContainer := map[string]string{}
 	for _, rows := range [][]RunStateEntry{state.Services, state.DBServices} {
-		for _, e := range rows {
-			if e.Status != "running" {
-				continue
-			}
-			if e.PID > 0 {
-				if PidAlive(e.PID, e.Command) {
-					names = append(names, e.Name)
-				}
-				continue
-			}
-			if c := strings.TrimSpace(e.Container); c != "" {
-				ask = append(ask, c)
-				byContainer[c] = e.Name
-			}
-		}
+		names = append(names, runningByPID(rows, byContainer)...)
 	}
+	ask := make([]string, 0, len(byContainer))
+	for c := range byContainer {
+		ask = append(ask, c)
+	}
+	sort.Strings(ask)
 	for _, c := range runningContainers(ask) {
 		names = append(names, byContainer[c])
+	}
+	return names
+}
+
+func runningByPID(rows []RunStateEntry, byContainer map[string]string) []string {
+	var names []string
+	for _, e := range rows {
+		if e.Status != "running" {
+			continue
+		}
+		if e.PID > 0 {
+			if PidAlive(e.PID, e.Command) {
+				names = append(names, e.Name)
+			}
+		} else if c := strings.TrimSpace(e.Container); c != "" {
+			byContainer[c] = e.Name
+		}
 	}
 	return names
 }

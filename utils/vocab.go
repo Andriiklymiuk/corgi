@@ -106,12 +106,7 @@ func schemaType(n *schemaNode) string {
 	}
 	switch t := n.Type.(type) {
 	case string:
-		if t == "array" && n.Items != nil {
-			if it := schemaType(n.Items); it != "" {
-				return it + "[]"
-			}
-		}
-		return t
+		return namedSchemaType(t, n.Items)
 	case []any:
 		parts := make([]string, 0, len(t))
 		for _, p := range t {
@@ -131,6 +126,16 @@ func schemaType(n *schemaNode) string {
 		}
 	}
 	return strings.Join(alts, "|")
+}
+
+func namedSchemaType(t string, items *schemaNode) string {
+	if t != "array" || items == nil {
+		return t
+	}
+	if it := schemaType(items); it != "" {
+		return it + "[]"
+	}
+	return t
 }
 
 func enumOf(n *schemaNode) []string {

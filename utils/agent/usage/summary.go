@@ -42,6 +42,16 @@ func SummaryOf(transcriptPath string) (Summary, bool) {
 	return summaryFromTail(data, start > 0)
 }
 
+type summaryRow struct {
+	Type    string `json:"type"`
+	Message struct {
+		Content []struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		} `json:"content"`
+	} `json:"message"`
+}
+
 func summaryFromTail(data []byte, truncated bool) (Summary, bool) {
 	lines := bytes.Split(data, []byte{'\n'})
 	first := 0
@@ -49,41 +59,33 @@ func summaryFromTail(data []byte, truncated bool) (Summary, bool) {
 		first = 1
 	}
 	var out Summary
-	for i := len(lines) - 1; i >= first; i-- {
+	for i := len(lines) - 1; i >= first && (out.Line == "" || out.PR == ""); i-- {
 		line := bytes.TrimSpace(lines[i])
 		if len(line) == 0 || !bytes.Contains(line, []byte(`"assistant"`)) {
 			continue
 		}
-		var row struct {
-			Type    string `json:"type"`
-			Message struct {
-				Content []struct {
-					Type string `json:"type"`
-					Text string `json:"text"`
-				} `json:"content"`
-			} `json:"message"`
-		}
-		if json.Unmarshal(line, &row) != nil || row.Type != "assistant" {
-			continue
-		}
-		for _, c := range row.Message.Content {
-			if c.Type != "text" || strings.TrimSpace(c.Text) == "" {
-				continue
-			}
-			if out.PR == "" {
-				if links := pullRequestLink.FindAllString(c.Text, -1); len(links) > 0 {
-					out.PR = links[len(links)-1]
-				}
-			}
-			if out.Line == "" {
-				out.Line = firstSentence(c.Text)
-			}
-		}
-		if out.Line != "" && out.PR != "" {
-			break
+		var row summaryRow
+		if json.Unmarshal(line, &row) == nil && row.Type == "assistant" {
+			out.addFrom(row)
 		}
 	}
 	return out, out.Line != ""
+}
+
+func (out *Summary) addFrom(row summaryRow) {
+	for _, c := range row.Message.Content {
+		if c.Type != "text" || strings.TrimSpace(c.Text) == "" {
+			continue
+		}
+		if out.PR == "" {
+			if links := pullRequestLink.FindAllString(c.Text, -1); len(links) > 0 {
+				out.PR = links[len(links)-1]
+			}
+		}
+		if out.Line == "" {
+			out.Line = firstSentence(c.Text)
+		}
+	}
 }
 
 func firstSentence(text string) string {
