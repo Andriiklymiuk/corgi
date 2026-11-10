@@ -187,25 +187,29 @@ func (b *kanbanBoard) placeEvents() {
 		if e.Ref == "" || e.Kind == watch.KindRoutine || (b.in.ignored != nil && b.in.ignored(e.Key)) {
 			continue
 		}
-		current := e.State
-		if now, ok := b.in.moved.Get(e.Key); ok {
-			current = now.Status
-		}
-		c := b.card(e.Workspace, e.Ref)
-		if c.Key == "" {
-			c.Key, c.Title, c.URL, c.Kind, c.State, c.UpdatedAt = e.Key, firstLineOf(e.Title), e.URL, string(e.Kind), current, e.At
-		}
-		if e.Parent != "" && c.Feature == nil {
-			c.Feature = &CardFeature{Ref: e.Parent, Title: firstLineOf(e.ParentTitle)}
-		}
-		if len(e.Links) > 0 {
-			b.links[e.Workspace+"/"+e.Ref] = e.Links
-		}
-		if e.Kind == watch.KindTask {
-			b.placeTask(c, e, current)
-		} else {
-			b.placeTicket(c, e, current)
-		}
+		b.placeEvent(e)
+	}
+}
+
+func (b *kanbanBoard) placeEvent(e watch.Event) {
+	current := e.State
+	if now, ok := b.in.moved.Get(e.Key); ok {
+		current = now.Status
+	}
+	c := b.card(e.Workspace, e.Ref)
+	if c.Key == "" {
+		c.Key, c.Title, c.URL, c.Kind, c.State, c.UpdatedAt = e.Key, firstLineOf(e.Title), e.URL, string(e.Kind), current, e.At
+	}
+	if e.Parent != "" && c.Feature == nil {
+		c.Feature = &CardFeature{Ref: e.Parent, Title: firstLineOf(e.ParentTitle)}
+	}
+	if len(e.Links) > 0 {
+		b.links[e.Workspace+"/"+e.Ref] = e.Links
+	}
+	if e.Kind == watch.KindTask {
+		b.placeTask(c, e, current)
+	} else {
+		b.placeTicket(c, e, current)
 	}
 }
 
@@ -282,6 +286,10 @@ func (b *kanbanBoard) placeRun(r watch.FixRecord) {
 	}
 	c.Fix = &CardFix{Running: !r.Done(), StartedAt: r.StartedAt, Outcome: r.Outcome(), PRs: r.PRs, Branch: r.Branch}
 	nameCardFromRun(c, r)
+	b.columnForRun(c, r)
+}
+
+func (b *kanbanBoard) columnForRun(c *KanbanCard, r watch.FixRecord) {
 	switch {
 	case !r.Done():
 		c.Column, c.Why = ColRunning, "a run started "+roughAge(b.in.now.Sub(r.StartedAt))+" ago"
@@ -533,12 +541,7 @@ func (b *kanbanBoard) placePulls() {
 
 // A post naming several pull requests (a Slack review request) is over
 // when every one it names is merged or closed; until then it says how many.
-func (b *kanbanBoard) placeLinkedPulls(c *KanbanCard, links []string) {
-	if len(links) == 0 || c.Column == ColDone {
-		return
-	}
-	known, over := 0, 0
-	var latest time.Time
+func (b *kanbanBoard) linkedPullsOver(links []string) (known, over int, latest time.Time) {
 	for _, link := range links {
 		ref := watch.PullRef(link)
 		if ref == "" {
@@ -556,20 +559,25 @@ func (b *kanbanBoard) placeLinkedPulls(c *KanbanCard, links []string) {
 			}
 		}
 	}
-	if known == 0 {
+	return known, over, latest
+}
+
+func (b *kanbanBoard) placeLinkedPulls(c *KanbanCard, links []string) {
+	if len(links) == 0 || c.Column == ColDone {
 		return
 	}
-	if over < known {
+	known, over, latest := b.linkedPullsOver(links)
+	switch {
+	case known == 0:
+	case over < known:
 		if cardOpen(c) {
 			c.Why = fmt.Sprintf("%d of %d pull requests merged", over, known)
 		}
-		return
-	}
-	if !latest.IsZero() && b.in.now.Sub(latest) > 24*time.Hour {
+	case !latest.IsZero() && b.in.now.Sub(latest) > 24*time.Hour:
 		b.drop(c.Workspace, c.Ref)
-		return
+	default:
+		c.Column, c.Why, c.Blocked, c.BlockedBy = ColDone, "every pull request it names is merged", "", ""
 	}
-	c.Column, c.Why, c.Blocked, c.BlockedBy = ColDone, "every pull request it names is merged", "", ""
 }
 
 func pullOver(state string) string {

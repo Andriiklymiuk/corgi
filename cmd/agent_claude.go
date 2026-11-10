@@ -270,6 +270,40 @@ func resolveClaudeLaunch(dir, profile string, extra []string) (claudeLaunch, err
 // resolveLaunch is the session for dir's workspace: its harness (the
 // workspace's first installed agent, or --kind), account and permission
 // mode, with open spelled in that harness's flags and extra after.
+func workspaceAt(registry *workspace.Registry, dir string) (id, root string) {
+	dir = cleanPath(dir)
+	for _, ws := range registry.Sorted() {
+		r := cleanPath(ws.AbsPath)
+		if r == "" || (dir != r && !strings.HasPrefix(dir, r+string(filepath.Separator))) {
+			continue
+		}
+		if len(r) > len(root) {
+			id, root = ws.ID, r
+		}
+	}
+	return id, root
+}
+
+func installedKind(resolved config.Resolved) string {
+	if k := strings.TrimSpace(kindOverride); k != "" {
+		return k
+	}
+	order := resolved.AgentOrder()
+	if len(order) <= 1 {
+		return resolved.Kind
+	}
+	// The first agent that is installed opens; a person hears why.
+	for _, name := range order {
+		if harness.For(name, "").Installed() {
+			if name != order[0] {
+				utils.Info(fmt.Sprintf("corgi: %s is not installed here - %s opens", order[0], name))
+			}
+			return name
+		}
+	}
+	return resolved.Kind
+}
+
 func resolveLaunch(dir, profile string, open harness.Open, extra []string) (claudeLaunch, error) {
 	launch := claudeLaunch{Kind: harness.For(kindOverride, "").Name, Bin: harness.For(kindOverride, "").Bin, Open: open, Extra: append([]string(nil), extra...), Env: map[string]string{}}
 	launch.build()
@@ -281,55 +315,41 @@ func resolveLaunch(dir, profile string, open harness.Open, extra []string) (clau
 	if err != nil {
 		return launch, nil
 	}
-	dir = cleanPath(dir)
-	var id, best string
-	for _, ws := range registry.Sorted() {
-		root := cleanPath(ws.AbsPath)
-		if root == "" || (dir != root && !strings.HasPrefix(dir, root+string(filepath.Separator))) {
-			continue
-		}
-		if len(root) > len(best) {
-			id, best = ws.ID, root
-		}
-	}
+	id, best := workspaceAt(registry, dir)
 	if id == "" {
 		return launch, nil
 	}
 	launch.Workspace = id
-	user, err := config.LoadUser(agentUserConfigPath(agentD))
+	resolved, err := launchSettings(agentD, id, best, profile)
 	if err != nil {
 		return launch, err
 	}
-	repo, _ := config.LoadRepo(best)
+	resolved.Kind = installedKind(resolved)
+	kind, err := supervisor.KindFor(supervisor.SpawnConfig{Kind: resolved.Kind, ConfigDirEnv: resolved.ConfigDirEnv, CredentialEnv: resolved.CredentialEnv})
+	if err != nil {
+		return launch, err
+	}
+	launch.applyKind(kind, resolved)
+	return launch, nil
+}
+
+func launchSettings(agentD, id, root, profile string) (config.Resolved, error) {
+	user, err := config.LoadUser(agentUserConfigPath(agentD))
+	if err != nil {
+		return config.Resolved{}, err
+	}
+	repo, _ := config.LoadRepo(root)
 	resolved := config.Resolve(id, repo, user)
 	if strings.EqualFold(strings.TrimSpace(profile), "auto") {
 		profile = pickAccountProfileSticky(agentD, user, resolved)
 	}
 	if p := strings.TrimSpace(profile); p != "" {
-		withProfile, err := config.ApplyProfile(resolved, user, p)
-		if err != nil {
-			return launch, err
-		}
-		resolved = withProfile
+		return config.ApplyProfile(resolved, user, p)
 	}
-	if k := strings.TrimSpace(kindOverride); k != "" {
-		resolved.Kind = k
-	} else if order := resolved.AgentOrder(); len(order) > 1 {
-		// The first agent that is installed opens; a person hears why.
-		for _, name := range order {
-			if harness.For(name, "").Installed() {
-				if name != order[0] {
-					utils.Info(fmt.Sprintf("corgi: %s is not installed here - %s opens", order[0], name))
-				}
-				resolved.Kind = name
-				break
-			}
-		}
-	}
-	kind, err := supervisor.KindFor(supervisor.SpawnConfig{Kind: resolved.Kind, ConfigDirEnv: resolved.ConfigDirEnv, CredentialEnv: resolved.CredentialEnv})
-	if err != nil {
-		return launch, err
-	}
+	return resolved, nil
+}
+
+func (launch *claudeLaunch) applyKind(kind supervisor.Kind, resolved config.Resolved) {
 	launch.Kind = kind.Name
 	if bin := strings.TrimSpace(resolved.Bin); bin != "" {
 		launch.Bin = expandTilde(bin)
@@ -348,7 +368,6 @@ func resolveLaunch(dir, profile string, open harness.Open, extra []string) (clau
 	if cfg := strings.TrimSpace(resolved.ConfigDir); cfg != "" && kind.ConfigDirEnv != "" && (kind.Name == first || kind.Name == supervisor.KindCustom) {
 		launch.Env[kind.ConfigDirEnv] = expandTilde(cfg)
 	}
-	return launch, nil
 }
 
 // permissionModeFor is the mode a person's session opens with: the
@@ -510,29 +529,37 @@ const autoSwitchAt = 98
 
 func autoProfilePath(agentDir string) string { return filepath.Join(agentDir, "auto-profile") }
 
+func stickyProfile(agentDir string, user *config.UserConfig, resolved config.Resolved) (string, bool) {
+	last, err := os.ReadFile(autoProfilePath(agentDir))
+	if err != nil {
+		return "", false
+	}
+	name := strings.TrimSpace(string(last))
+	if name == "" || !accountAllowed(resolved.Accounts, name) {
+		return "", false
+	}
+	p, ok := user.Profiles[name]
+	if !ok && name != "default" {
+		return "", false
+	}
+	if l, ok := usage.ReadLimits(expandTilde(p.ConfigDir)); ok && l.FiveHour.Percent >= autoSwitchAt {
+		return "", false
+	}
+	if name == "default" {
+		return "", true
+	}
+	return name, true
+}
+
 func pickAccountProfileSticky(agentDir string, user *config.UserConfig, resolved config.Resolved) string {
 	if user == nil || len(resolved.Accounts) == 0 {
 		return ""
 	}
-	if last, err := os.ReadFile(autoProfilePath(agentDir)); err == nil {
-		name := strings.TrimSpace(string(last))
-		if name != "" && accountAllowed(resolved.Accounts, name) {
-			if p, ok := user.Profiles[name]; ok || name == "default" {
-				if l, ok := usage.ReadLimits(expandTilde(p.ConfigDir)); !ok || l.FiveHour.Percent < autoSwitchAt {
-					if name == "default" {
-						return ""
-					}
-					return name
-				}
-			}
-		}
+	if name, ok := stickyProfile(agentDir, user, resolved); ok {
+		return name
 	}
 	pick := pickAccountProfile(user, resolved)
-	remember := pick
-	if remember == "" {
-		remember = "default"
-	}
-	_ = os.WriteFile(autoProfilePath(agentDir), []byte(remember+"\n"), 0o600)
+	_ = os.WriteFile(autoProfilePath(agentDir), []byte(firstNonEmpty(pick, "default")+"\n"), 0o600)
 	return pick
 }
 
@@ -598,27 +625,35 @@ func isolationRef(ticket string, now time.Time) string {
 	return "session-" + now.Format("0102-1504")
 }
 
-func isolateWorkspace(root, branch string) (trees []string, start string, err error) {
-	hasCompose := false
+func hasComposeFile(root string) bool {
 	for _, name := range []string{utils.CorgiComposeDefaultName, "corgi-compose.yaml"} {
 		if _, err := os.Stat(filepath.Join(root, name)); err == nil {
-			hasCompose = true
-			break
+			return true
 		}
 	}
-	if hasCompose {
+	return false
+}
+
+func startTree(root string, trees []string) string {
+	start := trees[0]
+	repo, ok := utils.RepoRootOf(root)
+	if !ok || repo == "" {
+		return start
+	}
+	prefix := utils.WorktreeDirPrefix(repo) + "@"
+	for _, t := range trees {
+		if strings.HasPrefix(filepath.Base(t), prefix) {
+			return t
+		}
+	}
+	return start
+}
+
+func isolateWorkspace(root, branch string) (trees []string, start string, err error) {
+	if hasComposeFile(root) {
 		trees, err = isolateFixWorktrees(root, branch)
 		if err == nil && len(trees) > 0 {
-			start = trees[0]
-			if repo, ok := utils.RepoRootOf(root); ok && repo != "" {
-				prefix := utils.WorktreeDirPrefix(repo) + "@"
-				for _, t := range trees {
-					if strings.HasPrefix(filepath.Base(t), prefix) {
-						start = t
-						break
-					}
-				}
-			}
+			start = startTree(root, trees)
 		}
 		return trees, start, err
 	}
