@@ -16,6 +16,7 @@ import (
 	"andriiklymiuk/corgi/utils/agent/harness"
 	"andriiklymiuk/corgi/utils/agent/sessions"
 	"andriiklymiuk/corgi/utils/agent/usage"
+	"andriiklymiuk/corgi/utils/agent/workspace"
 )
 
 var agentCarryCmd = &cobra.Command{
@@ -56,6 +57,14 @@ harnesses, so this is always a fresh start. Only an agent the workspace lists
 	Run:  runAgentCarry,
 }
 
+func carryExitCode(err error) int {
+	var ce *carryError
+	if errors.As(err, &ce) {
+		return ce.code
+	}
+	return 1
+}
+
 func runAgentCarry(cmd *cobra.Command, args []string) {
 	profile, _ := cmd.Flags().GetString("profile")
 	profile = strings.TrimSpace(profile)
@@ -74,23 +83,7 @@ func runAgentCarry(cmd *cobra.Command, args []string) {
 		exitWithError("agent_carry", err, 1)
 	}
 	if forks > 0 || len(prompts) > 0 {
-		if to != "" {
-			exitWithError("agent_carry", fmt.Errorf("--fork continues the conversation; another agent cannot, so it cannot be combined with --to"), 2)
-		}
-		if fresh {
-			exitWithError("agent_carry", fmt.Errorf("--fork continues the conversation; it cannot be combined with --fresh"), 2)
-		}
-		if err := forkSession(dir, s, profile, forks, prompts, "cli"); err != nil {
-			code := 1
-			var ce *carryError
-			if errors.As(err, &ce) {
-				code = ce.code
-			}
-			exitWithError("agent_carry", err, code)
-		}
-		if !utils.JSONOutput {
-			utils.Infof("%d forks of %s are opening; the original keeps running\n", forks, s.Display)
-		}
+		runCarryFork(dir, s, profile, forks, prompts, carryForkFlags{fresh: fresh, to: to})
 		return
 	}
 	if profile == "" && (fresh || to != "") {
@@ -101,18 +94,34 @@ func runAgentCarry(cmd *cobra.Command, args []string) {
 	}
 	packetPath, err := carrySessionTo(dir, s, profile, fresh, to, "cli")
 	if err != nil {
-		code := 1
-		var ce *carryError
-		if errors.As(err, &ce) {
-			code = ce.code
-		}
-		exitWithError("agent_carry", err, code)
+		exitWithError("agent_carry", err, carryExitCode(err))
 	}
-	if packetPath != "" && !utils.JSONOutput {
+	if utils.JSONOutput {
+		return
+	}
+	if packetPath != "" {
 		utils.Infof("handoff: %s\n", packetPath)
 	}
+	utils.Info("the old session keeps running; close its tab when you are done with it")
+}
+
+type carryForkFlags struct {
+	fresh bool
+	to    string
+}
+
+func runCarryFork(dir string, s sessions.Session, profile string, forks int, prompts []string, f carryForkFlags) {
+	if f.to != "" {
+		exitWithError("agent_carry", fmt.Errorf("--fork continues the conversation; another agent cannot, so it cannot be combined with --to"), 2)
+	}
+	if f.fresh {
+		exitWithError("agent_carry", fmt.Errorf("--fork continues the conversation; it cannot be combined with --fresh"), 2)
+	}
+	if err := forkSession(dir, s, profile, forks, prompts, "cli"); err != nil {
+		exitWithError("agent_carry", err, carryExitCode(err))
+	}
 	if !utils.JSONOutput {
-		utils.Info("the old session keeps running; close its tab when you are done with it")
+		utils.Infof("%d forks of %s are opening; the original keeps running\n", forks, s.Display)
 	}
 }
 
@@ -131,18 +140,23 @@ func carrySession(dir string, s sessions.Session, profile string, fresh bool, so
 // carrySessionTo is carrySession with a harness to hand the work to: "" keeps
 // the session's own; another name means a fresh start under it, in the
 // same workspace, since a conversation cannot cross harnesses.
-func carrySessionTo(dir string, s sessions.Session, profile string, fresh bool, to, source string) (packetPath string, err error) {
-	if to != "" {
-		fresh = true
+func carryFresh(s sessions.Session, fresh bool, to string) bool {
+	if fresh || to != "" {
+		return true
 	}
-	if !fresh && sessionHarness(s) != harness.Claude {
-		fresh = true
+	if sessionHarness(s) != harness.Claude {
 		utils.Infof("%s threads cannot move between accounts - starting the new session clean, from the handoff\n", sessionHarness(s))
+		return true
 	}
-	if !fresh && s.Context != nil && s.Context.Percent >= carryFreshAt {
-		fresh = true
+	if s.Context != nil && s.Context.Percent >= carryFreshAt {
 		utils.Infof("context is %d%% full - starting the new session clean, from the handoff\n", s.Context.Percent)
+		return true
 	}
+	return false
+}
+
+func carrySessionTo(dir string, s sessions.Session, profile string, fresh bool, to, source string) (packetPath string, err error) {
+	fresh = carryFresh(s, fresh, to)
 	plan, err := planCarry(dir, s, profile, fresh)
 	if err != nil {
 		return "", &carryError{err, 1}
@@ -154,39 +168,55 @@ func carrySessionTo(dir string, s sessions.Session, profile string, fresh bool, 
 	}
 	packet, packetPath := leaveCarryHandoffTo(plan.Workspace, s, profile, to)
 	if fresh {
-		if packetPath == "" {
-			return "", &carryError{fmt.Errorf("a fresh start needs a handoff, and the branch %q names no ticket - say --ref on `corgi agent handoff` first", sessions.Branch(s.Cwd)), 2}
-		}
-		id, err := savePrompt(dir, carryPrompt(packet, packetPath))
-		if err != nil {
-			return "", &carryError{err, 1}
-		}
-		if to != "" {
-			plan.Command = handCommand(plan.Exe, to, plan.WorkspaceID, profile, id)
-		} else {
-			plan.Command = fmt.Sprintf("%s agent %s --profile %s --prompt-id %s", shellQuote(plan.Exe), sessionHarness(s), shellQuote(profile), id)
-		}
+		err = freshCarryCommand(dir, &plan, s, profile, to, packet, packetPath)
 	} else {
-		if err := os.MkdirAll(filepath.Dir(plan.To), 0o700); err != nil {
-			return "", &carryError{err, 1}
-		}
-		if err := copyFile(plan.From, plan.To); err != nil {
-			return "", &carryError{fmt.Errorf("copy transcript: %w", err), 1}
-		}
+		err = copyCarryTranscript(plan)
+	}
+	if err != nil {
+		return "", err
+	}
+	sendBoardCommand(command.Command{Action: command.ActionNew, WindowID: s.Host.WindowID, Command: plan.Command, Source: source}, carrySaid(s, profile, to, fresh))
+	if s.Status == sessions.StatusLimited || s.Status == sessions.StatusDone || s.Status == sessions.StatusStale {
+		_, _ = command.Write(dir, command.Command{Action: command.ActionDismiss, SessionID: s.ID, Source: source})
+	}
+	return packetPath, nil
+}
+
+func freshCarryCommand(dir string, plan *carryPlan, s sessions.Session, profile, to string, packet handoff.Packet, packetPath string) error {
+	if packetPath == "" {
+		return &carryError{fmt.Errorf("a fresh start needs a handoff, and the branch %q names no ticket - say --ref on `corgi agent handoff` first", sessions.Branch(s.Cwd)), 2}
+	}
+	id, err := savePrompt(dir, carryPrompt(packet, packetPath))
+	if err != nil {
+		return &carryError{err, 1}
+	}
+	if to != "" {
+		plan.Command = handCommand(plan.Exe, to, plan.WorkspaceID, profile, id)
+	} else {
+		plan.Command = fmt.Sprintf("%s agent %s --profile %s --prompt-id %s", shellQuote(plan.Exe), sessionHarness(s), shellQuote(profile), id)
+	}
+	return nil
+}
+
+func copyCarryTranscript(plan carryPlan) error {
+	if err := os.MkdirAll(filepath.Dir(plan.To), 0o700); err != nil {
+		return &carryError{err, 1}
+	}
+	if err := copyFile(plan.From, plan.To); err != nil {
+		return &carryError{fmt.Errorf("copy transcript: %w", err), 1}
+	}
+	return nil
+}
+
+func carrySaid(s sessions.Session, profile, to string, fresh bool) string {
+	if to != "" {
+		return fmt.Sprintf("handing %s to %s: a new terminal opens it there, from the handoff", s.Display, to)
 	}
 	how := "a new terminal resumes it there"
 	if fresh {
 		how = "a new terminal starts clean there, from the handoff"
 	}
-	said := fmt.Sprintf("carrying %s to %s: %s", s.Display, profile, how)
-	if to != "" {
-		said = fmt.Sprintf("handing %s to %s: a new terminal opens it there, from the handoff", s.Display, to)
-	}
-	sendBoardCommand(command.Command{Action: command.ActionNew, WindowID: s.Host.WindowID, Command: plan.Command, Source: source}, said)
-	if s.Status == sessions.StatusLimited || s.Status == sessions.StatusDone || s.Status == sessions.StatusStale {
-		_, _ = command.Write(dir, command.Command{Action: command.ActionDismiss, SessionID: s.ID, Source: source})
-	}
-	return packetPath, nil
+	return fmt.Sprintf("carrying %s to %s: %s", s.Display, profile, how)
 }
 
 const maxForks = 8
@@ -304,30 +334,33 @@ func carryProfileFor(dir string, s sessions.Session) (string, error) {
 	}
 	repo, _ := config.LoadRepo(ws.AbsPath)
 	resolved := config.Resolve(launch.Workspace, repo, user)
-	current := firstNonEmpty(s.Profile, "default")
+	return roomiestAccount(resolved, user, firstNonEmpty(s.Profile, "default")), nil
+}
+
+func roomiestAccount(resolved config.Resolved, user *config.UserConfig, current string) string {
 	best, bestLeft := "", 0
 	for _, name := range resolved.Accounts {
 		name = strings.TrimSpace(name)
 		if name == "" || strings.EqualFold(name, current) {
 			continue
 		}
-		target, err := config.ApplyProfile(resolved, user, name)
-		if err != nil {
-			continue
-		}
-		limits, ok := usage.ReadLimits(expandTilde(target.ConfigDir))
-		if !ok {
-			continue
-		}
-		left := 100 - limits.FiveHour.Percent
-		if limits.SevenDay.Percent >= quotaFullAt || limits.FiveHour.Percent >= quotaFullAt {
-			continue
-		}
-		if left > bestLeft {
+		if left := accountRoom(resolved, user, name); left > bestLeft {
 			best, bestLeft = name, left
 		}
 	}
-	return best, nil
+	return best
+}
+
+func accountRoom(resolved config.Resolved, user *config.UserConfig, name string) int {
+	target, err := config.ApplyProfile(resolved, user, name)
+	if err != nil {
+		return 0
+	}
+	limits, ok := usage.ReadLimits(expandTilde(target.ConfigDir))
+	if !ok || limits.SevenDay.Percent >= quotaFullAt || limits.FiveHour.Percent >= quotaFullAt {
+		return 0
+	}
+	return 100 - limits.FiveHour.Percent
 }
 
 const quotaFullAt = 95
@@ -413,6 +446,51 @@ func carryPrompt(p handoff.Packet, path string) string {
 	return msg
 }
 
+type carryWorkspace struct {
+	user     *config.UserConfig
+	id       string
+	ws       workspace.Workspace
+	resolved config.Resolved
+}
+
+func carryWorkspaceOf(agentD string, s sessions.Session) (carryWorkspace, error) {
+	user, err := config.LoadUser(agentUserConfigPath(agentD))
+	if err != nil {
+		return carryWorkspace{}, err
+	}
+	launch, err := resolveClaudeLaunch(s.Cwd, "", nil)
+	if err != nil {
+		return carryWorkspace{}, err
+	}
+	if launch.Workspace == "" {
+		return carryWorkspace{}, fmt.Errorf("%s is not inside a registered workspace", s.Cwd)
+	}
+	registry, _, err := agentRegistry()
+	if err != nil {
+		return carryWorkspace{}, err
+	}
+	ws, ok := registry.Find(launch.Workspace)
+	if !ok {
+		return carryWorkspace{}, fmt.Errorf("workspace %s is not registered", launch.Workspace)
+	}
+	repo, _ := config.LoadRepo(ws.AbsPath)
+	return carryWorkspace{user: user, id: launch.Workspace, ws: ws, resolved: config.Resolve(launch.Workspace, repo, user)}, nil
+}
+
+func (cw carryWorkspace) target(agentD string, s sessions.Session, profile string) (config.Resolved, error) {
+	sameAccount := strings.EqualFold(profile, firstNonEmpty(s.Profile, "default"))
+	if !sameAccount && !accountAllowed(cw.resolved.Accounts, profile) {
+		if len(cw.resolved.Accounts) == 0 {
+			return config.Resolved{}, fmt.Errorf("workspace %s lists no accounts: add `accounts: [default, %s]` under it in %s", cw.id, profile, agentUserConfigPath(agentD))
+		}
+		return config.Resolved{}, fmt.Errorf("workspace %s may run under %s, not %s", cw.id, strings.Join(cw.resolved.Accounts, ", "), profile)
+	}
+	if sameAccount && profile == "default" {
+		return cw.resolved, nil
+	}
+	return config.ApplyProfile(cw.resolved, cw.user, profile)
+}
+
 func planCarry(agentD string, s sessions.Session, profile string, fresh bool) (carryPlan, error) {
 	if s.Cwd == "" {
 		return carryPlan{}, fmt.Errorf("%s has no working directory on record", s.Display)
@@ -420,39 +498,13 @@ func planCarry(agentD string, s sessions.Session, profile string, fresh bool) (c
 	if sessions.Placeholder(s.ID) {
 		return carryPlan{}, fmt.Errorf("%s has not reported its session id yet", s.Display)
 	}
-	user, err := config.LoadUser(agentUserConfigPath(agentD))
+	cw, err := carryWorkspaceOf(agentD, s)
 	if err != nil {
 		return carryPlan{}, err
 	}
-	launch, err := resolveClaudeLaunch(s.Cwd, "", nil)
+	target, err := cw.target(agentD, s, profile)
 	if err != nil {
 		return carryPlan{}, err
-	}
-	if launch.Workspace == "" {
-		return carryPlan{}, fmt.Errorf("%s is not inside a registered workspace", s.Cwd)
-	}
-	registry, _, err := agentRegistry()
-	if err != nil {
-		return carryPlan{}, err
-	}
-	ws, ok := registry.Find(launch.Workspace)
-	if !ok {
-		return carryPlan{}, fmt.Errorf("workspace %s is not registered", launch.Workspace)
-	}
-	repo, _ := config.LoadRepo(ws.AbsPath)
-	resolved := config.Resolve(launch.Workspace, repo, user)
-	sameAccount := strings.EqualFold(profile, firstNonEmpty(s.Profile, "default"))
-	if !sameAccount && !accountAllowed(resolved.Accounts, profile) {
-		if len(resolved.Accounts) == 0 {
-			return carryPlan{}, fmt.Errorf("workspace %s lists no accounts: add `accounts: [default, %s]` under it in %s", launch.Workspace, profile, agentUserConfigPath(agentD))
-		}
-		return carryPlan{}, fmt.Errorf("workspace %s may run under %s, not %s", launch.Workspace, strings.Join(resolved.Accounts, ", "), profile)
-	}
-	target := resolved
-	if !sameAccount || profile != "default" {
-		if target, err = config.ApplyProfile(resolved, user, profile); err != nil {
-			return carryPlan{}, err
-		}
 	}
 	fromDir := claudeConfigDir(s.ConfigDir)
 	toDir := claudeConfigDir(expandTilde(target.ConfigDir))
@@ -468,7 +520,7 @@ func planCarry(agentD string, s sessions.Session, profile string, fresh bool) (c
 	if err != nil || exe == "" {
 		exe = "corgi"
 	}
-	plan.Exe, plan.Workspace, plan.WorkspaceID, plan.Agents = exe, ws.AbsPath, ws.ID, resolved.AgentOrder()
+	plan.Exe, plan.Workspace, plan.WorkspaceID, plan.Agents = exe, cw.ws.AbsPath, cw.ws.ID, cw.resolved.AgentOrder()
 	plan.Command = fmt.Sprintf("%s agent claude --profile %s -- --resume %s", shellQuote(exe), shellQuote(profile), s.ID)
 	return plan, nil
 }

@@ -15,6 +15,7 @@ import (
 	"andriiklymiuk/corgi/utils/agent/command"
 	"andriiklymiuk/corgi/utils/agent/daemon"
 	"andriiklymiuk/corgi/utils/agent/harness"
+	"andriiklymiuk/corgi/utils/agent/peers"
 	"andriiklymiuk/corgi/utils/agent/sessions"
 
 	"github.com/fsnotify/fsnotify"
@@ -300,30 +301,27 @@ func printGroups(st sessions.State) {
 		display[s.ID] = firstNonEmpty(s.Display, s.Label, s.ID)
 	}
 	for _, g := range st.Groups {
-		fmt.Printf("%s", g.Key)
-		if g.NeedsInput > 0 {
-			fmt.Printf("  %d waiting on you", g.NeedsInput)
-		}
-		if g.Working > 0 {
-			fmt.Printf("  %d working", g.Working)
-		}
-		fmt.Println()
-		names := make([]string, 0, len(g.Sessions))
-		for _, id := range g.Sessions {
-			names = append(names, display[id])
-		}
-		fmt.Printf("  sessions   %s\n", strings.Join(names, ", "))
-		if len(g.Branches) > 0 {
-			fmt.Printf("  branches   %s\n", strings.Join(g.Branches, ", "))
-		}
-		if len(g.Worktrees) > 0 {
-			fmt.Printf("  worktrees  %s\n", strings.Join(g.Worktrees, ", "))
-		}
-		if len(g.PRs) > 0 {
-			fmt.Printf("  prs        %s\n", strings.Join(g.PRs, ", "))
-		}
-		if g.Ticket != "" {
-			fmt.Printf("  ticket     %s\n", g.Ticket)
+		printGroup(g, display)
+	}
+}
+
+func printGroup(g sessions.Group, display map[string]string) {
+	fmt.Printf("%s", g.Key)
+	if g.NeedsInput > 0 {
+		fmt.Printf("  %d waiting on you", g.NeedsInput)
+	}
+	if g.Working > 0 {
+		fmt.Printf("  %d working", g.Working)
+	}
+	fmt.Println()
+	names := make([]string, 0, len(g.Sessions))
+	for _, id := range g.Sessions {
+		names = append(names, display[id])
+	}
+	fmt.Printf("  sessions   %s\n", strings.Join(names, ", "))
+	for _, row := range [][2]string{{"branches ", strings.Join(g.Branches, ", ")}, {"worktrees", strings.Join(g.Worktrees, ", ")}, {"prs      ", strings.Join(g.PRs, ", ")}, {"ticket   ", g.Ticket}} {
+		if row[1] != "" {
+			fmt.Printf("  %s  %s\n", row[0], row[1])
 		}
 	}
 }
@@ -395,41 +393,93 @@ func printBoard(rep boardReport, now time.Time) {
 // after this laptop's own.
 func printPeerBoards(list []sessions.PeerBoard) {
 	for _, p := range list {
-		state := "asleep"
-		if p.Alive {
-			state = "awake"
-		}
-		lead := ""
-		if p.Lead {
-			lead = ", leads"
-		}
-		fmt.Printf("\non %s (%s%s):\n", p.Name, state, lead)
-		n := 0
-		for _, s := range p.Sessions {
-			if s.Status == "gone" || s.Status == "ended" {
-				continue
-			}
+		printPeerBoard(p)
+	}
+}
+
+func printPeerBoard(p sessions.PeerBoard) {
+	state := "asleep"
+	if p.Alive {
+		state = "awake"
+	}
+	lead := ""
+	if p.Lead {
+		lead = ", leads"
+	}
+	fmt.Printf("\non %s (%s%s):\n", p.Name, state, lead)
+	n := 0
+	for _, s := range p.Sessions {
+		if s.Status != "gone" && s.Status != "ended" {
 			n++
-			line := "  " + s.Status + "  " + firstNonEmpty(s.Display, s.Label)
-			if s.Ticket != "" {
-				line += " · " + s.Ticket
-			}
-			if s.Pending != "" {
-				line += " - waiting on " + s.Pending
-			} else if s.Detail != "" {
-				line += " - " + s.Detail
-			}
-			fmt.Println(line)
-		}
-		for _, r := range p.Runs {
-			if r.State == "failed" || r.State == "blocked" {
-				fmt.Printf("  %s %s: %s\n", r.State, r.Ref, r.Reason)
-			}
-		}
-		if n == 0 {
-			fmt.Println("  no sessions")
+			fmt.Println(peerSessionLine(s))
 		}
 	}
+	for _, r := range p.Runs {
+		if r.State == "failed" || r.State == "blocked" {
+			fmt.Printf("  %s %s: %s\n", r.State, r.Ref, r.Reason)
+		}
+	}
+	if n == 0 {
+		fmt.Println("  no sessions")
+	}
+}
+
+func peerSessionLine(s peers.PeerSession) string {
+	line := "  " + s.Status + "  " + firstNonEmpty(s.Display, s.Label)
+	if s.Ticket != "" {
+		line += " · " + s.Ticket
+	}
+	if s.Pending != "" {
+		return line + " - waiting on " + s.Pending
+	}
+	if s.Detail != "" {
+		line += " - " + s.Detail
+	}
+	return line
+}
+
+func slotWord(sl sessions.Slot) string {
+	switch {
+	case sl.Drift != "" && sl.Status == sessions.StatusWorking:
+		return "DRIFT"
+	case sl.Status == sessions.StatusLimited && sl.Limit == sessions.LimitOverload:
+		return "OVERLOAD"
+	case sl.Stuck:
+		return "SLOW"
+	}
+	return statusWord(sl.Status)
+}
+
+func slotExtras(sl sessions.Slot) string {
+	line := ""
+	if !sl.ResumeAt.IsZero() {
+		line += " · continues " + sl.ResumeAt.Local().Format("15:04")
+	}
+	for _, part := range []string{clipIfSet(sl.Drift, 48), sl.Changes, clipIfSet(sl.Tests, 28)} {
+		if part != "" {
+			line += " · " + part
+		}
+	}
+	if sl.Reading {
+		line += " · 👁 phone reading"
+	}
+	if sl.Spend != "" {
+		line += " · " + sl.Spend
+		if sl.OverCap {
+			line += " over budget"
+		}
+	}
+	if sl.Overlap != "" {
+		line += " · ⚠ " + clipTitle(sl.Overlap, 40)
+	}
+	return line
+}
+
+func clipIfSet(s string, n int) string {
+	if s == "" {
+		return ""
+	}
+	return clipTitle(s, n)
 }
 
 func formatSlot(sl sessions.Slot) string {
@@ -444,44 +494,11 @@ func formatSlot(sl sessions.Slot) string {
 	if sl.Pinned {
 		pin = "📌"
 	}
-	word := statusWord(sl.Status)
-	if sl.Stuck {
-		word = "SLOW"
-	}
-	if sl.Status == sessions.StatusLimited && sl.Limit == sessions.LimitOverload {
-		word = "OVERLOAD"
-	}
-	if sl.Drift != "" && sl.Status == sessions.StatusWorking {
-		word = "DRIFT"
-	}
-	line := fmt.Sprintf("%s %s %s %-18s %-10s", key, pin, statusGlyph(sl.Status), clipTitle(sl.Label, 18), word)
+	line := fmt.Sprintf("%s %s %s %-18s %-10s", key, pin, statusGlyph(sl.Status), clipTitle(sl.Label, 18), slotWord(sl))
 	if detail := firstNonEmpty(sl.Note, sl.Detail); detail != "" {
 		line += " " + clipTitle(detail, 24)
 	}
-	if !sl.ResumeAt.IsZero() {
-		line += " · continues " + sl.ResumeAt.Local().Format("15:04")
-	}
-	if sl.Drift != "" {
-		line += " · " + clipTitle(sl.Drift, 48)
-	}
-	if sl.Changes != "" {
-		line += " · " + sl.Changes
-	}
-	if sl.Tests != "" {
-		line += " · " + clipTitle(sl.Tests, 28)
-	}
-	if sl.Reading {
-		line += " · 👁 phone reading"
-	}
-	if sl.Spend != "" {
-		line += " · " + sl.Spend
-		if sl.OverCap {
-			line += " over budget"
-		}
-	}
-	if sl.Overlap != "" {
-		line += " · ⚠ " + clipTitle(sl.Overlap, 40)
-	}
+	line += slotExtras(sl)
 	line += "  " + sl.Profile + " · " + string(sl.Host)
 	if sl.Context > 0 {
 		line += fmt.Sprintf(" · ctx %d%%", sl.Context)
