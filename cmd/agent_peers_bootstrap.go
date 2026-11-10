@@ -69,6 +69,20 @@ var gitOutput = func(dir string, args ...string) string {
 	return strings.TrimSpace(string(out))
 }
 
+func localTimeZone() string {
+	if tz := os.Getenv("TZ"); tz != "" {
+		return tz
+	}
+	zone, err := os.Readlink("/etc/localtime")
+	if err != nil {
+		return ""
+	}
+	if i := strings.Index(zone, "zoneinfo/"); i >= 0 {
+		return zone[i+len("zoneinfo/"):]
+	}
+	return ""
+}
+
 func buildPeerPack(dir string, only []string, withTokens bool) (peerPack, error) {
 	registry, err := workspace.Load(agentRegistryPath(dir))
 	if err != nil {
@@ -78,36 +92,19 @@ func buildPeerPack(dir string, only []string, withTokens bool) (peerPack, error)
 	if err != nil {
 		return peerPack{}, err
 	}
-	pack := peerPack{From: peers.Me(), At: time.Now(), TZ: os.Getenv("TZ"),
+	pack := peerPack{From: peers.Me(), At: time.Now(), TZ: localTimeZone(),
 		GitName: gitOutput(".", "config", gitGlobalFlag, gitUserNameKey), GitEmail: gitOutput(".", "config", gitGlobalFlag, "user.email")}
-	if pack.TZ == "" {
-		if zone, err := os.Readlink("/etc/localtime"); err == nil {
-			if i := strings.Index(zone, "zoneinfo/"); i >= 0 {
-				pack.TZ = zone[i+len("zoneinfo/"):]
-			}
-		}
-	}
 	for _, ws := range registry.Workspaces {
 		if len(only) > 0 && !containsFold(only, ws.ID) {
 			continue
 		}
-		remote := gitOutput(ws.AbsPath, "remote", "get-url", "origin")
-		if remote == "" {
-			if len(only) > 0 {
-				return peerPack{}, fmt.Errorf("%s has no git remote to clone from", ws.ID)
-			}
-			continue
+		pw, ok := packWorkspaceFor(dir, ws, user, withTokens)
+		if !ok && len(only) > 0 {
+			return peerPack{}, fmt.Errorf("%s has no git remote to clone from", ws.ID)
 		}
-		pw := packWorkspace{ID: ws.ID, Remote: remote, Compose: ws.ComposeFile != "", Aliases: ws.Aliases}
-		if wc, ok := user.Workspaces[ws.ID]; ok {
-			pw.Config = &config.WorkspaceConfig{Kind: wc.Kind, Agents: wc.Agents, Capacity: wc.Capacity, Watch: wc.Watch, Models: wc.Models, Routines: wc.Routines}
+		if ok {
+			pack.Workspaces = append(pack.Workspaces, pw)
 		}
-		if withTokens {
-			if s := watch.WorkspaceSecrets(dir, ws.ID); !s.IsZero() {
-				pw.Secrets = &s
-			}
-		}
-		pack.Workspaces = append(pack.Workspaces, pw)
 	}
 	if withTokens {
 		if s := watch.LoadSecrets(dir); !s.IsZero() {
@@ -119,6 +116,23 @@ func buildPeerPack(dir string, only []string, withTokens bool) (peerPack, error)
 		return peerPack{}, errors.New("no workspace with a git remote to send; corgi agent init in a checkout first")
 	}
 	return pack, nil
+}
+
+func packWorkspaceFor(dir string, ws workspace.Workspace, user *config.UserConfig, withTokens bool) (packWorkspace, bool) {
+	remote := gitOutput(ws.AbsPath, "remote", "get-url", "origin")
+	if remote == "" {
+		return packWorkspace{}, false
+	}
+	pw := packWorkspace{ID: ws.ID, Remote: remote, Compose: ws.ComposeFile != "", Aliases: ws.Aliases}
+	if wc, ok := user.Workspaces[ws.ID]; ok {
+		pw.Config = &config.WorkspaceConfig{Kind: wc.Kind, Agents: wc.Agents, Capacity: wc.Capacity, Watch: wc.Watch, Models: wc.Models, Routines: wc.Routines}
+	}
+	if withTokens {
+		if s := watch.WorkspaceSecrets(dir, ws.ID); !s.IsZero() {
+			pw.Secrets = &s
+		}
+	}
+	return pw, true
 }
 
 type importOptions struct {
@@ -169,52 +183,74 @@ func applyPeerPack(dir string, pack peerPack, opt importOptions) ([]string, erro
 		done = append(done, "machine tokens")
 	}
 	for _, w := range pack.Workspaces {
-		target := filepath.Join(opt.base, w.ID)
-		if _, err := os.Stat(filepath.Join(target, ".git")); err != nil {
-			if err := os.MkdirAll(opt.base, 0o755); err != nil {
-				return done, err
-			}
-			if err := opt.clone(w.Remote, target); err != nil {
-				return done, fmt.Errorf("%s: clone %s: %w", w.ID, w.Remote, err)
-			}
-			done = append(done, w.ID+": cloned")
+		steps, err := applyPackWorkspace(dir, w, opt)
+		done = append(done, steps...)
+		if err != nil {
+			return done, err
 		}
-		if w.Compose {
-			if _, err := os.Stat(filepath.Join(target, ".corgi", "corgi_services")); err != nil {
-				if err := opt.stackInit(target); err != nil {
-					return done, fmt.Errorf("%s: corgi init: %w", w.ID, err)
-				}
-				done = append(done, w.ID+": services cloned")
-			}
-		}
-		agents := []string(nil)
-		if w.Config != nil {
-			agents = w.Config.Agents
-		}
-		if _, err := registerWorkspace(target, w.ID, w.Aliases, "", false, opt.skipPerms, agents); err != nil {
-			return done, fmt.Errorf("%s: %w", w.ID, err)
-		}
-		if w.Config != nil {
-			path := agentUserConfigPath(dir)
-			user, err := config.LoadUser(path)
-			if err != nil {
-				return done, err
-			}
-			entry := user.Workspaces[w.ID]
-			entry.Kind, entry.Capacity, entry.Watch, entry.Models, entry.Routines = w.Config.Kind, w.Config.Capacity, w.Config.Watch, w.Config.Models, w.Config.Routines
-			user.Workspaces[w.ID] = entry
-			if err := writeUserConfig(path, user); err != nil {
-				return done, err
-			}
-		}
-		if w.Secrets != nil {
-			if err := watch.SaveWorkspaceSecrets(dir, w.ID, *w.Secrets); err != nil {
-				return done, err
-			}
-		}
-		done = append(done, w.ID+": registered"+map[bool]string{true: " with its watch", false: ""}[w.Config != nil && w.Config.Watch != nil])
 	}
 	return done, nil
+}
+
+func checkoutPackWorkspace(w packWorkspace, target string, opt importOptions) ([]string, error) {
+	var done []string
+	if _, err := os.Stat(filepath.Join(target, ".git")); err != nil {
+		if err := os.MkdirAll(opt.base, 0o755); err != nil {
+			return done, err
+		}
+		if err := opt.clone(w.Remote, target); err != nil {
+			return done, fmt.Errorf("%s: clone %s: %w", w.ID, w.Remote, err)
+		}
+		done = append(done, w.ID+": cloned")
+	}
+	if !w.Compose {
+		return done, nil
+	}
+	if _, err := os.Stat(filepath.Join(target, ".corgi", "corgi_services")); err != nil {
+		if err := opt.stackInit(target); err != nil {
+			return done, fmt.Errorf("%s: corgi init: %w", w.ID, err)
+		}
+		done = append(done, w.ID+": services cloned")
+	}
+	return done, nil
+}
+
+func applyPackWorkspace(dir string, w packWorkspace, opt importOptions) ([]string, error) {
+	target := filepath.Join(opt.base, w.ID)
+	done, err := checkoutPackWorkspace(w, target, opt)
+	if err != nil {
+		return done, err
+	}
+	agents := []string(nil)
+	if w.Config != nil {
+		agents = w.Config.Agents
+	}
+	if _, err := registerWorkspace(target, w.ID, w.Aliases, "", false, opt.skipPerms, agents); err != nil {
+		return done, fmt.Errorf("%s: %w", w.ID, err)
+	}
+	if w.Config != nil {
+		if err := savePackWorkspaceConfig(dir, w); err != nil {
+			return done, err
+		}
+	}
+	if w.Secrets != nil {
+		if err := watch.SaveWorkspaceSecrets(dir, w.ID, *w.Secrets); err != nil {
+			return done, err
+		}
+	}
+	return append(done, w.ID+": registered"+map[bool]string{true: " with its watch", false: ""}[w.Config != nil && w.Config.Watch != nil]), nil
+}
+
+func savePackWorkspaceConfig(dir string, w packWorkspace) error {
+	path := agentUserConfigPath(dir)
+	user, err := config.LoadUser(path)
+	if err != nil {
+		return err
+	}
+	entry := user.Workspaces[w.ID]
+	entry.Kind, entry.Capacity, entry.Watch, entry.Models, entry.Routines = w.Config.Kind, w.Config.Capacity, w.Config.Watch, w.Config.Models, w.Config.Routines
+	user.Workspaces[w.ID] = entry
+	return writeUserConfig(path, user)
 }
 
 type remoteRunner func(ctx context.Context, script string, stdin []byte) (string, error)
@@ -290,16 +326,7 @@ func runBootstrap(ctx context.Context, dir string, opt bootstrapOptions) error {
 	packJSON, _ := json.Marshal(pack)
 	say := func(format string, a ...any) { fmt.Fprintf(opt.out, format+"\n", a...) }
 	if opt.dryRun {
-		say("would send %d workspace(s) to %s (tokens: %v):", len(pack.Workspaces), opt.host, pack.hasTokens())
-		for _, w := range pack.Workspaces {
-			say("  %-16s %s", w.ID, w.Remote)
-		}
-		for _, s := range bootstrapSteps(pack, packJSON, opt) {
-			say("  step %s: ssh %s %s", s.name, opt.host, firstLineOf(s.script))
-		}
-		if opt.pair {
-			say("  step pair: corgi agent peers invite here, then ssh %s corgi agent peers join <url> <code>", opt.host)
-		}
+		sayBootstrapPlan(say, pack, packJSON, opt)
 		return nil
 	}
 	remoteOS, err := opt.run(ctx, "uname -s", nil)
@@ -318,21 +345,47 @@ func runBootstrap(ctx context.Context, dir string, opt bootstrapOptions) error {
 		}
 	}
 	if opt.pair {
-		say("→ pairing as peers")
-		url, code, err := opt.invite()
-		if err != nil {
-			return fmt.Errorf("pair window here: %w", err)
-		}
-		if _, err := opt.run(ctx, remotePath+"corgi agent peers join "+shellQuote(url)+" "+shellQuote(code), nil); err != nil {
-			return fmt.Errorf("peers join from %s: %w (the other side needs a URL this machine can reach: a tunnel, or --lan on one network)", opt.host, err)
-		}
-		if opt.lead {
-			if _, err := opt.run(ctx, remotePath+"corgi agent peers lead", nil); err != nil {
-				return fmt.Errorf("peers lead: %w", err)
-			}
-			say("%s leads the shared trackers", opt.host)
+		if err := pairBootstrapped(ctx, say, opt); err != nil {
+			return err
 		}
 	}
+	sayBootstrapLeft(say, pack, opt)
+	return nil
+}
+
+func sayBootstrapPlan(say func(string, ...any), pack peerPack, packJSON []byte, opt bootstrapOptions) {
+	say("would send %d workspace(s) to %s (tokens: %v):", len(pack.Workspaces), opt.host, pack.hasTokens())
+	for _, w := range pack.Workspaces {
+		say("  %-16s %s", w.ID, w.Remote)
+	}
+	for _, s := range bootstrapSteps(pack, packJSON, opt) {
+		say("  step %s: ssh %s %s", s.name, opt.host, firstLineOf(s.script))
+	}
+	if opt.pair {
+		say("  step pair: corgi agent peers invite here, then ssh %s corgi agent peers join <url> <code>", opt.host)
+	}
+}
+
+func pairBootstrapped(ctx context.Context, say func(string, ...any), opt bootstrapOptions) error {
+	say("→ pairing as peers")
+	url, code, err := opt.invite()
+	if err != nil {
+		return fmt.Errorf("pair window here: %w", err)
+	}
+	if _, err := opt.run(ctx, remotePath+"corgi agent peers join "+shellQuote(url)+" "+shellQuote(code), nil); err != nil {
+		return fmt.Errorf("peers join from %s: %w (the other side needs a URL this machine can reach: a tunnel, or --lan on one network)", opt.host, err)
+	}
+	if !opt.lead {
+		return nil
+	}
+	if _, err := opt.run(ctx, remotePath+"corgi agent peers lead", nil); err != nil {
+		return fmt.Errorf("peers lead: %w", err)
+	}
+	say("%s leads the shared trackers", opt.host)
+	return nil
+}
+
+func sayBootstrapLeft(say func(string, ...any), pack peerPack, opt bootstrapOptions) {
 	say("")
 	say("left to do on %s, by hand:", opt.host)
 	say("  ssh %s claude auth login        # prints a URL to open anywhere and a code to paste back", opt.host)
@@ -342,7 +395,6 @@ func runBootstrap(ctx context.Context, dir string, opt bootstrapOptions) error {
 	}
 	say("  a stable URL: corgi agent tunnel setup <host> there (the quick tunnel changes on restart and un-pairs)")
 	say("  ssh %s corgi agent doctor        # the rest, named", opt.host)
-	return nil
 }
 
 var agentPeersExportCmd = &cobra.Command{

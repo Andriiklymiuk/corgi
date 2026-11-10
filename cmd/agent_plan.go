@@ -39,69 +39,85 @@ type plannerAnswer struct {
 func repoPicture(root string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Repository root: %s\n", root)
-	if entries, err := os.ReadDir(root); err == nil {
-		var names []string
-		for _, e := range entries {
-			n := e.Name()
-			if strings.HasPrefix(n, ".") && n != ".github" {
-				continue
-			}
-			if e.IsDir() {
-				n += "/"
-			}
-			names = append(names, n)
-		}
-		sort.Strings(names)
-		if len(names) > 60 {
-			names = append(names[:60], "…")
-		}
-		fmt.Fprintf(&b, "Top level: %s\n", strings.Join(names, " "))
+	if line := topLevelLine(root); line != "" {
+		b.WriteString(line)
 	}
-	if out, err := exec.Command("git", "-C", root, "ls-files").Output(); err == nil {
-		files := strings.Split(strings.TrimSpace(string(out)), "\n")
-		byExt := map[string]int{}
-		for _, f := range files {
-			if ext := filepath.Ext(f); ext != "" {
-				byExt[ext]++
-			}
-		}
-		type kv struct {
-			k string
-			n int
-		}
-		var exts []kv
-		for k, n := range byExt {
-			exts = append(exts, kv{k, n})
-		}
-		sort.Slice(exts, func(i, j int) bool { return exts[i].n > exts[j].n })
-		if len(exts) > 8 {
-			exts = exts[:8]
-		}
-		var parts []string
-		for _, e := range exts {
-			parts = append(parts, fmt.Sprintf("%s %d", e.k, e.n))
-		}
-		fmt.Fprintf(&b, "Tracked files: %d (%s)\n", len(files), strings.Join(parts, ", "))
+	if line := trackedFilesLine(root); line != "" {
+		b.WriteString(line)
 	}
-	for _, name := range []string{"CLAUDE.md", "README.md"} {
-		data, err := os.ReadFile(filepath.Join(root, name))
-		if err != nil {
-			continue
-		}
-		lines := strings.Split(string(data), "\n")
-		limit := 60
-		if name == "README.md" {
-			limit = 30
-		}
-		if len(lines) > limit {
-			lines = lines[:limit]
-		}
-		fmt.Fprintf(&b, "\n--- %s (head) ---\n%s\n", name, strings.Join(lines, "\n"))
+	for _, name := range []string{claudeMemoryFile, "README.md"} {
+		b.WriteString(fileHead(root, name))
 	}
 	if b.Len() > 12000 {
 		return b.String()[:12000]
 	}
 	return b.String()
+}
+
+func topLevelLine(root string) string {
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return ""
+	}
+	var names []string
+	for _, e := range entries {
+		n := e.Name()
+		if strings.HasPrefix(n, ".") && n != ".github" {
+			continue
+		}
+		if e.IsDir() {
+			n += "/"
+		}
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	if len(names) > 60 {
+		names = append(names[:60], "…")
+	}
+	return fmt.Sprintf("Top level: %s\n", strings.Join(names, " "))
+}
+
+func trackedFilesLine(root string) string {
+	out, err := exec.Command("git", "-C", root, "ls-files").Output()
+	if err != nil {
+		return ""
+	}
+	files := strings.Split(strings.TrimSpace(string(out)), "\n")
+	byExt := map[string]int{}
+	for _, f := range files {
+		if ext := filepath.Ext(f); ext != "" {
+			byExt[ext]++
+		}
+	}
+	exts := make([]string, 0, len(byExt))
+	for k := range byExt {
+		exts = append(exts, k)
+	}
+	sort.Slice(exts, func(i, j int) bool { return byExt[exts[i]] > byExt[exts[j]] })
+	if len(exts) > 8 {
+		exts = exts[:8]
+	}
+	parts := make([]string, 0, len(exts))
+	for _, e := range exts {
+		parts = append(parts, fmt.Sprintf("%s %d", e, byExt[e]))
+	}
+	return fmt.Sprintf("Tracked files: %d (%s)\n", len(files), strings.Join(parts, ", "))
+}
+
+func fileHead(root, name string) string {
+	data, err := os.ReadFile(filepath.Join(root, name))
+	if err != nil {
+		return ""
+	}
+	lines := strings.Split(string(data), "\n")
+	limit := 60
+	if name == "README.md" {
+		limit = 30
+	}
+	if len(lines) > limit {
+		lines = lines[:limit]
+	}
+	return fmt.Sprintf("\n--- %s (head) ---\n%s\n", name, strings.Join(lines, "\n"))
 }
 
 func parsePlannerAnswer(text string, limit int) (plannerAnswer, error) {
@@ -127,16 +143,20 @@ func parsePlannerAnswer(text string, limit int) (plannerAnswer, error) {
 		if len(t.Title) > 200 {
 			t.Title = t.Title[:200]
 		}
-		var after []int
-		for _, n := range t.After {
-			if n >= 1 && n <= len(ans.Tasks) && n != i+1 {
-				after = append(after, n)
-			}
-		}
-		t.After = after
+		t.After = validAfter(t.After, i+1, len(ans.Tasks))
 		ans.Tasks[i] = t
 	}
 	return ans, nil
+}
+
+func validAfter(after []int, self, count int) []int {
+	var out []int
+	for _, n := range after {
+		if n >= 1 && n <= count && n != self {
+			out = append(out, n)
+		}
+	}
+	return out
 }
 
 func writePlanFile(dir string, p watch.Plan, tasks []watch.Task) string {
@@ -567,62 +587,76 @@ func launchPlansHandler(w http.ResponseWriter, r *http.Request) {
 	tasks := watch.LoadTasks(dir)
 	switch r.Method {
 	case http.MethodGet:
-		out := make([]map[string]any, 0)
-		for _, p := range plans.All() {
-			pr := p.Progress(tasks)
-			var its []watch.Task
-			for _, id := range p.TaskIDs() {
-				if t, ok := tasks.Find(fmt.Sprintf("task:%d", id)); ok {
-					its = append(its, t)
-				}
-			}
-			if its == nil {
-				its = []watch.Task{}
-			}
-			out = append(out, map[string]any{"plan": p, "tasks": its, "todo": pr.Todo, "doing": pr.Doing, "review": pr.Review, "done": pr.Done, "canceled": pr.Canceled})
-		}
-		writeLaunchJSON(w, map[string]any{"plans": out})
+		writeLaunchJSON(w, map[string]any{"plans": planRows(plans, tasks)})
 	case http.MethodPost:
-		var req struct {
-			Plan  string `json:"plan"`
-			Do    string `json:"do"`
-			Slots int    `json:"slots"`
-		}
-		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&req); err != nil {
-			writeLaunchError(w, http.StatusBadRequest, "body: {plan, do: run|stop, slots?}")
-			return
-		}
-		p, ok := plans.Find(req.Plan)
-		if !ok {
-			writeLaunchError(w, http.StatusNotFound, "no plan "+req.Plan)
-			return
-		}
-		now := time.Now()
-		switch req.Do {
-		case "run":
-			if req.Slots > 0 {
-				p, _ = plans.Update(p.ID, now, func(p *watch.Plan) { p.Slots = req.Slots })
-			}
-			if why := planWatchReady(dir, p.Workspace, p.Slots); why != "" {
-				writeLaunchError(w, http.StatusConflict, why)
-				return
-			}
-			p, _ = plans.SetState(p.ID, watch.PlanRunning, now)
-			nudgePlans(dir)
-		case "stop":
-			for _, id := range p.TaskIDs() {
-				if t, ok := tasks.Find(fmt.Sprintf("task:%d", id)); ok && t.State == "Todo" {
-					_, _ = tasks.Move(t.Ref(), "Canceled", now)
-				}
-			}
-			p, _ = plans.SetState(p.ID, watch.PlanStopped, now)
-			nudgeDaemon(dir)
-		default:
-			writeLaunchError(w, http.StatusBadRequest, "do: run or stop")
-			return
-		}
-		writeLaunchJSON(w, map[string]any{"plan": p})
+		changePlan(w, r, dir, plans, tasks)
 	default:
 		writeLaunchError(w, http.StatusMethodNotAllowed, "GET or POST /launch/plans")
 	}
+}
+
+func planTasks(p watch.Plan, tasks *watch.TaskLog) []watch.Task {
+	its := []watch.Task{}
+	for _, id := range p.TaskIDs() {
+		if t, ok := tasks.Find(fmt.Sprintf("task:%d", id)); ok {
+			its = append(its, t)
+		}
+	}
+	return its
+}
+
+func planRows(plans *watch.PlanLog, tasks *watch.TaskLog) []map[string]any {
+	out := make([]map[string]any, 0)
+	for _, p := range plans.All() {
+		pr := p.Progress(tasks)
+		out = append(out, map[string]any{"plan": p, "tasks": planTasks(p, tasks), "todo": pr.Todo, "doing": pr.Doing, "review": pr.Review, "done": pr.Done, "canceled": pr.Canceled})
+	}
+	return out
+}
+
+func changePlan(w http.ResponseWriter, r *http.Request, dir string, plans *watch.PlanLog, tasks *watch.TaskLog) {
+	var req struct {
+		Plan  string `json:"plan"`
+		Do    string `json:"do"`
+		Slots int    `json:"slots"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&req); err != nil {
+		writeLaunchError(w, http.StatusBadRequest, "body: {plan, do: run|stop, slots?}")
+		return
+	}
+	p, ok := plans.Find(req.Plan)
+	if !ok {
+		writeLaunchError(w, http.StatusNotFound, "no plan "+req.Plan)
+		return
+	}
+	now := time.Now()
+	switch req.Do {
+	case "run":
+		if req.Slots > 0 {
+			p, _ = plans.Update(p.ID, now, func(p *watch.Plan) { p.Slots = req.Slots })
+		}
+		if why := planWatchReady(dir, p.Workspace, p.Slots); why != "" {
+			writeLaunchError(w, http.StatusConflict, why)
+			return
+		}
+		p, _ = plans.SetState(p.ID, watch.PlanRunning, now)
+		nudgePlans(dir)
+	case "stop":
+		p = stopPlan(dir, plans, tasks, p, now)
+	default:
+		writeLaunchError(w, http.StatusBadRequest, "do: run or stop")
+		return
+	}
+	writeLaunchJSON(w, map[string]any{"plan": p})
+}
+
+func stopPlan(dir string, plans *watch.PlanLog, tasks *watch.TaskLog, p watch.Plan, now time.Time) watch.Plan {
+	for _, t := range planTasks(p, tasks) {
+		if t.State == "Todo" {
+			_, _ = tasks.Move(t.Ref(), "Canceled", now)
+		}
+	}
+	p, _ = plans.SetState(p.ID, watch.PlanStopped, now)
+	nudgeDaemon(dir)
+	return p
 }
