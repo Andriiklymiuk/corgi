@@ -173,21 +173,23 @@ var transcriptPathFor = func(s sessions.Session) string {
 
 const maxStreamWait = 25 * time.Second
 
+type transcriptRequest struct {
+	Session string `json:"session"`
+	After   int64  `json:"after"`
+	Wait    int    `json:"wait"`
+	Max     int    `json:"max"`
+	Why     bool   `json:"why"`
+}
+
 func launchTranscriptHandler(w http.ResponseWriter, r *http.Request) {
 	setLaunchHeaders(w)
 	if r.Method != http.MethodPost {
 		writeLaunchError(w, http.StatusMethodNotAllowed, "POST {session, after, wait} to read a conversation")
 		return
 	}
-	var req struct {
-		Session string `json:"session"`
-		After   int64  `json:"after"`
-		Wait    int    `json:"wait"`
-		Max     int    `json:"max"`
-		Why     bool   `json:"why"`
-	}
+	var req transcriptRequest
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&req); err != nil {
-		writeLaunchError(w, http.StatusBadRequest, "could not read the request")
+		writeLaunchError(w, http.StatusBadRequest, requestUnreadableMessage)
 		return
 	}
 	session, code, msg := launchSessionFor(req.Session)
@@ -200,42 +202,52 @@ func launchTranscriptHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	path := transcriptPathFor(session)
-	if req.Why {
+	switch {
+	case req.Why:
 		steps, err := transcriptSteps(path, req.Max)
 		if err != nil {
 			writeLaunchError(w, http.StatusInternalServerError, conversationUnreadableMessage)
 			return
 		}
 		writeLaunchJSON(w, map[string]any{"session": session.ID, "steps": steps})
-		return
-	}
-	if path == "" || !transcript.Exists(path) {
+	case path == "" || !transcript.Exists(path):
 		writeLaunchJSON(w, map[string]any{"entries": []transcript.Entry{}, "offset": 0, "empty": true})
+	default:
+		markSessionRead(session.ID)
+		serveTranscript(w, r, path, req)
+	}
+}
+
+func markSessionRead(id string) {
+	dir, err := agentDir()
+	if err != nil {
 		return
 	}
-	if dir, err := agentDir(); err == nil {
-		if info, err := daemon.ReadInfo(dir); err == nil && info != nil && info.Commands {
-			if _, err := command.Write(dir, command.Command{Action: command.ActionRead, SessionID: session.ID, Source: "phone"}); err == nil {
-				daemon.Nudge(info)
-			}
+	if info, err := daemon.ReadInfo(dir); err == nil && info != nil && info.Commands {
+		if _, err := command.Write(dir, command.Command{Action: command.ActionRead, SessionID: id, Source: "phone"}); err == nil {
+			daemon.Nudge(info)
 		}
 	}
+}
+
+func writeEntries(w http.ResponseWriter, entries []transcript.Entry, offset int64) {
+	if entries == nil {
+		entries = []transcript.Entry{}
+	}
+	writeLaunchJSON(w, map[string]any{"entries": entries, "offset": offset})
+}
+
+func serveTranscript(w http.ResponseWriter, r *http.Request, path string, req transcriptRequest) {
 	if req.After <= 0 {
 		entries, offset, err := transcript.Last(path, req.Max)
 		if err != nil {
 			writeLaunchError(w, http.StatusInternalServerError, conversationUnreadableMessage)
 			return
 		}
-		if entries == nil {
-			entries = []transcript.Entry{}
-		}
-		writeLaunchJSON(w, map[string]any{"entries": entries, "offset": offset})
+		writeEntries(w, entries, offset)
 		return
 	}
-	wait := time.Duration(req.Wait) * time.Second
-	if wait > maxStreamWait {
-		wait = maxStreamWait
-	}
+	wait := min(time.Duration(req.Wait)*time.Second, maxStreamWait)
 	deadline := time.Now().Add(wait)
 	for {
 		entries, offset, err := transcript.Read(path, req.After, req.Max)
@@ -244,10 +256,7 @@ func launchTranscriptHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if len(entries) > 0 || offset != req.After || wait == 0 || time.Now().After(deadline) {
-			if entries == nil {
-				entries = []transcript.Entry{}
-			}
-			writeLaunchJSON(w, map[string]any{"entries": entries, "offset": offset})
+			writeEntries(w, entries, offset)
 			return
 		}
 		select {

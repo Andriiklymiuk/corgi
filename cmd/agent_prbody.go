@@ -29,64 +29,86 @@ func prBodyFor(ctx context.Context, s sessions.Session) (string, error) {
 	}
 	var b strings.Builder
 	b.WriteString("## What\n\n")
+	b.WriteString(prWhat(s) + "\n")
+	b.WriteString(prCommits(ctx, dir, base))
+	b.WriteString(prChanges(files))
+	b.WriteString("\n## Tests\n\n")
+	b.WriteString(prTests(s))
+	b.WriteString("\n<sub>Written by corgi from the session that made this branch.</sub>\n")
+	return transcript.Scrub(b.String()), nil
+}
+
+func prWhat(s sessions.Session) string {
 	asked := firstPromptOf(s)
 	switch {
 	case asked != "" && s.Ticket != "":
-		b.WriteString(s.Ticket + " - " + asked + "\n")
+		return s.Ticket + " - " + asked
 	case asked != "":
-		b.WriteString(asked + "\n")
+		return asked
 	case s.Ticket != "":
-		b.WriteString(s.Ticket + "\n")
-	default:
-		b.WriteString(firstNonEmpty(s.Summary, "See the changes below.") + "\n")
+		return s.Ticket
 	}
-	if out, err := exec.CommandContext(ctx, "git", "-C", dir, "log", "--format=%s", base+"..HEAD").Output(); err == nil {
-		lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-		if len(lines) > 0 && lines[0] != "" {
-			b.WriteString("\n## Commits\n\n")
-			for i, l := range lines {
-				if i == 12 {
-					b.WriteString(fmt.Sprintf("- … and %d more\n", len(lines)-12))
-					break
-				}
-				b.WriteString("- " + l + "\n")
-			}
+	return firstNonEmpty(s.Summary, "See the changes below.")
+}
+
+func prCommits(ctx context.Context, dir, base string) string {
+	out, err := exec.CommandContext(ctx, "git", "-C", dir, "log", "--format=%s", base+"..HEAD").Output()
+	if err != nil {
+		return ""
+	}
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	if len(lines) == 0 || lines[0] == "" {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("\n## Commits\n\n")
+	for i, l := range lines {
+		if i == 12 {
+			b.WriteString(fmt.Sprintf("- … and %d more\n", len(lines)-12))
+			break
+		}
+		b.WriteString("- " + l + "\n")
+	}
+	return b.String()
+}
+
+func prChanges(files []DiffFile) string {
+	if len(files) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("\n## Changes\n\n")
+	added, deleted, generated := 0, 0, 0
+	for i, f := range files {
+		if f.Generated {
+			generated++
+			continue
+		}
+		added += f.Added
+		deleted += f.Deleted
+		if i < 30 {
+			b.WriteString(fmt.Sprintf("- `%s` +%d −%d\n", f.Path, f.Added, f.Deleted))
 		}
 	}
-	if len(files) > 0 {
-		b.WriteString("\n## Changes\n\n")
-		added, deleted, generated := 0, 0, 0
-		for i, f := range files {
-			if f.Generated {
-				generated++
-				continue
-			}
-			added += f.Added
-			deleted += f.Deleted
-			if i < 30 {
-				b.WriteString(fmt.Sprintf("- `%s` +%d −%d\n", f.Path, f.Added, f.Deleted))
-			}
-		}
-		if len(files) > 30 {
-			b.WriteString(fmt.Sprintf("- … %d more files\n", len(files)-30))
-		}
-		line := fmt.Sprintf("\n%d files, +%d −%d", len(files)-generated, added, deleted)
-		if generated > 0 {
-			line += fmt.Sprintf(" (%d generated left out)", generated)
-		}
-		b.WriteString(line + "\n")
+	if len(files) > 30 {
+		b.WriteString(fmt.Sprintf("- … %d more files\n", len(files)-30))
 	}
-	b.WriteString("\n## Tests\n\n")
+	line := fmt.Sprintf("\n%d files, +%d −%d", len(files)-generated, added, deleted)
+	if generated > 0 {
+		line += fmt.Sprintf(" (%d generated left out)", generated)
+	}
+	b.WriteString(line + "\n")
+	return b.String()
+}
+
+func prTests(s sessions.Session) string {
 	switch {
 	case s.Gate != nil && s.Gate.Cmd != "":
-		b.WriteString(fmt.Sprintf("`%s` %s%s\n", s.Gate.Cmd, mark(s.Gate.OK), sinceWord(s.Gate.At)))
+		return fmt.Sprintf("`%s` %s%s\n", s.Gate.Cmd, mark(s.Gate.OK), sinceWord(s.Gate.At))
 	case s.Tests != nil:
-		b.WriteString(fmt.Sprintf("`%s` %s%s\n", s.Tests.Cmd, mark(s.Tests.OK), sinceWord(s.Tests.At)))
-	default:
-		b.WriteString("No test run recorded for this session.\n")
+		return fmt.Sprintf("`%s` %s%s\n", s.Tests.Cmd, mark(s.Tests.OK), sinceWord(s.Tests.At))
 	}
-	b.WriteString("\n<sub>Written by corgi from the session that made this branch.</sub>\n")
-	return transcript.Scrub(b.String()), nil
+	return "No test run recorded for this session.\n"
 }
 
 func mark(ok bool) string {

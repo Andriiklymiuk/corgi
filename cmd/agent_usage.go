@@ -103,32 +103,12 @@ func startOfDay(now time.Time) time.Time {
 func printUsageReport(rep usageReport) {
 	fmt.Println("Accounts")
 	for _, a := range rep.Accounts {
-		name := a.Profile
-		if a.ConfigDir != "" {
-			name += " (" + strings.Replace(a.ConfigDir, os.Getenv("HOME"), "~", 1) + ")"
-		}
-		if a.Limits == nil {
-			fmt.Printf("  %-28s no usage snapshot yet - run /usage once in a session under it\n", name)
-			continue
-		}
-		fmt.Printf("  %-28s 5h %s  week %s  · %d session(s) · as of %s ago\n", name,
-			limitBar(a.Limits.FiveHour), limitBar(a.Limits.SevenDay), a.Sessions, agoText(time.Since(a.Limits.FetchedAt)))
-		if line := forecastLine(a.Limits, a.Forecast); line != "" {
-			fmt.Printf("  %-28s %s\n", "", line)
-		}
+		printUsageAccount(a)
 	}
 	if len(rep.Today) > 0 {
 		fmt.Println("\nToday (Claude Code's own stats cache; lags by hours)")
 		for _, d := range rep.Today {
-			var models []string
-			for _, m := range d.Models {
-				models = append(models, shortModel(m.Model)+" "+formatTokens(m.Tokens))
-			}
-			fmt.Printf("  %-28s %d sessions · %d messages · %d tool calls", d.Profile, d.Sessions, d.Messages, d.ToolCalls)
-			if len(models) > 0 {
-				fmt.Printf(" · %s", strings.Join(models, ", "))
-			}
-			fmt.Println()
+			printUsageDay(d)
 		}
 	}
 	fmt.Println("\nWaiting on you today")
@@ -272,4 +252,32 @@ day wherever notifications go (desktop, Telegram, webhook). --send sends it now.
 func init() {
 	agentDigestCmd.Flags().Bool("send", false, "Send it now, the way the daemon would")
 	agentCmd.AddCommand(agentDigestCmd)
+}
+
+func printUsageAccount(a sessions.Account) {
+	name := a.Profile
+	if a.ConfigDir != "" {
+		name += " (" + strings.Replace(a.ConfigDir, os.Getenv("HOME"), "~", 1) + ")"
+	}
+	if a.Limits == nil {
+		fmt.Printf("  %-28s no usage snapshot yet - run /usage once in a session under it\n", name)
+		return
+	}
+	fmt.Printf("  %-28s 5h %s  week %s  · %d session(s) · as of %s ago\n", name,
+		limitBar(a.Limits.FiveHour), limitBar(a.Limits.SevenDay), a.Sessions, agoText(time.Since(a.Limits.FetchedAt)))
+	if line := forecastLine(a.Limits, a.Forecast); line != "" {
+		fmt.Printf("  %-28s %s\n", "", line)
+	}
+}
+
+func printUsageDay(d accountDayJSON) {
+	var models []string
+	for _, m := range d.Models {
+		models = append(models, shortModel(m.Model)+" "+formatTokens(m.Tokens))
+	}
+	fmt.Printf("  %-28s %d sessions · %d messages · %d tool calls", d.Profile, d.Sessions, d.Messages, d.ToolCalls)
+	if len(models) > 0 {
+		fmt.Printf(" · %s", strings.Join(models, ", "))
+	}
+	fmt.Println()
 }

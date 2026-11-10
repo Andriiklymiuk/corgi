@@ -1179,17 +1179,40 @@ func watchTracker(configured string, secrets watch.Secrets) string {
 	return ""
 }
 
-func watchSources(rules watch.Rules, wc *config.WatchConfig, secrets watch.Secrets) []watch.Source {
-	var sources []watch.Source
+func trackerSource(wc *config.WatchConfig, secrets watch.Secrets) watch.Source {
 	switch watchTracker(wc.Tracker, secrets) {
 	case "linear":
 		if secrets.Linear != "" {
-			sources = append(sources, watch.NewLinear(secrets, wc.Project))
+			return watch.NewLinear(secrets, wc.Project)
 		}
 	case "jira":
 		if secrets.JiraToken != "" {
-			sources = append(sources, watch.NewJira(secrets, wc.Project))
+			return watch.NewJira(secrets, wc.Project)
 		}
+	}
+	return nil
+}
+
+func slackSource(rules watch.Rules, wc *config.WatchConfig, secrets watch.Secrets) watch.Source {
+	if rules.DeadSource("slack") || wc.Chat == nil || wc.Chat.Slack == nil {
+		return nil
+	}
+	sl := watch.NewSlack(secrets, watch.SlackWatchConfig{
+		Mentions:       wc.Chat.Slack.Mentions,
+		Channels:       wc.Chat.Slack.Channels,
+		ReviewChannels: wc.Chat.Slack.ReviewChannels,
+	})
+	if sl.Token() == "" {
+		return nil
+	}
+	sl.LimitReads(sendgate.ReadsFor(agentDirOrEmpty()))
+	return sl
+}
+
+func watchSources(rules watch.Rules, wc *config.WatchConfig, secrets watch.Secrets) []watch.Source {
+	var sources []watch.Source
+	if s := trackerSource(wc, secrets); s != nil {
+		sources = append(sources, s)
 	}
 	if !rules.DeadSource("github") {
 		if gh := watch.NewGitHub(secrets, wc.Repos); gh.Token != "" {
@@ -1202,15 +1225,8 @@ func watchSources(rules watch.Rules, wc *config.WatchConfig, secrets watch.Secre
 	if wc.Errors && wc.SentryOrg != "" && secrets.Sentry != "" {
 		sources = append(sources, watch.NewSentry(secrets, wc.SentryOrg, wc.SentryProjects, wc.SentryLevel))
 	}
-	if !rules.DeadSource("slack") && wc.Chat != nil && wc.Chat.Slack != nil {
-		if sl := watch.NewSlack(secrets, watch.SlackWatchConfig{
-			Mentions:       wc.Chat.Slack.Mentions,
-			Channels:       wc.Chat.Slack.Channels,
-			ReviewChannels: wc.Chat.Slack.ReviewChannels,
-		}); sl.Token() != "" {
-			sl.LimitReads(sendgate.ReadsFor(agentDirOrEmpty()))
-			sources = append(sources, sl)
-		}
+	if s := slackSource(rules, wc, secrets); s != nil {
+		sources = append(sources, s)
 	}
 	return sources
 }

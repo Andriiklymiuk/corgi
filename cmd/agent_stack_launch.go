@@ -86,91 +86,115 @@ func launchStackHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	switch r.Method {
 	case http.MethodGet:
-		id := strings.TrimSpace(r.URL.Query().Get("workspace"))
-		root, err := workspaceRoot(id)
-		if err != nil {
-			writeLaunchError(w, http.StatusNotFound, err.Error())
-			return
-		}
-		compose := composePathIn(root)
-		if compose == "" {
-			writeLaunchJSON(w, map[string]any{"workspace": id, "compose": false, "services": []StackService{}})
-			return
-		}
-		ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
-		defer cancel()
-		services, running, err := stackSnapshot(ctx, root)
-		if err != nil {
-			writeLaunchError(w, http.StatusBadGateway, "corgi ps did not answer: "+firstLineOf(err.Error()))
-			return
-		}
-		writeLaunchJSON(w, map[string]any{"workspace": id, "compose": true, "path": filepath.Base(compose), "services": services, "running": running, "at": time.Now()})
+		showStack(w, r)
 	case http.MethodPost:
-		var req struct {
-			Workspace string   `json:"workspace"`
-			Do        string   `json:"do"`
-			Services  []string `json:"services"`
-		}
-		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(&req); err != nil {
-			writeLaunchError(w, http.StatusBadRequest, "could not read the request")
-			return
-		}
-		root, err := workspaceRoot(strings.TrimSpace(req.Workspace))
-		if err != nil {
-			writeLaunchError(w, http.StatusNotFound, err.Error())
-			return
-		}
-		if composePathIn(root) == "" {
-			writeLaunchError(w, http.StatusBadRequest, "no corgi-compose.yml in that workspace")
-			return
-		}
-		var picked []string
-		for _, s := range req.Services {
-			s = strings.TrimSpace(s)
-			if s == "" {
-				continue
-			}
-			if !stackServiceName.MatchString(s) {
-				writeLaunchError(w, http.StatusBadRequest, "a service name is letters, digits, dots, dashes")
-				return
-			}
-			picked = append(picked, s)
-		}
-		var args []string
-		switch strings.TrimSpace(req.Do) {
-		case "run", "start":
-			args = []string{"run", "--detach", "--ci", "--logs"}
-			if len(picked) > 0 {
-				args = append(args, "--services", strings.Join(picked, ","))
-			}
-		case "stop":
-			args = []string{"stop"}
-			if len(picked) == 1 {
-				args = append(args, "--service", picked[0])
-			}
-		case "restart":
-			args = []string{"restart"}
-		case "test", "e2e":
-			go runStackTests(dir, req.Workspace, root, picked, req.Do == "e2e")
-			writeLaunchJSON(w, map[string]any{"done": "running the " + map[bool]string{true: "e2e", false: "tests"}[req.Do == "e2e"] + " - a push says how they went", "workspace": req.Workspace})
-			return
-		default:
-			writeLaunchError(w, http.StatusBadRequest, "do is run, stop, restart, test or e2e")
-			return
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), stackTimeout)
-		defer cancel()
-		out, err := corgiIn(ctx, root, args...)
-		tail := lastLines(string(out), 6)
-		if err != nil {
-			writeLaunchError(w, http.StatusBadGateway, "corgi "+args[0]+" failed: "+tail)
-			return
-		}
-		services, running, _ := stackSnapshot(ctx, root)
-		writeLaunchJSON(w, map[string]any{"done": map[string]string{"run": "started", "start": "started", "stop": "stopped", "restart": "restarted"}[strings.TrimSpace(req.Do)], "output": tail, "services": services, "running": running})
+		changeStack(w, r, dir)
 	default:
 		writeLaunchError(w, http.StatusMethodNotAllowed, "GET ?workspace=<id> for the stack, POST {workspace, do, services} to change it")
 	}
+}
+
+func showStack(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimSpace(r.URL.Query().Get("workspace"))
+	root, err := workspaceRoot(id)
+	if err != nil {
+		writeLaunchError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	compose := composePathIn(root)
+	if compose == "" {
+		writeLaunchJSON(w, map[string]any{"workspace": id, "compose": false, "services": []StackService{}})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+	defer cancel()
+	services, running, err := stackSnapshot(ctx, root)
+	if err != nil {
+		writeLaunchError(w, http.StatusBadGateway, "corgi ps did not answer: "+firstLineOf(err.Error()))
+		return
+	}
+	writeLaunchJSON(w, map[string]any{"workspace": id, "compose": true, "path": filepath.Base(compose), "services": services, "running": running, "at": time.Now()})
+}
+
+func pickedServices(list []string) ([]string, bool) {
+	var picked []string
+	for _, s := range list {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			continue
+		}
+		if !stackServiceName.MatchString(s) {
+			return nil, false
+		}
+		picked = append(picked, s)
+	}
+	return picked, true
+}
+
+func stackArgs(do string, picked []string) []string {
+	switch do {
+	case "run", "start":
+		args := []string{"run", "--detach", "--ci", "--logs"}
+		if len(picked) > 0 {
+			args = append(args, "--services", strings.Join(picked, ","))
+		}
+		return args
+	case "stop":
+		if len(picked) == 1 {
+			return []string{"stop", "--service", picked[0]}
+		}
+		return []string{"stop"}
+	case "restart":
+		return []string{"restart"}
+	}
+	return nil
+}
+
+func changeStack(w http.ResponseWriter, r *http.Request, dir string) {
+	var req struct {
+		Workspace string   `json:"workspace"`
+		Do        string   `json:"do"`
+		Services  []string `json:"services"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(&req); err != nil {
+		writeLaunchError(w, http.StatusBadRequest, requestUnreadableMessage)
+		return
+	}
+	root, err := workspaceRoot(strings.TrimSpace(req.Workspace))
+	if err != nil {
+		writeLaunchError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	if composePathIn(root) == "" {
+		writeLaunchError(w, http.StatusBadRequest, "no corgi-compose.yml in that workspace")
+		return
+	}
+	picked, ok := pickedServices(req.Services)
+	if !ok {
+		writeLaunchError(w, http.StatusBadRequest, "a service name is letters, digits, dots, dashes")
+		return
+	}
+	do := strings.TrimSpace(req.Do)
+	if do == "test" || do == "e2e" {
+		go runStackTests(dir, req.Workspace, root, picked, do == "e2e")
+		writeLaunchJSON(w, map[string]any{"done": "running the " + map[bool]string{true: "e2e", false: "tests"}[do == "e2e"] + " - a push says how they went", "workspace": req.Workspace})
+		return
+	}
+	args := stackArgs(do, picked)
+	if args == nil {
+		writeLaunchError(w, http.StatusBadRequest, "do is run, stop, restart, test or e2e")
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), stackTimeout)
+	defer cancel()
+	out, err := corgiIn(ctx, root, args...)
+	tail := lastLines(string(out), 6)
+	if err != nil {
+		writeLaunchError(w, http.StatusBadGateway, "corgi "+args[0]+" failed: "+tail)
+		return
+	}
+	services, running, _ := stackSnapshot(ctx, root)
+	writeLaunchJSON(w, map[string]any{"done": map[string]string{"run": "started", "start": "started", "stop": "stopped", "restart": "restarted"}[do], "output": tail, "services": services, "running": running})
 }
 
 func runStackTests(agentDir, workspace, root string, services []string, e2e bool) {
