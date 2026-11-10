@@ -269,12 +269,36 @@ func templateSoul(template string) string {
 
 // ideaDigestLines are the pages that wait on a person: proposals nobody
 // took, answers nobody closed, sign-offs still missing.
-func ideaDigestLines(dir string) []string {
-	type row struct {
-		line string
-		at   time.Time
+type digestRow struct {
+	line string
+	at   time.Time
+}
+
+func ideaDigestPart(m idea.Meta, id *idea.Idea) []string {
+	proposals, answered := 0, 0
+	for _, c := range id.Comments.Comments {
+		switch {
+		case c.Kind == idea.KindProposal && c.Status == idea.StatusOpen && lastAuthorIsAgent(c):
+			proposals++
+		case c.Status == idea.StatusAnswered || c.Status == idea.StatusFixed:
+			answered++
+		}
 	}
-	var rows []row
+	var parts []string
+	if answered > 0 {
+		parts = append(parts, fmt.Sprintf("%d answered, to close", answered))
+	}
+	if proposals > 0 {
+		parts = append(parts, fmt.Sprintf("%d proposal(s) to take or leave", proposals))
+	}
+	if m.Status == idea.Draft && len(m.Approvals) > 0 && !m.IsApproved() {
+		parts = append(parts, fmt.Sprintf("signed off %d of %d", len(m.Approvers()), m.NeededApprovals()))
+	}
+	return parts
+}
+
+func ideaDigestLines(dir string) []string {
+	var rows []digestRow
 	for _, m := range idea.List(dir) {
 		if m.Status == idea.Built {
 			continue
@@ -283,29 +307,9 @@ func ideaDigestLines(dir string) []string {
 		if err != nil {
 			continue
 		}
-		proposals, answered := 0, 0
-		for _, c := range id.Comments.Comments {
-			switch {
-			case c.Kind == idea.KindProposal && c.Status == idea.StatusOpen && lastAuthorIsAgent(c):
-				proposals++
-			case c.Status == idea.StatusAnswered || c.Status == idea.StatusFixed:
-				answered++
-			}
+		if parts := ideaDigestPart(m, id); len(parts) > 0 {
+			rows = append(rows, digestRow{fmt.Sprintf("💡 %s: %s", firstNonEmpty(m.Name, m.Title), strings.Join(parts, ", ")), m.UpdatedAt})
 		}
-		var parts []string
-		if answered > 0 {
-			parts = append(parts, fmt.Sprintf("%d answered, to close", answered))
-		}
-		if proposals > 0 {
-			parts = append(parts, fmt.Sprintf("%d proposal(s) to take or leave", proposals))
-		}
-		if m.Status == idea.Draft && len(m.Approvals) > 0 && !m.IsApproved() {
-			parts = append(parts, fmt.Sprintf("signed off %d of %d", len(m.Approvers()), m.NeededApprovals()))
-		}
-		if len(parts) == 0 {
-			continue
-		}
-		rows = append(rows, row{fmt.Sprintf("💡 %s: %s", firstNonEmpty(m.Name, m.Title), strings.Join(parts, ", ")), m.UpdatedAt})
 	}
 	sort.SliceStable(rows, func(i, j int) bool { return rows[i].at.After(rows[j].at) })
 	var out []string

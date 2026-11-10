@@ -55,26 +55,27 @@ func htmlMediaToMarkdown(md string) string {
 			continue
 		}
 		wrapped := htmlWrapper.MatchString(line)
-		depth += len(htmlBlockOpen.FindAllString(line, -1)) - len(htmlBlockClose.FindAllString(line, -1))
-		if depth < 0 {
-			depth = 0
-		}
-		parts := strings.Split(line, "`")
-		for j := 0; j < len(parts); j += 2 {
-			parts[j] = htmlMediaInText(parts[j])
-		}
-		out := strings.Join(parts, "`")
-		// Inside a centring block the lines were indented for HTML, not as code;
-		// what a wrapper held is a paragraph of its own.
-		if wrapped || inBlock {
-			out = strings.TrimLeft(out, " \t")
-		}
-		if wrapped && strings.TrimSpace(out) != "" {
-			out = "\n" + out + "\n"
-		}
-		lines[i] = out
+		depth = max(0, depth+len(htmlBlockOpen.FindAllString(line, -1))-len(htmlBlockClose.FindAllString(line, -1)))
+		lines[i] = mediaLine(line, wrapped, inBlock)
 	}
 	return strings.Join(lines, "\n")
+}
+
+func mediaLine(line string, wrapped, inBlock bool) string {
+	parts := strings.Split(line, "`")
+	for j := 0; j < len(parts); j += 2 {
+		parts[j] = htmlMediaInText(parts[j])
+	}
+	out := strings.Join(parts, "`")
+	// Inside a centring block the lines were indented for HTML, not as code;
+	// what a wrapper held is a paragraph of its own.
+	if wrapped || inBlock {
+		out = strings.TrimLeft(out, " \t")
+	}
+	if wrapped && strings.TrimSpace(out) != "" {
+		out = "\n" + out + "\n"
+	}
+	return out
 }
 
 func htmlMediaInText(s string) string {

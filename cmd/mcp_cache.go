@@ -146,48 +146,48 @@ func cloneCompose(c *utils.CorgiCompose) *utils.CorgiCompose {
 
 func deepCopyValue(v reflect.Value) reflect.Value {
 	switch v.Kind() {
-	case reflect.Ptr:
+	case reflect.Ptr, reflect.Interface, reflect.Slice, reflect.Map:
 		if v.IsNil() {
 			return v
 		}
+		return deepCopyReference(v)
+	case reflect.Struct:
+		return deepCopyStruct(v)
+	}
+	return v
+}
+
+func deepCopyReference(v reflect.Value) reflect.Value {
+	switch v.Kind() {
+	case reflect.Ptr:
 		out := reflect.New(v.Elem().Type())
 		out.Elem().Set(deepCopyValue(v.Elem()))
 		return out
 	case reflect.Interface:
-		if v.IsNil() {
-			return v
-		}
 		out := reflect.New(v.Type()).Elem()
 		out.Set(deepCopyValue(v.Elem()))
 		return out
 	case reflect.Slice:
-		if v.IsNil() {
-			return v
-		}
 		out := reflect.MakeSlice(v.Type(), v.Len(), v.Len())
 		for i := 0; i < v.Len(); i++ {
 			out.Index(i).Set(deepCopyValue(v.Index(i)))
 		}
 		return out
-	case reflect.Map:
-		if v.IsNil() {
+	}
+	out := reflect.MakeMapWithSize(v.Type(), v.Len())
+	for _, k := range v.MapKeys() {
+		out.SetMapIndex(k, deepCopyValue(v.MapIndex(k)))
+	}
+	return out
+}
+
+func deepCopyStruct(v reflect.Value) reflect.Value {
+	out := reflect.New(v.Type()).Elem()
+	for i := 0; i < v.NumField(); i++ {
+		if !out.Field(i).CanSet() {
 			return v
 		}
-		out := reflect.MakeMapWithSize(v.Type(), v.Len())
-		for _, k := range v.MapKeys() {
-			out.SetMapIndex(k, deepCopyValue(v.MapIndex(k)))
-		}
-		return out
-	case reflect.Struct:
-		out := reflect.New(v.Type()).Elem()
-		for i := 0; i < v.NumField(); i++ {
-			if !out.Field(i).CanSet() {
-				return v
-			}
-			out.Field(i).Set(deepCopyValue(v.Field(i)))
-		}
-		return out
-	default:
-		return v
+		out.Field(i).Set(deepCopyValue(v.Field(i)))
 	}
+	return out
 }

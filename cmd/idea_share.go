@@ -210,49 +210,62 @@ func pageToShare(dir string, req shareRequest, now time.Time) (slug string, crea
 	}
 	text = strings.TrimRight(text, "\n") + "\n"
 	if source != "" {
-		for _, m := range idea.List(dir) {
-			if m.Source != source {
-				continue
-			}
-			changed := false
-			_, err := idea.Update(dir, m.Slug, func(id *idea.Idea) error {
-				if id.Doc == text {
-					return nil
-				}
-				changed = true
-				id.ChangeBy, id.ChangeNote = firstNonEmpty(req.By, "someone"), "updated from "+filepath.Base(source)
-				return id.SetDoc(text, now)
-			})
-			return m.Slug, false, changed, err
+		if slug, found, changed, err := updateSharedFile(dir, source, text, req.By, now); found {
+			return slug, false, changed, err
 		}
 	}
+	slug, err = createSharedPage(dir, req, text, now)
+	return slug, err == nil, false, err
+}
+
+func updateSharedFile(dir, source, text, by string, now time.Time) (slug string, found, changed bool, err error) {
+	for _, m := range idea.List(dir) {
+		if m.Source != source {
+			continue
+		}
+		_, err := idea.Update(dir, m.Slug, func(id *idea.Idea) error {
+			if id.Doc == text {
+				return nil
+			}
+			changed = true
+			id.ChangeBy, id.ChangeNote = firstNonEmpty(by, "someone"), "updated from "+filepath.Base(source)
+			return id.SetDoc(text, now)
+		})
+		return m.Slug, true, changed, err
+	}
+	return "", false, false, nil
+}
+
+func sharedPageTitle(req shareRequest, text string) string {
 	title := firstNonEmpty(strings.TrimSpace(req.Title), firstHeading(text))
-	if title == "" && source != "" {
-		title = strings.TrimSuffix(filepath.Base(source), filepath.Ext(source))
+	if title == "" && req.Source != "" {
+		title = strings.TrimSuffix(filepath.Base(req.Source), filepath.Ext(req.Source))
 	}
-	if title == "" {
-		title = "page"
-	}
+	return firstNonEmpty(title, "page")
+}
+
+func createSharedPage(dir string, req shareRequest, text string, now time.Time) (string, error) {
+	title := sharedPageTitle(req, text)
 	typ := req.Type
 	if !idea.ValidTypeName(typ) {
 		typ = idea.TypeSpec
 	}
 	ws := req.Workspace
-	if ws == "" && source != "" {
-		_, ws = workspaceRootFor(filepath.Dir(source))
+	if ws == "" && req.Source != "" {
+		_, ws = workspaceRootFor(filepath.Dir(req.Source))
 	}
 	if ws != "" {
 		if _, err := workspaceRoot(ws); err != nil {
-			return "", false, false, err
+			return "", err
 		}
 	}
-	meta := idea.Meta{Type: typ, Name: title, Workspace: ws, Source: source, By: firstNonEmpty(req.By, "someone"), Auto: true}
+	meta := idea.Meta{Type: typ, Name: title, Workspace: ws, Source: req.Source, By: firstNonEmpty(req.By, "someone"), Auto: true}
 	id, err := idea.Create(dir, "", title, text, meta, now)
 	if err != nil {
-		return "", false, false, err
+		return "", err
 	}
 	nudgeDaemon(dir)
-	return id.Meta.Slug, true, false, nil
+	return id.Meta.Slug, nil
 }
 
 // repoRootOf is the git checkout dir sits in, or dir itself.

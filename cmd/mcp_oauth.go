@@ -224,6 +224,31 @@ type registerRequest struct {
 	TokenEndpointAuthMethod string   `json:"token_endpoint_auth_method"`
 }
 
+func (oa *oauthServer) registrationRefusal(req registerRequest) (code, msg string) {
+	if len(req.RedirectURIs) == 0 {
+		return "invalid_redirect_uri", "redirect_uris is required"
+	}
+	for _, u := range req.RedirectURIs {
+		if !oa.hosts.allowedRedirectURI(u) {
+			return "invalid_redirect_uri", "redirect URI not allowed: " + u + " (loopback, or https to claude.ai / claude.com / an --oauth-client-host)"
+		}
+	}
+	for _, g := range req.GrantTypes {
+		if g != "authorization_code" && g != "refresh_token" {
+			return "invalid_client_metadata", "unsupported grant_type " + g
+		}
+	}
+	for _, rt := range req.ResponseTypes {
+		if rt != "code" {
+			return "invalid_client_metadata", "unsupported response_type " + rt
+		}
+	}
+	if m := req.TokenEndpointAuthMethod; m != "" && m != "none" {
+		return "invalid_client_metadata", "token_endpoint_auth_method must be none; corgi issues no client secrets"
+	}
+	return "", ""
+}
+
 func (oa *oauthServer) registerHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusNoContent)
@@ -243,30 +268,8 @@ func (oa *oauthServer) registerHandler(w http.ResponseWriter, r *http.Request) {
 		oauthError(w, http.StatusBadRequest, "invalid_client_metadata", "body is not valid JSON")
 		return
 	}
-	if len(req.RedirectURIs) == 0 {
-		oauthError(w, http.StatusBadRequest, "invalid_redirect_uri", "redirect_uris is required")
-		return
-	}
-	for _, u := range req.RedirectURIs {
-		if !oa.hosts.allowedRedirectURI(u) {
-			oauthError(w, http.StatusBadRequest, "invalid_redirect_uri", "redirect URI not allowed: "+u+" (loopback, or https to claude.ai / claude.com / an --oauth-client-host)")
-			return
-		}
-	}
-	for _, g := range req.GrantTypes {
-		if g != "authorization_code" && g != "refresh_token" {
-			oauthError(w, http.StatusBadRequest, "invalid_client_metadata", "unsupported grant_type "+g)
-			return
-		}
-	}
-	for _, rt := range req.ResponseTypes {
-		if rt != "code" {
-			oauthError(w, http.StatusBadRequest, "invalid_client_metadata", "unsupported response_type "+rt)
-			return
-		}
-	}
-	if m := req.TokenEndpointAuthMethod; m != "" && m != "none" {
-		oauthError(w, http.StatusBadRequest, "invalid_client_metadata", "token_endpoint_auth_method must be none; corgi issues no client secrets")
+	if code, msg := oa.registrationRefusal(req); code != "" {
+		oauthError(w, http.StatusBadRequest, code, msg)
 		return
 	}
 	name := cleanClientName(req.ClientName, "MCP client")

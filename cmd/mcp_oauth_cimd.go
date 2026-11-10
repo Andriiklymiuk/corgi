@@ -92,46 +92,51 @@ func ipv4Block(a, b, c byte, prefix int) *net.IPNet {
 	return &net.IPNet{IP: net.IPv4(a, b, c, 0).To4(), Mask: net.CIDRMask(prefix, 32)}
 }
 
-func (f *cimdFetcher) client(ctx context.Context, clientID string, hosts *oauthClientHosts) (oauthClient, error) {
+func cimdHost(clientID string, hosts *oauthClientHosts) (string, error) {
 	u, err := url.Parse(clientID)
 	if err != nil || !isCIMDClientID(clientID) {
-		return oauthClient{}, fmt.Errorf("%w: client_id is not an https URL with a path", errCIMDRefused)
+		return "", fmt.Errorf("%w: client_id is not an https URL with a path", errCIMDRefused)
 	}
 	if port := u.Port(); port != "" && port != "443" {
-		return oauthClient{}, fmt.Errorf("%w: only port 443", errCIMDRefused)
+		return "", fmt.Errorf("%w: only port 443", errCIMDRefused)
 	}
 	if u.User != nil || u.Fragment != "" {
-		return oauthClient{}, fmt.Errorf("%w: no credentials or fragment in client_id", errCIMDRefused)
+		return "", fmt.Errorf("%w: no credentials or fragment in client_id", errCIMDRefused)
 	}
 	host := u.Hostname()
 	if !hosts.allowsHost(host) {
-		return oauthClient{}, fmt.Errorf("%w: %s is not an allowed client host", errCIMDRefused, host)
+		return "", fmt.Errorf("%w: %s is not an allowed client host", errCIMDRefused, host)
 	}
+	return host, nil
+}
 
+func (f *cimdFetcher) cachedOrAllowed(clientID string) (oauthClient, bool, time.Time, error) {
 	f.mu.Lock()
+	defer f.mu.Unlock()
 	now := f.now()
 	if e, ok := f.cache[clientID]; ok && now.Before(e.expires) {
-		f.mu.Unlock()
-		return e.client, nil
+		return e.client, true, now, nil
 	}
 	if !f.bucket.take(now) {
-		f.mu.Unlock()
-		return oauthClient{}, fmt.Errorf("%w: too many metadata fetches; try again shortly", errCIMDRefused)
+		return oauthClient{}, false, now, fmt.Errorf("%w: too many metadata fetches; try again shortly", errCIMDRefused)
 	}
-	f.mu.Unlock()
+	return oauthClient{}, false, now, nil
+}
 
-	ctx, cancel := context.WithTimeout(ctx, cimdTimeout)
-	defer cancel()
+func (f *cimdFetcher) pinnedAddress(ctx context.Context, host string) (string, error) {
 	addrs, err := f.resolve(ctx, host)
 	if err != nil || len(addrs) == 0 {
-		return oauthClient{}, fmt.Errorf("%w: %s does not resolve", errCIMDRefused, host)
+		return "", fmt.Errorf("%w: %s does not resolve", errCIMDRefused, host)
 	}
 	for _, a := range addrs {
 		if !publicIP(a.IP) {
-			return oauthClient{}, fmt.Errorf("%w: %s resolves to a non-public address", errCIMDRefused, host)
+			return "", fmt.Errorf("%w: %s resolves to a non-public address", errCIMDRefused, host)
 		}
 	}
-	pinned := net.JoinHostPort(addrs[0].IP.String(), "443")
+	return net.JoinHostPort(addrs[0].IP.String(), "443"), nil
+}
+
+func (f *cimdFetcher) fetchDocument(ctx context.Context, clientID, pinned string) ([]byte, string, error) {
 	httpClient := &http.Client{
 		Transport: f.newTransport(pinned),
 		Timeout:   cimdTimeout,
@@ -141,31 +146,53 @@ func (f *cimdFetcher) client(ctx context.Context, clientID string, hosts *oauthC
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, clientID, nil)
 	if err != nil {
-		return oauthClient{}, fmt.Errorf("%w: %v", errCIMDRefused, err)
+		return nil, "", fmt.Errorf("%w: %v", errCIMDRefused, err)
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "corgi-mcp")
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return oauthClient{}, fmt.Errorf("%w: fetch failed: %v", errCIMDRefused, err)
+		return nil, "", fmt.Errorf("%w: fetch failed: %v", errCIMDRefused, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return oauthClient{}, fmt.Errorf("%w: document returned %d", errCIMDRefused, resp.StatusCode)
+		return nil, "", fmt.Errorf("%w: document returned %d", errCIMDRefused, resp.StatusCode)
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, cimdMaxBody+1))
 	if err != nil {
-		return oauthClient{}, fmt.Errorf("%w: %v", errCIMDRefused, err)
+		return nil, "", fmt.Errorf("%w: %v", errCIMDRefused, err)
 	}
 	if len(body) > cimdMaxBody {
-		return oauthClient{}, fmt.Errorf("%w: document over %d bytes", errCIMDRefused, cimdMaxBody)
+		return nil, "", fmt.Errorf("%w: document over %d bytes", errCIMDRefused, cimdMaxBody)
+	}
+	return body, resp.Header.Get(headerCacheControl), nil
+}
+
+func (f *cimdFetcher) client(ctx context.Context, clientID string, hosts *oauthClientHosts) (oauthClient, error) {
+	host, err := cimdHost(clientID, hosts)
+	if err != nil {
+		return oauthClient{}, err
+	}
+	cached, hit, now, err := f.cachedOrAllowed(clientID)
+	if err != nil || hit {
+		return cached, err
+	}
+	ctx, cancel := context.WithTimeout(ctx, cimdTimeout)
+	defer cancel()
+	pinned, err := f.pinnedAddress(ctx, host)
+	if err != nil {
+		return oauthClient{}, err
+	}
+	body, cacheControl, err := f.fetchDocument(ctx, clientID, pinned)
+	if err != nil {
+		return oauthClient{}, err
 	}
 	c, err := parseCIMD(body, clientID, hosts)
 	if err != nil {
 		return oauthClient{}, err
 	}
 	c.CreatedAt = now
-	if ttl, ok := cimdTTL(resp.Header.Get("Cache-Control")); ok {
+	if ttl, ok := cimdTTL(cacheControl); ok {
 		f.mu.Lock()
 		if len(f.cache) >= cimdMaxEntries {
 			f.evictOneLocked()
