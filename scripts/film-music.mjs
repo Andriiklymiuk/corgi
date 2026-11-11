@@ -154,11 +154,11 @@ for (let bar = 0; bar < BARS; bar++) {
 	if (full) {
 		kick(at(0), 0.5); kick(at(2), 0.42); if (bar % 2) kick(at(2.5), 0.3);
 		rim(at(1), 0.2); rim(at(3), 0.22);
-		for (let step = 0; step < 8; step++) hat(at(step * 0.5), step % 2 ? 0.075 : 0.04, step % 2 ? 0.35 : -0.2);
+		for (let step = 0; step < 8; step++) hat(at(step * 0.5), step % 2 ? 0.045 : 0.024, step % 2 ? 0.35 : -0.2);
 	}
 	if (light) {
 		kick(at(0), 0.36); rim(at(3), 0.12);
-		for (let step = 1; step < 8; step += 2) hat(at(step * 0.5), 0.055, 0.3);
+		for (let step = 1; step < 8; step += 2) hat(at(step * 0.5), 0.033, 0.3);
 	}
 	if ([5, 7, 19, 29, 42, 57].includes(bar)) for (let step = 0; step < 8; step++) rim(at(2 + step * 0.25), 0.05 + step * 0.022);
 	if (!actCard && (within(bar, 12, 17) || within(bar, 23, 27) || within(bar, 36, 40) || within(bar, 44, 47) || within(bar, 52, 55) || within(bar, 60, 66))) MOTIF[cycle].forEach(([beat, length, note]) => lead(at(beat), length * BEAT * 0.92, note, 0.1));
@@ -203,11 +203,9 @@ const master = [new Float32Array(total), new Float32Array(total)];
 let peak = 0;
 const fadeFrom = (BARS * BAR - 1.2) * RATE;
 for (let ch = 0; ch < 2; ch++) {
-	let low = 0, crackle = 0;
+	let low = 0;
 	for (let i = 0; i < total; i++) {
-		crackle = crackle * 0.92 + (Math.abs(noise()) > 0.9993 ? noise() * 0.05 : 0);
-		const hiss = noise() * 0.0022 + crackle;
-		const sum = dry[ch][i] + echo[ch][i] * 0.55 + room[ch][i] * 0.11 + hiss;
+		const sum = dry[ch][i] + echo[ch][i] * 0.55 + room[ch][i] * 0.11;
 		low += 0.55 * (sum - low);
 		const fade = i > fadeFrom ? Math.max(0, 1 - (i - fadeFrom) / (2.6 * RATE)) : 1;
 		const value = Math.tanh(low * 1.5) * fade;
