@@ -10,7 +10,7 @@ const fps = Number(flag("fps", 30));
 const stills = flag("stills", "");
 const output = resolve(flag("out", "docs/media/corgi-film.mp4"));
 const poster = resolve(flag("poster", "docs/media/corgi-film.png"));
-const posterAt = Number(flag("poster-at", 105));
+const posterAt = Number(flag("poster-at", 153));
 const audio = resolve(flag("audio", "docs/film/music.mp3"));
 const chrome = process.env.CHROME ?? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const port = 9400 + Math.floor(Math.random() * 400);
@@ -58,7 +58,7 @@ try {
 	} else {
 		const inputs = ["-y", "-loglevel", "error", "-f", "image2pipe", "-framerate", String(fps), "-c:v", "mjpeg", "-i", "-"];
 		if (existsSync(audio)) inputs.push("-i", audio, "-c:a", "aac", "-b:a", "160k", "-shortest");
-		const ffmpeg = spawn("ffmpeg", [...inputs, "-c:v", "libx264", "-preset", "slow", "-crf", "26", "-pix_fmt", "yuv420p", "-movflags", "+faststart", output], { stdio: ["pipe", "inherit", "inherit"] });
+		const ffmpeg = spawn("ffmpeg", [...inputs, "-c:v", "libx264", "-preset", "slow", "-crf", "28", "-pix_fmt", "yuv420p", "-movflags", "+faststart", output], { stdio: ["pipe", "inherit", "inherit"] });
 		const total = Math.floor(duration * fps);
 		for (let frame = 0; frame < total; frame++) {
 			await evaluate(`seek(${frame / fps})`);
