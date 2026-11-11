@@ -62,6 +62,26 @@ A Telegram bot has the same: reply to a "needs you" message to type into
 that session, `/allow`, `/sessions`, `/usage`. Details in
 [docs/agent.md](agent.md#sessions-on-a-stream-deck).
 
+### Cards in the Telegram chat
+
+Telegram (Bot API 10.4) lets a bot put a small live page inside a message. corgi uses one for the things you
+answer most. Off until you turn it on, in the chat:
+
+```
+/cards on          a session that waits on you sends a card: Allow / Always / Deny, one tap
+/card board        every session, live, with the buttons on the ones that wait
+/card usage        each account's five-hour and week windows as bars
+/card levels       each workspace's level, and the command for the next one
+/card morning      what was opened, failed or arrived in the last 12 hours
+/cards off         back to text only
+```
+
+- A card redraws itself every few seconds while you look at it. Nothing is re-sent.
+- The text notification still rings, and a reply to it still types into the session. The card arrives silently under it.
+- A tap is checked on the laptop: only your chat, only a session that still waits, only allow, always or deny.
+- The levels card never changes a level. It copies the command, and you run it.
+- Telegram shows cards in the private chat with the bot only. An older app gets the text commands as before.
+
 <p align="center"><img src="media/telegram.gif" width="340" alt="Telegram: a needs-you message, /allow, /sessions, a reply typed into the session, /usage, limit lifted"></p>
 
 ## A team, not a pile of tabs

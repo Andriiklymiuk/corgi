@@ -59,6 +59,8 @@ func (t *telegramControl) run(ctx context.Context) {
 	if t.firstTimeInChat() {
 		t.sendCtx(ctx, "corgi is listening here. /help for what it can do.")
 	}
+	cardWatcher := t.watchForPendingCards(ctx)
+	defer func() { <-cardWatcher }()
 	for {
 		if ctx.Err() != nil {
 			return
@@ -108,6 +110,10 @@ func (t *telegramControl) poll(ctx context.Context) []telegramMessage {
 		if update.UpdateID >= t.offset {
 			t.offset = update.UpdateID + 1
 		}
+		if len(update.WidgetQuery) > 0 {
+			t.handleWidgetQuery(ctx, update.WidgetQuery)
+			continue
+		}
 		if fmt.Sprint(update.Message.Chat.ID) != t.chatID {
 			continue
 		}
@@ -137,8 +143,9 @@ type telegramControlPollResultMessage struct {
 }
 
 type telegramControlPollResult struct {
-	UpdateID int64                            `json:"update_id"`
-	Message  telegramControlPollResultMessage `json:"message"`
+	UpdateID    int64                            `json:"update_id"`
+	Message     telegramControlPollResultMessage `json:"message"`
+	WidgetQuery json.RawMessage                  `json:"widget_query"`
 }
 
 func (t *telegramControl) handle(text, replyTo string) {
@@ -208,6 +215,8 @@ func (t *telegramControl) handle(text, replyTo string) {
 		}()
 	case "mute":
 		t.mute(arg)
+	case "card", "cards":
+		t.cardCommand(arg)
 	default:
 		if claudeSlashWords[verb] {
 			t.send(claudeSlashTip(verb, t.driftingSession()))
@@ -386,6 +395,7 @@ const telegramHelp = `corgi commands:
 /focus <s>         bring its window to the front
 /ask <question>    the chief: what to look at first, what is blocked, who is on what
 /mute [1h|off]     nothing rings for a while
+/cards on|off      permission prompts as a card with buttons; /cards lists the cards
 /help              this
 
 A /compact or /model in a notification is Claude Code's - /send <session> /compact types it there.`

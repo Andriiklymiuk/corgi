@@ -1,0 +1,47 @@
+<style>
+body{margin:0;padding:12px 14px calc(12px + env(safe-area-inset-bottom));font:14px/1.35 system-ui,sans-serif;color:var(--tg-theme-text-color)}
+.t{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-weight:600;font-size:15px;padding-bottom:8px}
+.s,.w,.e{color:var(--tg-theme-hint-color);font-weight:400;font-size:12px}
+.r{padding:9px 0;border-top:1px solid var(--tg-theme-secondary-bg-color)}
+.h{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.n{font-weight:600;overflow-wrap:anywhere}
+.w{white-space:nowrap}
+.d{font:12px/1.35 ui-monospace,monospace;color:var(--tg-theme-hint-color);margin-top:2px;overflow-wrap:anywhere}
+.p{height:5px;border-radius:3px;background:var(--tg-theme-secondary-bg-color);margin-top:7px;overflow:hidden}
+.p i{display:block;height:100%;border-radius:3px;background:var(--tg-theme-button-color)}
+.b{display:flex;gap:8px;margin-top:9px}
+button{flex:1;border:0;border-radius:9px;padding:9px 0;font:600 13px system-ui,sans-serif;background:var(--tg-theme-secondary-bg-color);color:var(--tg-theme-text-color)}
+button.m{background:var(--tg-theme-button-color);color:var(--tg-theme-button-text-color)}
+.e{padding-top:8px;border-top:1px solid var(--tg-theme-secondary-bg-color)}
+</style>
+<div id="c"></div>
+<script>
+var W=window.TelegramWidget,c=document.getElementById('c'),S=null;
+function el(tag,cls,text){var e=document.createElement(tag);if(cls)e.className=cls;if(text!=null)e.textContent=text;return e}
+function ask(data){if(!W)return;W.request(data).then(function(a){if(a&&a.result)draw(a.result)}).catch(function(){})}
+function btn(label,main,tap){var b=el('button',main?'m':'',label);b.addEventListener('click',tap);return b}
+function row(r){
+var e=el('div','r'),h=el('div','h');
+h.appendChild(el('span','n',r.n));if(r.w)h.appendChild(el('span','w',r.w));e.appendChild(h);
+if(r.d)e.appendChild(el('div','d',r.d));
+if(r.p!=null){var p=el('div','p'),i=el('i');i.style.width=Math.max(0,Math.min(100,r.p))+'%';p.appendChild(i);e.appendChild(p)}
+var k=el('div','b');
+(r.b||[]).forEach(function(x){k.appendChild(btn(x[0],x[2],function(){ask(x[1])}))});
+if(r.u)k.appendChild(btn('Open',0,function(){W&&W.openLink(r.u)}));
+if(r.c)k.appendChild(btn('Copy the command',0,function(){W&&W.copyText(r.c)}));
+if(k.firstChild)e.appendChild(k);
+return e}
+function draw(json){
+var s;try{s=JSON.parse(json)}catch(x){return}
+if(!s||!s.t)return;
+S=s;c.textContent='';
+var t=el('div','t');t.appendChild(el('span','',s.t));if(s.s)t.appendChild(el('span','s',s.s));c.appendChild(t);
+(s.r||[]).forEach(function(r){c.appendChild(row(r))});
+if(s.e)c.appendChild(el('div','e',s.e))}
+if(W){
+draw(W.chatData);
+W.onEvent('chatDataChanged',function(){draw(W.chatData)});
+setInterval(function(){if(W.isActive&&S&&S.q)ask(S.q)},5000);
+if(S&&S.q)ask(S.q);
+W.ready()}
+</script>

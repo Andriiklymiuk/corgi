@@ -50,7 +50,15 @@ func runAgentWhileAway(cmd *cobra.Command, _ []string) {
 	if err != nil {
 		exitWithError("agent_while_away", fmt.Errorf("--since takes a duration like 12h, not %q", sinceFlag), 2)
 	}
-	since := time.Now().Add(-dur)
+	rep := buildAwayReport(dir, time.Now().Add(-dur))
+	if utils.JSONOutput {
+		utils.PrintJSON(rep)
+		return
+	}
+	printWhileAway(rep)
+}
+
+func buildAwayReport(dir string, since time.Time) awayReport {
 	rep := awayReport{Since: since, Deferred: map[string]string{}}
 
 	state := watch.LoadState(dir)
@@ -80,12 +88,7 @@ func runAgentWhileAway(cmd *cobra.Command, _ []string) {
 	for _, e := range log.DeferredEvents() {
 		rep.Deferred[firstNonEmptyString(e.Ref, e.Key)] = e.Workspace
 	}
-
-	if utils.JSONOutput {
-		utils.PrintJSON(rep)
-		return
-	}
-	printWhileAway(rep)
+	return rep
 }
 
 func printWhileAway(rep awayReport) {
