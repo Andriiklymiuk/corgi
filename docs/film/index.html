@@ -1,0 +1,563 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The corgi film</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&display=block">
+<style>
+:root { --ink: #000072; --paper: #FDF6F2; --orange: #FFA133; --lilac: #dfe3ff; }
+html, body { margin: 0; height: 100%; background: #0a0e2a; overflow: hidden; }
+#fit { position: absolute; left: 50%; top: 50%; width: 1280px; height: 720px; transform-origin: 0 0; }
+#stage { position: absolute; inset: 0; overflow: hidden; background: var(--paper); color: var(--ink);
+  font-family: -apple-system, "Segoe UI", Inter, Helvetica, Arial, sans-serif; }
+#stage::after { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .5;
+  background-image: radial-gradient(rgba(0, 0, 114, .07) 1px, transparent 1.2px); background-size: 22px 22px; }
+svg.ink { position: absolute; inset: 0; width: 1280px; height: 720px; overflow: visible; fill: none; stroke: var(--ink);
+  stroke-width: 3.6; stroke-linecap: round; stroke-linejoin: round; }
+svg.ink text { stroke: none; fill: var(--ink); font-family: Caveat, "Bradley Hand", "Segoe Print", cursive; font-weight: 700; }
+svg.ink text.sans { font-family: -apple-system, "Segoe UI", Inter, Helvetica, Arial, sans-serif; font-weight: 600; }
+svg.ink text.mono { font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace; font-weight: 600; }
+.term { position: absolute; background: #0a0e2a; border: 3px solid #000072; border-radius: 14px; box-shadow: 7px 8px 0 rgba(0, 0, 114, .18); overflow: hidden; transform-origin: 50% 50%; }
+.term .bar { height: 30px; display: flex; align-items: center; padding: 0 12px; background: #141a4a; color: #a9b0e6; font-size: 12px; position: relative; }
+.term .bar i { width: 10px; height: 10px; border-radius: 50%; background: #ff5f57; margin-right: 7px; }
+.term .bar i + i { background: #febc2e; } .term .bar i + i + i { background: #28c840; }
+.term .bar span { position: absolute; left: 0; right: 0; text-align: center; }
+.term .body { padding: 12px 16px; font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace; line-height: 1.6; white-space: pre; color: #FDF6F2; }
+.term .l { min-height: 1.6em; } .term b { color: #fff; font-weight: 600; }
+.term .hi { background: rgba(255, 161, 51, .16); box-shadow: inset 3px 0 #FFA133; margin: 0 -16px; padding: 0 16px; }
+.term .cur { display: inline-block; width: .55em; height: 1.05em; background: #FDF6F2; vertical-align: -.18em; }
+.cap { position: absolute; left: 0; right: 0; bottom: 34px; text-align: center; font-family: Caveat, "Bradley Hand", "Segoe Print", cursive; font-weight: 700; font-size: 46px; line-height: 1.05; color: var(--ink); padding: 0 70px; }
+.cap small { display: block; font-size: 33px; font-weight: 500; margin-top: 4px; }
+.cap em { font-style: normal; color: #e07b00; }
+.chip { position: absolute; font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace; font-size: 15px; font-weight: 600; white-space: pre; background: #0a0e2a; color: #FDF6F2; border: 3px solid #000072; border-radius: 12px; padding: 8px 14px; box-shadow: 5px 6px 0 rgba(0, 0, 114, .18); transform-origin: 50% 50%; }
+.chip .g { color: #3fb950; } .chip .o { color: #FFA133; }
+.card { position: absolute; background: #fff; border: 3px solid var(--ink); border-radius: 12px; padding: 9px 12px; font-size: 14px; font-weight: 600; color: #000072; box-shadow: 5px 6px 0 rgba(0, 0, 114, .16); transform-origin: 50% 50%; white-space: nowrap; }
+.card small { display: block; font-weight: 500; font-size: 12px; opacity: .75; margin-top: 2px; }
+.card .tag { display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 8px; background: #FFA133; color: #2b1600; margin-left: 6px; }
+.card .tag.g { background: #2fbf71; color: #fff; } .card .tag.r { background: #e5484d; color: #fff; }
+#ui { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(10, 14, 42, .55); cursor: pointer; z-index: 5; }
+#ui button { font: 700 22px/1 -apple-system, "Segoe UI", sans-serif; color: #0a0e2a; background: #FFA133; border: 0; border-radius: 40px; padding: 18px 34px; cursor: pointer; box-shadow: 0 10px 40px rgba(0, 0, 0, .4); }
+#bar { position: absolute; left: 0; right: 0; bottom: 0; height: 14px; z-index: 4; cursor: pointer; }
+#bar div { position: absolute; left: 0; bottom: 0; height: 4px; background: #FFA133; }
+.capture #ui, .capture #bar { display: none; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <filter id="boil0" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency=".018" numOctaves="2" seed="3"/><feDisplacementMap in="SourceGraphic" scale="4.5"/></filter>
+  <filter id="boil1" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency=".018" numOctaves="2" seed="11"/><feDisplacementMap in="SourceGraphic" scale="4.5"/></filter>
+  <filter id="boil2" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency=".018" numOctaves="2" seed="27"/><feDisplacementMap in="SourceGraphic" scale="4.5"/></filter>
+</svg>
+<div id="fit"><div id="stage"></div><div id="bar"><div></div></div><div id="ui"><button>▶&nbsp; Play the corgi film</button></div></div>
+<audio id="music" preload="auto" src="music.mp3"></audio>
+<script>
+const BAR = 60 / 90 * 4;
+const SCENE_BARS = [0, 3, 6, 10, 13, 16, 21, 27, 32, 35, 40, 44, 48, 52, 55, 59];
+const DURATION = SCENE_BARS[SCENE_BARS.length - 1] * BAR;
+const INK = "#000072", PAPER = "#FDF6F2", ORANGE = "#FFA133", NIGHT = "#0a0e2a", GREEN = "#2fbf71", RED = "#e5484d", PINK = "#ff8fa3";
+
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const lerp = (a, b, t) => a + (b - a) * t;
+const seg = (t, a, b) => clamp((t - a) / (b - a));
+const ease = (t) => (t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+const out = (t) => 1 - Math.pow(1 - t, 3);
+const back = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : 1 + 2.70158 * Math.pow(t - 1, 3) + 1.70158 * Math.pow(t - 1, 2));
+const pop = (t, a, d = .45) => back(seg(t, a, a + d));
+const sin = Math.sin, cos = Math.cos, PI = Math.PI;
+const rad = (d) => d * PI / 180;
+const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+const mix = (a, b, t) => {
+	const h = (c) => [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16));
+	const x = h(a), y = h(b);
+	return "#" + x.map((v, i) => Math.round(lerp(v, y[i], t)).toString(16).padStart(2, "0")).join("");
+};
+
+const svg = (inner) => `<svg class="ink" viewBox="0 0 1280 720">${inner}</svg>`;
+const P = (d, p = 1, attrs = "") => (p <= 0 ? "" : `<path d="${d}" pathLength="1" stroke-dasharray="1" stroke-dashoffset="${(1 - clamp(p)).toFixed(4)}" ${attrs}/>`);
+const G = (inner, tf, attrs = "") => `<g transform="${tf}" ${attrs}>${inner}</g>`;
+const at = (x, y, s = 1, r = 0) => `translate(${x.toFixed(2)},${y.toFixed(2)}) rotate(${r.toFixed(2)}) scale(${s.toFixed(4)})`;
+const T = (x, y, s, size, attrs = "") => `<text x="${x}" y="${y}" font-size="${size}" ${attrs}>${esc(s)}</text>`;
+const check = (x, y, p, s = 1, color = GREEN) => (p <= 0 ? "" : G(`<circle r="15" fill="${color}" stroke="none"/>` + P("M-7 0 L-2 6 L8 -6", 1, 'stroke="#fff" stroke-width="4"'), at(x, y, s * back(clamp(p)))));
+
+function corgi(o) {
+	const { x, y, s = 1, t = 0, walk = 0, flip = false, sleep = 0, carry = 0, wag = 1, tongue = 1 } = o;
+	const ph = t * 15;
+	const sw = (i) => walk * sin(ph + i * PI) * 10;
+	const bob = walk * Math.abs(sin(ph)) * -5 + sleep * 26;
+	const tail = sin(t * 20) * 22 * wag * (1 - sleep);
+	const head = sleep * 26 + sin(t * 3) * 2 * (1 - sleep) + walk * sin(ph) * 3;
+	const leg = (lx, i) => `<path d="M${lx} 98 L${(lx + sw(i)).toFixed(1)} 129 q1 7 10 7" />`;
+	const legs = sleep > .5 ? `<path d="M70 104 q-4 8 10 8 M150 104 q6 9 22 6"/>` : leg(66, 0) + leg(84, 1) + leg(140, 1) + leg(158, 0);
+	const breathe = 1 + sleep * sin(t * 2.2) * .03;
+	const body = G(`<path d="M48 78 C44 52 70 50 96 52 L150 52 C176 52 180 74 176 88 C172 104 150 104 130 104 L80 104 C60 104 50 98 48 78 Z" fill="${ORANGE}"/>
+		<path d="M152 62 C168 68 172 96 150 104 L128 104 C144 94 150 78 152 62Z" fill="#fff" stroke="none"/>
+		<path d="M48 78 C44 52 70 50 96 52 L150 52 C176 52 180 74 176 88 C172 104 150 104 130 104 L80 104 C60 104 50 98 48 78 Z"/>`, `translate(112 104) scale(1 ${breathe.toFixed(3)}) translate(-112 -104)`);
+	const eye = sleep > .5 ? `<path d="M181 38 q5 4 10 0"/>` : `<circle cx="186" cy="37" r="3.4" fill="var(--ink)" stroke="none"/>`;
+	const headG = G(`<path d="M156 22 L149 -8 L174 12 Z" fill="${ORANGE}"/><path d="M178 12 L193 -10 L197 20 Z" fill="${ORANGE}"/>
+		<path d="M150 32 C150 10 196 10 198 34 C210 36 221 42 221 50 C221 60 206 64 196 62 C186 72 156 70 150 52 Z" fill="${ORANGE}"/>
+		<path d="M197 35 C210 36 221 42 221 50 C221 60 206 64 196 62 C190 56 190 44 197 35 Z" fill="#fff" stroke="none"/>
+		<path d="M150 32 C150 10 196 10 198 34 C210 36 221 42 221 50 C221 60 206 64 196 62 C186 72 156 70 150 52 Z"/>
+		<circle cx="218" cy="46" r="4.6" fill="var(--ink)" stroke="none"/>${eye}
+		${tongue && !carry && sleep < .5 ? `<path d="M202 61 q1 12 8 8 q3 -4 0 -9" fill="${PINK}"/>` : `<path d="M200 59 q6 4 12 -1"/>`}
+		${carry ? `<g transform="rotate(-8 222 54)"><rect x="210" y="40" width="34" height="42" rx="3" fill="#fff"/><path d="M217 52 h20 M217 60 h20 M217 68 h12" stroke-width="2.4"/></g>` : ""}`, `rotate(${head.toFixed(2)} 160 58)`);
+	const tailG = `<path d="M50 70 q-12 -4 -10 -16" transform="rotate(${tail.toFixed(1)} 50 70)"/>`;
+	const zzz = sleep > .5 ? [0, 1, 2].map((i) => { const p = (t * .45 + i / 3) % 1; return `<text x="${205 + p * 40}" y="${20 - p * 60}" font-size="${28 + p * 22}" opacity="${(sin(p * PI)).toFixed(2)}">z</text>`; }).join("") : "";
+	return G(G(legs + tailG + body + headG, `translate(0 ${bob.toFixed(2)})`) + zzz, `translate(${x} ${y}) scale(${flip ? -s : s} ${s}) translate(-112 -136)`);
+}
+
+function limb(sx, sy, a1, a2, l1, l2) {
+	const ex = sx + l1 * sin(rad(a1)), ey = sy + l1 * cos(rad(a1));
+	const hx = ex + l2 * sin(rad(a2)), hy = ey + l2 * cos(rad(a2));
+	return { d: `M${sx.toFixed(1)} ${sy.toFixed(1)} L${ex.toFixed(1)} ${ey.toFixed(1)} L${hx.toFixed(1)} ${hy.toFixed(1)}`, hx, hy };
+}
+function person(o) {
+	const { x, y, s = 1, flip = false, la = [14, 6], ra = [-14, -6], ll = [7, 0], rl = [-7, 0], mood = "smile", hair = 0, shirt = "var(--lilac)", sit = false, sweat = 0, t = 0, tilt = 0, hold = "", lie = false } = o;
+	const hipY = sit ? -36 : -72;
+	const legA = sit ? [[84, 4], [78, -2]] : [ll, rl];
+	const sh = hipY - 60;
+	const L1 = limb(7, hipY, legA[0][0], legA[0][1], 36, 36), L2 = limb(-7, hipY, legA[1][0], legA[1][1], 36, 36);
+	const A1 = limb(13, sh + 6, la[0], la[1], 30, 30), A2 = limb(-13, sh + 6, ra[0], ra[1], 30, 30);
+	const foot = (l) => `<path d="M${l.hx.toFixed(1)} ${l.hy.toFixed(1)} h11"/>`;
+	const hy = sh - 26;
+	const hairs = [
+		`<path d="M-20 ${hy} Q-25 ${hy - 27} 0 ${hy - 24} Q23 ${hy - 26} 20 ${hy - 3} Q10 ${hy - 15} -4 ${hy - 11} Q-14 ${hy - 11} -20 ${hy}Z" fill="var(--ink)"/>`,
+		`<circle cx="-8" cy="${hy - 27}" r="9" fill="var(--ink)"/><path d="M-21 ${hy + 4} Q-25 ${hy - 25} 0 ${hy - 23} Q22 ${hy - 24} 20 ${hy - 4} Q8 ${hy - 14} -8 ${hy - 10} Q-16 ${hy - 6} -21 ${hy + 4}Z" fill="var(--ink)"/>`,
+		`<path d="M-19 ${hy + 22} Q-30 ${hy - 28} 0 ${hy - 24} Q24 ${hy - 26} 20 ${hy - 2} Q8 ${hy - 14} -6 ${hy - 10} Q-10 ${hy + 8} -19 ${hy + 22}Z" fill="var(--ink)"/>`,
+	][hair];
+	const mouths = { smile: `<path d="M4 ${hy + 9} q6 6 12 0"/>`, frown: `<path d="M4 ${hy + 12} q6 -6 12 0"/>`, o: `<circle cx="10" cy="${hy + 10}" r="3.4"/>`, flat: `<path d="M5 ${hy + 10} h10"/>`, sleep: `<path d="M5 ${hy + 10} q5 3 9 0"/>` };
+	const eyes = mood === "sleep" ? `<path d="M2 ${hy - 1} q3 3 6 0 M11 ${hy - 1} q3 3 6 0" stroke-width="2.6"/>` : `<circle cx="5" cy="${hy - 2}" r="2.4" fill="var(--ink)" stroke="none"/><circle cx="14" cy="${hy - 2}" r="2.4" fill="var(--ink)" stroke="none"/>`;
+	const drops = sweat ? [0, 1, 2].map((i) => { const p = (t * 1.3 + i / 3) % 1; return `<path d="M${-30 - i * 9 - p * 10} ${hy - 22 + i * 12 + p * 22} q-4 7 0 9 q4 -2 0 -9" fill="#9fd3ff" stroke-width="2" opacity="${(sweat * sin(p * PI)).toFixed(2)}"/>`; }).join("") : "";
+	const prop = hold === "phone" ? `<rect x="${A1.hx - 7}" y="${A1.hy - 22}" width="15" height="26" rx="3" fill="#0a0e2a"/>` : hold === "cup" ? `<path d="M${A1.hx - 7} ${A1.hy - 14} h15 l-2 16 h-11 Z" fill="#fff"/><path d="M${A1.hx + 8} ${A1.hy - 10} q7 2 0 9" />` : "";
+	const inner = `<path d="${A2.d}"/>${lie ? "" : `<path d="${L2.d}"/>${foot(L2)}`}
+		<path d="M-17 ${sh + 2} Q0 ${sh - 8} 17 ${sh + 2} L20 ${hipY - 2} Q0 ${hipY + 7} -20 ${hipY - 2} Z" fill="${shirt}"/>
+		${lie ? "" : `<path d="${L1.d}"/>${foot(L1)}`}
+		<g transform="rotate(${tilt} 0 ${hy + 18})"><circle cx="0" cy="${hy}" r="20" fill="var(--paper)"/>${hairs}${eyes}${mouths[mood]}</g>
+		<path d="${A1.d}"/>${prop}${drops}`;
+	return G(inner, `translate(${x} ${y}) scale(${flip ? -s : s} ${s})`);
+}
+
+function bot(o) {
+	const { x, y, s = 1, t = 0, flip = false, color = ORANGE, arms = [0, 0], walk = 0, label = "", mood = "smile" } = o;
+	const bob = sin(t * 5 + x * .01) * 2.5 + walk * Math.abs(sin(t * 12)) * -5;
+	const blink = ((t * .6 + x * .013) % 1) < .05 ? .15 : 1;
+	const st = walk * sin(t * 12) * 7;
+	const inner = `<path d="M-8 -18 L${(-8 + st).toFixed(1)} -2 h-7 M8 -18 L${(8 - st).toFixed(1)} -2 h7"/>
+		<rect x="-18" y="-50" width="36" height="33" rx="10" fill="${color}"/>
+		<path d="M-18 -42 L${-32} ${(-30 - arms[0]).toFixed(1)}"/><path d="M18 -42 L32 ${(-30 - arms[1]).toFixed(1)}"/>
+		<path d="M0 -90 V-104"/><circle cx="0" cy="-108" r="5.5" fill="${ORANGE}"/>
+		<rect x="-26" y="-90" width="52" height="38" rx="13" fill="var(--paper)"/>
+		<g transform="translate(0 -72) scale(1 ${blink}) translate(0 72)"><circle cx="-10" cy="-74" r="3.6" fill="var(--ink)" stroke="none"/><circle cx="10" cy="-74" r="3.6" fill="var(--ink)" stroke="none"/></g>
+		${mood === "smile" ? `<path d="M-6 -63 q6 5 12 0" stroke-width="2.8"/>` : `<path d="M-5 -62 h10" stroke-width="2.8"/>`}
+		${label ? `<text x="0" y="-28" font-size="13" text-anchor="middle" class="mono" style="fill:#2b1600">${esc(label)}</text>` : ""}`;
+	return G(inner, `translate(${x} ${(y + bob).toFixed(2)}) scale(${flip ? -s : s} ${s})`);
+}
+
+const TC = { g: "#3fb950", r: "#ff7b72", y: "#e3b341", b: "#79c0ff", c: "#56d4dd", d: "#8b949e", o: "#FFA133" };
+const mark = (s) => esc(s).replace(/\{([grybcdoB])\}/g, (_, k) => (k === "B" ? "<b>" : `<span style="color:${TC[k]}">`)).replace(/\{\/\}/g, "</span>").replace(/<\/span>(?=[^<]*<\/b>)/g, "</b>");
+function term(o) {
+	const { x, y, w, h, title = "", cmd = "", typed = 1, lines = [], n = lines.length, fs = 13, rot = 0, s = 1, op = 1, extra = "" } = o;
+	if (op <= 0 || s <= 0) return "";
+	const c = cmd.slice(0, Math.round(cmd.length * clamp(typed)));
+	const rows = lines.slice(0, Math.max(0, Math.floor(n))).map((l) => (l.startsWith("{H}") ? `<div class="l hi">${mark(l.slice(3))}</div>` : `<div class="l">${l === "" ? "&nbsp;" : mark(l)}</div>`)).join("");
+	const cur = typed < 1 || n < lines.length ? `<span class="cur"></span>` : "";
+	return `<div class="term" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px;opacity:${op};transform:rotate(${rot.toFixed(2)}deg) scale(${s.toFixed(3)})"><div class="bar"><i></i><i></i><i></i><span>${esc(title)}</span></div><div class="body" style="font-size:${fs}px">${cmd ? `<div class="l"><span style="color:${TC.g}">$</span> <b>${esc(c)}</b>${typed < 1 ? cur : ""}</div>` : ""}${rows}${typed >= 1 && n < lines.length ? `<div class="l">${cur}</div>` : ""}${extra}</div></div>`;
+}
+const reveal = (t, times) => times.filter((x) => t >= x).length;
+const cap = (t, a, b, html) => { const p = seg(t, a, a + .5) * (1 - seg(t, b - .4, b)); return p <= 0 ? "" : `<div class="cap" style="opacity:${p.toFixed(3)};transform:translateY(${((1 - out(seg(t, a, a + .5))) * 14).toFixed(1)}px)">${html}</div>`; };
+const chip = (x, y, html, p, extra = "") => (p <= 0 ? "" : `<div class="chip" style="left:${x}px;top:${y}px;transform:scale(${back(clamp(p)).toFixed(3)});${extra}">${html}</div>`);
+const card = (x, y, html, p = 1, extra = "") => (p <= 0 ? "" : `<div class="card" style="left:${x.toFixed(1)}px;top:${y.toFixed(1)}px;transform:scale(${back(clamp(p)).toFixed(3)});${extra}">${html}</div>`);
+const ground = (p = 1, y = 560) => P(`M40 ${y} C300 ${y - 6} 520 ${y + 5} 760 ${y - 2} S1100 ${y + 4} 1240 ${y - 1}`, p, 'stroke-width="3" opacity=".55"');
+const repoBox = (x, y, name, p, extra = "") => (p <= 0 ? "" : G(P("M0 14 q0 -8 8 -8 h34 l10 -12 h40 q8 0 8 8 v70 q0 8 -8 8 h-84 q-8 0 -8 -8 Z", p, 'fill="var(--paper)"') + (p > .6 ? T(50, 52, name, 30, 'text-anchor="middle"') : "") + extra, `translate(${x - 50} ${y - 40})`));
+const dbCyl = (x, y, p, fill = 0) => (p <= 0 ? "" : G(
+	(fill > 0 ? `<path d="M-40 ${40 - fill * 62} v${fill * 62} q40 18 80 0 v${-fill * 62} q-40 18 -80 0Z" fill="${ORANGE}" stroke="none" opacity=".85"/>` : "") +
+	P("M-40 -24 q40 -20 80 0 q-40 20 -80 0 v64 q40 20 80 0 v-64", p, "") + (p > .6 ? T(0, 78, "db", 30, 'text-anchor="middle"') : ""), `translate(${x} ${y})`));
+
+function s0(t) {
+	const errs = [
+		{ x: 70, y: 70, title: "api", line: "{r}error{/} connect ECONNREFUSED 127.0.0.1:5432", a: .5 },
+		{ x: 880, y: 60, title: "web", line: "{r}TypeError:{/} API_URL is undefined", a: 1.2 },
+		{ x: 905, y: 300, title: "mobile", line: "{y}WARN{/} POST /v2/login → 404", a: 1.9 },
+	];
+	const terms = errs.map((e, i) => term({ x: e.x, y: e.y, w: 330, h: 104, title: e.title, lines: [e.line, "{d}retrying…{/}"], n: t > e.a + .5 ? 2 : 1, fs: 12, s: pop(t, e.a), rot: sin(t * 7 + i * 2) * 1.6 })).join("");
+	const tangle = P("M400 130 C520 60 560 250 640 210 S760 60 880 110 C980 150 820 250 905 350 C820 420 700 250 640 300 S470 330 400 180 C460 250 600 340 640 330", seg(t, 2.2, 5.5), `stroke="${RED}" stroke-width="2.6" opacity=".75"`);
+	const marks = ["?", "!", "?"].map((m, i) => { const p = pop(t, 2.6 + i * .6); return p > 0 ? G(T(0, 0, m, 64, `text-anchor="middle" fill="${RED}" style="fill:${RED}"`), at(585 + i * 44, 300 - i * 14 + sin(t * 4 + i) * 4, p, (i - 1) * 12)) : ""; }).join("");
+	const desk = P("M500 470 H800 M520 470 V560 M780 470 V560", seg(t, 0, .8)) + P("M690 468 h74 M700 468 l-10 -52 h72 l8 52", seg(t, .2, 1), 'fill="var(--paper)"') + P("M585 524 h40 M605 524 V560", seg(t, .1, .7));
+	const dev = person({ x: 606, y: 560, sit: true, mood: t > 2 ? "frown" : "flat", sweat: seg(t, 2, 3), t, la: [70 + sin(t * 16) * 5, 100], ra: [60 + cos(t * 16) * 5, 95], tilt: sin(t * 3) * 4 });
+	return terms + svg(ground(seg(t, 0, 1)) + desk + dev + tangle + marks) +
+		cap(t, .5, 4.1, "A feature is never one repo.") + cap(t, 4.2, 8, "It's an API change, a web change,<small>a mobile change, and a migration.</small>");
+}
+
+const YML = ["db_services:", "  db:", "    driver: postgres", "    seedFromFilePath: ./seed.sql", "services:", "  api:", "    cloneFrom: github.com/acme/api", "    depends_on_db: [db]", "  web:", "    depends_on_services: [api]"];
+function sheet(x, y, s, p, r = 0) {
+	const rows = YML.map((l, i) => (p > i / YML.length ? `<text x="18" y="${58 + i * 19}" font-size="12.4" class="mono" style="fill:${/^\S/.test(l) ? "#e07b00" : "var(--ink)"}" xml:space="preserve">${esc(l)}</text>` : "")).join("");
+	return G(`<path d="M8 8 h270 v248 h-270Z" fill="rgba(0,0,114,.14)" stroke="none"/><path d="M0 0 h246 l26 26 v222 h-272 Z" fill="#fff"/><path d="M246 0 v26 h26"/>` + T(18, 30, "corgi-compose.yml", 24) + rows, `${at(x, y, s, r)} translate(-136 -124)`);
+}
+function s1(t) {
+	const cx = lerp(-160, 350, ease(seg(t, .2, 3)));
+	const walking = t < 3 ? 1 : 0;
+	const fly = ease(seg(t, 3.2, 4.4));
+	const sx = lerp(cx + 100, 960, fly), sy = lerp(470, 250, fly) - sin(fly * PI) * 120;
+	const dev = person({ x: 606, y: 560, sit: true, mood: t < 2.2 ? "frown" : t < 4.4 ? "o" : "smile", t, la: t > 4.6 ? [150 + sin(t * 9) * 12, 170] : [70, 100], ra: t > 4.6 ? [-150 - sin(t * 9) * 12, -170] : [60, 95], tilt: t > 2.2 ? -6 : 0 });
+	const desk = P("M500 470 H800 M520 470 V560 M780 470 V560") + P("M690 468 h74 M700 468 l-10 -52 h72 l8 52", 1, 'fill="var(--paper)"') + P("M585 524 h40 M605 524 V560");
+	const title = "corgi".split("").map((ch, i) => { const p = pop(t, 4.5 + i * .12); return p > 0 ? G(T(0, 0, ch, 190, 'text-anchor="middle"'), at(118 + i * 70 + (i > 2 ? 4 : 0), 250, p, (i - 2) * 3)) : ""; }).join("");
+	const under = P("M70 285 C150 268 300 300 420 276", seg(t, 5.2, 5.9), `stroke="${ORANGE}" stroke-width="9"`);
+	const hearts = t > 4.6 ? [0, 1].map((i) => { const p = ((t - 4.6) * .7 + i * .5) % 1; return G(`<path d="M0 6 C-12 -6 -6 -14 0 -6 C6 -14 12 -6 0 6Z" fill="${PINK}" stroke-width="2.4"/>`, at(405 + i * 26, 400 - p * 70, 1 + p * .4), `opacity="${sin(p * PI).toFixed(2)}"`); }).join("") : "";
+	return svg(ground() + desk + dev + title + under + (t > 3.2 ? sheet(sx, sy, lerp(.16, 1, fly), seg(t, 4.3, 6.4), lerp(-8, 3, fly)) : "") + corgi({ x: cx, y: 560, t, walk: walking, carry: t < 3.2 ? 1 : 0 }) + hearts) +
+		cap(t, .4, 4.3, "Then a corgi walks in. With one file.") + cap(t, 4.5, 8, "<em>corgi-compose.yml</em><small>every repo, database, service, and the env between them</small>");
+}
+
+const RUN = [
+	"🚀 🤖 Executing command for api:  {g}git clone https://github.com/acme/api.git api{/}",
+	"Cloning into 'api'...",
+	"{b} 🤖 Starting database db {/}",
+	"{b} ⛅ GETTING DATABASE DUMP for db {/}",
+	"✅ Successfully added database dump to db",
+	"{b} 🎉  db  IS SEEDED {/}",
+	"{b} 🐶 RUNNING SERVICE api {/}",
+	"🚀 🤖 Executing command for api:  {g}go run .{/}",
+	"{b} 🐶 RUNNING SERVICE web {/}",
+	"⏳ web dependency api satisfied (ready)",
+	"🚀 🤖 Executing command for web:  {g}yarn dev{/}",
+	"{c}[api]{/} listening on :7012",
+	"{c}[web]{/} ➜  Local: http://localhost:5173/",
+	"{H}😉 corgi is running - Ctrl+C to stop",
+];
+const RUN_AT = [1.8, 2.2, 3, 3.7, 4.3, 4.7, 5.4, 6, 6.6, 7, 7.4, 7.9, 8.2, 8.7];
+function s2(t) {
+	const n = reveal(t, RUN_AT);
+	const file = G(`<path d="M0 0 h58 l16 16 v70 h-74 Z" fill="#fff"/><path d="M58 0 v16 h16 M12 34 h46 M12 48 h46 M12 62 h30" stroke-width="2.6"/>`, at(973, 56, pop(t, .2))) + (t > .5 ? T(1010, 168, "corgi-compose.yml", 26, 'text-anchor="middle"') : "");
+	const arrows = P("M1010 180 C1010 220 850 220 850 262", seg(t, 2.6, 3.2)) + P("M1010 180 V262", seg(t, 1.4, 1.9)) + P("M1010 180 C1010 220 1170 220 1170 262", seg(t, 6.2, 6.7));
+	const wire1 = P("M892 318 H958", seg(t, 5.4, 5.9), `stroke="${ORANGE}" stroke-width="5" stroke-dasharray=".12 .08"`) + (t > 5.7 ? T(925, 304, ".env", 24, 'text-anchor="middle" style="fill:#e07b00"') + T(925, 342, "DB_HOST", 12, 'text-anchor="middle" class="mono"') : "");
+	const wire2 = P("M1062 318 H1118", seg(t, 6.9, 7.3), `stroke="${ORANGE}" stroke-width="5" stroke-dasharray=".12 .08"`) + (t > 7.1 ? T(1090, 304, ".env", 24, 'text-anchor="middle" style="fill:#e07b00"') + T(1090, 342, "API_URL", 12, 'text-anchor="middle" class="mono"') : "");
+	const nodes = dbCyl(850, 310, seg(t, 3, 3.6), ease(seg(t, 3.7, 4.6))) + repoBox(1010, 316, "api", seg(t, 1.8, 2.5)) + repoBox(1170, 316, "web", seg(t, 6.6, 7.1));
+	const checks = check(884, 268, seg(t, 4.7, 5.1)) + check(1052, 268, seg(t, 6, 6.4)) + check(1212, 268, seg(t, 7.4, 7.8));
+	const done = t > 8.7;
+	const dev = person({ x: 1120, y: 560, t, mood: done ? "smile" : "o", la: done ? [150 + sin(t * 10) * 10, 175] : [14, 6], ra: done ? [-150 - sin(t * 10) * 10, -175] : [-14, -6] });
+	return term({ x: 40, y: 56, w: 700, h: 426, title: "corgi run - stack", cmd: "corgi run", typed: seg(t, .5, 1.3), lines: RUN, n, fs: 12.2 }) +
+		svg(ground() + file + arrows + nodes + wire1 + wire2 + checks + dev + corgi({ x: 930, y: 560, t, wag: 1 + (done ? 1 : 0) })) +
+		cap(t, .4, 5.2, "<em>corgi run</em><small>one command brings the whole stack up</small>") + cap(t, 5.4, 10.67, "It clones what is missing, seeds the database,<small>writes the env, and starts everything.</small>");
+}
+
+const FEAT = [
+	"feature: api → ABC-123 @ /Users/me/dev/stack/corgi_services/.worktrees/api-ABC-123",
+	"feature: web → ABC-123 @ /Users/me/dev/stack/corgi_services/.worktrees/web-ABC-123",
+	"feature: mobile → no ABC-123 branch, staying on current checkout",
+];
+function s3(t) {
+	const lanes = [["api", 250, 1], ["web", 350, 1], ["mobile", 450, 0]];
+	const g = lanes.map(([name, y, has], i) => {
+		const main = P(`M330 ${y} H1090`, seg(t, .3 + i * .15, 1.3 + i * .15), 'opacity=".45"');
+		const dots = [400, 480, 560].map((x, k) => (t > .8 + k * .15 ? `<circle cx="${x}" cy="${y}" r="7" fill="var(--paper)"/>` : "")).join("");
+		const br = has ? P(`M560 ${y} C610 ${y} 600 ${y - 42} 650 ${y - 42} H1090`, seg(t, 2.3 + i * .5, 3.4 + i * .5), `stroke="${ORANGE}" stroke-width="5.5"`) +
+			[720, 820, 930].map((x, k) => (t > 3 + i * .5 + k * .2 ? `<circle cx="${x}" cy="${y - 42}" r="7" fill="${ORANGE}"/>` : "")).join("") +
+			(t > 3 + i * .5 ? T(1000, y - 54, "ABC-123", 26, 'style="fill:#e07b00"') : "")
+			: (t > 4.2 ? T(660, y - 14, "no such branch here: stays on main", 26, 'opacity=".7"') + [660, 780, 900].map((x) => `<circle cx="${x}" cy="${y}" r="7" fill="var(--paper)"/>`).join("") : "");
+		return repoBox(250, y - 8, name, seg(t, .1 + i * .15, .8 + i * .15)) + main + dots + br;
+	}).join("");
+	const join = P("M1100 208 q22 0 22 22 v96 q0 22 22 22 q-22 0 -22 22 v76 q0 22 -22 22", seg(t, 5, 5.8)) + (t > 5.6 ? T(1160, 340, "one", 30) + T(1160, 368, "running", 30) + T(1160, 396, "stack", 30) : "") + check(1190, 290, seg(t, 6, 6.4));
+	const cx = lerp(-120, 1400, seg(t, 1.5, 8));
+	return term({ x: 230, y: 34, w: 820, h: 138, title: "corgi run --feature", cmd: "corgi run --feature ABC-123", typed: seg(t, .3, 1.5), lines: FEAT, n: reveal(t, [2.3, 2.8, 4.2]), fs: 12.2 }) +
+		svg(ground(1, 585) + g + join + corgi({ x: cx, y: 585, t, walk: 1, s: .8 })) +
+		cap(t, .6, 8, "One branch name, across every repo.<small>Repos that have it join in. The rest stay on main.</small>");
+}
+
+function s4(t) {
+	const xs = [430, 690, 950], names = ["api/", "web/", "mobile/"], prs = ["#412", "#98", "#57"];
+	const stations = xs.map((x, i) => {
+		const p = seg(t, .2 + i * .15, 1);
+		const code = [0, 1, 2, 3].map((k) => P(`M${x - 62} ${268 + k * 18} h${[90, 60, 110, 74][(k + i) % 4]}`, seg(t, 4.2 + i * .3 + k * .5, 4.7 + i * .3 + k * .5), `stroke="${k % 2 ? ORANGE : "var(--ink)"}" stroke-width="5"`)).join("");
+		return P(`M${x - 80} 220 h160 q10 0 10 10 v110 q0 10 -10 10 h-160 q-10 0 -10 -10 v-110 q0 -10 10 -10Z`, p, 'fill="#fff"') + (p > .7 ? T(x - 68, 250, names[i], 26) : "") + code;
+	}).join("");
+	const bots = xs.map((x, i) => {
+		const p = ease(seg(t, 2 + i * .25, 4 + i * .15));
+		const bx = lerp(-80 - i * 90, x, p);
+		const typing = t > 4.2 && t < 7.2;
+		return bot({ x: bx, y: 520, t, walk: p < 1 ? 1 : 0, arms: typing ? [20 + sin(t * 22 + i) * 8, 20 + cos(t * 22 + i) * 8] : t > 9 ? [26, 26] : [0, 0], label: ["api", "web", "app"][i], color: ["#ffd9a8", "#cfe8ff", "#d7f5dd"][i] });
+	}).join("");
+	const sparks = t > 4.2 && t < 7.2 ? xs.map((x, i) => [0, 1, 2].map((k) => { const p = (t * 2.2 + k / 3 + i * .2) % 1; return `<path d="M${x - 20 + k * 20} ${400 - p * 36} v-9" stroke="${ORANGE}" opacity="${(1 - p).toFixed(2)}"/>`; }).join("")).join("") : "";
+	const prCards = xs.map((x, i) => card(x - 84, 150, `draft PR ${prs[i]} <span class="tag">draft</span>`, pop(t, 8.8 + i * .4))).join("");
+	const dev = t > 9.8 ? person({ x: lerp(1400, 1175, out(seg(t, 9.8, 11))), y: 560, t, flip: true, hold: "cup", la: [60, 150], mood: "smile", hair: 0 }) : "";
+	const stamp = pop(t, 11.2);
+	return chip(50, 40, `<span class="o">❯</span> ${esc("/corgi:stories ABC-123".slice(0, Math.round(22 * seg(t, .8, 2))))}`, pop(t, .5)) +
+		card(60, 110, `ABC-123 <small>Referral program · api, web, mobile</small>`, pop(t, .3), `transform-origin:0 0;`) +
+		chip(360, 40, `corgi run --detach <span class="g">✓</span>`, pop(t, 7.2)) + chip(620, 40, `corgi status --ready <span class="g">✓</span>`, pop(t, 7.9)) + chip(900, 40, `corgi test --e2e <span class="g">✓</span>`, pop(t, 8.4)) +
+		prCards + svg(ground() + stations + sparks + bots + dev +
+			(stamp > 0 ? G(`<rect x="-150" y="-34" width="300" height="68" rx="12" stroke="${RED}" stroke-width="5"/>` + T(0, 13, "you review, you merge", 34, `text-anchor="middle" style="fill:${RED}"`), at(1120, 300, stamp, -8)) : "")) +
+		cap(t, .6, 6.6, "Give the whole ticket to an agent.") + cap(t, 6.8, 13.33, "It edits three repos, runs the real stack,<small>and opens three draft PRs. Nothing ships without you.</small>");
+}
+
+function s5(t) {
+	const pg = `<path d="M430 70 h440 v440 h-440Z" fill="rgba(0,0,114,.12)" stroke="none"/>` + P("M420 60 h440 v440 h-440Z", seg(t, .1, .9), 'fill="#fff"');
+	const fixedP = seg(t, 4.8, 5.3);
+	const lines = [150, 172, 194, 290, 312, 334].map((y, i) => P(`M450 ${y} h${[380, 340, 250, 380, 310, 360][i]}`, seg(t, .6 + i * .06, 1.1 + i * .06), 'stroke-width="5" opacity=".18"')).join("");
+	const hl = `<rect x="${516}" y="226" width="${(158 * seg(t, 1, 1.8)).toFixed(1)}" height="30" rx="5" fill="${ORANGE}" opacity="${(.55 * (1 - fixedP)).toFixed(2)}" stroke="none"/>`;
+	const sentence = t > .8 ? `<text x="450" y="248" font-size="21" class="sans" opacity="${(1 - fixedP).toFixed(2)}">Guests need an account to pay.</text><text x="450" y="248" font-size="21" class="sans" opacity="${fixedP.toFixed(2)}">Guests pay without an account.</text>` : "";
+	const tag = fixedP > 0 ? G(`<rect x="-30" y="-14" width="60" height="28" rx="14" fill="${GREEN}" stroke="none"/><text x="0" y="6" font-size="15" class="sans" text-anchor="middle" style="fill:#fff">fixed</text>`, at(800, 240, back(fixedP))) : "";
+	const bubble = (x, y, w, who, text, p, tailX, flipTail) => (p <= 0 ? "" : G(`<path d="M0 0 h${w} q12 0 12 12 v52 q0 12 -12 12 h-${w - tailX - 26} l${flipTail ? 22 : -22} 24 l4 -24 h-${tailX} q-12 0 -12 -12 v-52 q0 -12 12 -12Z" fill="#fff"/>` + T(14, 30, who, 26, 'style="fill:#e07b00"') + `<text x="14" y="56" font-size="17" class="sans">${esc(text)}</text>`, `${at(x, y, back(clamp(p)))}`));
+	const max = person({ x: 250, y: 560, t, hair: 1, shirt: "#ffd9a8", mood: t > 2 && t < 4 ? "o" : "smile", la: (t > 1.6 && t < 4) || (t > 8.6 && t < 10.6) ? [100, 150] : [14, 6] });
+	const agent = bot({ x: 1050, y: 560, t, flip: true, arms: (t > 4 && t < 5.4) || (t > 6.3 && t < 7.4) ? [24 + sin(t * 20) * 6, 24] : [0, 0], color: "#ffd9a8" });
+	const press = seg(t, 12.1, 12.3) * (1 - seg(t, 12.3, 12.5));
+	const accepted = t > 7.6;
+	const decisions = (t > 5.5 ? T(450, 388, "Decisions", 28, 'style="fill:#e07b00"') + `<text x="450" y="412" font-size="15.5" class="sans">· guests pay without an account</text>` : "") + (t > 7.9 ? `<text x="450" y="434" font-size="15.5" class="sans">· no cart page: one tap is enough</text>` : "");
+	const proposal = bubble(900, 110, 320, "the agent proposes", "cut the cart page? one tap is enough", pop(t, 6.3) * (1 - seg(t, 10.6, 10.9)), 60, false) +
+		(t > 6.8 && t < 10.6 ? G(`<rect x="-44" y="-15" width="88" height="30" rx="15" fill="${accepted ? GREEN : ORANGE}"/><text x="0" y="6" font-size="15" class="sans" text-anchor="middle" style="fill:${accepted ? "#fff" : "#201000"}">${accepted ? "accepted" : "accept"}</text>`, at(1160, 196, pop(t, 6.8) * (1 - .12 * seg(t, 7.4, 7.6) * (1 - seg(t, 7.6, 7.8))))) : "");
+	const good = (x, y, a) => (t > a ? G(`<rect x="-66" y="-18" width="132" height="36" rx="18" stroke="${GREEN}" fill="#fff"/>` + T(0, 9, "Looks good", 26, `text-anchor="middle" style="fill:#1f8f52"`), at(x, y, pop(t, a), -6)) : "");
+	const dev2 = t > 8.8 ? person({ x: lerp(-60, 120, out(seg(t, 8.8, 9.6))), y: 560, t, la: t > 9.6 && t < 10.8 ? [100, 150] : [14, 6] }) : "";
+	const approved = t > 10.2 ? G(`<rect x="-62" y="-15" width="124" height="30" rx="15" fill="${GREEN}" stroke="none"/><text x="0" y="6" font-size="15" class="sans" text-anchor="middle" style="fill:#fff">approved 2/2</text>`, at(790, 60, pop(t, 10.2))) : "";
+	const btn = t > 11.3 ? G(`<rect x="-70" y="-22" width="140" height="44" rx="22" fill="${ORANGE}"/>` + T(0, 10, "Build it", 30, 'text-anchor="middle"'), at(640, 468, pop(t, 11.3) * (1 - press * .12))) : "";
+	const tickets = [0, 1, 2].map((i) => { const p = ease(seg(t, 12.5 + i * .3, 13.6 + i * .3)); return p > 0 ? card(lerp(600, 930 + i * 14, p), lerp(440, 250 + i * 62, p) - sin(p * PI) * 90, `${["API-1", "WEB-1", "APP-1"][i]} <small>${["guest checkout endpoint", "one-tap button", "pay sheet"][i]}</small>`, 1, `opacity:${Math.min(1, p * 3)};`) : ""; }).join("");
+	return chip(40, 34, `<span class="g">$</span> ${esc("corgi idea share docs/specs/checkout.md".slice(0, Math.round(39 * seg(t, .2, 1.3))))}`, pop(t, .1), "font-size:12.5px;") +
+		svg(ground() + pg + (t > .5 ? T(450, 112, "Checkout in one tap", 40) : "") + lines + hl + sentence + tag + decisions + approved + btn + max + dev2 + agent + proposal + good(250, 330, 8.9) + good(120, 330, 9.8) +
+			bubble(60, 200, 300, "max", "why? let guests pay without one", pop(t, 2.2) * (1 - seg(t, 5.6, 5.9)), 180, false) +
+			bubble(900, 110, 320, "the agent", "fixed. guests pay without an account", pop(t, 4.1) * (1 - seg(t, 5.8, 6.1)), 60, false)) +
+		tickets + cap(t, .5, 5.6, "A spec becomes a link.<small>People comment on the words. The agent answers and fixes the page.</small>") + cap(t, 5.8, 11, "The agent proposes. People sign off.<small>Every settled thread becomes a line under Decisions.</small>") + cap(t, 11.2, 16, "<em>Build it</em><small>the page becomes tickets, and the agents build them</small>");
+}
+
+const QR = (() => {
+	const n = 23; let seed = 7; const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+	let r = "";
+	const finder = (x, y) => x >= 0 && x < 7 && y >= 0 && y < 7 ? ((x === 0 || x === 6 || y === 0 || y === 6) || (x > 1 && x < 5 && y > 1 && y < 5)) : null;
+	for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+		const f = finder(x, y) ?? finder(x - (n - 7), y) ?? finder(x, y - (n - 7));
+		const inZone = (x < 8 && y < 8) || (x >= n - 8 && y < 8) || (x < 8 && y >= n - 8);
+		if (f === true || (f === null && !inZone && rnd() > .5)) r += `<rect x="${x}" y="${y}" width="1.03" height="1.03"/>`;
+	}
+	return `<svg viewBox="-1 -1 ${n + 2} ${n + 2}" width="150" height="150" style="background:#FDF6F2;border-radius:6px;display:block;margin:8px 0 0 0" fill="#0a0e2a">${r}</svg>`;
+})();
+const UP = ["", "  {g}✓{/} workspace registered", "  {g}✓{/} agent daemon running", "  {g}✓{/} tunnel  https://…trycloudflare.com", "  {g}✓{/} pairing open · scan with your phone to pair"];
+function s6(t) {
+	const B = ease(seg(t, 5, 6));
+	const n = reveal(t, [1.4, 1.6, 2, 2.4, 2.8]);
+	const laptop = term({ x: lerp(60, 30, B), y: lerp(50, 120, B), w: 500, h: 372, title: "corgi agent up", cmd: "corgi agent up", typed: seg(t, .4, 1.2), lines: UP, n, fs: 12.5, s: lerp(1, .6, B), extra: t > 3 ? QR : "" });
+	const scan = t > 3.5 && t < 5 ? P("M700 368 L300 330", 1, `stroke="${ORANGE}" stroke-dasharray=".03 .03" opacity="${(.5 + .5 * sin(t * 20)).toFixed(2)}"`) : "";
+	const paired = t < 5.2 ? check(330, 300, seg(t, 4.5, 4.9), 2.2) : "";
+	const walkPh = t * 6;
+	const devA = person({ x: 740, y: 560, t, flip: true, hold: "phone", la: [80, 120], mood: t > 4.5 ? "smile" : "flat" });
+	const devB = person({ x: 1060, y: 560, t, hold: "phone", la: [50, 130], mood: "smile", ll: [sin(walkPh) * 26, sin(walkPh) * 26 - 14], rl: [-sin(walkPh) * 26, -sin(walkPh) * 26 - 14] });
+	const scroll = (t * 60) % 400;
+	const outdoors = B > 0 ? G(`<circle cx="1150" cy="110" r="38" fill="${ORANGE}"/>` + [0, 1, 2, 3, 4, 5, 6, 7].map((i) => `<path d="M${1150 + cos(i * PI / 4 + t * .5) * 52} ${110 + sin(i * PI / 4 + t * .5) * 52} L${1150 + cos(i * PI / 4 + t * .5) * 66} ${110 + sin(i * PI / 4 + t * .5) * 66}" stroke="${ORANGE}"/>`).join("") +
+		[0, 1, 2].map((i) => { const x = 1360 - ((scroll + i * 400 / 3 * 2) % 520); return x > 880 ? `<path d="M${x} 500 v-34 M${x - 16} ${454} q16 -36 32 0 q-16 14 -32 0Z" fill="#d7f5dd" opacity=".8"/>` : ""; }).join("") +
+		P("M880 500 q90 -60 180 -10 t200 -8", 1, 'opacity=".35"'), "", `opacity="${B.toFixed(2)}"`) : "";
+	const home = B > 0 ? P("M20 190 L205 70 L390 190", seg(t, 5.4, 6.2)) + P("M50 172 V560 M360 172 V560", seg(t, 5.6, 6.4), 'opacity=".5"') + (t > 6 ? T(205, 132, "home", 30, 'text-anchor="middle"') : "") + bot({ x: 205, y: 560, t, arms: t > 10.4 ? [22 + sin(t * 22) * 7, 22 + cos(t * 22) * 7] : [0, 0], color: "#ffd9a8", mood: t > 10.4 ? "smile" : "flat" }) +
+		(t > 6.6 && t < 10.3 ? G(T(0, 0, "waits on you…", 28), at(250, 500 + sin(t * 3) * 3)) : "") + (t > 10.5 ? G(T(0, 0, "back to work!", 28, 'style="fill:#1f8f52"'), at(250, 500)) : "") : "";
+	const py = lerp(760, 96, out(seg(t, 6, 7)));
+	const allowed = t > 9;
+	const tap = seg(t, 8.5, 9);
+	const phone = t > 6 ? `<div style="position:absolute;left:560px;top:${py}px;width:250px;height:440px;border-radius:38px;background:#0b0b0d;border:4px solid #000072;box-shadow:8px 10px 0 rgba(0,0,114,.18);overflow:hidden;color:#fff">
+		<div style="position:absolute;left:50%;top:10px;transform:translateX(-50%);width:78px;height:22px;border-radius:12px;background:#000"></div>
+		<div style="padding:54px 16px 0 16px"><div style="font:700 22px/1 -apple-system,sans-serif">Inbox</div>
+		<div style="margin-top:16px;background:#1c1c1f;border-radius:16px;padding:14px">
+			<div style="display:flex;align-items:center;gap:8px;font:600 15px/1 -apple-system,sans-serif"><span style="width:9px;height:9px;border-radius:50%;background:${allowed ? "#30D158" : "#FF9F0A"}"></span>acme-api<span style="margin-left:auto;font-weight:500;font-size:12px;color:${allowed ? "#30D158" : "#FF9F0A"}">${allowed ? "allowed" : "needs you"}</span></div>
+			<div style="margin-top:10px;font:500 13px/1.3 'SF Mono',ui-monospace,Menlo,monospace;color:#c7c7cc">Bash&nbsp; git push</div>
+			<div style="display:flex;gap:8px;margin-top:14px;opacity:${allowed ? .35 : 1}"><div style="flex:1;text-align:center;padding:10px 0;border-radius:11px;background:#2c2c2e;font:600 14px/1 -apple-system,sans-serif">Deny</div><div style="flex:1;text-align:center;padding:10px 0;border-radius:11px;background:#FFA133;color:#201000;font:600 14px/1 -apple-system,sans-serif;box-shadow:0 0 0 ${(tap * (1 - seg(t, 9, 9.4)) * 7).toFixed(1)}px rgba(255,161,51,.45)">Allow</div></div>
+		</div>
+		<div style="margin-top:10px;background:#1c1c1f;border-radius:16px;padding:14px;font:600 15px/1 -apple-system,sans-serif;display:flex;align-items:center;gap:8px"><span style="width:9px;height:9px;border-radius:50%;background:#0A84FF"></span>web<span style="margin-left:auto;font-weight:500;font-size:12px;color:#8e8e93">working</span></div>
+		<div style="margin-top:10px;background:#1c1c1f;border-radius:16px;padding:14px;font:600 15px/1 -apple-system,sans-serif;display:flex;align-items:center;gap:8px"><span style="width:9px;height:9px;border-radius:50%;background:#30D158"></span>mobile<span style="margin-left:auto;font-weight:500;font-size:12px;color:#8e8e93">ready to merge</span></div>
+		</div><div style="position:absolute;left:50%;bottom:8px;transform:translateX(-50%);width:100px;height:4px;border-radius:3px;background:rgba(255,255,255,.8)"></div></div>` : "";
+	const arcP = seg(t, 9.2, 10.4);
+	const arcPath = "M560 300 C480 200 420 230 370 300";
+	const lockX = lerp(560, 370, arcP), lockY = 300 - sin(arcP * PI) * 70;
+	const arc = P(arcPath, arcP, `stroke="${ORANGE}" stroke-width="5" stroke-dasharray=".06 .05"`) + (arcP > 0 && arcP < 1 ? G(`<rect x="-11" y="-6" width="22" height="18" rx="4" fill="${ORANGE}"/><path d="M-6 -6 v-6 q6 -8 12 0 v6"/>`, at(lockX, lockY)) : "");
+	return svg(ground() + outdoors + home) + laptop + svg((t < 5 ? devA + corgi({ x: 900, y: 560, t, flip: true }) + scan : devB + corgi({ x: 930, y: 560, t, walk: 1, s: .9 })) + paired) + phone + svg(arc) +
+		cap(t, .4, 4.9, "<em>corgi agent up</em><small>scan the QR once, and the phone is paired</small>") + cap(t, 5.4, 13.33, "Then answer your agents from anywhere.<small>End-to-end encrypted, through your own machine.</small>");
+}
+
+function s7(t) {
+	const cols = ["Inbox", "Ready", "Running", "Blocked", "Review", "Done"];
+	const cx = (i) => 62 + i * 195;
+	const board = cols.map((c, i) => P(`M${cx(i)} 60 h180 q8 0 8 8 v330 q0 8 -8 8 h-180 q-8 0 -8 -8 v-330 q0 -8 8 -8Z`, seg(t, .1 + i * .08, .8 + i * .08), 'opacity=".4" stroke-width="3"') + (t > .3 + i * .08 ? T(cx(i) + 12, 96, c, 30) : "")).join("");
+	const mv = (a, b, t0) => lerp(cx(a), cx(b), ease(seg(t, t0, t0 + .8)));
+	const merged = t > 5.2, ready = t > 3.4;
+	const cards =
+		card(mv(0, 2, 1.4) + 8, 118, `ABC-118 <small>${t > 2.2 ? "now: Edit cmd/x.go" : "new bug · api"}</small>`, pop(t, .7)) +
+		card(cx(2) + 8, 196, `ABC-127 <small>now: Bash go test ./...</small>`, pop(t, .9)) +
+		card(cx(3) + 8, 118, `ABC-131 <span class="tag r">blocked</span><small>needs a credential</small>`, pop(t, 1.1)) +
+		card(mv(4, 5, 5.2) + 8, 118, `ABC-123 ${merged ? `<span class="tag g">merged</span>` : ""}<small>${merged ? "PR #412" : ready ? "ready to merge" : "checks ✓ · review…"}</small>`, pop(t, 1.3), ready && !merged ? `box-shadow:0 0 0 4px ${GREEN}55, 5px 6px 0 rgba(0,0,114,.16);` : "") +
+		card(cx(1) + 8, 118, `ABC-140 <small>handoff waiting</small>`, pop(t, 1.5));
+	const icon = (i, inner, label) => { const p = pop(t, 3.2 + i * .35); const x = 200 + i * 220; return p > 0 ? G(inner + T(0, 78, label, 28, 'text-anchor="middle"') + (t > 3.6 + i * .35 ? G(`<circle r="13" fill="${ORANGE}"/><text y="6" font-size="17" class="sans" text-anchor="middle">2</text>`, at(34, -34, pop(t, 3.6 + i * .35))) : ""), at(x, 488, p)) : ""; };
+	const icons = icon(0, `<rect x="-50" y="-30" width="100" height="18" rx="5" fill="#fff"/><path d="M-22 -12 h62 v54 h-62Z" fill="#fff"/><path d="M-12 4 h40 M-12 18 h30"/>`, "menu bar") +
+		icon(1, `<rect x="-44" y="-32" width="88" height="70" rx="8" fill="#fff"/><path d="M-22 -32 v70 M-10 -12 h40 M-10 4 h28 M-10 20 h36"/>`, "VS Code") +
+		icon(2, `<rect x="-48" y="-32" width="96" height="70" rx="10" fill="#fff"/>` + [0, 1, 2].map((a) => [0, 1].map((b) => `<rect x="${-38 + a * 27}" y="${-23 + b * 28}" width="21" height="21" rx="5" fill="${(a + b) % 2 ? ORANGE : "var(--lilac)"}" stroke-width="2.6"/>`).join("")).join(""), "Stream Deck") +
+		icon(3, `<rect x="-24" y="-40" width="48" height="84" rx="10" fill="#fff"/><path d="M-8 -30 h16 M-12 -6 h24 M-12 8 h18"/>`, "phone") +
+		icon(4, `<circle r="38" fill="#fff"/><path d="M-20 0 L22 -18 L12 20 L0 8 L-6 16 L-8 6 Z M0 8 L22 -18" fill="var(--lilac)"/>`, "Telegram");
+	return svg(board) + cards + svg(icons) + cap(t, .5, 8, "Every session, one board.<small>Menu bar, VS Code, Stream Deck, phone. They never disagree.</small>");
+}
+
+function s8(t, D) {
+	const sunrise = seg(t, 8.2, 9.6);
+	const stars = [[120, 90], [260, 160], [420, 70], [560, 140], [700, 60], [820, 170], [940, 90], [330, 250], [640, 240], [1180, 220], [1040, 300], [180, 300]].map(([x, y], i) => `<path d="M${x} ${y - 7} v14 M${x - 7} ${y} h14" stroke-width="2.6" opacity="${((.4 + .6 * Math.abs(sin(t * 2 + i))) * (1 - sunrise)).toFixed(2)}"/>`).join("");
+	const moon = G(`<path d="M0 -42 A42 42 0 1 0 30 30 A34 34 0 1 1 0 -42Z" fill="#fff3c4"/>`, at(1120, lerp(130, 60, seg(t, 0, 8)) + sunrise * 300, 1, -20), `opacity="${(1 - sunrise).toFixed(2)}"`);
+	const sun = sunrise > 0 ? `<circle cx="1120" cy="${lerp(640, 150, out(sunrise))}" r="50" fill="${ORANGE}"/>` : "";
+	const desk = P("M150 470 H520 M175 470 V560 M495 470 V560") + P("M300 468 h84 M310 468 l-10 -58 h82 l8 58", 1, `fill="${ORANGE}"`) +
+		`<path d="M290 400 L250 330 M340 396 V318 M392 400 L432 330" stroke="${ORANGE}" opacity="${(.35 + .25 * sin(t * 5)).toFixed(2)}"/>`;
+	const b1 = bot({ x: 230, y: 560, t, arms: [22 + sin(t * 22) * 7, 22 + cos(t * 22) * 7], color: "#ffd9a8" });
+	const b2 = bot({ x: 450, y: 560, t, flip: true, arms: [22 + cos(t * 19) * 7, 22 + sin(t * 19) * 7], color: "#cfe8ff" });
+	const bed = P("M900 560 V470 M900 520 H1220 V560 M1220 520 V490") + `<path d="M910 506 q18 -22 42 0Z" fill="var(--paper)"/><path d="M960 520 q20 -46 130 -38 q110 4 130 38Z" fill="var(--lilac)"/>`;
+	const devHead = G(person({ x: 0, y: 0, t, mood: sunrise > .7 ? "smile" : "sleep", lie: true, la: [0, 0], ra: [0, 0] }), `translate(${lerp(770, 930, 0)} 0)`);
+	const sleeper = sunrise < .7 ? G(`<circle cx="0" cy="0" r="20" fill="var(--paper)"/><path d="M-20 0 Q-25 -27 0 -24 Q23 -26 20 -3 Q10 -15 -4 -11 Q-14 -11 -20 0Z" fill="var(--ink)"/><path d="M2 3 q3 3 6 0 M11 3 q3 3 6 0" stroke-width="2.6"/><path d="M5 12 q5 3 9 0"/>`, at(942, 488, 1, -90)) : person({ x: 990, y: 520, t, sit: true, mood: "smile", la: [160 + sin(t * 8) * 10, 178], ra: [-160, -178] });
+	const notes = [["review comment", "fixed, replied, pushed"], ["red build", "rerun once → green"], ["ABC-131", "draft PR opened"]].map(([a, b], i) => {
+		const p = seg(t, 2 + i * 1.7, 3 + i * 1.7);
+		return p > 0 ? card(560, lerp(440, 150 + i * 92, out(p)), `${a} <span class="tag g">✓</span><small>${b}</small>`, 1, `opacity:${Math.min(1, p * 2.5)};min-width:210px`) : "";
+	}).join("");
+	return svg(stars + moon + sun + ground() + desk + b1 + b2 + bed + sleeper + corgi({ x: 800, y: 560, t, sleep: sunrise > .6 ? 0 : 1, flip: true })) + notes +
+		cap(t, .8, 8, "<em>corgi agent watch</em><small>bugs, reviews and red builds, handled while you sleep</small>") + cap(t, 8.3, D, "Good morning. Three things are done.");
+}
+
+function s9(t) {
+	const ys = [200, 290, 380];
+	const inl = ["api", "web", "mobile"].map((n, i) => P(`M90 ${ys[i]} H250 C330 ${ys[i]} 300 290 380 290`, seg(t, .2 + i * .15, 1.2 + i * .15), `stroke="${i < 2 ? ORANGE : "var(--ink)"}" stroke-width="5"`) + (t > .4 + i * .15 ? T(92, ys[i] - 14, `${n} ${i < 2 ? "· PR branch" : "· main"}`, 26) : "")).join("");
+	const xs = [430, 660, 890];
+	const run = lerp(380, 1090, ease(seg(t, 1.6, 6)));
+	const pipe = P("M380 290 H1090", seg(t, 1.2, 2.2), 'stroke-width="5" opacity=".45"');
+	const cmds = ["corgi init --feature $BRANCH", "corgi run --detach --wait", "corgi test --e2e"];
+	const nodes = xs.map((x, i) => { const on = run > x; return (t > 1.4 + i * .2 ? `<circle cx="${x}" cy="290" r="20" fill="${on ? GREEN : "var(--paper)"}"/>` + (on ? P("M-8 0 L-2 7 L9 -7", 1, `stroke="#fff" stroke-width="4.5" transform="translate(${x} 290)"`) : "") : ""); }).join("");
+	const chips = xs.map((x, i) => chip(x - 118 + (i - 1) * 16, 340 + (i % 2) * 54, `<span class="g">$</span> ${cmds[i]}`, pop(t, 1.8 + i * .5), "font-size:13.5px;")).join("");
+	const big = seg(t, 6, 6.6);
+	const confetti = t > 6.2 ? [...Array(14)].map((_, i) => { const p = seg(t, 6.2, 8); const a = i * 2.4; return `<circle cx="${1130 + cos(a) * p * (70 + i * 6)}" cy="${290 + sin(a) * p * (60 + i * 5) + p * p * 40}" r="5" fill="${[ORANGE, GREEN, PINK, "#79c0ff"][i % 4]}" stroke="none" opacity="${(1 - p).toFixed(2)}"/>`; }).join("") : "";
+	return svg(inl + pipe + nodes + (t > 1.6 && t < 6.1 ? bot({ x: run, y: 272, t, s: .7, walk: 1, color: "#ffd9a8" }) : "") + check(1130, 290, big, 3.2) + confetti + ground(1, 590) + corgi({ x: 1130, y: 590, t, s: .8, wag: t > 6 ? 2 : 1 })) + chips +
+		cap(t, .5, 8, "The same file boots the whole stack in CI.<small>One e2e suite across every repo. No sleep 60.</small>");
+}
+
+function s10(t, D) {
+	const title = "corgi".split("").map((ch, i) => { const p = pop(t, .5 + i * .12); return p > 0 ? G(T(0, 0, ch, 210, 'text-anchor="middle"'), at(486 + i * 78, 210, p, (i - 2) * 3)) : ""; }).join("");
+	const under = P("M440 250 C560 228 720 268 850 238", seg(t, 1.3, 2), `stroke="${ORANGE}" stroke-width="10"`);
+	const wave = (ph) => [150 + sin(t * 9 + ph) * 16, 172 + sin(t * 9 + ph) * 22];
+	const cast = person({ x: 250, y: 560, t, hair: 1, shirt: "#ffd9a8", la: wave(0), s: pop(t, 2.2) }) + person({ x: 390, y: 560, t, la: wave(1), s: pop(t, 2) }) +
+		bot({ x: 880, y: 560, t, arms: [0, 26 + sin(t * 9) * 10], color: "#ffd9a8", s: pop(t, 2.1) }) + bot({ x: 980, y: 560, t, arms: [0, 26 + sin(t * 9 + 1) * 10], color: "#cfe8ff", s: pop(t, 2.3) }) + bot({ x: 1080, y: 560, t, arms: [0, 26 + sin(t * 9 + 2) * 10], color: "#d7f5dd", s: pop(t, 2.5) });
+	const dog = corgi({ x: 640, y: 560, t, s: 1.5 * pop(t, 1.6), wag: 2 });
+	const fade = seg(t, D - 1.4, D - .2);
+	return svg(ground() + title + under + (t > 2 ? T(640, 318, "One file runs your whole project.", 50, 'text-anchor="middle"') : "") + cast + dog) +
+		chip(398, 606, `<span class="g">$</span> brew install andriiklymiuk/homebrew-tools/corgi`, pop(t, 3.6), "font-size:17px;") +
+		(t > 4.6 ? `<div style="position:absolute;left:0;right:0;top:672px;text-align:center;font:600 17px/1 -apple-system,'Segoe UI',sans-serif;opacity:${seg(t, 4.6, 5.2)}">github.com/Andriiklymiuk/corgi</div>` : "") +
+		`<div style="position:absolute;inset:0;background:${NIGHT};opacity:${fade}"></div>`;
+}
+
+const DBL = ['📦 snapshot "nightly" saved (postgres:16-alpine, pg16/arm64, 4823104 bytes)', "", "{g}${/} {B}corgi db restore nightly{/}", '✅ restored "db" from nightly.tar.zst'];
+const TUN = ["🌐 Tunnels (cloudflared) - Ctrl+C to stop", "", "  {g}✓{/} api                          :7012  → https://muddy-otter-42.trycloudflare.com", "  {g}✓{/} web                          :5173  → https://calm-fox-17.trycloudflare.com"];
+function sTools(t) {
+	const snap = seg(t, 1.5, 1.9) * (1 - seg(t, 1.9, 2.5));
+	const rewind = seg(t, 3.4, 4.4);
+	const db = dbCyl(300, 400, seg(t, .2, .9), 1) + (snap > 0 ? `<circle cx="300" cy="400" r="${80 + snap * 40}" stroke="${ORANGE}" opacity="${snap.toFixed(2)}" stroke-width="6"/>` : "") +
+		P("M400 430 C470 400 470 330 400 310 M400 310 l18 -6 M400 310 l8 17", rewind, `stroke="${ORANGE}" stroke-width="5"`) + (t > 3.6 ? T(430, 372, "back to", 26) + T(430, 398, "last night", 26) : "");
+	const globe = G(P("M-46 0 a46 46 0 1 0 92 0 a46 46 0 1 0 -92 0 M-46 0 h92 M0 -46 q-30 46 0 92 M0 -46 q30 46 0 92", seg(t, 4.2, 5.2), 'fill="var(--paper)"'), at(1090, 400));
+	const lap = P("M780 440 h84 M790 440 l-10 -56 h82 l8 56", seg(t, 4, 4.8), 'fill="var(--paper)"') + (t > 4.6 ? T(822, 476, "localhost", 24, 'text-anchor="middle"') : "");
+	const link = P("M876 400 C940 350 980 350 1040 396", seg(t, 5.4, 6.2), `stroke="${ORANGE}" stroke-width="5" stroke-dasharray=".1 .07"`) + (t > 6 ? T(960, 336, "https", 28, 'text-anchor="middle" style="fill:#e07b00"') : "") + check(1136, 356, seg(t, 6.2, 6.6));
+	return term({ x: 20, y: 40, w: 596, h: 150, title: "corgi db", cmd: "corgi db snapshot nightly", typed: seg(t, .3, 1.3), lines: DBL, n: reveal(t, [1.6, 2.4, 2.5, 3.5]), fs: 11.2 }) +
+		term({ x: 636, y: 40, w: 624, h: 150, title: "corgi tunnel", cmd: "corgi tunnel", typed: seg(t, 3.6, 4.2), lines: TUN, n: t > 4.2 ? reveal(t, [4.5, 4.6, 5.6, 6]) : 0, fs: 11.2, s: pop(t, 3.3) }) +
+		svg(ground() + db + lap + globe + link + corgi({ x: 150, y: 560, t, s: .85 })) +
+		cap(t, .5, 8, "Databases you can snapshot and restore.<small>A public HTTPS URL for a webhook or a phone. 38 database drivers.</small>");
+}
+
+function sAuto(t) {
+	const zx = [300, 530, 760], zn = ["Ready", "In Progress", "In Review"];
+	const zones = zn.map((n, i) => P(`M${zx[i]} 86 h200 q8 0 8 8 v96 q0 8 -8 8 h-200 q-8 0 -8 -8 v-96 q0 -8 8 -8Z`, seg(t, .2 + i * .1, .9 + i * .1), 'opacity=".4" stroke-width="3"') + (t > .5 ? T(zx[i] + 10, 78, n, 28) : "")).join("");
+	const bell = G(P("M-22 14 q4 -8 4 -22 q0 -22 18 -22 q18 0 18 22 q0 14 4 22 Z M-6 20 q6 8 12 0", seg(t, .2, .8), 'fill="var(--paper)"'), at(150, 140, 1, t > .9 && t < 1.8 ? sin(t * 40) * 14 : 0)) + (t > .4 ? T(150, 196, "the tracker", 26, 'text-anchor="middle"') : "");
+	const tx = lerp(lerp(lerp(120, zx[0] + 10, ease(seg(t, 1, 1.7))), zx[1] + 10, ease(seg(t, 3, 3.7))), zx[2] + 10, ease(seg(t, 8.6, 9.3)));
+	const claimed = t > 2.7;
+	const ticket = t > 1 ? card(tx, 112, `ABC-7 ${claimed ? `<span class="tag">${t > 9.2 ? "PR linked" : "claimed"}</span>` : ""}<small>Login loops after reset</small>`, pop(t, 1), "max-width:170px;white-space:normal;") : "";
+	const bx = lerp(-80, 640, ease(seg(t, 1.6, 3.2)));
+	const working = t > 4.2 && t < 6.6, reviewing = t >= 6.6 && t < 8;
+	const box = P("M540 270 h200 q10 0 10 10 v120 q0 10 -10 10 h-200 q-10 0 -10 -10 v-120 q0 -10 10 -10Z", seg(t, 3.3, 4), 'fill="#fff"') + (t > 3.8 ? T(552, 300, "worktree · api", 24) : "") +
+		[0, 1, 2, 3].map((k) => P(`M556 ${322 + k * 20} h${[150, 96, 170, 120][k]}`, seg(t, 4.3 + k * .5, 4.8 + k * .5), `stroke="${k % 2 ? ORANGE : "var(--ink)"}" stroke-width="5"`)).join("");
+	const lens = reviewing ? G(`<circle r="26" fill="rgba(255,255,255,.5)"/><path d="M19 19 L40 40" stroke-width="6"/>`, at(600 + sin(t * 4) * 60, 350 + cos(t * 5) * 20)) + T(640, 250, "reviews its own diff", 28, 'text-anchor="middle" style="fill:#e07b00"') : "";
+	const worker = bot({ x: bx, y: 560, t, walk: t < 3.2 ? 1 : 0, arms: working ? [22 + sin(t * 22) * 7, 22 + cos(t * 22) * 7] : t > 8 ? [26, 26] : [0, 0], color: "#ffd9a8" });
+	const sparks = working ? [0, 1, 2].map((k) => { const p = (t * 2.2 + k / 3) % 1; return `<path d="M${620 + k * 20} ${440 - p * 30} v-9" stroke="${ORANGE}" opacity="${(1 - p).toFixed(2)}"/>`; }).join("") : "";
+	const dev = person({ x: 1150, y: 560, t, sit: true, flip: true, hold: "cup", la: [70, 150], mood: "smile" }) + P("M1128 524 h44 M1150 524 V560");
+	const rules = [["someone else's PR", "reviewed, never pushed to"], ["a ticket in Backlog", "skipped: not in the rules"], ["4th fix this hour", "deferred: cap 3/h, 10/day"]].map(([a, b], i) => card(36, 300 + i * 66, `${a}<small>${b}</small>`, pop(t, 10.2 + i * .5), "min-width:200px;")).join("");
+	return chip(300, 20, `<span class="g">$</span> ${esc("corgi agent watch enable --action fix --auto-for tickets,reviews,comments,ci".slice(0, Math.round(77 * seg(t, .2, 1.6))))}`, pop(t, .1), "font-size:12.5px;padding:5px 12px;top:8px;") +
+		svg(ground() + zones + bell + box + sparks + worker + lens + dev) + ticket +
+		card(545, 216, `draft PR #415 <span class="tag">draft</span>`, pop(t, 8)) +
+		card(1010, 300, `🔔 fixed ABC-7 <small>github.com/acme/api/pull/415</small>`, pop(t, 9.6)) + rules +
+		cap(t, .5, 6.4, "Agents that run on their own.<small>A ticket assigned to you is claimed and moved to In Progress.</small>") +
+		cap(t, 6.6, 13.33, "It reviews its own diff, opens a draft PR,<small>moves the ticket to In Review, and rings you once.</small>");
+}
+
+const RUNGS = [["1", "You drive"], ["2", "It tells you"], ["3", "It drafts,", "you review"], ["4", "It works", "a shift"], ["5", "Lights out"]];
+function sLadder(t) {
+	const sx = (i) => 230 + i * 172, sy = (i) => 470 - i * 68;
+	const stairs = P(`M230 560 V470 H402 V402 H574 V334 H746 V266 H918 V198 H1090 V560`, seg(t, .3, 2.2), `fill="var(--lilac)"`);
+	const labels = RUNGS.map((r, i) => (t > .9 + i * .3 ? T(sx(i) + 14, sy(i) + 44, r[0], 46, 'style="fill:#e07b00"') + T(sx(i) + 46, sy(i) + 34, r[1], 23) + (r[2] ? T(sx(i) + 46, sy(i) + 56, r[2], 23) : "") : "")).join("");
+	const climb = ease(seg(t, 6.4, 7.6));
+	const bx = lerp(sx(2) + 100, sx(3) + 100, climb), by = lerp(sy(2), sy(3), climb) - sin(climb * PI) * 50;
+	const tags = card(sx(0) + 50, sy(0) - 206, "payments", pop(t, 3)) + card(bx - 26, by - 168, `api <span class="tag">${climb > .9 ? "level 4" : "level 3"}</span>`, pop(t, 3.6)) + card(sx(4) + 14, sy(4) - 150, "docs", pop(t, 4.2));
+	const first = "corgi agent level 3", second = 'corgi agent level 4 --done-when "go test ./..."';
+	const cmd = t < 5 ? first.slice(0, Math.round(first.length * seg(t, .3, 1.2))) : second.slice(0, Math.round(second.length * seg(t, 5, 6.3)));
+	return chip(40, 30, `<span class="g">$</span> ${esc(cmd)}`, pop(t, .1)) +
+		(t > 7.6 ? chip(40, 84, `<span class="g">✓</span> done means the tests say so`, pop(t, 7.6), "font-size:13px;") : "") +
+		svg(stairs + labels + person({ x: sx(0) + 96, y: sy(0), t, s: .8, mood: "smile", la: [14, 6] }) +
+			(t > 3.4 ? bot({ x: bx, y: by, t, s: .9, color: "#ffd9a8", arms: climb > .9 ? [26, 26] : [0, 0] }) : "") +
+			(t > 4 ? corgi({ x: sx(4) + 96, y: sy(4), t, s: .7, sleep: 1 }) : "") + P("M40 560 H230 M1090 560 H1240", 1, 'stroke-width="3" opacity=".55"')) + tags +
+		cap(t, .5, 10.67, "Choose how much runs without you.<small>Five levels, set per workspace: payments stays low, docs runs high.</small>");
+}
+
+function sTeam(t) {
+	const lap = (x, name) => P(`M${x - 52} 330 h104 M${x - 40} 330 l-8 -64 h96 l-8 64`, seg(t, .2, 1), 'fill="var(--paper)"') + (t > .6 ? T(x, 366, name, 26, 'text-anchor="middle"') : "");
+	const hop = ease(seg(t, 3.8, 4.8));
+	const cx = lerp(170, 430, hop), cy = 236 - sin(hop * PI) * 70;
+	const crown = t > 1.2 ? G(`<path d="M-22 12 L-26 -12 L-10 0 L0 -18 L10 0 L26 -12 L22 12 Z" fill="${ORANGE}"/>`, at(cx, cy, pop(t, 1.2), sin(hop * PI) * 20)) + T(cx, cy - 26, "leads", 26, 'text-anchor="middle" style="fill:#e07b00"') : "";
+	const pulse = P("M228 300 H372", seg(t, 1.4, 2), 'stroke-dasharray=".08 .08" opacity=".6"') + (t > 2 ? `<circle cx="${228 + ((t * .9) % 1) * 144}" cy="300" r="6" fill="${ORANGE}" stroke="none"/>` : "");
+	const spent = t > 3 ? T(170, 398, "window spent", 24, `text-anchor="middle" style="fill:${RED}"`) : "";
+	const quiet = t > 1.8 ? T(lerp(430, 170, hop), 424, t > 3 && hop >= 1 ? "rests" : "stays quiet", 24, 'text-anchor="middle" opacity=".6"') : "";
+	const pass = ease(seg(t, 6.2, 7.2));
+	const claude = bot({ x: 800, y: 560, t, color: "#ffd9a8", mood: t > 5.4 ? "flat" : "smile", arms: t < 5.4 ? [20 + sin(t * 22) * 7, 20 + cos(t * 22) * 7] : [0, 0] }) + T(800, 590, "claude", 26, 'text-anchor="middle"');
+	const codex = bot({ x: 1050, y: 560, t, flip: true, color: "#cfe8ff", arms: t > 7.2 ? [20 + sin(t * 22) * 7, 20 + cos(t * 22) * 7] : [0, 0] }) + T(1050, 590, "codex", 26, 'text-anchor="middle"');
+	const limit = t > 5.4 && t < 9.5 ? T(800, 420, "at its limit", 26, `text-anchor="middle" style="fill:${RED}"`) : "";
+	return chip(40, 30, `<span class="g">$</span> corgi agent peers`, pop(t, .2)) + chip(640, 30, `<span class="g">$</span> corgi agent workspaces agents acme-stack claude,codex`, pop(t, 4.6), "font-size:12.5px;") +
+		svg(ground() + lap(170, "home-mbp") + lap(430, "work-mbp") + pulse + crown + spent + quiet + claude + codex + limit + P("M620 110 V540", seg(t, 4.4, 5), 'opacity=".25" stroke-dasharray=".02 .02"')) +
+		card(lerp(740, 990, pass), 350 - sin(pass * PI) * 90, `acme/api#418 <small>review comment</small>`, pop(t, 5)) +
+		card(810, 150, `handoff <span class="tag g">typed packet</span><small>done · not done · decided · the check to re-run</small>`, pop(t, 8.2)) +
+		cap(t, .5, 5, "Two laptops: one leads, the other takes over.") + cap(t, 5.2, 10.67, "Claude first, Codex when it cannot.<small>Work hands itself off, and the next run re-checks it.</small>");
+}
+
+const SCENES = [s0, s1, s2, s3, sTools, s4, s5, s6, s7, sAuto, sLadder, s8, sTeam, s9, s10];
+const stage = document.getElementById("stage");
+function render(time) {
+	const t = clamp(time, 0, DURATION - .001);
+	let i = SCENE_BARS.findIndex((b, k) => t < SCENE_BARS[k + 1] * BAR);
+	if (i < 0) i = SCENES.length - 1;
+	const a = SCENE_BARS[i] * BAR, D = (SCENE_BARS[i + 1] - SCENE_BARS[i]) * BAR, lt = t - a;
+	const fade = Math.min(seg(lt, 0, .35), i === SCENES.length - 1 ? 1 : 1 - seg(lt, D - .3, D));
+	let night = 0;
+	if (SCENES[i] === s8) night = ease(seg(lt, 0, 1.2)) * (1 - ease(seg(lt, 8.2, 9.6)));
+	stage.style.setProperty("--ink", mix(INK, PAPER, night));
+	stage.style.setProperty("--paper", mix(PAPER, NIGHT, night));
+	stage.style.setProperty("--lilac", mix("#dfe3ff", "#2a3170", night));
+	stage.style.background = mix(PAPER, NIGHT, night);
+	const boil = Math.floor(t * 7) % 3;
+	stage.innerHTML = `<div style="position:absolute;inset:0;opacity:${fade.toFixed(3)}"><style>svg.ink{filter:url(#boil${boil})}</style>${SCENES[i](lt, D)}</div>`;
+}
+
+const music = document.getElementById("music"), ui = document.getElementById("ui"), bar = document.getElementById("bar"), fit = document.getElementById("fit");
+const capture = new URLSearchParams(location.search).has("capture");
+if (capture) document.body.classList.add("capture");
+function layout() {
+	const s = capture ? 1 : Math.min(innerWidth / 1280, innerHeight / 720);
+	fit.style.transform = `scale(${s}) translate(-50%, -50%)`;
+}
+addEventListener("resize", layout); layout();
+window.seek = (t) => { render(t); return true; };
+window.filmDuration = DURATION;
+
+let playing = false, clock0 = 0, hasAudio = false;
+music.addEventListener("canplaythrough", () => { hasAudio = true; }, { once: true });
+const now = () => (hasAudio ? music.currentTime : (performance.now() - clock0) / 1000);
+function tick() {
+	if (!playing) return;
+	const t = now();
+	render(t);
+	bar.firstElementChild.style.width = `${(t / DURATION) * 100}%`;
+	if (t >= DURATION || (hasAudio && music.ended)) { playing = false; ui.style.display = "flex"; ui.querySelector("button").textContent = "↻  Play again"; return; }
+	requestAnimationFrame(tick);
+}
+function play(from = 0) {
+	ui.style.display = "none"; playing = true; clock0 = performance.now() - from * 1000;
+	if (hasAudio) { music.currentTime = from; music.play().catch(() => { hasAudio = false; }); }
+	requestAnimationFrame(tick);
+}
+ui.addEventListener("click", () => play(0));
+bar.addEventListener("click", (e) => { const r = bar.getBoundingClientRect(); const t = ((e.clientX - r.left) / r.width) * DURATION; if (playing) { clock0 = performance.now() - t * 1000; if (hasAudio) music.currentTime = t; } else play(t); });
+Promise.all([document.fonts.load('700 40px Caveat'), document.fonts.load('500 40px Caveat')]).catch(() => {}).then(() => document.fonts.ready).then(() => { render(capture ? 0 : 9); window.filmReady = true; });
+</script>
+</body>
+</html>

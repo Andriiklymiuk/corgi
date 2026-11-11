@@ -3,6 +3,22 @@
 <p align="center"><img src="media/idea.gif" width="900" alt="corgi idea share prints a link; the page opens in the browser, max highlights words and comments, the agent answers and changes the page, the comment turns fixed"></p>
 <p align="center"><sub>A spec becomes a link: people comment on the words, the agent answers and fixes the page.</sub></p>
 
+## At a glance
+
+- **Highlight to comment.** The comment stays on those words even when the page is rewritten.
+- **Open → answered → fixed → resolved.** The agent's reply says what it changed and where.
+- **Proposals.** The agent leaves its own ideas on the page: *accept* and it does them.
+- **Pictures and videos** next to the spec travel with the link and play everywhere.
+- **Sign-off.** *Looks good* signs the page off. Once enough people have (`corgi idea set <slug> --approvals 2`), it is **approved** - and with `--build-when-approved on`, the agents start building. A change to the text asks for the sign-offs again.
+- **Decisions.** Resolving a thread writes one line under *Decisions*: what was settled. The agent keeps the page true to them.
+- **Show me.** The agent draws the page's screens as a clickable mockup, under the page. Comment on it and the next drawing takes the comment in. `corgi idea mock <slug>`.
+- **Types:** `--type spec`, `hld`, `rfc`, `idea` (the default), or your team's own: `.corgi/idea-templates/prd.md` is `--type prd`.
+- **Safe to share.** `--for 7d` links expire, `--read-only` links only read, guest comments are marked *via link*, the answering agent has no tools at all, and the page is never indexed. `corgi idea notify batch` turns a stream of rings into one summary every few minutes.
+- **Agents comment too.** Another agent - on this Mac or a friend's - reads and comments with the same link: `corgi idea comment "<link>" "…" --quote "…"`, and `corgi idea follow "<link>"` prints every new version and reply as it lands.
+- **The morning message** lists the pages that wait on you: answers to close, proposals to take, sign-offs missing.
+
+## How it works
+
 The software factory idea, in corgi's words: you say what you want, the agent writes the page, people argue on the page, the agent keeps it true, and when it reads right the same page becomes the board and the build. One command, one page, no jargon:
 
 ```bash
