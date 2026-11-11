@@ -6,7 +6,7 @@ const output = resolve(process.argv[2] ?? "docs/film/music.mp3");
 const RATE = 44100;
 const BEAT = 60 / 90;
 const BAR = BEAT * 4;
-const BARS = 59;
+const BARS = 68;
 const SWING = 0.035;
 const total = Math.ceil((BARS * BAR + 1.5) * RATE);
 
@@ -116,9 +116,10 @@ for (let bar = 0; bar < BARS; bar++) {
 	const at = (beat) => bar * BAR + beat * BEAT + (Math.round(beat * 2) % 2 === 1 && beat * 2 === Math.round(beat * 2) ? SWING : 0);
 	const cycle = (((bar - 3) % 4) + 4) % 4;
 	const chord = bar < 3 ? TENSE : bar === LAST ? FINAL : CHORDS[cycle];
-	const night = within(bar, 44, 47);
-	const full = within(bar, 6, 20) || within(bar, 27, 39) || within(bar, 48, 57);
-	const light = within(bar, 21, 26) || within(bar, 40, 43);
+	const night = within(bar, 48, 51);
+	const actCard = [6, 7, 18, 19, 28, 29, 41, 42, 56, 57].includes(bar);
+	const full = !actCard && (within(bar, 8, 27) || within(bar, 36, 47) || within(bar, 52, 66));
+	const light = within(bar, 30, 35) || actCard;
 
 	chord.notes.forEach((note, i) => pad(bar * BAR, bar === LAST ? BAR * 1.3 : BAR, note, bar < 3 ? 0.03 : night ? 0.05 : 0.04, (i - 1.5) * 0.35));
 
@@ -159,9 +160,9 @@ for (let bar = 0; bar < BARS; bar++) {
 		kick(at(0), 0.36); rim(at(3), 0.12);
 		for (let step = 1; step < 8; step += 2) hat(at(step * 0.5), 0.055, 0.3);
 	}
-	if (bar === 54 || bar === 26 || bar === 5) for (let step = 0; step < 8; step++) rim(at(2 + step * 0.25), 0.05 + step * 0.022);
-	if (within(bar, 16, 20) || within(bar, 28, 34) || within(bar, 36, 39) || within(bar, 49, 51) || within(bar, 55, 57)) MOTIF[cycle].forEach(([beat, length, note]) => lead(at(beat), length * BEAT * 0.92, note, 0.1));
-	if (light || within(bar, 52, 54)) MOTIF[cycle].slice(0, 2).forEach(([beat, , note]) => bell(at(beat), note + 12, 0.06, 0.2));
+	if ([5, 7, 19, 29, 42, 57].includes(bar)) for (let step = 0; step < 8; step++) rim(at(2 + step * 0.25), 0.05 + step * 0.022);
+	if (!actCard && (within(bar, 12, 17) || within(bar, 23, 27) || within(bar, 36, 40) || within(bar, 44, 47) || within(bar, 52, 55) || within(bar, 60, 66))) MOTIF[cycle].forEach(([beat, length, note]) => lead(at(beat), length * BEAT * 0.92, note, 0.1));
+	if (light) MOTIF[cycle].slice(0, 2).forEach(([beat, , note]) => bell(at(beat), note + 12, 0.06, 0.2));
 }
 
 const delay = Math.round(BEAT * 0.75 * RATE);
