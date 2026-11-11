@@ -427,7 +427,7 @@ function s10(t, D) {
 		bot({ x: 880, y: 560, t, arms: [0, 26 + sin(t * 9) * 10], color: "#F6D9B4", s: pop(t, 2.1) }) + bot({ x: 980, y: 560, t, arms: [0, 26 + sin(t * 9 + 1) * 10], color: "#D5E3F2", s: pop(t, 2.3) }) + bot({ x: 1080, y: 560, t, arms: [0, 26 + sin(t * 9 + 2) * 10], color: "#D9EAD9", s: pop(t, 2.5) });
 	const dog = corgi({ x: 640, y: 560, t, s: 1.5 * pop(t, 1.6), wag: 2 });
 	const fade = seg(t, D - 1.4, D - .2);
-	return svg(ground() + title + under + (t > 2 && t < 5.6 ? T(640, 318, "One file runs your whole project.", 50, 'text-anchor="middle"') : "") + (t >= 5.6 ? G(T(0, 0, "Start on step one.", 56, 'text-anchor="middle" style="fill:#C96A12"'), at(640, 318, pop(t, 5.6))) : "") + cast + dog) +
+	return svg(ground() + title + under + (t > 2 && t < 5.6 ? T(640, 318, "One file runs your whole project.", 50, 'text-anchor="middle"') : "") + (t >= 5.6 ? G(T(0, 0, "Start on step one. Go autonomous when you want.", 46, 'text-anchor="middle" style="fill:#C96A12"'), at(640, 318, pop(t, 5.6))) : "") + cast + dog) +
 		chip(398, 606, `<span class="g">$</span> brew install andriiklymiuk/homebrew-tools/corgi`, pop(t, 3.6), "font-size:17px;") +
 		(t > 4.6 ? `<div style="position:absolute;left:0;right:0;top:672px;text-align:center;font:600 17px/1 -apple-system,'Segoe UI',sans-serif;opacity:${seg(t, 4.6, 5.2)}">github.com/Andriiklymiuk/corgi</div>` : "") +
 		`<div style="position:absolute;inset:0;background:${NIGHT};opacity:${fade}"></div>`;
@@ -572,8 +572,7 @@ window.seek = (t) => { render(t); return true; };
 window.filmDuration = DURATION;
 
 let playing = false, clock0 = 0, hasAudio = false;
-music.addEventListener("canplaythrough", () => { hasAudio = true; }, { once: true });
-const now = () => (hasAudio ? music.currentTime : (performance.now() - clock0) / 1000);
+const now = () => (hasAudio && !music.paused ? music.currentTime : (performance.now() - clock0) / 1000);
 function tick() {
 	if (!playing) return;
 	const t = now();
@@ -584,11 +583,13 @@ function tick() {
 }
 function play(from = 0) {
 	ui.style.display = "none"; playing = true; clock0 = performance.now() - from * 1000;
-	if (hasAudio) { music.currentTime = from; music.play().catch(() => { hasAudio = false; }); }
+	try { music.currentTime = from; } catch {}
+	const started = music.play();
+	if (started) started.then(() => { hasAudio = true; }).catch(() => { hasAudio = false; });
 	requestAnimationFrame(tick);
 }
 ui.addEventListener("click", () => play(0));
-bar.addEventListener("click", (e) => { const r = bar.getBoundingClientRect(); const t = ((e.clientX - r.left) / r.width) * DURATION; if (playing) { clock0 = performance.now() - t * 1000; if (hasAudio) music.currentTime = t; } else play(t); });
+bar.addEventListener("click", (e) => { const r = bar.getBoundingClientRect(); const t = ((e.clientX - r.left) / r.width) * DURATION; if (playing) { clock0 = performance.now() - t * 1000; try { music.currentTime = t; } catch {} } else play(t); });
 Promise.all([document.fonts.load('500 40px Fraunces'), document.fonts.load('600 40px Fraunces'), document.fonts.load('italic 500 40px Fraunces'), document.fonts.load('400 20px Inter'), document.fonts.load('500 20px Inter'), document.fonts.load('600 20px Inter')]).catch(() => {}).then(() => document.fonts.ready).then(() => { render(capture ? 0 : 9); window.filmReady = true; });
 </script>
 </body>
