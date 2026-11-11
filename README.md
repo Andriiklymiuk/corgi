@@ -28,8 +28,8 @@ A feature is rarely one repo. It's an API change, a web change, a mobile change,
                           └─ your phone  scan a QR           send work to this laptop from anywhere
 ```
 
-<p align="center"><a href="docs/media/corgi-film.mp4"><img src="docs/media/corgi-film.png" width="760" alt="The corgi film: a drawn corgi carries one file into a messy desk, the stack comes up, agents take a ticket across three repos, the team comments on a spec and signs it off, the phone answers a permission, an agent takes a ticket to a draft PR by itself, a ladder of five autonomy levels, the laptop works through the night"></a></p>
-<p align="center"><sub>▶ <a href="docs/media/corgi-film.mp4">Watch the film</a> (under 3 minutes, with sound) · <a href="https://youtu.be/rlMCjs4EoFs?si=o3SQaymM55zxBCUY">the older screen recording</a></sub></p>
+<p align="center"><a href="https://andriiklymiuk.github.io/corgi/film/"><img src="docs/media/corgi-film.png" width="760" alt="The corgi film: a drawn corgi carries one file into a messy desk, the stack comes up, agents take a ticket across three repos, the team comments on a spec and signs it off, the phone answers a permission, an agent takes a ticket to a draft PR by itself, a ladder of five autonomy levels, the laptop works through the night"></a></p>
+<p align="center"><sub>▶ <a href="https://andriiklymiuk.github.io/corgi/film/">Watch the film</a> (under 3 minutes, with sound) · <a href="https://andriiklymiuk.github.io/corgi/film/corgi-film.mp4">mp4</a> · <a href="https://youtu.be/rlMCjs4EoFs?si=o3SQaymM55zxBCUY">the older screen recording</a></sub></p>
 
 ## Install
 
