@@ -95,6 +95,7 @@ coverage-check: test
 	./scripts/coverage-floor.sh coverage.out
 
 .PHONY: showcase \
+film \
 fixHooks \
 release \
 tag \
@@ -116,3 +117,7 @@ coverage-check
 
 showcase: ## redraw docs/media (terminal mockups + gifs) with Chrome
 	scripts/capture-showcase.sh
+
+film: ## redraw the film: synthesize the music, render docs/film/index.html to docs/media/corgi-film.mp4
+	node scripts/film-music.mjs
+	node scripts/render-film.mjs

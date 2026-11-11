@@ -54,6 +54,8 @@ corgi-mobile-app/
 docs/media/frames/
 docs/media/*.mp4
 !docs/media/story.mp4
+!docs/media/corgi-film.mp4
+docs/film/music.*
 
 *.ips
 # claude plugin eval reports

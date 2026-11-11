@@ -110,4 +110,4 @@ Picking one ticket quietly engages the rest of the loop:
 
 - [`docs/agents.md`](agents.md) - driving corgi non-interactively (`--json`, exit codes).
 - [`docs/mcp.md`](mcp.md) - corgi's own MCP server.
-- The Claude Code plugin section of the [README](../README.md#ai-agents-mcp--claude-code).
+- The Claude Code plugin section of the [README](ticket-to-pr.md).
