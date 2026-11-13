@@ -1652,7 +1652,17 @@ func (d *Daemon) isolateFix(spec WatchSpec, e watch.Event, fix *harness.Print, l
 		return noop, true
 	}
 	branch := FixBranch(e.Ref)
-	trees, err := d.Isolate(spec.Dir, branch)
+	projects := pullProjects(e)
+	if len(projects) > 0 {
+		fmt.Fprintf(logFile, "=== making worktrees on %s in %s\n", branch, strings.Join(projects, ", "))
+	} else {
+		fmt.Fprintf(logFile, "=== making worktrees on %s in every repository\n", branch)
+	}
+	began := time.Now()
+	trees, err := d.isolateWithin(spec.Dir, branch, projects, isolateTimeout)
+	if err == nil {
+		fmt.Fprintf(logFile, "=== worktrees ready in %s\n", time.Since(began).Round(time.Second))
+	}
 	if err != nil {
 		fmt.Fprintf(logFile, "\n=== could not isolate: %v\n", err)
 		d.watchState.Fixes.Finish(e.Key, nil, "", "could not create worktrees: "+err.Error(), time.Now())
@@ -1679,6 +1689,53 @@ func (d *Daemon) isolateFix(spec WatchSpec, e watch.Event, fix *harness.Print, l
 		return func() { d.ReleaseStack(spec.Dir, branch) }, true
 	}
 	return noop, true
+}
+
+const isolateTimeout = 15 * time.Minute
+
+func pullProjects(e watch.Event) []string {
+	if !onOwnPullRequest(e) {
+		return nil
+	}
+	seen := map[string]bool{}
+	var out []string
+	for _, ref := range e.Refs() {
+		project := utils.PullRequestProject(ref)
+		if project == "" {
+			return nil
+		}
+		if !seen[project] {
+			seen[project] = true
+			out = append(out, project)
+		}
+	}
+	return out
+}
+
+type isolateResult struct {
+	trees []string
+	err   error
+}
+
+func (d *Daemon) isolateWithin(dir, branch string, projects []string, limit time.Duration) ([]string, error) {
+	done := make(chan isolateResult, 1)
+	go func() {
+		var r isolateResult
+		if len(projects) > 0 && d.IsolateRepos != nil {
+			r.trees, r.err = d.IsolateRepos(dir, branch, projects)
+		} else {
+			r.trees, r.err = d.Isolate(dir, branch)
+		}
+		done <- r
+	}()
+	timer := time.NewTimer(limit)
+	defer timer.Stop()
+	select {
+	case r := <-done:
+		return r.trees, r.err
+	case <-timer.C:
+		return nil, fmt.Errorf("making the worktrees took over %s, so this run gave up instead of waiting silently", limit)
+	}
 }
 
 func (d *Daemon) fixFailed(ctx context.Context, run fixRun, runErr error, logFile *os.File) {
@@ -2179,20 +2236,24 @@ func FixBranch(ref string) string {
 }
 
 func IsolationNote(branch string, trees []string) string {
-	return "\n\nThis run is isolated: every repository already has a worktree on branch `" + branch +
+	return "\n\nThis run is isolated: these repositories have a worktree on branch `" + branch +
 		"`, created off its current HEAD. Work only in these directories and open the pull requests from this branch; " +
-		"do not create another branch and do not edit the main checkouts:\n- " + strings.Join(trees, "\n- ")
+		"do not create another branch and do not edit the main checkouts. " + anotherRepoHint(branch) + "\n- " + strings.Join(trees, "\n- ")
 }
 
 // PullIsolationNote is for a run on a pull request that already exists: the
 // fix goes on that pull request's branch, so the scratch branch the
 // worktrees start on is only a place to stand.
 func PullIsolationNote(trees []string) string {
-	return "\n\nThis run is isolated: every repository already has a worktree, on a scratch branch off its current HEAD. " +
+	return "\n\nThis run is isolated: the pull request's repository has a worktree, on a scratch branch off its current HEAD. " +
 		"The pull request already exists, so its own branch is where the fix goes: in the repository it belongs to, " +
 		"`git -C <worktree> fetch origin <pr-branch> && git -C <worktree> checkout --detach origin/<pr-branch>`, commit there, " +
-		"and push with `git -C <worktree> push origin HEAD:<pr-branch>`. Never open a new pull request and do not edit the main checkouts:\n- " +
-		strings.Join(trees, "\n- ")
+		"and push with `git -C <worktree> push origin HEAD:<pr-branch>`. Never open a new pull request and do not edit the main checkouts. " +
+		anotherRepoHint("<pr-branch>") + "\n- " + strings.Join(trees, "\n- ")
+}
+
+func anotherRepoHint(branch string) string {
+	return "Need a repository that is not listed? `corgi worktree add <service> --branch " + branch + "` from the workspace folder makes one and prints its path:"
 }
 
 const retryCrashAfter = 30 * time.Minute

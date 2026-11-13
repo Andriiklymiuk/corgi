@@ -21,6 +21,10 @@ const (
 var isolateMu sync.Mutex
 
 func isolateFixWorktrees(dir, branch string) ([]string, error) {
+	return isolateFixWorktreesIn(dir, branch, nil)
+}
+
+func isolateFixWorktreesIn(dir, branch string, projects []string) ([]string, error) {
 	isolateMu.Lock()
 	defer isolateMu.Unlock()
 	composePath := ""
@@ -44,7 +48,7 @@ func isolateFixWorktrees(dir, branch string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	set, err := utils.MaterializeBranchAcrossRepos(corgi, dir, branch, nil)
+	set, err := utils.MaterializeBranchAcrossRepos(corgi, dir, branch, utils.ServicesInRepos(corgi, projects))
 	if err != nil {
 		return nil, err
 	}

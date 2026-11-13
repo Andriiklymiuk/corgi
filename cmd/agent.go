@@ -211,6 +211,7 @@ func wireTrackers(d *daemon.Daemon, dir string) {
 		return claimTicket(d.Dir, workspaceID, e)
 	}
 	d.Isolate = isolateFixWorktrees
+	d.IsolateRepos = isolateFixWorktreesIn
 	d.RunStack = runStackNote
 	d.ReleaseStack = releaseRunStack
 	d.Reconcile = reconcileBoard(dir)
