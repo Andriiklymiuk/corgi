@@ -36,6 +36,9 @@ first red.
    scenario. Blocking → fix and re-run the tests; the rest → the PR body.
 4. **Risk**: the `risk` skill on the local diff. Keep the card; it goes in the body.
 
+A team skill that does one of these gates for this repo (`conventions.md` › Team skills)
+runs in its place; name it in the table.
+
 Show the four results in one table before drafting. Red → fix, re-run only the red
 gate, continue.
 

@@ -12,7 +12,8 @@ import (
 
 func TestCostByRepoDayAndBot(t *testing.T) {
 	dir := t.TempDir()
-	now := time.Date(2026, 9, 14, 15, 0, 0, 0, time.Local)
+	y, m, d := time.Now().Date()
+	now := time.Date(y, m, d, 15, 0, 0, 0, time.Local)
 	l := usage.OpenLedger(dir)
 	l.AddTokens("api", 1_000_000, now)
 	l.AddTokens("web", 250_000, now)

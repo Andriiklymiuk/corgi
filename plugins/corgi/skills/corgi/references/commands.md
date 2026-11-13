@@ -366,9 +366,10 @@ Confirm with the user before running `clean -i services`, `clean -i snapshots`, 
 
 Manage the worktrees corgi creates for `run/exec/test --service-branch` (under `.corgi/corgi_services/.worktrees/`).
 
+- `corgi worktree add <svc>... --branch <b> [--base <base>]` - make (or reuse) a worktree per service under `.corgi/corgi_services/.worktrees/`, inside the workspace, so the repo's `CLAUDE.md` still loads there. A new branch starts at fetched `origin/<base>` with `--base`, else the checkout's HEAD; an existing branch is reused. `--detach <ref>` instead makes a read-only worktree at a commit (reviews: `--detach FETCH_HEAD`). Prints one dir per service on stdout (`W=$(corgi worktree add api --branch x --base main)`); `--json` gives the set. Exit 2 on an unknown service, 1 when a repo is not cloned.
 - `corgi worktree list` - print each corgi-created worktree path.
 - `corgi worktree prune` (alias `clean`) - `git worktree remove` each one and prune the source repos' admin entries. A worktree with **uncommitted or untracked changes is kept and named**, not removed; `--force` drops those too (discards the work). Safe to run anytime; recreated on next `--service-branch`. Prints `[n/total]` per worktree - deleting a big `node_modules` takes a while and the line is how you tell work from a hang.
-- Only covers `.corgi/corgi_services/.worktrees/`. Worktrees you made yourself elsewhere (e.g. the `stories` skill's `/tmp/corgi-wt/`) are untouched - remove those with `git worktree remove` in the source repo.
+- Only covers `.corgi/corgi_services/.worktrees/`. Worktrees you made yourself elsewhere (e.g. an old `/tmp/corgi-wt/`) are untouched - remove those with `git worktree remove` in the source repo. Prune removes every clean one, also ones another session still uses; to drop just yours, `git -C <repo> worktree remove <dir>`.
 
 ### `corgi assets push <file>... --key <KEY>`
 

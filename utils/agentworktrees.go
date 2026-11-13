@@ -29,11 +29,20 @@ func AgentWorktreeBase(composeDir string) string {
 }
 
 func MaterializeBranchAcrossRepos(corgi *CorgiCompose, composeDir, branch string, services []string) (*WorktreeSet, error) {
+	return MaterializeBranchFromBase(corgi, composeDir, branch, "", services)
+}
+
+func MaterializeBranchFromBase(corgi *CorgiCompose, composeDir, branch, baseBranch string, services []string) (*WorktreeSet, error) {
 	if strings.TrimSpace(branch) == "" {
 		return nil, fmt.Errorf("branch is required")
 	}
 	if err := validateBranchName(branch); err != nil {
 		return nil, err
+	}
+	if baseBranch != "" {
+		if err := validateBranchName(baseBranch); err != nil {
+			return nil, err
+		}
 	}
 
 	base := AgentWorktreeBase(composeDir)
@@ -42,7 +51,7 @@ func MaterializeBranchAcrossRepos(corgi *CorgiCompose, composeDir, branch string
 	}
 
 	order, byRoot, skipped := groupServicesByRepo(corgi, branch, services)
-	results := prepareWorktrees(order, base, branch)
+	results := prepareWorktrees(order, base, branch, baseBranch)
 
 	set := &WorktreeSet{Branch: branch}
 	set.Worktrees = append(set.Worktrees, skipped...)
@@ -109,7 +118,7 @@ func (r worktreeResult) entry(service, root, branch string) RepoWorktree {
 	return e
 }
 
-func prepareWorktrees(order []string, base, branch string) []worktreeResult {
+func prepareWorktrees(order []string, base, branch, baseBranch string) []worktreeResult {
 	results := make([]worktreeResult, len(order))
 	var wg sync.WaitGroup
 	for i, root := range order {
@@ -117,7 +126,7 @@ func prepareWorktrees(order []string, base, branch string) []worktreeResult {
 		go func(i int, root string) {
 			defer wg.Done()
 			dest := filepath.Join(base, worktreeDirName(root, branch))
-			dir, created, err := ensureWorkBranchWorktree(root, branch, dest)
+			dir, created, err := ensureWorkBranchWorktree(root, branch, baseBranch, dest)
 			results[i] = worktreeResult{dir: dir, created: created, err: err}
 		}(i, root)
 	}
@@ -125,7 +134,7 @@ func prepareWorktrees(order []string, base, branch string) []worktreeResult {
 	return results
 }
 
-func ensureWorkBranchWorktree(repo, branch, dest string) (dir string, created bool, err error) {
+func ensureWorkBranchWorktree(repo, branch, baseBranch, dest string) (dir string, created bool, err error) {
 	if !isGitRepo(repo) {
 		return "", false, fmt.Errorf("%s is not a git repository", repo)
 	}
@@ -153,10 +162,46 @@ func ensureWorkBranchWorktree(repo, branch, dest string) (dir string, created bo
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 		return "", false, err
 	}
-	if err := gitRun(repo, "worktree", "add", "-q", "-b", branch, dest); err != nil {
+	args := []string{"worktree", "add", "-q", "-b", branch, dest}
+	if baseBranch != "" {
+		if err := fetchBranchFromOrigin(repo, baseBranch); err != nil {
+			return "", false, err
+		}
+		args = append(args, "origin/"+baseBranch)
+	}
+	if err := gitRun(repo, args...); err != nil {
 		return "", false, fmt.Errorf("git worktree add -b %s %s: %v", branch, dest, err)
 	}
 	return dest, true, nil
+}
+
+func MaterializeDetachedWorktree(repo, composeDir, ref string) (string, error) {
+	root, ok := repoRoot(repo)
+	if !ok {
+		return "", fmt.Errorf("%s is not a git repository (run corgi init first)", repo)
+	}
+	if strings.HasPrefix(strings.TrimSpace(ref), "-") || strings.TrimSpace(ref) == "" {
+		return "", fmt.Errorf("ref %q is not a commit", ref)
+	}
+	sha, err := gitOut(root, gitRevParse, "--verify", "--quiet", ref+"^{commit}")
+	if err != nil || sha == "" {
+		return "", fmt.Errorf("%s has no commit %s (fetch it first)", root, ref)
+	}
+	if err := prepareWorktreeBase(composeDir); err != nil {
+		return "", err
+	}
+	dest := filepath.Join(AgentWorktreeBase(composeDir), fmt.Sprintf("%s@detached-%s", WorktreeDirPrefix(root), sha[:12]))
+	if info, statErr := os.Stat(dest); statErr == nil && info.IsDir() {
+		if head, herr := gitOut(dest, gitRevParse, "HEAD"); herr == nil && head == sha {
+			return dest, nil
+		}
+		return "", fmt.Errorf("%s already exists and is not at %s", dest, sha[:12])
+	}
+	_ = gitRun(root, "worktree", "prune")
+	if err := gitRun(root, "worktree", "add", "-q", "--detach", dest, sha); err != nil {
+		return "", fmt.Errorf("git worktree add --detach %s: %v", dest, err)
+	}
+	return dest, nil
 }
 
 func MaterializeBranchInRepo(repo, branch string) (string, error) {
@@ -174,7 +219,7 @@ func MaterializeBranchInRepo(repo, branch string) (string, error) {
 		return "", err
 	}
 	dest := filepath.Join(AgentWorktreeBase(root), worktreeDirName(root, branch))
-	dir, _, err := ensureWorkBranchWorktree(root, branch, dest)
+	dir, _, err := ensureWorkBranchWorktree(root, branch, "", dest)
 	return dir, err
 }
 

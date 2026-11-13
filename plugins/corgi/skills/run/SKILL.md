@@ -131,8 +131,8 @@ compose `path:`); combine with `--detach`, `--with-deps`, `--services`.
   service's `beforeStart` (e.g. `npm install`); reused worktrees keep it.
 - **Existing worktree dir** - `--service-dir <svc>=<path>`. Runs that exact dir's env
   + beforeStart/afterStart + process; pure cwd swap, no git touch, no clone. Dir must
-  exist. For **uncommitted/live** code in a known worktree (`stories` Phase 3 shape,
-  `/tmp/corgi-wt/<wt-id>-<svc>`). (`--service-checkout <svc>=<branch>` = in-place
+  exist. For **uncommitted/live** code in a known worktree (`stories` Phase 3:
+  `corgi worktree add <svc> --branch <b> --base <base>` prints it). (`--service-checkout <svc>=<branch>` = in-place
   checkout of the service's own dir; refuses on a dirty tree, leaves the dir on that
   branch.)
 - **One branch name across repos** - `--feature <branch>` (no `<svc>=`). corgi asks
@@ -155,8 +155,8 @@ corgi run --with-deps --detach \
 corgi run --with-deps --detach --feature feature/ABC-200/user-phone
 # live worktree code for some, compose path: for the rest
 corgi run --detach \
-  --service-dir api=/tmp/corgi-wt/ABC-200-api \
-  --service-dir web=/tmp/corgi-wt/ABC-200-web
+  --service-dir api="$(corgi worktree add api --branch feature/ABC-200/user-phone)" \
+  --service-dir web="$(corgi worktree add web --branch feature/ABC-200/user-phone)"
 # admin, worker, db_services (unnamed) run from their compose path:
 ```
 

@@ -325,6 +325,15 @@ stack is complete, but corgi never starts it and no skill changes it. Exclude it
 service maps, dependency graphs, test runs, and branches. When a fix would have to land
 there, stop and flag it out of band.
 
+## Team skills
+
+The session's skill list already names every installed skill, the team's own too. Look at
+it **once, when planning** - not at every step: a non-corgi skill whose description fits
+one step of this work (the team's QA prep, a mobile dev loop, the team's review or ticket
+rules) runs at that step instead of the generic one. Name it in the plan, so the reader
+sees it. Step-sized skills only: one that is a whole workflow of its own (plan → code →
+PR) is not run inside a corgi flow, the two would fight. None fits → say nothing.
+
 ## Compose preflight
 
 Skills that read the workspace start with `ls corgi-compose.yml *.corgi-compose.yml` in
@@ -343,7 +352,8 @@ Per repo: forge from `git -C <dir> remote get-url origin` (`github.com` → `gh`
 
 Before branching in a repo, check `git -C <dir> status --porcelain --untracked-files=no`.
 Empty → branch in place. Dirty, or several stories touching the same repo → a worktree per
-story (`corgi run|test --service-branch <svc>=<branch>`, or `git worktree add`), so the
+story (`corgi worktree add <svc> --branch <branch> --base <base>`, inside the workspace so
+the repo's `CLAUDE.md` still loads; never a `/tmp` worktree for a compose service), so the
 user's uncommitted work is never disturbed. A worktree branches from clean `origin/<base>`,
 so it excludes those edits: when they overlap the story's files, stop and ask the user to
 commit, stash, or confirm. Never checkout off a dirty tree, delete branches, or force-push

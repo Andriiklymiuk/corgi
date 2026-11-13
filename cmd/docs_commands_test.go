@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -9,7 +10,7 @@ import (
 )
 
 func TestSkillsAndDocsNameOnlyRealCommandsAndFlags(t *testing.T) {
-	files, err := markdownFiles([]string{"../docs", "../plugins", "../README.md"})
+	files, err := shippedMarkdownFiles(t)
 	if err != nil || len(files) < 20 {
 		t.Fatalf("found %d markdown files: %v", len(files), err)
 	}
@@ -75,7 +76,7 @@ func TestOnlyShellFencesAndInlineCodeAreRead(t *testing.T) {
 
 func TestSkillsAndDocsNameOnlyRealMCPTools(t *testing.T) {
 	notTools := map[string]bool{"corgi_services": true}
-	files, _ := markdownFiles([]string{"../docs", "../plugins", "../README.md"})
+	files, _ := shippedMarkdownFiles(t)
 	for _, file := range files {
 		b, err := os.ReadFile(file)
 		if err != nil {
@@ -91,3 +92,25 @@ func TestSkillsAndDocsNameOnlyRealMCPTools(t *testing.T) {
 }
 
 var mcpToolMention = regexp.MustCompile("`(corgi_[a-z_]+)`")
+
+func shippedMarkdownFiles(t *testing.T) ([]string, error) {
+	t.Helper()
+	files, err := markdownFiles([]string{"../docs", "../plugins", "../README.md"})
+	if err != nil {
+		return nil, err
+	}
+	check := exec.Command("git", "check-ignore", "--stdin")
+	check.Stdin = strings.NewReader(strings.Join(files, "\n"))
+	out, _ := check.Output()
+	ignored := map[string]bool{}
+	for line := range strings.SplitSeq(strings.TrimSpace(string(out)), "\n") {
+		ignored[line] = true
+	}
+	kept := files[:0]
+	for _, f := range files {
+		if !ignored[f] {
+			kept = append(kept, f)
+		}
+	}
+	return kept, nil
+}

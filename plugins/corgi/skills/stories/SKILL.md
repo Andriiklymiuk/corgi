@@ -370,6 +370,9 @@ PR body, never into repo file standing in for comment:
   `installed apps: still read items[0] - kept`).
   Name what plan deliberately does **not** build and what covers it instead (native element, existing helper) - cheapest spec has fewest
   new parts. Multi-service: `## Contract` + cross-service order.
+- **Team skills** that take a step of this plan (`../_shared/conventions.md` ›
+  Team skills), each with its step - e.g. the team's `ready-for-qa` before QA
+  hand-off. None fits → no line.
 
 ### Triage: actionable vs blocked - controls POSTING, not writing
 
@@ -512,29 +515,29 @@ edits overlapping story's files → STOP and ask; no overlap → worktree safe.
 
 **Must-run producer in a worktree → run it with `--service-dir`.** Producer that
 must be _running_ for consumer to verify (Phase 4) can live in worktree:
-`corgi run --service-dir <producer>=/tmp/corgi-wt/<wt-id>-<service>` (below).
+`corgi run --service-dir <producer>="$W"` (below).
 
 - **Branch in place** (clean tree). Branch straight off fetched remote base - no
   `checkout <base>`/`pull` dance, no local-divergence trap:
   `git -C <dir> fetch origin && git -C <dir> checkout -b <branch> origin/<base>`.
-- **Worktree** (dirty tree, or several stories in one repo). Path
-  `/tmp/corgi-wt/<wt-id>-<service>` - `<wt-id>` = `<issue-key>` (or `<kebab-slug>`
-  for no-ticket), `<service>` = service name, so multi-repo story's repos never
-  collide. Branch off `origin/<base>` - never touches `<dir>`'s tree:
+- **Worktree** (dirty tree, or several stories in one repo). `corgi worktree add`
+  puts it under `.corgi/corgi_services/.worktrees/`, inside workspace, so the repo's
+  `CLAUDE.md` still loads when you read files there - a `/tmp` worktree loses it and
+  you code without the repo's rules. Branches off fetched `origin/<base>`, never
+  touches `<dir>`'s tree, reuses branch that already exists, one dir per repo+branch
+  so stories never collide:
   ```bash
-  git -C <dir> fetch origin
-  git -C <dir> worktree prune                                # drop stale entries
-  W=/tmp/corgi-wt/<wt-id>-<service>
-  [ -e "$W" ] && W="$W-$(date +%s)"                          # a leftover (re-run/crash): new path, never rm -rf
-  git -C <dir> worktree add -b <branch> "$W" origin/<base>
+  W=$(corgi worktree add <service> --branch <branch> --base <base>)   # prints the dir
+  # several repos: corgi --json worktree add api web --branch <branch> --base <base>
+  # repo not in corgi-compose.yml: git -C <dir> worktree add -b <branch> <dir>/../.wt-<branch-slug> origin/<base>,
+  #   then read that worktree's CLAUDE.md / AGENTS.md yourself before editing
   # deps dir (node_modules / vendor / target / .venv) gitignored → symlink main
   # checkout's for SEQUENTIAL gate runs; real install for CONCURRENT runs and for
   # any worktree corgi will run (--service-dir, below).
   ln -s "$PWD/<dir>/node_modules" "$W/node_modules"
   ```
-  `rm -rf` denied in hardened workspace and by auto mode, so leftover dir
-  never deleted - next path taken, `/tmp` is OS's to clean. Use
-  path you got (`$W`) for every later step of this repo.
+  Use path you got (`$W`) for every later step of this repo. corgi older
+  than 2.45.0 has no `worktree add` → `corgi upd`.
   **Worktree corgi will run gets real install, never symlink.**
   `--service-dir` (below) runs service's `beforeStart` in worktree, and
   install step rebuilding deps dir (`npm ci`, clean reinstall) follows
@@ -547,14 +550,14 @@ must be _running_ for consumer to verify (Phase 4) can live in worktree:
   - **Run a worktree'd service with `--service-dir` (only services in
     `corgi-compose.yml`).** corgi resolves service from `path:` (main `<dir>`);
     to _run_ worktree's code - e.g. producer consumer verifies against
-    (Phase 4) - pass `--service-dir <svc>=/tmp/corgi-wt/<wt-id>-<svc>`; corgi runs
+    (Phase 4) - pass `--service-dir <svc>="$W"` (worktree dir); corgi runs
     service's env, beforeStart/afterStart, process from worktree, main
     checkout untouched. Per-service, repeatable - mix worktree + compose `path:`
     services:
     ```bash
     corgi run --detach \
-      --service-dir api=/tmp/corgi-wt/ABC-200-api \
-      --service-dir web=/tmp/corgi-wt/ABC-200-web
+      --service-dir api="$W_API" \
+      --service-dir web="$W_WEB"
     # services not named (admin, worker, db_services) run from their compose path:
     ```
     `beforeStart` steps run from worktree too, so step leaving
@@ -573,8 +576,8 @@ must be _running_ for consumer to verify (Phase 4) can live in worktree:
     "run this branch", but for stories point at impl worktree.) Branched repo
     **not** corgi service → no `--service-dir`; run its runner in
     worktree dir.
-  - **Success →** `git -C <dir> worktree remove /tmp/corgi-wt/<wt-id>-<service>` once
-    PR up. **Failure (Stop rule) →** leave it; report `/tmp` path. Never
+  - **Success →** `git -C <dir> worktree remove "$W"` once
+    PR up. **Failure (Stop rule) →** leave it; report its path. Never
     `worktree remove` failed story.
 
 Implement to spec, and **before each piece, walk ladder in
@@ -600,7 +603,7 @@ matching existing patterns.
   - Other command (typecheck/lint/migrate/one-off) →
     `corgi exec <svc> --service-dir <svc>=<worktree-dir> --ensure-deps -- <cmd>`.
   - Not in compose, no `test` script, or no compose → run discovered runner
-    (Phase 0) in worktree dir. Same `--service-dir <svc>=/tmp/corgi-wt/<wt-id>-<svc>`
+    (Phase 0) in worktree dir. Same `--service-dir <svc>="$W"`
     mapping as `corgi run` (Phase 3); drop for in-place.
 - **Bug tier: red test first** - write, confirm **FAILS on base**, make
   pass. Adjustments skip.
@@ -790,7 +793,7 @@ never auto-install). No `.corgi/memory/` → offer to create; declined → skip.
   Until up, consumer's generated types stale → won't typecheck. Producer from
   `depends_on_services`/`exports` graph (Phase 0). `corgi stop` when done. **Producer
   in worktree?** `corgi run` serves `path:` (main checkout) by default - add
-  `--service-dir <producer>=/tmp/corgi-wt/<wt-id>-<service>` to run worktree's
+  `--service-dir <producer>="$W"` to run worktree's
   code (Phase 3).
 - Consumers regenerate, commit generated output, finish slice.
 - **Merge order:** producer PR first, consumers after. State in spec + every PR body.
@@ -802,7 +805,7 @@ never auto-install). No `.corgi/memory/` → offer to create; declined → skip.
 ## Phase 5 - Push + draft PR/MR per repo
 
 Per repo, forge from Phase 0. **`<dir>` = repo's working dir** - worktree dir
-(`/tmp/corgi-wt/<wt-id>-<service>`) if worktree'd in Phase 3, else checkout. Push,
+(`$W` from Phase 3) if worktree'd, else checkout. Push,
 create draft, attach spec with commands in `../_shared/forge-commands.md`
 §6, run from inside `<dir>`. Title `<subject> [<issue-key>]`; body = what / how / tests /
 issue link.
@@ -849,7 +852,7 @@ issue link.
 - **Changed surface at top of body.** `corgi surface --branch <branch>`
   (or `corgi_diff` with `surface: true`) prints `## Changed surface` block.
   `--branch` (here and on `docs check` below) finds any git worktree on that branch,
-  this skill's `/tmp/corgi-wt` ones included. corgi older than 2.35.4 sees only
+  `corgi worktree add` ones included. corgi older than 2.35.4 sees only
   worktrees it made itself, fails with `no worktrees exist for branch` - then
   `corgi upd`, or write block from `git -C <worktree> diff <base>...HEAD` per
   repo. Block lists exported symbols, routes, contracts, migrations,
@@ -954,7 +957,7 @@ with nuance. No-ticket → short `[<slug>]` tag as key. Under each block:
   form, no variants).
 - **Blocked / failed** → no link, one line:
   `[<key>] <Service>: BLOCKED - <decision needed>` (or `needs attention - <reason>`, +
-  worktree `/tmp` path if partial work parked there).
+  worktree path if partial work parked there).
 - **Review-channel blurb (print it last, every run)** - one part leaving
   terminal, never make user ask → terse. No pitch, no root-cause
   paragraph, no emoji, no "please review" - link unfurls; channel
@@ -995,16 +998,16 @@ risk 7/10 high · auto-approve: no - cross-service contract
 
 ### Then clean up the worktrees
 
-Phase 3's worktrees under `/tmp/corgi-wt/` are **yours**, not corgi's - `corgi worktree
-prune` only manages `.corgi/corgi_services/.worktrees/` (`--service-branch` ones),
-won't touch them. Nothing else removes them, so they accumulate one per story per
-repo, each carrying `node_modules` symlink and checked-out branch.
+Phase 3's worktrees live under `.corgi/corgi_services/.worktrees/`. Don't run
+`corgi worktree prune` for this - it also removes clean worktrees other sessions are
+still using. Remove only yours, one per story per repo, each carrying
+`node_modules` symlink and checked-out branch.
 
 Clean **after report**, once every branch pushed - branch lives on
 remote, removing worktree loses nothing:
 
 ```bash
-git -C <dir> worktree remove /tmp/corgi-wt/<wt-id>-<service>   # no --force
+git -C <dir> worktree remove "$W"                              # no --force
 git -C <dir> worktree prune                                    # drop the admin entry
 ```
 
@@ -1013,7 +1016,7 @@ Rules:
 - **Never `--force` here.** Plain `remove` refuses worktree with uncommitted or
   untracked changes; refusal = signal something not committed. Report
   path, leave it - don't discard work to tidy up.
-- **Only worktrees this run created.** `/tmp/corgi-wt/` dir from earlier session may
+- **Only worktrees this run created.** Another worktree there may
   still be someone's working state.
 - **Blocked story → keep its worktree.** Nothing pushed; removing destroys
   only copy.

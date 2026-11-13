@@ -105,7 +105,7 @@ Per test file in the diff, read the `expect` lines, not the `describe` names:
 Run the gate:
 
 ```bash
-corgi exec <svc> --service-dir <svc>=/tmp/corgi-review/<repo>-<n> -- <coverage script>
+corgi exec <svc> --service-dir <svc>="$W" -- <coverage script>   # $W = the P1 evidence worktree
 ```
 
 Quote the numbers in the finding. "Weak tests" without a number is an opinion.

@@ -67,10 +67,10 @@ Fetch **reviewable diff raw** - output filter on `gh`/`glab` (rtk or similar) tr
 
 **Evidence worktree (read-only).** Diff is where findings anchor; evidence lives in tree around it. Put head SHA in throwaway detached worktree - never user's checkout, never branch. Detached worktree has **no installed dependencies**, cannot run test or probe as-is. Decide once per repo whether hunt needs to run anything; if yes, install into **one** copy per repo up front, not each subagent rebuilding own - otherwise half the set verifies by running, half falls back to trusting CI. **Never borrow another checkout's installed deps when PR touches manifest or lockfile** - you'd test dependency tree PR just changed, and version bump often the thing under review. Can't install → say so in report, let CI carry test signal; probe on wrong deps worse than no probe:
 ```bash
-W=/tmp/corgi-review/<repo>-<n>; [ -e "$W" ] && W="$W-$(date +%s)"   # leftover: new path, never rm -rf
 git -C <dir> fetch origin pull/<n>/head            # GitLab: merge-requests/<iid>/head
-git -C <dir> worktree add --detach "$W" FETCH_HEAD
-# no local clone of the repo (not a service in the compose file):
+W=$(corgi worktree add <service> --detach FETCH_HEAD)   # inside the workspace, so the repo's CLAUDE.md loads; same SHA → same dir
+# repo not in corgi-compose.yml, or no local clone - /tmp, and read its CLAUDE.md / AGENTS.md yourself first:
+W=/tmp/corgi-review/<repo>-<n>; [ -e "$W" ] && W="$W-$(date +%s)"   # leftover: new path, never rm -rf
 git init -q "$W" && git -C "$W" fetch -q --depth 50 <clone-url> merge-requests/<iid>/head && git -C "$W" checkout -q --detach FETCH_HEAD
 ```
 Grep callers, open dependency source, run coverage gate or probe there; `git worktree remove` it in P6 (no `--force`, no `rm -rf` - both refused; clone in `/tmp` left for OS). Remote-only repo → `git init` + fetch line above. Without it, review stays inside hunk and misses what human reviewer next to you finds (P3, evidence sweep).
@@ -115,7 +115,7 @@ Read canonical file (`CLAUDE.md`/`AGENTS.md`) plus one lint config matching diff
 
 **Monorepo with >1 service** → still read each canonical file once, but **scope note per service area** (keyed by compose path prefix, e.g. `api/` vs `web/`) so `web` convention isn't applied to `api` code.
 
-Distilled note = naming conventions, test patterns, forbidden patterns, code-style rules repo **explicitly** spells out. Target short note (~dozen bullets), reused unchanged across every PR in repo.
+Distilled note = naming conventions, test patterns, forbidden patterns, code-style rules repo **explicitly** spells out. Team has an installed review or conventions skill for this repo (`../_shared/conventions.md` › Team skills) → read it once here, its rules go into same note. Target short note (~dozen bullets), reused unchanged across every PR in repo.
 
 ## Phase 3 - Review each PR (this session, one at a time)
 
@@ -330,7 +330,7 @@ Zero findings → `0 findings - clean.` - keep form exact, always print totals l
 
 **Skipped** line - list every ref NOT reviewed and why (merged/closed and declined, blocked) so skipped target isn't lost between P1 and report.
 
-List anything that couldn't be inlined explicitly (file, line, reason) - no silent drops. Then remove evidence worktree(s): `git -C <dir> worktree remove /tmp/corgi-review/<repo>-<n>`.
+List anything that couldn't be inlined explicitly (file, line, reason) - no silent drops. Then remove evidence worktree(s): `git -C <dir> worktree remove "$W"`.
 
 **No ceremony footer.** Don't append "review only - does not merge" to every report; reads like bot covering itself, user knows what review is. *Behaviour* stays hard-enforced (Guardrails) - just don't narrate each time. Say in plain words **only** if actually in question (e.g. someone asks "so did you block it?").
 
