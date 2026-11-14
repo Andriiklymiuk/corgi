@@ -1,6 +1,6 @@
 ---
 name: showcase
-description: "Use for README pictures, demos or a short video of a CLI, app or extension: \"make screenshots for the README\", \"showcase gif\", \"demo video\", \"marketplace media\". Draws the UI as HTML from the product's strings. NOT store shots (mobile-screenshots)."
+description: "Use for README pictures, demos or a short video of a CLI, app or extension: \"make screenshots for the README\", \"showcase gif\", \"demo video\", \"pitch video\", \"marketplace media\". Draws the UI as HTML from the product's strings. NOT store shots (mobile-screenshots)."
 ---
 
 # Showcase: README pictures, GIFs and short videos from HTML
@@ -60,7 +60,9 @@ without a word of prose around it:
 
 The caption strip is one plain sentence in the reader's words, not the
 command's: "An agent takes the ticket across three repos and opens three
-draft PRs", not "corgi stories ABC-123". Under the gif in the README, the
+draft PRs", not "corgi stories ABC-123". No inside word or metaphor the
+reader has to decode ("the meter is running", "the gate says no"): say what
+happens to them ("you pay for what you use"). Under the gif in the README, the
 same sentence in `<sub>`, and `alt` text that says what happens for those
 who cannot see it.
 
@@ -98,6 +100,13 @@ who cannot see it.
     prints it (`on home-mbp (awake, leads):`, a ring "by home-mbp"), never
     as a second window - two terminals side by side are unreadable at
     README width. Use `yourdomain.com` for hostnames a user would own.
+11. **Only what ships, and a mark on what does not.** Each person in the
+    story does only what the product lets them do today: a feature one side
+    has is not drawn on the other side. A feature still in testing that you
+    show anyway carries a visible `*` and a footnote ("in testing, not
+    available yet"). Say what comes next ("production comes next"), never a
+    roadmap negative ("never in production"). A made-up figure carries an
+    "Illustrative data" tag on screen.
 
 ## Layout of the work
 
@@ -238,12 +247,83 @@ rm -rf $F
 
 The mp4 is the gif's frames at the gif's pace (1.2 s a frame, 3 s on the last),
 even dimensions for H.264, playable in a store listing, a post, or a slide.
-A 30-second product video is the scenes joined in README order with
-`ffmpeg -f concat` on the per-scene mp4s, no narration, no music.
+A 30-second README video is the scenes joined in README order with
+`ffmpeg -f concat` on the per-scene mp4s, no narration, no music. A longer
+pitch or demo video, or one with sound, is its own job: see the next section.
 A clip that explains a feature belongs in its spec too: one line,
 `![what it shows](media/<scene>.mp4)`, under the heading it explains (a path
 next to the spec, inside the repository). `corgi idea share <spec.md>` takes it
 along, and it plays in the browser, VS Code, the Mac and the phone.
+
+## A pitch or demo video
+
+A video for the people who decide (a pitch, a keynote, a full demo, a
+minute or more) outgrows the frame-by-frame gif. The rules above hold, plus:
+
+- **The product works on screen; no slides about it.** Typing, a tap, a
+  notification, a tool call and its answer, a figure that counts up, a state
+  that changes - told as a story about a person who needs something. Title
+  cards with bullet lists read as "a presentation"; keep a card for the
+  opening and the end only.
+- **Animate on a timeline, render to mp4.** An HTML page with a GSAP
+  timeline, rendered frame by frame by a timeline renderer (HyperFrames,
+  Remotion). Animate `transform` and `opacity`, not `left` / `top`. Render
+  stills of the key moments and fix overlaps and cut-off text before the
+  full render. A render takes minutes: tell the user which video and which
+  step it is on without being asked.
+- **Objects are photographed or rendered, never drawn in CSS.** A bottle, a
+  box or a parcel made of CSS gradients reads as a toy. Use the real photo;
+  with none, render the object in 3D (three.js with physical materials, an
+  environment light, soft shadows, a contact shadow so it does not float) in
+  headless Chrome at 2x and use the stills.
+- **Sound you cannot hear.** Build it from parts you can trust, then check it
+  with tools (next section).
+
+### Music and sound
+
+`references/soundtrack.py` (next to this file) makes the whole track: a
+music bed arranged from loops, plus synthesized UI sounds on cue. Needs
+`ffmpeg` and `numpy soundfile scipy`.
+
+- **Music from a loop library you may use**, never an AI music model: those
+  can hide voice-like sounds in the mix, and you will not catch them. On a
+  Mac with GarageBand that is Apple Loops in `/Library/Audio/Apple
+  Loops/Apple` (check the licence). Take one song family - loops that share
+  a name (`<Song> Synth`, `<Song> Bass`, `<Song> Guitar`) share tempo and
+  key - and a drum loop at the same tempo. `list` shows the tempo of each
+  loop:
+
+  ```sh
+  python3 references/soundtrack.py list "/Library/Audio/Apple Loops/Apple" "07 Chillwave"
+  ```
+
+- **One spec per video.** The script arranges the loops on the bar grid:
+  pad alone for the intro, then bass, beat, lead, a break, a last part with
+  the `extra` layer, and fades. Cues are the timeline's own seconds:
+  a tap where a button is pressed, `typing` while text types, `success`
+  when the result lands.
+
+  ```json
+  {"duration": 98, "bpm": 116, "root": "/Library/Audio/Apple Loops/Apple",
+   "loops": {"pad": "<dir>/<Song> Synth", "bass": "<dir>/<Song> Bass",
+             "beat": "<dir>/<Beat> 01", "lead": "<dir>/<Song> Guitar"},
+   "cues": [[0.3, "swell", 0.6], [7.6, "typing", 0.6, 9.0], [9.3, "tap", 1], [9.5, "success", 1]]}
+  ```
+
+- **Mix, mux, level, look:**
+
+  ```sh
+  python3 references/soundtrack.py mix sound.json mix.wav
+  ffmpeg -y -i video.mp4 -i mix.wav -map 0:v -map 1:a -af loudnorm=I=-16:TP=-1.5:LRA=11 \
+    -ar 48000 -c:v copy -c:a aac -b:a 192k -shortest -movflags +faststart video-sound.mp4
+  ffmpeg -y -i mix.wav -lavfi showspectrumpic=s=1200x400 spectrum.png
+  ```
+
+  Open the spectrogram and look for a long whine or a sweep. A clean picture
+  does not prove a clean mix: ask the user to listen to the first video
+  before you score the rest.
+- **No pitched sweep as a riser**: it sounds like a siren. The script's
+  `swell` is filtered noise; keep it that way.
 
 ## Procedure
 
@@ -292,6 +372,8 @@ along, and it plays in the browser, VS Code, the Mac and the phone.
 - The first frame of a scene is the command alone; the last has one
   highlighted line and lingers.
 - Every line in every frame is something the code prints, or a real UI state.
+- Every feature shown is one the viewer can use today or carries the
+  in-testing mark; every made-up figure carries its tag.
 - One command redraws everything; the README says which.
 - The hero gif is the first thing under the tagline; nothing side by side.
 - Frames of a gif share one size; the last frame lingers.
