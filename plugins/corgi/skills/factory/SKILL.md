@@ -61,7 +61,7 @@ yet written. That is how the human gets out of the loop without quality falling.
 |---|---|
 | Where work arrives | the tracker, `watch`, `task add`, `idea` tickets |
 | What starts a run | `watch` events, `routine` clocks, `plan`, another run's result |
-| Where a run happens | a worktree (`--isolate`), `agent container`, another laptop (`peers`) |
+| Where a run happens | a worktree (`--isolate`), `agent container`, another laptop or a server (`peers bootstrap` over ssh, `peers invite --setup` without) |
 | A run's memory | the tracker, git, `handoff`, `lesson`. Nothing else survives a run |
 | What stops a run | `--done-when`, `scope`, `guard`, `cap`, the breaker, quiet hours |
 | What you see | the board (live line, who worked, features), `history`, `scorecard`, `cost`, `selfcheck`, `digest` |

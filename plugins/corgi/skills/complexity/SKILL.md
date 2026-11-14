@@ -1,6 +1,6 @@
 ---
 name: complexity
-description: "Use when changed code must get simpler: \"reduce complexity\", \"this function is a jungle\", \"simplify this\", \"is this AI slop\", or as the gate stories and review run. Measures, refactors the worst first, proves behaviour unchanged. NOT performance or a whole-repo pass (quality)."
+description: "Use when changed code must get simpler: \"reduce complexity\", \"this function is a jungle\", \"simplify this\", \"is this AI slop\", or as the gate stories and review run. Measures, refactors the worst first, proves behaviour unchanged. NOT performance, a whole-repo pass (quality) or the boundaries between modules (architecture)."
 ---
 
 # Reduce complexity
@@ -172,6 +172,7 @@ Numbers and the diff do the talking; keep prose to what the table cannot say.
 - Whole-repo rewrite offered for a one-function ask → scope is the diff.
 
 ## See also
+- **`architecture`** - when the tangle is between modules or services, not inside a function.
 - **`review`** - runs this in `report` mode on every PR diff (Phase 3 hunt list).
 - **`stories`** - runs this in `gate` mode before the per-service gate (Phase 3).
 - **`memory`** - where a stack's chosen threshold is recorded as a `decision`.

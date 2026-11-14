@@ -40,13 +40,14 @@ review pull requests, and keep the work moving while you are away from the desk.
 | `suggest`, `suggest-proactive` | Ranked improvement ideas; one a week on the board |
 | `align` | Settles a request that can be read two ways before building |
 | `agent` | Remote Control, the daemon, ticket and review watches, handoffs |
-| `setup` | Sets corgi up end to end on a new machine |
+| `setup` | Sets corgi up end to end on a new machine, or copies this one's workspaces, env files and Claude settings to another (ssh, a link, or a sealed file) |
 | `resume`, `standup`, `summary`, `budget` | Where you were, what you did, where a batch stands, how much usage is left |
 | `mobile`, `ship`, `purchases`, `mobile-screenshots` | Expo / React Native: verify on a device, ship to the stores, in-app purchases, store screenshots |
 | `before-after`, `design-parity`, `showcase` | Visual proof: before/after captures, design comparison, README pictures |
 | `unslop` | A design pass for a UI that looks generated: neutral surfaces, one accent, rows not cards, every state designed, measured contrast |
 | `factory` | How much runs without a person: the ladder, its brakes, the next step |
 | `quality` | A code quality pass: a baseline, real defects hunted by kind, fixed worst first with proof |
+| `architecture` | How the app or workspace is put together: a map from the code, cycles, hubs and change coupling measured, one seam moved at a time behind a fence rule, decisions written down |
 | `memory`, `improve-skill` | The workspace memory store; refining a skill from a session |
 
 Each skill has a slash command under `commands/` (`/corgi-run`, `/corgi-review`, ...).

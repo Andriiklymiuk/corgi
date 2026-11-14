@@ -1,0 +1,27 @@
+schema_version: "1.0"
+name: architecture-takes-the-boundary
+description: A complaint about modules that always change together goes to the architecture skill, not complexity or quality.
+tags: [routing]
+context:
+  scaffold_script: scaffold.sh
+execution:
+  max_turns: 6
+  timeout_seconds: 240
+  allowed_tools: [Skill, Read, Glob, Grep]
+  prompt: |
+    Every time we touch orders we also have to change billing, and the two import each other.
+    Where should the boundary be? Look at the repo and tell me, do not change anything yet.
+graders:
+  - name: loads-architecture
+    type: tool_used
+    tool: Skill
+    input_match: '"(corgi:)?architecture"'
+    min: 1
+    arm: both
+  - name: not-complexity
+    type: tool_used
+    tool: Skill
+    input_match: '"(corgi:)?complexity"'
+    min: 0
+    max: 0
+    arm: both
