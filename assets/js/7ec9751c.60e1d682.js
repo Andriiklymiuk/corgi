@@ -1,1 +1,0 @@
-"use strict";(globalThis.webpackChunkcorgi_docs=globalThis.webpackChunkcorgi_docs||[]).push([[7299],{101(o){o.exports=JSON.parse('{"metadata":{"permalink":"/corgi/blog","page":1,"postsPerPage":10,"totalPages":1,"totalCount":4,"blogDescription":"Blog","blogTitle":"Blog"}}')}}]);
