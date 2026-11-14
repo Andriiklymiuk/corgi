@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -27,6 +28,8 @@ const (
 	skipPermissionsFlag = "dangerously-skip-permissions"
 	gitUserNameKey      = "user.name"
 	withTokensFlag      = "with-tokens"
+	withEnvFlag         = "with-env"
+	withClaudeFlag      = "with-claude"
 )
 
 type peerPack struct {
@@ -35,21 +38,27 @@ type peerPack struct {
 	TZ         string          `json:"tz,omitempty"`
 	GitName    string          `json:"gitName,omitempty"`
 	GitEmail   string          `json:"gitEmail,omitempty"`
+	Home       string          `json:"home,omitempty"`
+	Notify     string          `json:"notify,omitempty"`
 	Workspaces []packWorkspace `json:"workspaces"`
 	Secrets    *watch.Secrets  `json:"secrets,omitempty"`
+	Claude     []packClaude    `json:"claude,omitempty"`
 }
 
 type packWorkspace struct {
-	ID      string                  `json:"id"`
-	Remote  string                  `json:"remote"`
-	Compose bool                    `json:"compose,omitempty"`
-	Aliases []string                `json:"aliases,omitempty"`
-	Config  *config.WorkspaceConfig `json:"config,omitempty"`
-	Secrets *watch.Secrets          `json:"secrets,omitempty"`
+	ID        string                  `json:"id"`
+	Remote    string                  `json:"remote"`
+	Compose   bool                    `json:"compose,omitempty"`
+	Aliases   []string                `json:"aliases,omitempty"`
+	Path      string                  `json:"path,omitempty"`
+	ConfigDir string                  `json:"configDir,omitempty"`
+	Config    *config.WorkspaceConfig `json:"config,omitempty"`
+	Secrets   *watch.Secrets          `json:"secrets,omitempty"`
+	Files     []packFile              `json:"files,omitempty"`
 }
 
 func (p peerPack) hasTokens() bool {
-	if p.Secrets != nil && !p.Secrets.IsZero() {
+	if p.Notify != "" || (p.Secrets != nil && !p.Secrets.IsZero()) {
 		return true
 	}
 	for _, w := range p.Workspaces {
@@ -140,6 +149,7 @@ type importOptions struct {
 	skipPerms bool
 	clone     func(remote, target string) error
 	stackInit func(target string) error
+	runClaude func(dir string, args ...string) error
 }
 
 var defaultClone = func(remote, target string) error {
@@ -159,6 +169,38 @@ var defaultStackInit = func(target string) error {
 	return cmd.Run()
 }
 
+func packTarget(w packWorkspace, opt importOptions, home string) string {
+	if opt.base != "" {
+		return filepath.Join(expandTilde(opt.base), w.ID)
+	}
+	if strings.HasPrefix(w.Path, "~/") {
+		return underHome(w.Path, home)
+	}
+	return filepath.Join(home, "dev", w.ID)
+}
+
+func newCarryApply(pack peerPack, opt importOptions, home string) *carryApply {
+	c := &carryApply{home: home, oldHome: pack.Home}
+	old := pack.Home
+	if old == "" {
+		old = home
+	}
+	for _, w := range pack.Workspaces {
+		if w.Path == "" {
+			continue
+		}
+		from, to := underHome(w.Path, old), packTarget(w, opt, home)
+		if from != to {
+			c.moves = append(c.moves, [2]string{from, to})
+		}
+	}
+	sort.Slice(c.moves, func(i, j int) bool { return len(c.moves[i][0]) > len(c.moves[j][0]) })
+	if old != home {
+		c.moves = append(c.moves, [2]string{old, home})
+	}
+	return c
+}
+
 func applyPeerPack(dir string, pack peerPack, opt importOptions) ([]string, error) {
 	if opt.clone == nil {
 		opt.clone = defaultClone
@@ -166,40 +208,86 @@ func applyPeerPack(dir string, pack peerPack, opt importOptions) ([]string, erro
 	if opt.stackInit == nil {
 		opt.stackInit = defaultStackInit
 	}
-	if opt.base == "" {
-		home, _ := os.UserHomeDir()
-		opt.base = filepath.Join(home, "dev")
-	}
-	var done []string
+	home, _ := os.UserHomeDir()
+	c := newCarryApply(pack, opt, home)
 	if pack.GitName != "" && gitOutput(".", "config", gitGlobalFlag, gitUserNameKey) == "" {
 		_ = exec.Command("git", "config", gitGlobalFlag, gitUserNameKey, pack.GitName).Run()
 		_ = exec.Command("git", "config", gitGlobalFlag, "user.email", pack.GitEmail).Run()
-		done = append(done, "git identity: "+pack.GitName)
+		c.done = append(c.done, "git identity: "+pack.GitName)
 	}
 	if pack.Secrets != nil && watch.LoadSecrets(dir).IsZero() {
 		if err := watch.SaveSecrets(dir, *pack.Secrets); err != nil {
-			return done, err
+			return c.done, err
 		}
-		done = append(done, "machine tokens")
+		c.done = append(c.done, "machine tokens")
+	}
+	if err := applyPackNotify(dir, pack.Notify); err != nil {
+		return c.done, err
+	}
+	if pack.Notify != "" {
+		c.done = append(c.done, "notifications")
+	}
+	var failed []string
+	for _, pc := range pack.Claude {
+		if err := c.claudeDir(pc, opt.runClaude); err != nil {
+			failed = append(failed, err.Error())
+		}
 	}
 	for _, w := range pack.Workspaces {
-		steps, err := applyPackWorkspace(dir, w, opt)
-		done = append(done, steps...)
+		target := packTarget(w, opt, home)
+		steps, err := applyPackWorkspace(dir, w, target, opt)
+		c.done = append(c.done, steps...)
+		if err == nil {
+			err = c.envFiles(target, w)
+		}
 		if err != nil {
-			return done, err
+			failed = append(failed, err.Error())
 		}
 	}
-	return done, nil
+	if c.kept > 0 {
+		c.done = append(c.done, fmt.Sprintf("%d file(s) already here, kept as they are", c.kept))
+	}
+	if len(failed) > 0 {
+		return c.done, errors.New(strings.Join(failed, "; "))
+	}
+	return c.done, nil
+}
+
+func applyPackNotify(dir, notify string) error {
+	if notify == "" {
+		return nil
+	}
+	path := agentUserConfigPath(dir)
+	user, err := config.LoadUser(path)
+	if err != nil || user.NotifyUrl != "" {
+		return err
+	}
+	user.NotifyUrl = notify
+	return writeUserConfig(path, user)
+}
+
+func httpsRemote(remote string) string {
+	if !strings.HasPrefix(remote, "git@") {
+		return ""
+	}
+	host, path, ok := strings.Cut(strings.TrimPrefix(remote, "git@"), ":")
+	if !ok {
+		return ""
+	}
+	return "https://" + host + "/" + path
 }
 
 func checkoutPackWorkspace(w packWorkspace, target string, opt importOptions) ([]string, error) {
 	var done []string
 	if _, err := os.Stat(filepath.Join(target, ".git")); err != nil {
-		if err := os.MkdirAll(opt.base, 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 			return done, err
 		}
 		if err := opt.clone(w.Remote, target); err != nil {
-			return done, fmt.Errorf("%s: clone %s: %w", w.ID, w.Remote, err)
+			alt := httpsRemote(w.Remote)
+			if alt == "" || opt.clone(alt, target) != nil {
+				return done, fmt.Errorf("%s: clone %s: %w", w.ID, w.Remote, err)
+			}
 		}
 		done = append(done, w.ID+": cloned")
 	}
@@ -215,8 +303,7 @@ func checkoutPackWorkspace(w packWorkspace, target string, opt importOptions) ([
 	return done, nil
 }
 
-func applyPackWorkspace(dir string, w packWorkspace, opt importOptions) ([]string, error) {
-	target := filepath.Join(opt.base, w.ID)
+func applyPackWorkspace(dir string, w packWorkspace, target string, opt importOptions) ([]string, error) {
 	done, err := checkoutPackWorkspace(w, target, opt)
 	if err != nil {
 		return done, err
@@ -225,7 +312,12 @@ func applyPackWorkspace(dir string, w packWorkspace, opt importOptions) ([]strin
 	if w.Config != nil {
 		agents = w.Config.Agents
 	}
-	if _, err := registerWorkspace(target, w.ID, w.Aliases, "", false, opt.skipPerms, agents); err != nil {
+	configDir := ""
+	if w.ConfigDir != "" {
+		home, _ := os.UserHomeDir()
+		configDir = underHome(w.ConfigDir, home)
+	}
+	if _, err := registerWorkspace(target, w.ID, w.Aliases, configDir, false, opt.skipPerms, agents); err != nil {
 		return done, fmt.Errorf("%s: %w", w.ID, err)
 	}
 	if w.Config != nil {
@@ -275,6 +367,8 @@ type bootstrapOptions struct {
 	base       string
 	only       []string
 	withTokens bool
+	withEnv    bool
+	withClaude bool
 	skipPerms  bool
 	lead       bool
 	lan        bool
@@ -294,7 +388,10 @@ type bootstrapStep struct {
 
 func bootstrapSteps(pack peerPack, packJSON []byte, opt bootstrapOptions) []bootstrapStep {
 	linux := func(os string) bool { return os == "Linux" }
-	importCmd := "corgi agent peers import --dir " + shellQuote(opt.base)
+	importCmd := "corgi agent peers import"
+	if opt.base != "" {
+		importCmd += " --dir " + shellQuote(opt.base)
+	}
 	if opt.skipPerms {
 		importCmd += " --dangerously-skip-permissions"
 	}
@@ -306,7 +403,7 @@ func bootstrapSteps(pack peerPack, packJSON []byte, opt bootstrapOptions) []boot
 		{name: "corgi", script: remotePath + `command -v corgi >/dev/null || { [ "$(uname -s)" = Darwin ] && brew install andriiklymiuk/homebrew-tools/corgi || curl -fsSL https://raw.githubusercontent.com/Andriiklymiuk/corgi/main/install.sh | sh; }; corgi --version`},
 		{name: "claude", script: remotePath + `command -v claude >/dev/null || curl -fsSL https://claude.ai/install.sh | bash; claude --version`},
 		{name: fmt.Sprintf("import %d workspace(s)", len(pack.Workspaces)), script: remotePath + importCmd, stdin: packJSON},
-		{name: "daemon at login", script: remotePath + up + " >/dev/null 2>&1; corgi agent status --json | head -c 4000"},
+		{name: "daemon at login", script: remotePath + up + " >/dev/null 2>&1; corgi agent status | head -3"},
 		{name: "linger", script: `loginctl enable-linger "$USER" 2>/dev/null || true`, when: linux},
 	}
 	if pack.TZ != "" {
@@ -319,7 +416,7 @@ func runBootstrap(ctx context.Context, dir string, opt bootstrapOptions) error {
 	if opt.out == nil {
 		opt.out = os.Stdout
 	}
-	pack, err := buildPeerPack(dir, opt.only, opt.withTokens)
+	pack, err := buildCarryPack(dir, carryOptions{only: opt.only, tokens: opt.withTokens, env: opt.withEnv, claude: opt.withClaude})
 	if err != nil {
 		return err
 	}
@@ -340,8 +437,12 @@ func runBootstrap(ctx context.Context, dir string, opt bootstrapOptions) error {
 			continue
 		}
 		say("→ %s", s.name)
-		if _, err := opt.run(ctx, s.script, s.stdin); err != nil {
+		out, err := opt.run(ctx, s.script, s.stdin)
+		if err != nil {
 			return fmt.Errorf("%s: %w", s.name, err)
+		}
+		if s.name == "corgi" {
+			warnOlderRemote(say, opt.host, out, pack)
 		}
 	}
 	if opt.pair {
@@ -353,10 +454,33 @@ func runBootstrap(ctx context.Context, dir string, opt bootstrapOptions) error {
 	return nil
 }
 
+func warnOlderRemote(say func(string, ...any), host, out string, pack peerPack) {
+	fields := strings.Fields(lastLine(out))
+	if len(fields) == 0 {
+		return
+	}
+	there := strings.TrimPrefix(fields[len(fields)-1], "v")
+	carries := len(pack.Claude) > 0
+	for _, w := range pack.Workspaces {
+		carries = carries || len(w.Files) > 0
+	}
+	if carries && versionLess(there, APP_VERSION) {
+		say("  %s runs corgi %s, older than %s here: it skips the env files and Claude settings. ssh %s corgi upd, then run this again", host, there, APP_VERSION, host)
+	}
+}
+
+func lastLine(s string) string {
+	lines := strings.Split(strings.TrimSpace(s), "\n")
+	return lines[len(lines)-1]
+}
+
 func sayBootstrapPlan(say func(string, ...any), pack peerPack, packJSON []byte, opt bootstrapOptions) {
 	say("would send %d workspace(s) to %s (tokens: %v):", len(pack.Workspaces), opt.host, pack.hasTokens())
 	for _, w := range pack.Workspaces {
-		say("  %-16s %s", w.ID, w.Remote)
+		say("  %-16s %s%s", w.ID, w.Remote, packFilesNote(len(w.Files), "env file"))
+	}
+	for _, pc := range pack.Claude {
+		say("  claude %-9s %d file(s), %d plugin(s)", pc.Dir, len(pc.Files), len(pc.Plugins))
 	}
 	for _, s := range bootstrapSteps(pack, packJSON, opt) {
 		say("  step %s: ssh %s %s", s.name, opt.host, firstLineOf(s.script))
@@ -400,54 +524,221 @@ func sayBootstrapLeft(say func(string, ...any), pack peerPack, opt bootstrapOpti
 var agentPeersExportCmd = &cobra.Command{
 	Use:   "export",
 	Short: "This machine's workspaces as a pack another machine imports",
-	Args:  cobra.NoArgs,
+	Long: `Prints the pack as JSON, or with --out seals it into one file for a machine
+with no ssh to this one (AirDrop, a USB stick).
+
+  corgi agent peers export --out ~/Desktop/me.corgi --with-tokens --with-env --with-claude
+  corgi agent peers import --from me.corgi          # on the other machine
+
+--with-env takes the git-ignored .env, .npmrc and .yarnrc.yml files of each
+workspace. --with-claude takes every Claude account's settings, rules, skills,
+memories, MCP servers and the plugin list (never the login). The file is
+sealed with a passphrase printed once (or ` + carryPassEnv + `).`,
+	Args: cobra.NoArgs,
 	Run: func(cmd *cobra.Command, _ []string) {
 		dir := mustAgentDir()
 		only, _ := cmd.Flags().GetStringSlice("workspace")
 		withTokens, _ := cmd.Flags().GetBool(withTokensFlag)
-		pack, err := buildPeerPack(dir, only, withTokens)
+		withEnv, _ := cmd.Flags().GetBool(withEnvFlag)
+		withClaude, _ := cmd.Flags().GetBool(withClaudeFlag)
+		out, _ := cmd.Flags().GetString("out")
+		pack, err := buildCarryPack(dir, carryOptions{only: only, tokens: withTokens, env: withEnv, claude: withClaude})
 		if err != nil {
 			exitWithError("agent_peers", err, 2)
 			return
 		}
-		utils.PrintJSON(pack)
+		if out == "" {
+			utils.PrintJSON(pack)
+			return
+		}
+		if err := writeCarryFile(expandTilde(out), pack); err != nil {
+			exitWithError("agent_peers", err, 1)
+		}
 	},
+}
+
+func writeCarryFile(path string, pack peerPack) error {
+	pass := os.Getenv(carryPassEnv)
+	minted := pass == ""
+	if minted {
+		var err error
+		if pass, err = newCarryPassphrase(); err != nil {
+			return err
+		}
+	}
+	plain, err := json.Marshal(pack)
+	if err != nil {
+		return err
+	}
+	sealed, err := sealCarry(plain, pass)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(path, sealed, 0o600); err != nil {
+		return err
+	}
+	if utils.JSONOutput {
+		ans := map[string]any{"file": path, "bytes": len(sealed), "workspaces": len(pack.Workspaces), "claude": len(pack.Claude)}
+		if minted {
+			ans["passphrase"] = pass
+		}
+		utils.PrintJSON(ans)
+		return nil
+	}
+	fmt.Printf("sealed %d workspace(s), %d Claude account(s) into %s (%d KB)\n", len(pack.Workspaces), len(pack.Claude), path, len(sealed)>>10)
+	if minted {
+		fmt.Printf("passphrase: %s\n", pass)
+		fmt.Println("  shown once, stored nowhere. Type it on the other machine; do not send it with the file.")
+	}
+	fmt.Printf("there: corgi agent peers import --from %s\n", filepath.Base(path))
+	return nil
+}
+
+func readPackInput(from string) (peerPack, error) {
+	var raw []byte
+	var err error
+	if from != "" {
+		raw, err = os.ReadFile(expandTilde(from))
+	} else {
+		raw, err = io.ReadAll(os.Stdin)
+	}
+	if err != nil {
+		return peerPack{}, err
+	}
+	if isCarryFile(raw) {
+		pass, err := askCarryPassphrase()
+		if err != nil {
+			return peerPack{}, err
+		}
+		if raw, err = openCarry(raw, pass); err != nil {
+			return peerPack{}, err
+		}
+	}
+	var pack peerPack
+	if err := json.Unmarshal(raw, &pack); err != nil || len(pack.Workspaces) == 0 {
+		return peerPack{}, errors.New("not a pack: corgi agent peers export --out me.corgi here, then import --from me.corgi there")
+	}
+	return pack, nil
 }
 
 var agentPeersImportCmd = &cobra.Command{
 	Use:   "import",
-	Short: "Clone and register the workspaces of a pack read from stdin",
+	Short: "Clone and register the workspaces of a pack (stdin or --from a sealed file)",
 	Args:  cobra.NoArgs,
 	Run: func(cmd *cobra.Command, _ []string) {
 		dir := mustAgentDir()
 		base, _ := cmd.Flags().GetString("dir")
 		skipPerms, _ := cmd.Flags().GetBool(skipPermissionsFlag)
-		raw, err := io.ReadAll(os.Stdin)
+		from, _ := cmd.Flags().GetString("from")
+		pack, err := readPackInput(from)
 		if err != nil {
-			exitWithError("agent_peers", err, 1)
+			exitWithError("agent_peers", err, 2)
 			return
 		}
-		var pack peerPack
-		if err := json.Unmarshal(raw, &pack); err != nil || len(pack.Workspaces) == 0 {
-			exitWithError("agent_peers", errors.New("stdin is not a pack: corgi agent peers export --json | ssh <host> corgi agent peers import"), 2)
-			return
-		}
-		done, err := applyPeerPack(dir, pack, importOptions{base: base, skipPerms: skipPerms})
-		if utils.JSONOutput {
-			out := map[string]any{"done": done, "from": pack.From}
-			if err != nil {
-				out["error"] = err.Error()
-			}
-			utils.PrintJSON(out)
-		} else {
-			for _, d := range done {
-				fmt.Println(d)
-			}
-		}
+		done, err := applyPeerPack(dir, pack, importOptions{base: base, skipPerms: skipPerms, runClaude: runClaudeCommand})
+		reportPackImport(pack, done, err)
 		if err != nil {
 			exitWithError("agent_peers", err, 1)
 		}
 	},
+}
+
+func reportPackImport(pack peerPack, done []string, err error) {
+	left := packLeftToDo(pack)
+	if utils.JSONOutput {
+		out := map[string]any{"done": done, "from": pack.From, "left": left}
+		if err != nil {
+			out["error"] = err.Error()
+		}
+		utils.PrintJSON(out)
+		return
+	}
+	for _, d := range done {
+		fmt.Println(d)
+	}
+	if len(left) == 0 {
+		return
+	}
+	fmt.Println()
+	fmt.Println("left to do here, by hand:")
+	for _, l := range left {
+		fmt.Println("  " + l)
+	}
+}
+
+var commandSucceeds = func(env []string, name string, args ...string) bool {
+	if _, err := exec.LookPath(name); err != nil {
+		return false
+	}
+	cmd := exec.Command(name, args...)
+	cmd.Env = append(os.Environ(), env...)
+	return cmd.Run() == nil
+}
+
+func packLeftToDo(pack peerPack) []string {
+	home, _ := os.UserHomeDir()
+	var left []string
+	dirs := []string{"~/.claude"}
+	for _, pc := range pack.Claude {
+		if pc.Dir != "~/.claude" {
+			dirs = append(dirs, pc.Dir)
+		}
+	}
+	for _, d := range dirs {
+		var env []string
+		prefix := ""
+		if d != "~/.claude" {
+			env = []string{"CLAUDE_CONFIG_DIR=" + underHome(d, home)}
+			prefix = "CLAUDE_CONFIG_DIR=" + d + " "
+		}
+		if !commandSucceeds(env, "claude", "auth", "status") {
+			left = append(left, prefix+"claude auth login        # once per account; no browser here prints a URL")
+		}
+	}
+	hosts := map[string]bool{}
+	compose := false
+	for _, w := range pack.Workspaces {
+		hosts[remoteHost(w.Remote)] = true
+		compose = compose || w.Compose
+	}
+	if hosts["github.com"] && !commandSucceeds(nil, "gh", "auth", "status") {
+		left = append(left, "gh auth login --git-protocol ssh   # pull requests, and ssh keys for the clones")
+	}
+	for h := range hosts {
+		if strings.Contains(h, "gitlab") && !commandSucceeds(nil, "glab", "auth", "status") {
+			left = append(left, "glab auth login --hostname "+h)
+			break
+		}
+	}
+	left = append(left, "corgi agent up --at-login            # the daemon, the endpoint and a pairing QR")
+	left = append(left, "corgi agent tunnel setup <hostname>  # a URL that survives restarts (one per machine)")
+	if compose {
+		left = append(left, "databases: corgi db snapshot on the old machine, copy the file, corgi db restore <file> here")
+	}
+	return append(left, "corgi agent doctor                   # whatever is still missing, named")
+}
+
+func remoteHost(remote string) string {
+	if alt := httpsRemote(remote); alt != "" {
+		remote = alt
+	}
+	rest := remote
+	if _, after, ok := strings.Cut(remote, "://"); ok {
+		rest = after
+	}
+	if at := strings.LastIndex(rest, "@"); at >= 0 {
+		rest = rest[at+1:]
+	}
+	host, _, _ := strings.Cut(rest, "/")
+	host, _, _ = strings.Cut(host, ":")
+	return strings.ToLower(host)
+}
+
+func packFilesNote(n int, what string) string {
+	if n == 0 {
+		return ""
+	}
+	return fmt.Sprintf(" (+%d %s(s))", n, what)
 }
 
 var agentPeersBootstrapCmd = &cobra.Command{
@@ -473,18 +764,20 @@ answers; pair it with corgi agent harden there.`,
 		only, _ := cmd.Flags().GetStringSlice("workspace")
 		base, _ := cmd.Flags().GetString("dir")
 		withTokens, _ := cmd.Flags().GetBool(withTokensFlag)
+		withEnv, _ := cmd.Flags().GetBool(withEnvFlag)
+		withClaude, _ := cmd.Flags().GetBool(withClaudeFlag)
 		skipPerms, _ := cmd.Flags().GetBool(skipPermissionsFlag)
 		lead, _ := cmd.Flags().GetBool("lead")
 		lan, _ := cmd.Flags().GetBool("lan")
 		noPair, _ := cmd.Flags().GetBool("no-pair")
 		dry, _ := cmd.Flags().GetBool(watchFlagDryRun)
-		opt := bootstrapOptions{host: args[0], base: base, only: only, withTokens: withTokens, skipPerms: skipPerms, lead: lead, lan: lan, pair: !noPair, dryRun: dry,
+		opt := bootstrapOptions{host: args[0], base: base, only: only, withTokens: withTokens, withEnv: withEnv, withClaude: withClaude, skipPerms: skipPerms, lead: lead, lan: lan, pair: !noPair, dryRun: dry,
 			run: sshRunner(args[0]), invite: func() (string, string, error) {
 				ans, err := requestPairWindowFor(dir, pairing.RolePeer, 6*time.Second)
 				if err != nil {
 					return "", "", err
 				}
-				return firstNonEmpty(ans.PublicURL, ans.LocalURL), ans.Code, nil
+				return peerURL(dir, ans), ans.Code, nil
 			}}
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 		defer cancel()
@@ -496,13 +789,19 @@ answers; pair it with corgi agent harden there.`,
 
 func init() {
 	agentPeersExportCmd.Flags().StringSlice("workspace", nil, "Only these workspace ids")
-	agentPeersExportCmd.Flags().Bool(withTokensFlag, false, "Include the tracker tokens")
-	agentPeersImportCmd.Flags().String("dir", "", "Where the checkouts go (default ~/dev)")
+	agentPeersExportCmd.Flags().Bool(withTokensFlag, false, "Include the tracker tokens and the notification URL")
+	agentPeersExportCmd.Flags().Bool(withEnvFlag, false, "Include each workspace's git-ignored .env, .npmrc and .yarnrc.yml files")
+	agentPeersExportCmd.Flags().Bool(withClaudeFlag, false, "Include every Claude account's settings, rules, skills, memories, MCP servers and plugin list")
+	agentPeersExportCmd.Flags().String("out", "", "Seal the pack into this file instead of printing JSON")
+	agentPeersImportCmd.Flags().String("dir", "", "Where the checkouts go (default: the same place under home as there, else ~/dev)")
+	agentPeersImportCmd.Flags().String("from", "", "A sealed file from export --out (default: stdin)")
 	agentPeersImportCmd.Flags().Bool(skipPermissionsFlag, false, "Register every workspace with permission prompts off")
 	for _, f := range []*cobra.Command{agentPeersBootstrapCmd} {
 		f.Flags().StringSlice("workspace", nil, "Only these workspace ids")
-		f.Flags().String("dir", "~/dev", "Where the checkouts go on the other machine")
-		f.Flags().Bool(withTokensFlag, false, "Copy this machine's tracker tokens over ssh")
+		f.Flags().String("dir", "", "Where the checkouts go on the other machine (default: the same place under home as here)")
+		f.Flags().Bool(withTokensFlag, false, "Copy this machine's tracker tokens and notification URL over ssh")
+		f.Flags().Bool(withEnvFlag, false, "Copy each workspace's git-ignored .env files over ssh")
+		f.Flags().Bool(withClaudeFlag, false, "Copy every Claude account's settings, skills, memories, MCP servers and plugins over ssh")
 		f.Flags().Bool(skipPermissionsFlag, false, "Register the workspaces there with permission prompts off (a server)")
 		f.Flags().Bool("lead", false, "The other machine leads every shared tracker")
 		f.Flags().Bool("lan", false, "Serve on 0.0.0.0:8765 there instead of a tunnel")

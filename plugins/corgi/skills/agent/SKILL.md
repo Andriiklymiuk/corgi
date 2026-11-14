@@ -1142,6 +1142,10 @@ per laptop - those are not shared work.
   same names with their watch, starts the daemon and pairs; `--lead` makes it
   the one that works unattended, `--with-tokens` carries the tracker tokens
   over the ssh session, `--dry-run` only prints the plan (the setup skill).
+- No ssh: `corgi agent peers invite --setup [--with-secrets]` on A, then the
+  printed `corgi agent peers join <url> <code> --import` on B; or a sealed file:
+  `peers export --out me.corgi --with-tokens --with-env --with-claude` on A,
+  `peers import --from me.corgi` on B (the setup skill).
 - `corgi agent peers` - who is paired, awake, leading, and what each watches.
 - `corgi agent peers lead` - this laptop leads every tracker it shares (the
   home machine that should do the unattended work); `lead off` returns to

@@ -311,8 +311,9 @@ func (p *Peer) Absorb(in Pulse, now time.Time) {
 
 // Client talks to one peer as a paired device: bearer token, sealed body.
 type Client struct {
-	Peer Peer
-	HTTP *http.Client
+	Peer      Peer
+	HTTP      *http.Client
+	MaxAnswer int64
 }
 
 func NewClient(p Peer) *Client {
@@ -354,7 +355,11 @@ func (c *Client) Call(ctx context.Context, path string, body any, out any) error
 		return err
 	}
 	defer res.Body.Close()
-	raw, err := io.ReadAll(io.LimitReader(res.Body, 1<<20))
+	limit := c.MaxAnswer
+	if limit <= 0 {
+		limit = 1 << 20
+	}
+	raw, err := io.ReadAll(io.LimitReader(res.Body, limit))
 	if err != nil {
 		return err
 	}

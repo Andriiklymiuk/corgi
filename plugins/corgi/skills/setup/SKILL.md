@@ -405,8 +405,25 @@ under the same names with its watch, models and routines, starts the daemon at l
 timezone on Linux, pairs the two as peers and, with `--lead`, hands the unattended work over. Tokens go only
 with `--with-tokens`, inside the ssh session, never on a command line. `--dangerously-skip-permissions` is
 for a server nobody answers (add `corgi agent harden` there). It ends with what is left by hand: `claude auth
-login` and `gh auth login` on the other machine, and a stable tunnel. Without ssh, the same in two halves:
-`corgi agent peers export --json` here, `corgi agent peers import` there with the pack on stdin.
+login` and `gh auth login` on the other machine, and a stable tunnel. `--with-env` also copies each
+workspace's git-ignored `.env`, `.npmrc` and `.yarnrc.yml`; `--with-claude` copies every Claude account's
+settings, rules, skills, memories, MCP servers and plugin list (never the login). Workspaces land at the same
+place under the new home, so the Claude memories follow them; `--dir ~/dev` puts them all in one folder.
+
+**No ssh to the other machine** (a new laptop beside this one, a teammate's machine) - pick one:
+
+| how | here | there |
+|---|---|---|
+| over the network, both online | `corgi agent peers invite --setup --with-secrets` | the line it prints: `corgi agent peers join <url> <code> --import` |
+| a file (AirDrop, USB) | `corgi agent peers export --out ~/Desktop/me.corgi --with-tokens --with-env --with-claude` | `corgi agent peers import --from me.corgi` |
+
+The invite's setup window lasts 15 minutes and serves one machine once, over the paired (end-to-end
+sealed) link; without `--with-secrets` it sends the workspaces only. The file is AES-sealed with a
+passphrase printed once (or `CORGI_CARRY_PASSPHRASE`): say to type it there, never to send it with the
+file. Both print what is left by hand: the logins this machine still lacks, `corgi agent up --at-login`,
+a tunnel, and for a stack with databases `corgi db snapshot` there + `corgi db restore <file>` here.
+Files already on the new machine are kept, never overwritten. A clone over ssh that fails falls back to
+https (works once `gh auth login` ran).
 
 By hand, or to check what it did:
 
@@ -415,9 +432,10 @@ By hand, or to check what it did:
    "Running it on a server" is the full list (git identity, `gh`/`glab` login, the plugin, linger, TZ).
    Register the same stacks **under the same workspace names**: a task sent across looks for its
    checkout by that name.
-2. **Logins and tokens are per machine.** `claude auth login` for each account (`--config-dir` for the
-   second), `gh auth login` or `glab auth login`, and `corgi agent watch auth <tracker>` again. Nothing
-   is copied from the first machine, and nothing should be: the peer link carries events, never tokens.
+2. **Logins are per machine.** `claude auth login` for each account (`--config-dir` for the
+   second), `gh auth login` or `glab auth login`. Tracker tokens travel only when asked
+   (`--with-tokens`, `--with-secrets`); otherwise `corgi agent watch auth <tracker>` again. The
+   everyday peer link carries events, never tokens.
 3. **Watch the same sources** (`corgi agent watch enable` with the same tracker and repos). Two machines
    that watch the same project are how corgi knows they are peers of one tracker; a workspace watched on
    one machine only is simply that machine's.
@@ -439,8 +457,8 @@ By hand, or to check what it did:
    `corgi agent doctor` is green; the phone's board shows the other machine's sessions under
    "on <name>". `corgi agent task add "…" --on <peer>` puts a task straight on the other machine.
 
-What does not travel: tokens, transcripts, sessions and their permission prompts, the agent config of the
-first machine. What does: the board, the day's runs, ignores and mutes (`watch ignore` on one ignores on
+What does not travel: logins, transcripts, sessions and their permission prompts, the agent config of the
+first machine (tokens, env files and Claude settings only when asked, above). What does: the board, the day's runs, ignores and mutes (`watch ignore` on one ignores on
 both), tasks waiting for a run (after the home machine is silent for ten minutes, or `task send`).
 
 ## The manual checklist (print only what is still open)

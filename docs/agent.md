@@ -2246,6 +2246,45 @@ What stays by hand is printed at the end: `claude auth login` and `gh auth login
 there, and a stable tunnel. The rest of this section is what it does, for a
 server set up without it.
 
+### A machine you cannot ssh into
+
+A new laptop on the desk, a teammate's machine: the same pack, without ssh.
+
+```bash
+# over the network - here, then the line it prints, there
+corgi agent peers invite --setup --with-secrets
+corgi agent peers join http://192.168.1.4:8765 GE7N6GSTZKVNX367A9XX --import
+
+# or as one sealed file - AirDrop it, carry it on a stick
+corgi agent peers export --out ~/Desktop/me.corgi --with-tokens --with-env --with-claude
+corgi agent peers import --from me.corgi       # asks for the passphrase export printed
+```
+
+| flag | what travels |
+|---|---|
+| (none) | each workspace's remote, name, aliases, watch, models, routines; the git identity |
+| `--with-tokens` | tracker tokens and the notification URL |
+| `--with-env` | each workspace's git-ignored `.env*`, `.npmrc`, `.yarnrc.yml`, two folders deep |
+| `--with-claude` | every Claude account's settings, `*.md`, rules, skills, agents, commands, memories, MCP servers, and the plugins (installed there) |
+
+`invite --with-secrets` is all three. Never: logins, transcripts, history, keys.
+
+- Workspaces land at the same place under the new home (`~/Documents/acme`
+  stays `~/Documents/acme`), so Claude's memories and project MCP servers
+  follow them, even under another user name. `--dir ~/dev` puts them in one
+  folder instead.
+- A file already there is kept, never overwritten. Run it again: it only
+  fills the gaps.
+- An ssh clone that fails is tried again over https (`gh auth login` first).
+- The setup window is 15 minutes, one machine, once, over the paired link
+  that is sealed end to end. The file is AES-256-GCM, its key from the
+  passphrase (PBKDF2, 600k rounds); the passphrase is printed once, or taken
+  from `CORGI_CARRY_PASSPHRASE`. Do not send it with the file.
+- Databases are too big for the pack: `corgi db snapshot` on the old
+  machine, copy the `.tar.zst`, `corgi db restore <file>` on the new one.
+- It ends with what is left by hand, checked on that machine: each Claude
+  account's login, `gh` / `glab`, the daemon, a tunnel.
+
 Nothing in agent mode needs a window. The daemon, the watch, the routines,
 the bots and every headless fix are plain processes, so a Linux box with
 `claude`, `git` and Docker runs the same loop a laptop does. The screen is

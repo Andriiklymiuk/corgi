@@ -352,8 +352,21 @@ func tunnelArgs(provider, name, host string) ([]string, error) {
 	return append(args, "--tunnel-hostname", host), nil
 }
 
+func asksForNonLoopback(addr string) bool {
+	host, _, err := net.SplitHostPort(strings.TrimSpace(addr))
+	if err != nil || host == "" || host == "localhost" {
+		return false
+	}
+	ip := net.ParseIP(strings.Trim(host, "[]"))
+	return ip == nil || !ip.IsLoopback()
+}
+
 func spawnDetachedMCP(dir, addr string, tunnel []string) error {
-	args := append([]string{"mcp", "--http", addr, "--tunnel", "--pair"}, tunnel...)
+	args := []string{"mcp", "--http", addr, "--tunnel", "--pair"}
+	if asksForNonLoopback(addr) {
+		args = append(args, "--bind-all")
+	}
+	args = append(args, tunnel...)
 	_ = os.Remove(filepath.Join(dir, mcpLogName))
 	pid, err := spawnDetached(dir, mcpLogName, args...)
 	if err != nil {

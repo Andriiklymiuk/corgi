@@ -371,6 +371,7 @@ var launchRoutes = map[string]http.HandlerFunc{
 	"/launch/peers/join":   launchPeersJoinHandler,
 	"/launch/peers/pulse":  launchPeersPulseHandler,
 	"/launch/peers/tasks":  launchPeersTasksHandler,
+	"/launch/peers/pack":   launchPeersPackHandler,
 }
 
 func mountLaunchRoutes(mux *http.ServeMux, token, deviceStore string) {

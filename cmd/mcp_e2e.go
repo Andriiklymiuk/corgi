@@ -198,6 +198,8 @@ func peerMay(method, path string) bool {
 	switch path {
 	case "/launch/peers/pulse", "/launch/peers/join":
 		return true
+	case "/launch/peers/pack":
+		return method == http.MethodPost
 	case "/launch/peers/tasks", "/launch/task":
 		return method == http.MethodPost
 	}

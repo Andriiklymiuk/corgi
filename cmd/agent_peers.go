@@ -133,18 +133,35 @@ var agentPeersInviteCmd = &cobra.Command{
 		if err != nil {
 			exitWithError("agent_peers", err, 1)
 		}
+		setup, _ := cmd.Flags().GetBool("setup")
+		secrets, _ := cmd.Flags().GetBool("with-secrets")
 		ans, err := requestPairWindowFor(dir, pairing.RolePeer, 6*time.Second)
 		if err != nil {
 			exitWithError("agent_peers", err, 1)
 		}
-		base := firstNonEmpty(ans.PublicURL, ans.LocalURL)
+		if setup || secrets {
+			if err := openShareWindow(dir, secrets, time.Now()); err != nil {
+				exitWithError("agent_peers", err, 1)
+			}
+		}
+		base := peerURL(dir, ans)
+		join := fmt.Sprintf("corgi agent peers join %s %s", base, ans.Code)
+		if setup || secrets {
+			join += " --import"
+		}
 		if utils.JSONOutput {
-			utils.PrintJSON(map[string]any{"url": base, "code": ans.Code, "expiresAt": ans.ExpiresAt})
+			utils.PrintJSON(map[string]any{"url": base, "code": ans.Code, "expiresAt": ans.ExpiresAt, "join": join})
 			return
 		}
 		fmt.Println()
-		fmt.Println("  on the other laptop, within 10 minutes:")
-		fmt.Printf("    corgi agent peers join %s %s\n", base, ans.Code)
+		fmt.Println("  on the other machine, within 10 minutes:")
+		if setup || secrets {
+			fmt.Println("    curl -fsSL https://raw.githubusercontent.com/Andriiklymiuk/corgi/main/install.sh | sh   # when corgi is not there yet")
+		}
+		fmt.Printf("    %s\n", join)
+		if secrets {
+			fmt.Println("  it takes the tracker tokens, env files and Claude settings too, once.")
+		}
 		fmt.Println()
 	},
 }
@@ -165,6 +182,10 @@ var agentPeersJoinCmd = &cobra.Command{
 			exitWithError("agent_peers", err, 1)
 		}
 		nudgeDaemon(dir)
+		if take, _ := cmd.Flags().GetBool("import"); take {
+			importFromPeer(cmd, dir, p)
+			return
+		}
 		if utils.JSONOutput {
 			utils.PrintJSON(p)
 			return
@@ -229,14 +250,38 @@ func joinPeerBothWays(ctx context.Context, dir, rawURL, code string) (peers.Peer
 	if err != nil {
 		return p, fmt.Errorf("paired one way; the MCP server here would not open a window for %s to pair back: %w", p.Name, err)
 	}
-	back := map[string]any{"url": firstNonEmpty(mine.PublicURL, mine.LocalURL), "code": mine.Code, "reciprocal": true}
+	back := map[string]any{"url": peerURL(dir, mine), "code": mine.Code, "reciprocal": true}
 	if err := peers.NewClient(p).Call(ctx, "/launch/peers/join", back, nil); err != nil {
 		return p, fmt.Errorf("paired one way; %s could not pair back: %w", p.Name, err)
 	}
 	return p, nil
 }
 
+func importFromPeer(cmd *cobra.Command, dir string, p peers.Peer) {
+	base, _ := cmd.Flags().GetString("dir")
+	skipPerms, _ := cmd.Flags().GetBool(skipPermissionsFlag)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+	pack, err := fetchPeerPack(ctx, p)
+	if err != nil {
+		exitWithError("agent_peers", fmt.Errorf("paired with %s, but the setup did not come: %w", p.Name, err), 1)
+	}
+	if !utils.JSONOutput {
+		fmt.Printf("Paired with %s. Setting up its %d workspace(s) here.\n", p.Name, len(pack.Workspaces))
+	}
+	done, err := applyPeerPack(dir, pack, importOptions{base: base, skipPerms: skipPerms, runClaude: runClaudeCommand})
+	reportPackImport(pack, done, err)
+	if err != nil {
+		exitWithError("agent_peers", err, 1)
+	}
+}
+
 func init() {
+	agentPeersInviteCmd.Flags().Bool("setup", false, "The machine that joins also clones and registers this one's workspaces")
+	agentPeersInviteCmd.Flags().Bool("with-secrets", false, "With --setup: it takes the tracker tokens, env files and Claude settings too")
+	agentPeersJoinCmd.Flags().Bool("import", false, "Set up the other machine's workspaces here (it ran invite --setup)")
+	agentPeersJoinCmd.Flags().String("dir", "", "With --import: where the checkouts go (default: the same place under home as there)")
+	agentPeersJoinCmd.Flags().Bool(skipPermissionsFlag, false, "With --import: register the workspaces with permission prompts off")
 	agentPeersCmd.AddCommand(agentPeersInviteCmd, agentPeersJoinCmd, agentPeersLeadCmd, agentPeersRmCmd)
 	agentCmd.AddCommand(agentPeersCmd)
 }
@@ -320,7 +365,7 @@ func launchPeersInviteHandler(w http.ResponseWriter, r *http.Request) {
 		writeLaunchError(w, http.StatusServiceUnavailable, err.Error())
 		return
 	}
-	writeLaunchJSON(w, map[string]any{"url": firstNonEmpty(ans.PublicURL, ans.LocalURL), "code": ans.Code, "expiresAt": ans.ExpiresAt, "name": peers.Me()})
+	writeLaunchJSON(w, map[string]any{"url": peerURL(dir, ans), "code": ans.Code, "expiresAt": ans.ExpiresAt, "name": peers.Me()})
 }
 
 func launchPeersJoinHandler(w http.ResponseWriter, r *http.Request) {
