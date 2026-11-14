@@ -184,11 +184,11 @@ picture shows inline, a video (mp4, mov, webm, m4v) plays inline on Jira and
 is a link on Linear, anything else (pdf, csv, log, json, zip, docx, xlsx...)
 is a file card on Jira and a link on Linear. --image is the same flag.
 On Jira this is the only way a file shows: a comment that just names a
-file, or markdown like ![](file.jpg), leaves the reader with a file name.
+file, or markdown like ` + "`![](file.jpg)`" + `, leaves the reader with a file name.
 Every file is checked before anything is sent: a missing, unreadable, empty
 or too large one posts nothing. Jira's limit is the site's own (1 GB by
 default); nothing over 2 GB goes to either tracker.
-The text is plain text. A URL or a markdown link [label](url) is clickable;
+The text is plain text. A URL or a markdown link ` + "`[label](url)`" + ` is clickable;
 a bare !9168 or #42 is not, the tracker does not know which repo it means.`,
 	Args: cobra.ExactArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
