@@ -200,6 +200,7 @@ func stopSingleService(corgi *utils.CorgiCompose, st utils.RunState, statePath, 
 		utils.StopDockerRunnerServices([]string{name})
 		summary.Stopped = append(summary.Stopped, name)
 	}
+	stopK8sRunners(corgi, name)
 	runServiceAfterStop(corgi, name)
 	if unlock, lerr := utils.LockRunState(utils.CorgiComposePathDir); lerr == nil {
 		defer unlock()

@@ -157,6 +157,7 @@ func restartSingleService(cmd *cobra.Command) {
 }
 
 func relaunchDetachedService(svc utils.Service) (pid int, command string, err error) {
+	svc = withK8sStart(svc)
 	if isDockerRunnable(svc) {
 		if uerr := utils.ExecuteServiceCommandRun(svc.ServiceName, "make", "upd"); uerr != nil {
 			return 0, "make upd", uerr

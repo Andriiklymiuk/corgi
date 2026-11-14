@@ -214,6 +214,12 @@ runner:
   composeFile: string             # Delegate to the repo's own compose file (mutually exclusive with build fields)
   image: string                   # Run a registry image directly - no repo, no build. Requires port:. Excludes dockerfile/composeFile
   watch: bool                     # Rebuild+restart container on file changes (foreground runs only)
+  # name: k8s (or kubernetes) runs it in a cluster instead - see "Kubernetes services" below
+  kubeContext: string             # k8s: context to deploy to; needed for any non-local cluster
+  namespace: string               # k8s: default corgi-<stack name>
+  manifests: string               # k8s: dir/file of manifests (kustomization.yaml → apply -k)
+  chart: string                   # k8s: helm chart; values: [files]
+  resource: string                # k8s: workload to wait on + forward (default: named like the service)
 
 waitForDatabases: bool            # Default true. False = start alongside the databases (still gets their env)
 
@@ -258,6 +264,43 @@ A service runs in docker instead of scripts when, in priority order:
 Also: `runner: {image: nginx:alpine}` runs a registry image with no repo at
 all (port: required); `corgi build` pre-builds every docker-capable image in
 parallel without starting anything.
+
+## Kubernetes services (`runner: {name: k8s}`)
+
+The service runs in a cluster; everything else in the stack (dbs, native
+services, env, healthChecks) stays as is, because corgi forwards its port to
+`localhost:<port>`.
+
+| source | when | what corgi does |
+|---|---|---|
+| generated | no `manifests`/`chart` | builds the Dockerfile (or uses `image`), writes a Deployment + Service with a TCP readiness probe |
+| `manifests` | your yaml or kustomize dir | `kubectl apply`, picks the workload, puts a built image on it when build fields are set |
+| `chart` | a helm chart | `helm upgrade --install <service>`, `--set image.repository/tag` when it built one |
+
+On `corgi run`: namespace → image (built, tagged by content, loaded into
+kind/k3d/minikube; docker-desktop/orbstack share the daemon) → env Secret
+`corgi-<service>-env` from the service's env, `localhost` rewritten to
+`host.docker.internal` (minikube: `host.minikube.internal`; override with
+`localhostNameInEnv`) → apply → `rollout status` (on failure it prints the
+cluster's warning events) → `kubectl port-forward` to 127.0.0.1:<port>, which
+reconnects when the pod restarts → logs from every pod into corgi's log.
+`corgi stop` removes exactly what it applied (`helm uninstall` for a chart).
+
+Safety: with no `kubeContext`, corgi uses the current context only when it is a
+local cluster; a remote cluster must be named, and a local build cannot go to
+one (use `image:` from a registry). `corgi doctor` names missing kubectl, helm,
+kind, k3d or minikube. `corgi k8s manifests <svc>` prints the generated yaml
+(start your own from it), `corgi k8s status` shows context, namespace and pods,
+`corgi k8s up|down <svc>` drive one by hand.
+
+```yaml
+services:
+  api:
+    port: 3000
+    runner:
+      name: k8s
+      kubeContext: kind-dev        # kind create cluster --name dev
+```
 
 `beforeStart` still runs host-side in docker mode (certs, migrations, env);
 the container replaces only `start:`. `afterStart` runs on stop. `port:` may

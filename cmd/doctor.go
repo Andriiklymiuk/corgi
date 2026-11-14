@@ -273,6 +273,7 @@ func buildDoctorResult(corgi *utils.CorgiCompose) doctorResult {
 	}
 
 	res.Checks = append(res.Checks, ciChecks(corgi)...)
+	res.Checks = append(res.Checks, k8sToolChecks(corgi)...)
 
 	for _, p := range collectDeclaredPorts(corgi) {
 		busy := utils.IsPortListening(p.Port)
@@ -338,7 +339,7 @@ func diskHeadroomCheck(corgi *utils.CorgiCompose) (doctorCheck, bool) {
 }
 
 func printCIChecks(corgi *utils.CorgiCompose) bool {
-	checks := ciChecks(corgi)
+	checks := append(ciChecks(corgi), k8sToolChecks(corgi)...)
 	if len(checks) == 0 {
 		return true
 	}

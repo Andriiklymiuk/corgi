@@ -193,6 +193,13 @@ invariant that would otherwise be lost, and only where the file already comments
   `beforeStart` step, ignoring `cacheKey` - **not** an image/deps rebuild). Truly
   stale generated artifacts → `corgi clean -i corgi_services` / `corgi run --fromScratch`.
 - **Env wrong** → `corgi env <x>`. **Compose wrong** → `corgi validate`.
+- **A `runner: k8s` service** → `corgi k8s status` (context, namespace, pods), the
+  service log has the rollout and "what the cluster says" (warning events: image
+  pull, probe, OOM). `ErrImageNeverPull`/`ImagePullBackOff` on a built image = the
+  Docker CLI builds into another daemon than the cluster's (check `docker context
+  show` against the kube context). Refused with "not a local cluster" = the current
+  context is remote: never change it to get past this, ask which `kubeContext` to
+  name. `corgi k8s down <x>` clears a half-applied one.
 
 Re-gate: `corgi status --ready --service <x> --timeout 120s --json`. Green → report.
 Red after ~2 tries → `needs attention` + the error, move on.

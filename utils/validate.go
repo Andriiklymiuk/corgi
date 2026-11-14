@@ -325,7 +325,7 @@ func checkMissingStart(c *CorgiCompose) []ValidationIssue {
 		if s.Port == 0 || s.ManualRun {
 			continue
 		}
-		if len(s.Start) > 0 || s.Runner.IsDocker() {
+		if len(s.Start) > 0 || s.Runner.IsDocker() || s.Runner.IsK8s() {
 			continue
 		}
 		if DetectDockerSource(s) != SourceNone {

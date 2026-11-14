@@ -865,6 +865,7 @@ func spawnDetachedServices(corgi *utils.CorgiCompose) []detachedProc {
 }
 
 func startDetachedService(svc utils.Service) (detachedProc, bool) {
+	svc = withK8sStart(svc)
 	if isDockerRunnable(svc) {
 		return startDetachedDockerRunner(svc)
 	}
@@ -1160,6 +1161,7 @@ func cleanup(corgi *utils.CorgiCompose) {
 	}
 
 	stopDockerRunners(corgi)
+	stopK8sRunners(corgi)
 
 	for _, service := range corgi.Services {
 		if service.AfterStart != nil && !omitted(utils.AfterStartInConfig) {
@@ -1336,6 +1338,7 @@ func runServicePullIfRequested(cobraCmd *cobra.Command, service utils.Service) {
 }
 
 func startServiceProcess(service utils.Service) {
+	service = withK8sStart(service)
 	if isDockerRunnable(service) {
 		utils.Info(art.BlueColor, "\n🤖 Starting service", service.ServiceName, art.WhiteColor)
 		target := "up"

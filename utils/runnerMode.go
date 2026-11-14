@@ -79,6 +79,9 @@ func ResolveRunnerModes(services []Service, dockerFlag, announce bool) ([]Servic
 }
 
 func validateRunnerConfig(s Service, dockerFlag bool) error {
+	if err := validateK8sRunner(s); err != nil || s.Runner.IsK8s() {
+		return err
+	}
 	if s.Runner.ComposeFile != "" && hasBuildFields(s.Runner) {
 		return fmt.Errorf(
 			"service %s: runner.composeFile and build fields (dockerfile/context/target/args/volumes/containerPort/command) are mutually exclusive",
@@ -104,6 +107,9 @@ func validateRunnerConfig(s Service, dockerFlag bool) error {
 }
 
 func deriveRunnerMode(s Service, dockerFlag, announce bool) (Service, error) {
+	if s.Runner.IsK8s() {
+		return s, nil
+	}
 	src := DetectDockerSource(s)
 	switch {
 	case s.Runner.IsDocker():
