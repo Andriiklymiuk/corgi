@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"testing"
+
+	"andriiklymiuk/corgi/utils"
 	"time"
 
 	"andriiklymiuk/corgi/utils/agent/timers"
@@ -33,6 +35,23 @@ func TestAgentLater(t *testing.T) {
 		t.Fatal("bad time accepted")
 	}
 	if err := runAgentLater(dir, nil, now); err != nil {
+		t.Fatal(err)
+	}
+	prev := utils.JSONOutput
+	utils.JSONOutput = true
+	t.Cleanup(func() { utils.JSONOutput = prev })
+	if err := runAgentLater(dir, nil, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := runAgentLater(dir, []string{"2h", "json"}, now); err != nil {
+		t.Fatal(err)
+	}
+	left, _ := timers.List(dir)
+	if err := runAgentLater(dir, []string{"cancel", left[0].ID}, now); err != nil {
+		t.Fatal(err)
+	}
+	empty := t.TempDir()
+	if err := runAgentLater(empty, nil, now); err != nil {
 		t.Fatal(err)
 	}
 }

@@ -189,93 +189,109 @@ func findScreenDevice(dir, name string) (string, string, error) {
 	return "", "", fmt.Errorf("no paired phone, iPad or Mac named %q (corgi agent screen devices)", name)
 }
 
+var screenWords = map[string]func(dir string, rest []string) error{
+	"status":  func(dir string, _ []string) error { return printScreenStatus(dir) },
+	"devices": func(dir string, _ []string) error { return printScreenDevices(dir) },
+	"on":      func(dir string, _ []string) error { return setScreenEnabled(dir, true) },
+	"off":     func(dir string, _ []string) error { return setScreenEnabled(dir, false) },
+	"grant":   grantScreen,
+	"forget":  forgetScreen,
+	"reach":   setScreenReach,
+	"log":     printScreenLog,
+}
+
 func runAgentScreen(dir, word string, rest []string) error {
-	switch word {
-	case "status":
-		return printScreenStatus(dir)
-	case "on", "off":
-		on := word == "on"
-		if _, err := screen.Update(dir, func(s *screen.Settings) error {
-			s.Enabled = on
-			return nil
-		}); err != nil {
-			return err
-		}
-		if !on {
-			_ = screen.ClearHost(dir)
-		}
-		if utils.JSONOutput {
-			utils.PrintJSON(map[string]any{"enabled": on})
-			return nil
-		}
-		if on {
-			utils.Info("✓ Remote screen on. Corgi Bar shares the screen; a new device is asked about on the Mac first.")
-		} else {
-			utils.Info("✓ Remote screen off. Sessions end within seconds and nothing listens.")
-		}
-		return nil
-	case "devices":
-		return printScreenDevices(dir)
-	case "grant":
-		if len(rest) != 2 {
-			return fmt.Errorf(`grant takes a device and a role: corgi agent screen grant "iPad" control`)
-		}
-		role, err := screen.ParseRole(rest[1])
-		if err != nil {
-			return err
-		}
-		id, name, err := findScreenDevice(dir, rest[0])
-		if err != nil {
-			return err
-		}
-		if err := applyScreenChange(dir, screenSettingsIn{Do: "grant", Device: id, Role: role}, time.Now()); err != nil {
-			return err
-		}
-		utils.Infof("✓ %s: %s\n", name, role)
-		return nil
-	case "forget":
-		if len(rest) != 1 {
-			return fmt.Errorf(`forget takes a device: corgi agent screen forget "iPad"`)
-		}
-		id, name, err := findScreenDevice(dir, rest[0])
-		if err != nil {
-			return err
-		}
-		if err := applyScreenChange(dir, screenSettingsIn{Do: "forget", Device: id}, time.Now()); err != nil {
-			return err
-		}
-		utils.Infof("✓ %s forgotten: it is asked about again next time\n", name)
-		return nil
-	case "reach":
-		if len(rest) != 1 || (rest[0] != screen.ReachNearby && rest[0] != screen.ReachAway) {
-			return fmt.Errorf("reach is nearby (same network only) or away (anywhere the phone can reach)")
-		}
-		_, err := screen.Update(dir, func(s *screen.Settings) error {
-			s.Reach = rest[0]
-			return nil
-		})
-		return err
-	case "log":
-		if screenLogEvent != "" {
-			return applyScreenChange(dir, screenSettingsIn{Do: "log", Device: screenLogDevice, Event: screenLogEvent}, time.Now())
-		}
-		recent, err := screen.Recent(dir, 20)
-		if err != nil {
-			return err
-		}
-		if utils.JSONOutput {
-			utils.PrintJSON(recent)
-			return nil
-		}
-		if len(recent) == 0 {
-			utils.Info("No sessions yet.")
-		}
-		for _, s := range recent {
-			fmt.Printf("%s  %-5s  %-20s %-7s %s\n", s.At.Local().Format("Jan 2 15:04"), s.Event, s.Name, s.Role, s.Addr)
-		}
-		return nil
+	if run, ok := screenWords[word]; ok {
+		return run(dir, rest)
 	}
 	return fmt.Errorf("unknown: %s (on, off, status, devices, grant, forget, reach, log)", word)
+}
+
+func setScreenEnabled(dir string, on bool) error {
+	if _, err := screen.Update(dir, func(s *screen.Settings) error {
+		s.Enabled = on
+		return nil
+	}); err != nil {
+		return err
+	}
+	if !on {
+		_ = screen.ClearHost(dir)
+	}
+	switch {
+	case utils.JSONOutput:
+		utils.PrintJSON(map[string]any{"enabled": on})
+	case on:
+		utils.Info("✓ Remote screen on. Corgi Bar shares the screen; a new device is asked about on the Mac first.")
+	default:
+		utils.Info("✓ Remote screen off. Sessions end within seconds and nothing listens.")
+	}
+	return nil
+}
+
+func grantScreen(dir string, rest []string) error {
+	if len(rest) != 2 {
+		return fmt.Errorf(`grant takes a device and a role: corgi agent screen grant "iPad" control`)
+	}
+	role, err := screen.ParseRole(rest[1])
+	if err != nil {
+		return err
+	}
+	id, name, err := findScreenDevice(dir, rest[0])
+	if err != nil {
+		return err
+	}
+	if err := applyScreenChange(dir, screenSettingsIn{Do: "grant", Device: id, Role: role}, time.Now()); err != nil {
+		return err
+	}
+	utils.Infof("✓ %s: %s\n", name, role)
+	return nil
+}
+
+func forgetScreen(dir string, rest []string) error {
+	if len(rest) != 1 {
+		return fmt.Errorf(`forget takes a device: corgi agent screen forget "iPad"`)
+	}
+	id, name, err := findScreenDevice(dir, rest[0])
+	if err != nil {
+		return err
+	}
+	if err := applyScreenChange(dir, screenSettingsIn{Do: "forget", Device: id}, time.Now()); err != nil {
+		return err
+	}
+	utils.Infof("✓ %s forgotten: it is asked about again next time\n", name)
+	return nil
+}
+
+func setScreenReach(dir string, rest []string) error {
+	if len(rest) != 1 || (rest[0] != screen.ReachNearby && rest[0] != screen.ReachAway) {
+		return fmt.Errorf("reach is nearby (same network only) or away (anywhere the phone can reach)")
+	}
+	_, err := screen.Update(dir, func(s *screen.Settings) error {
+		s.Reach = rest[0]
+		return nil
+	})
+	return err
+}
+
+func printScreenLog(dir string, _ []string) error {
+	if screenLogEvent != "" {
+		return applyScreenChange(dir, screenSettingsIn{Do: "log", Device: screenLogDevice, Event: screenLogEvent}, time.Now())
+	}
+	recent, err := screen.Recent(dir, 20)
+	if err != nil {
+		return err
+	}
+	if utils.JSONOutput {
+		utils.PrintJSON(recent)
+		return nil
+	}
+	if len(recent) == 0 {
+		utils.Info("No sessions yet.")
+	}
+	for _, s := range recent {
+		fmt.Printf("%s  %-5s  %-20s %-7s %s\n", s.At.Local().Format("Jan 2 15:04"), s.Event, s.Name, s.Role, s.Addr)
+	}
+	return nil
 }
 
 func printScreenStatus(dir string) error {

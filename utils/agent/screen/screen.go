@@ -415,15 +415,7 @@ type Candidate struct {
 	Kind string `json:"kind"`
 }
 
-var tailnet = mustCIDR("100.64.0.0/10")
-
-func mustCIDR(s string) *net.IPNet {
-	_, n, err := net.ParseCIDR(s)
-	if err != nil {
-		panic(err)
-	}
-	return n
-}
+var tailnet = &net.IPNet{IP: net.IPv4(100, 64, 0, 0).To4(), Mask: net.CIDRMask(10, 32)}
 
 func classify(ip net.IP) string {
 	switch {
@@ -446,30 +438,39 @@ func classify(ip net.IP) string {
 	return ""
 }
 
-func Candidates(port int, reach string) []Candidate {
+func localIPs() []net.IP {
 	ifaces, _ := net.Interfaces()
-	var out []Candidate
-	seen := map[string]bool{}
+	var out []net.IP
 	for _, iface := range ifaces {
 		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
 			continue
 		}
 		addrs, _ := iface.Addrs()
 		for _, a := range addrs {
-			n, ok := a.(*net.IPNet)
-			if !ok {
-				continue
-			}
-			kind := classify(n.IP)
-			if kind == "" || (reach == ReachNearby && kind != "lan" && kind != "lan6") {
-				continue
-			}
-			addr := net.JoinHostPort(n.IP.String(), strconv.Itoa(port))
-			if !seen[addr] {
-				seen[addr] = true
-				out = append(out, Candidate{Addr: addr, Kind: kind})
+			if n, ok := a.(*net.IPNet); ok {
+				out = append(out, n.IP)
 			}
 		}
+	}
+	return out
+}
+
+func Candidates(port int, reach string) []Candidate {
+	return candidatesFrom(localIPs(), port, reach)
+}
+
+func candidatesFrom(ips []net.IP, port int, reach string) []Candidate {
+	var out []Candidate
+	seen := map[string]bool{}
+	for _, ip := range ips {
+		kind := classify(ip)
+		nearbyOnly := reach == ReachNearby && kind != "lan" && kind != "lan6"
+		addr := net.JoinHostPort(ip.String(), strconv.Itoa(port))
+		if kind == "" || nearbyOnly || seen[addr] {
+			continue
+		}
+		seen[addr] = true
+		out = append(out, Candidate{Addr: addr, Kind: kind})
 	}
 	rank := map[string]int{"lan": 0, "lan6": 1, "tailnet": 2, "ipv6": 3, "public": 4}
 	sort.SliceStable(out, func(i, j int) bool { return rank[out[i].Kind] < rank[out[j].Kind] })

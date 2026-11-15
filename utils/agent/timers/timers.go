@@ -194,11 +194,11 @@ func clock(s string, day time.Time) (time.Time, bool) {
 		return time.Time{}, false
 	}
 	h, _ := strconv.Atoi(m[1])
-	min, _ := strconv.Atoi(m[2])
-	if h > 23 || min > 59 {
+	mins, _ := strconv.Atoi(m[2])
+	if h > 23 || mins > 59 {
 		return time.Time{}, false
 	}
-	return clockAt(day, h, min), true
+	return clockAt(day, h, mins), true
 }
 
 func clockAt(day time.Time, h, m int) time.Time {

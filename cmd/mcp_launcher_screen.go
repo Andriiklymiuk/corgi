@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"net"
 	"net/http"
 	"os"
@@ -193,22 +194,27 @@ func screenStartSession(w http.ResponseWriter, dir string, d pairing.Device, s *
 	})
 }
 
+var screenPowerRun = func(do string) error {
+	cmd := exec.Command("caffeinate", "-u", "-t", "3")
+	if do == "sleep" {
+		cmd = exec.Command("pmset", "displaysleepnow")
+	}
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	go func() { _ = cmd.Wait() }()
+	return nil
+}
+
 func screenPower(w http.ResponseWriter, s *screen.Settings, d pairing.Device, do string) {
 	if !s.Enabled || s.RoleFor(d.TokenHash) != screen.RoleControl {
 		writeLaunchError(w, http.StatusForbidden, "only a device with control may sleep or wake this Mac")
 		return
 	}
-	var cmd *exec.Cmd
-	if do == "sleep" {
-		cmd = exec.Command("pmset", "displaysleepnow")
-	} else {
-		cmd = exec.Command("caffeinate", "-u", "-t", "3")
-	}
-	if err := cmd.Start(); err != nil {
+	if err := screenPowerRun(do); err != nil {
 		writeLaunchError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	go func() { _ = cmd.Wait() }()
 	writeLaunchJSON(w, map[string]any{"ok": true, "do": do})
 }
 
@@ -335,17 +341,17 @@ func applyScreenChange(dir string, in screenSettingsIn, now time.Time) error {
 	case "log":
 		return screen.Log(dir, screen.Session{Device: in.Device, Name: in.Name, Role: in.Role, Addr: in.Addr, Event: in.Event, At: now})
 	case "set":
-		_, err := screen.Update(dir, func(s *screen.Settings) error {
+		s, err := screen.Update(dir, func(s *screen.Settings) error {
 			devices := s.Devices
 			if err := json.Unmarshal(in.Settings, s); err != nil {
 				return err
 			}
 			s.Devices = devices
-			if !s.Enabled {
-				_ = screen.ClearHost(dir)
-			}
 			return nil
 		})
+		if err == nil && !s.Enabled {
+			err = screen.ClearHost(dir)
+		}
 		return err
 	case "grant":
 		role, err := screen.ParseRole(in.Role)
@@ -372,11 +378,7 @@ func applyScreenChange(dir string, in screenSettingsIn, now time.Time) error {
 	return errUnknownScreenChange
 }
 
-var errUnknownScreenChange = &screenError{"do must be set, grant, forget or log"}
-
-type screenError struct{ msg string }
-
-func (e *screenError) Error() string { return e.msg }
+var errUnknownScreenChange = errors.New("do must be set, grant, forget or log")
 
 func deviceNameFor(dir, hash string) string {
 	store, err := pairing.Load(pairing.StorePath(dir))

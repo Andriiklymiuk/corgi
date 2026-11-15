@@ -78,43 +78,37 @@ func readLines(path string) ([]line, error) {
 	return out, nil
 }
 
-func Dream(agentDir, workspace string, now time.Time, opt DreamOptions) (DreamReport, error) {
-	rep := DreamReport{Workspace: workspace}
-	path := Path(agentDir, workspace)
-	lines, err := readLines(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return rep, nil
-		}
-		return rep, err
-	}
-	type idx struct {
-		i     int
-		l     *Lesson
-		words map[string]bool
-	}
-	var all []idx
+type indexed struct {
+	i     int
+	l     *Lesson
+	words map[string]bool
+}
+
+func indexLessons(lines []line) []indexed {
+	var all []indexed
 	for i, ln := range lines {
 		if ln.lesson != nil {
-			all = append(all, idx{i, ln.lesson, words(ln.lesson.Text)})
+			all = append(all, indexed{i, ln.lesson, words(ln.lesson.Text)})
 		}
 	}
-	rep.Before = len(all)
-	drop := map[int]string{}
 	sort.SliceStable(all, func(a, b int) bool { return all[a].l.At.After(all[b].l.At) })
-	for a := 0; a < len(all); a++ {
+	return all
+}
+
+func markDuplicates(all []indexed, similar float64, drop map[int]string) {
+	for a := range all {
 		if _, gone := drop[all[a].i]; gone {
 			continue
 		}
 		for b := a + 1; b < len(all); b++ {
-			if _, gone := drop[all[b].i]; gone {
-				continue
-			}
-			if similarity(all[a].words, all[b].words) >= opt.Similar {
+			if _, gone := drop[all[b].i]; !gone && similarity(all[a].words, all[b].words) >= similar {
 				drop[all[b].i] = "same as a newer lesson: " + all[a].l.Text
 			}
 		}
 	}
+}
+
+func markRetired(all []indexed, opt DreamOptions, now time.Time, drop map[int]string) {
 	kept := 0
 	for _, x := range all {
 		if _, gone := drop[x.i]; gone {
@@ -129,7 +123,38 @@ func Dream(agentDir, workspace string, now time.Time, opt DreamOptions) (DreamRe
 			kept++
 		}
 	}
-	rep.After = rep.Before - len(drop)
+}
+
+func rewrite(path string, lines []line, drop map[int]string) error {
+	var b strings.Builder
+	for i, ln := range lines {
+		if _, gone := drop[i]; !gone {
+			b.WriteString(ln.raw)
+			b.WriteByte('\n')
+		}
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, []byte(b.String()), 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
+}
+
+func Dream(agentDir, workspace string, now time.Time, opt DreamOptions) (DreamReport, error) {
+	rep := DreamReport{Workspace: workspace}
+	path := Path(agentDir, workspace)
+	lines, err := readLines(path)
+	if os.IsNotExist(err) {
+		return rep, nil
+	}
+	if err != nil {
+		return rep, err
+	}
+	all := indexLessons(lines)
+	drop := map[int]string{}
+	markDuplicates(all, opt.Similar, drop)
+	markRetired(all, opt, now, drop)
+	rep.Before, rep.After = len(all), len(all)-len(drop)
 	for i, why := range drop {
 		rep.Dropped = append(rep.Dropped, Dropped{Lesson: *lines[i].lesson, Why: why})
 	}
@@ -137,22 +162,10 @@ func Dream(agentDir, workspace string, now time.Time, opt DreamOptions) (DreamRe
 	if opt.DryRun || len(drop) == 0 {
 		return rep, nil
 	}
-	var b strings.Builder
-	for i, ln := range lines {
-		if _, gone := drop[i]; gone {
-			continue
-		}
-		b.WriteString(ln.raw)
-		b.WriteByte('\n')
-	}
 	if err := archive(agentDir, workspace, now, rep.Dropped); err != nil {
 		return rep, err
 	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, []byte(b.String()), 0o600); err != nil {
-		return rep, err
-	}
-	return rep, os.Rename(tmp, path)
+	return rep, rewrite(path, lines, drop)
 }
 
 func ArchivePath(agentDir, workspace string) string {

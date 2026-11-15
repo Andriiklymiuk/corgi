@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"andriiklymiuk/corgi/utils/agent/lessons"
 	"andriiklymiuk/corgi/utils/agent/sessions"
 	"andriiklymiuk/corgi/utils/agent/timers"
 )
@@ -54,5 +55,23 @@ func TestTimersTypeIntoTheSessionOrRing(t *testing.T) {
 	}
 	if left, _ := timers.List(d.Dir); len(left) != 0 {
 		t.Fatalf("fired timers are gone: %+v", left)
+	}
+}
+
+func TestDreamIfDue(t *testing.T) {
+	d := trackingDaemon(t)
+	now := time.Now()
+	d.dreamIfDue(now)
+	if err := lessons.Add(d.Dir, "api", lessons.Lesson{At: now.AddDate(-1, 0, 0), Source: "s", Text: "an old lesson about retries"}); err != nil {
+		t.Fatal(err)
+	}
+	d.dreamIfDue(now)
+	if left := lessons.List(d.Dir, "api"); len(left) != 0 {
+		t.Fatalf("the year-old lesson was put away: %+v", left)
+	}
+	_ = lessons.Add(d.Dir, "api", lessons.Lesson{At: now.AddDate(-1, 0, 0), Source: "s", Text: "another old one"})
+	d.dreamIfDue(now.Add(time.Hour))
+	if len(lessons.List(d.Dir, "api")) != 1 {
+		t.Fatal("dreaming waits a week")
 	}
 }

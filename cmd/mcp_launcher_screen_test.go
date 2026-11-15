@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/agent/pairing"
 	"andriiklymiuk/corgi/utils/agent/screen"
 )
@@ -264,5 +265,117 @@ func TestScreenCLIGrantByName(t *testing.T) {
 	s, _ = screen.Load(rig.dir)
 	if _, ok := s.Devices[rig.hashes["ipad"]]; ok {
 		t.Fatal("forget drops the grant")
+	}
+}
+
+func TestScreenPowerWithControl(t *testing.T) {
+	rig := newScreenRig(t)
+	_ = runAgentScreen(rig.dir, "on", nil)
+	var ran []string
+	prev := screenPowerRun
+	screenPowerRun = func(do string) error { ran = append(ran, do); return nil }
+	t.Cleanup(func() { screenPowerRun = prev })
+	_ = applyScreenChange(rig.dir, screenSettingsIn{Do: "grant", Device: rig.hashes["ipad"], Role: "control"}, time.Now())
+	for _, do := range []string{"sleep", "wake"} {
+		if code, out := rig.call(t, launchScreenHandler, "ipad", "POST", "/launch/screen", `{"do":"`+do+`"}`, ""); code != 200 || out["do"] != do {
+			t.Fatalf("%s: %d %v", do, code, out)
+		}
+	}
+	if len(ran) != 2 || ran[0] != "sleep" {
+		t.Fatalf("ran %v", ran)
+	}
+	if code, _ := rig.call(t, launchScreenHandler, "ipad", "POST", "/launch/screen", `{"do":"dance"}`, ""); code != 400 {
+		t.Fatalf("unknown do: %d", code)
+	}
+	if code, _ := rig.call(t, launchScreenHandler, "ipad", "POST", "/launch/screen", `not json`, ""); code != 400 {
+		t.Fatalf("bad body: %d", code)
+	}
+	if code, _ := rig.call(t, launchScreenHandler, "ipad", "DELETE", "/launch/screen", "", ""); code != 405 {
+		t.Fatalf("delete: %d", code)
+	}
+}
+
+func TestScreenMacRoutesShapes(t *testing.T) {
+	rig := newScreenRig(t)
+	_ = runAgentScreen(rig.dir, "on", nil)
+	if code, _ := rig.call(t, launchScreenHostHandler, "bar", "GET", "/launch/screen/host", "", local); code != 405 {
+		t.Fatalf("host GET: %d", code)
+	}
+	if code, _ := rig.call(t, launchScreenHostHandler, "bar", "POST", "/launch/screen/host", "{", local); code != 400 {
+		t.Fatalf("host bad json: %d", code)
+	}
+	if code, _ := rig.call(t, launchScreenHostHandler, "bar", "POST", "/launch/screen/host", `{"do":"register","port":70000,"fingerprint":"x"}`, local); code != 400 {
+		t.Fatalf("host bad port: %d", code)
+	}
+	rig.registerHost(t)
+	if code, out := rig.call(t, launchScreenHostHandler, "bar", "POST", "/launch/screen/host", `{"do":"clear"}`, local); code != 200 || out["ok"] != true {
+		t.Fatalf("clear: %d %v", code, out)
+	}
+	if code, _ := rig.call(t, launchScreenVerifyHandler, "bar", "GET", "/launch/screen/verify", "", local); code != 405 {
+		t.Fatalf("verify GET: %d", code)
+	}
+	if code, _ := rig.call(t, launchScreenVerifyHandler, "bar", "POST", "/launch/screen/verify", "{", local); code != 400 {
+		t.Fatalf("verify bad json: %d", code)
+	}
+	code, out := rig.call(t, launchScreenSettingsHandler, "bar", "GET", "/launch/screen/settings", "", local)
+	if code != 200 || out["settings"] == nil || out["devices"] == nil {
+		t.Fatalf("settings GET: %d %v", code, out)
+	}
+	if code, _ := rig.call(t, launchScreenSettingsHandler, "bar", "POST", "/launch/screen/settings", "{", local); code != 400 {
+		t.Fatalf("settings bad json: %d", code)
+	}
+	if code, _ := rig.call(t, launchScreenSettingsHandler, "bar", "POST", "/launch/screen/settings", `{"do":"explode"}`, local); code != 400 {
+		t.Fatalf("settings unknown do: %d", code)
+	}
+	set := `{"do":"set","settings":{"enabled":true,"reach":"nearby","clipboard":true,"idleStop":"30m"}}`
+	code, out = rig.call(t, launchScreenSettingsHandler, "bar", "POST", "/launch/screen/settings", set, local)
+	if code != 200 {
+		t.Fatalf("set: %d %v", code, out)
+	}
+	s, _ := screen.Load(rig.dir)
+	if s.Reach != screen.ReachNearby || !s.Clipboard || s.IdleStopDuration() != 30*time.Minute {
+		t.Fatalf("set did not stick: %+v", s)
+	}
+	if err := applyScreenChange(rig.dir, screenSettingsIn{Do: "log", Device: "d", Name: "iPad", Event: "end"}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if err := applyScreenChange(rig.dir, screenSettingsIn{Do: "grant", Device: "d", Role: "root"}, time.Now()); err == nil {
+		t.Fatal("bad role granted")
+	}
+	if code, out := rig.call(t, launchScreenSettingsHandler, "bar", "POST", "/launch/screen/settings", `{"do":"set","settings":{"enabled":false}}`, local); code != 200 || out["host"] != nil {
+		t.Fatalf("off clears the host: %d %v", code, out)
+	}
+	if deviceNameFor(rig.dir, rig.hashes["ipad"]) != "iPad mini" || deviceNameFor(rig.dir, "nope") != "" {
+		t.Fatal("device names")
+	}
+}
+
+func TestScreenCLIWords(t *testing.T) {
+	rig := newScreenRig(t)
+	for _, words := range [][]string{{"status"}, {"devices"}, {"on"}, {"status"}, {"log"}, {"off"}} {
+		if err := runAgentScreen(rig.dir, words[0], words[1:]); err != nil {
+			t.Fatalf("%v: %v", words, err)
+		}
+	}
+	prev := utils.JSONOutput
+	utils.JSONOutput = true
+	t.Cleanup(func() { utils.JSONOutput = prev })
+	for _, w := range []string{"status", "devices", "log", "on", "off"} {
+		if err := runAgentScreen(rig.dir, w, nil); err != nil {
+			t.Fatalf("%s --json: %v", w, err)
+		}
+	}
+	for _, bad := range [][]string{{"grant"}, {"grant", "iPad", "root"}, {"forget"}, {"reach", "mars"}, {"explode"}, {"grant", "nobody", "watch"}} {
+		if err := runAgentScreen(rig.dir, bad[0], bad[1:]); err == nil {
+			t.Fatalf("%v accepted", bad)
+		}
+	}
+	screenLogEvent, screenLogDevice = "end", "dev"
+	t.Cleanup(func() { screenLogEvent, screenLogDevice = "", "" })
+	if err := runAgentScreen(rig.dir, "log", nil); err != nil {
+		t.Fatal(err)
+	}
+	if recent, _ := screen.Recent(rig.dir, 5); len(recent) != 1 {
+		t.Fatalf("logged: %v", recent)
 	}
 }

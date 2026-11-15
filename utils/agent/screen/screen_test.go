@@ -243,3 +243,33 @@ func TestSessionLog(t *testing.T) {
 		t.Fatalf("recent: %+v %v", got, err)
 	}
 }
+
+func TestCandidatesFrom(t *testing.T) {
+	ips := []net.IP{net.ParseIP("8.8.4.4"), net.ParseIP("192.168.1.7"), net.ParseIP("100.70.1.1"), net.ParseIP("192.168.1.7"), net.ParseIP("127.0.0.1"), net.ParseIP("2a01::5")}
+	got := candidatesFrom(ips, 9000, ReachAway)
+	if len(got) != 4 || got[0].Kind != "lan" || got[1].Kind != "tailnet" || got[2].Kind != "ipv6" || got[3].Kind != "public" {
+		t.Fatalf("away: %+v", got)
+	}
+	near := candidatesFrom(ips, 9000, ReachNearby)
+	if len(near) != 1 || near[0].Addr != "192.168.1.7:9000" {
+		t.Fatalf("nearby: %+v", near)
+	}
+}
+
+func TestBrokenFilesSurface(t *testing.T) {
+	dir := t.TempDir()
+	_ = os.MkdirAll(filepath.Join(dir, "screen"), 0o700)
+	_ = os.WriteFile(filepath.Join(dir, "screen", "settings.json"), []byte("{nope"), 0o600)
+	if _, err := Load(dir); err == nil {
+		t.Fatal("a broken settings file is an error, not silent defaults")
+	}
+	if _, err := Update(dir, func(*Settings) error { return nil }); err == nil {
+		t.Fatal("update refuses to overwrite a broken file")
+	}
+	if VerifySignature("!!", "d", time.Now().Unix(), "x", time.Now()) == nil {
+		t.Fatal("garbage key verified")
+	}
+	if (&Settings{IdleStop: "soon"}).IdleStopDuration() != 15*time.Minute {
+		t.Fatal("bad idle stop falls back")
+	}
+}
