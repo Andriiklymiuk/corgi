@@ -76,10 +76,22 @@ them.
 | `corgi_preview_freeze` | `id, frozen?` | - | pin against idle reaping; **tunnel-gated** |
 | `corgi_preview_stop` | `id` | - | close the public URL when the user is done; **tunnel-gated** |
 
+## A Mac's screen (hands)
+
+| Tool | Args | Returns | Notes |
+|---|---|---|---|
+| `corgi_mac_windows` | `peer?` | text: windows, apps, front | cheap; call first |
+| `corgi_mac_look` | `peer?, window?, max?` | JPEG + size | coordinates for act are these pixels |
+| `corgi_mac_act` | `peer?, actions[], look?` | text (+ JPEG) | click, double, right, move, drag, type, key, scroll, wait |
+| `corgi_mac_open` | `peer?, app?, url?` | text | brings it to the front |
+
+Off until the used Mac runs `corgi agent hands allow <peer|here>`; it shows a banner, Esc three
+times stops agents for 10 minutes. Only when the user asked to operate that Mac.
+
 ## The tunnel gate
 
 Over a public tunnel the mutating tools (`corgi_exec`, `corgi_db_query`, `corgi_pr_open`,
-`corgi_worktrees_*`, `corgi_preview_*`) return an error unless
+`corgi_worktrees_*`, `corgi_preview_*`, `corgi_mac_*`) return an error unless
 `CORGI_MCP_ALLOW_DANGEROUS_TUNNEL=1` is set on the server's machine. Read-only tools and
 session start/stop stay available; a workspace marked `sensitive` refuses remote start and
 previews regardless.

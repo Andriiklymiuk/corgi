@@ -2530,6 +2530,16 @@ corgi agent term status
 From another machine: `corgi agent term build-server`. Corgi Bar opens the same
 shell in a window, through this Mac's daemon, for any peer.
 
+**Agents that use a Mac (hands).** An agent can look at and use a Mac through
+Corgi Bar: `corgi_mac_windows` (text, cheap), `corgi_mac_look` (a JPEG, 1280 px
+by default), `corgi_mac_act` (click, type, keys, scroll, drag), `corgi_mac_open`.
+With `peer` it works on another paired Mac; without, on this one. Off until the
+used Mac allows it: `corgi agent hands allow "office-mac"` (or `here` for this
+Mac's own agents). A banner names the agent while it works and Esc three times
+stops agents for 10 minutes. Hidden apps never show in a screenshot, and over a
+public tunnel the tools are off. The same from a shell: `corgi agent hands
+windows|look|act|open --on <peer>`.
+
 **A session's own terminal, sharp, on the phone.** Corgi Agents › a session ›
 Its terminal shows that session's terminal as text, live: tmux panes (servers
 and peers), iTerm tabs, Terminal.app tabs, and VS Code terminals with the

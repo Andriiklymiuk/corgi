@@ -324,6 +324,7 @@ type screenSettingsIn struct {
 	Event    string          `json:"event"`
 	Name     string          `json:"name"`
 	Addr     string          `json:"addr"`
+	On       bool            `json:"on"`
 }
 
 func launchScreenSettingsHandler(w http.ResponseWriter, r *http.Request) {
@@ -388,11 +389,26 @@ func applyScreenChange(dir string, in screenSettingsIn, now time.Time) error {
 			return nil
 		})
 		return err
+	case "agents":
+		_, err := screen.Update(dir, func(s *screen.Settings) error {
+			if in.Device == handsLocal {
+				s.LocalAgents = in.On
+				return nil
+			}
+			g := s.Devices[in.Device]
+			if g == nil {
+				g = &screen.Grant{Name: deviceNameFor(dir, in.Device), Role: screen.RoleAsk, Since: now}
+				s.Devices[in.Device] = g
+			}
+			g.Agents = in.On
+			return nil
+		})
+		return err
 	}
 	return errUnknownScreenChange
 }
 
-var errUnknownScreenChange = errors.New("do must be set, grant, forget or log")
+var errUnknownScreenChange = errors.New("do must be set, grant, forget, agents or log")
 
 func deviceNameFor(dir, hash string) string {
 	store, err := pairing.Load(pairing.StorePath(dir))
@@ -408,11 +424,13 @@ func deviceNameFor(dir, hash string) string {
 }
 
 type screenDeviceRow struct {
-	ID   string    `json:"id"`
-	Name string    `json:"name"`
-	Role string    `json:"role"`
-	Key  bool      `json:"key"`
-	Last time.Time `json:"last,omitempty"`
+	ID     string    `json:"id"`
+	Name   string    `json:"name"`
+	Role   string    `json:"role"`
+	Key    bool      `json:"key"`
+	Peer   bool      `json:"peer,omitempty"`
+	Agents bool      `json:"agents,omitempty"`
+	Last   time.Time `json:"last,omitempty"`
 }
 
 func screenOverview(dir string) map[string]any {
@@ -423,12 +441,13 @@ func screenOverview(dir string) map[string]any {
 			if !screenViewer(d) {
 				continue
 			}
-			row := screenDeviceRow{ID: d.TokenHash, Name: d.Name, Role: screen.RoleAsk}
+			row := screenDeviceRow{ID: d.TokenHash, Name: d.Name, Role: screen.RoleAsk, Peer: d.Peer()}
 			if g := s.Devices[d.TokenHash]; g != nil {
 				if g.Role != "" {
 					row.Role = g.Role
 				}
 				row.Key = g.Key != ""
+				row.Agents = g.Agents
 				row.Last = g.Last
 			}
 			rows = append(rows, row)

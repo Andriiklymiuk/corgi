@@ -77,6 +77,7 @@ Getting started:
 * [corgi agent focus](corgi_agent_focus)	 - Bring a session's window to the front and reveal its terminal tab
 * [corgi agent guard](corgi_agent_guard)	 - A pre-push hook that refuses a branch whose session's gate or tests are red
 * [corgi agent handoff](corgi_agent_handoff)	 - Leave a typed handoff for the next run on this ticket
+* [corgi agent hands](corgi_agent_hands)	 - Let agents on a peer Mac (or this one) look at and use this Mac, and do it from here
 * [corgi agent harden](corgi_agent_harden)	 - Write the safe defaults into this workspace's Claude settings
 * [corgi agent heat](corgi_agent_heat)	 - What the daemon does when the laptop gets hot in a bag
 * [corgi agent history](corgi_agent_history)	 - What was worked on, day by day: runs, merges, finished tasks, cards that left

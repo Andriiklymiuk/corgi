@@ -45,6 +45,7 @@ type Grant struct {
 	Name     string    `json:"name"`
 	Role     string    `json:"role"`
 	Terminal bool      `json:"terminal,omitempty"`
+	Agents   bool      `json:"agents,omitempty"`
 	Key      string    `json:"key,omitempty"`
 	Since    time.Time `json:"since"`
 	Last     time.Time `json:"last,omitempty"`
@@ -63,6 +64,7 @@ type Settings struct {
 	Devices     map[string]*Grant `json:"devices,omitempty"`
 	Terminal    bool              `json:"terminal,omitempty"`
 	NoRouter    bool              `json:"noRouter,omitempty"`
+	LocalAgents bool              `json:"localAgents,omitempty"`
 }
 
 func (s *Settings) TerminalFor(device string) bool {
