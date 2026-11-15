@@ -133,7 +133,7 @@ var agentScreenTicketCmd = &cobra.Command{
 		}
 		if screenTicketTunnel {
 			relay, ok := mintScreenRelay(dir, screenTicketDevice, g.Name, time.Now())
-			base := strings.TrimSuffix(localLauncherURL(), "/app")
+			base := strings.TrimSuffix(firstNonEmpty(launcherURL(), localLauncherURL()), "/app")
 			if !ok || base == "" {
 				exitWithError("agent_screen_ticket", fmt.Errorf("no tunnel ticket: is corgi agent up running?"), 1)
 			}
@@ -203,7 +203,7 @@ func init() {
 	_ = agentScreenCmd.Flags().MarkHidden("event")
 	_ = agentScreenCmd.Flags().MarkHidden("device")
 	agentScreenTicketCmd.Flags().StringVar(&screenTicketDevice, "device", "", "device id from corgi agent screen devices --json")
-	agentScreenTicketCmd.Flags().BoolVar(&screenTicketTunnel, "tunnel", false, "only the tunnel through this Mac's launcher, to test the away fallback")
+	agentScreenTicketCmd.Flags().BoolVar(&screenTicketTunnel, "tunnel", false, "only the tunnel through this Mac's public launcher URL (else the local one), to test the away fallback")
 	agentScreenCmd.AddCommand(agentScreenHostCmd, agentScreenVerifyCmd, agentScreenSettingsCmd, agentScreenTicketCmd, agentScreenPeerCmd)
 	agentCmd.AddCommand(agentScreenCmd)
 }

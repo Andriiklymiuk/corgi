@@ -324,6 +324,8 @@ var launchRoutes = map[string]http.HandlerFunc{
 	"/launch/board":           launchBoardHandler,
 	"/launch/answer":          launchAnswerHandler,
 	"/launch/send":            launchSendHandler,
+	"/launch/session/screen":  launchSessionScreenHandler,
+	"/launch/session/keys":    launchSessionKeysHandler,
 	"/launch/interrupt":       launchInterruptHandler,
 	"/launch/new":             launchNewHandler,
 	"/launch/carry":           launchCarryHandler,

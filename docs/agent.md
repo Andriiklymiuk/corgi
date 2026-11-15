@@ -2530,6 +2530,14 @@ corgi agent term status
 From another machine: `corgi agent term build-server`. Corgi Bar opens the same
 shell in a window, through this Mac's daemon, for any peer.
 
+**A session's own terminal, sharp, on the phone.** Corgi Agents › a session ›
+Its terminal shows that session's terminal as text, live: tmux panes (servers
+and peers), iTerm tabs, Terminal.app tabs, and VS Code terminals with the
+corgi VS Code extension 2.35+. Text, not a video of it: always sharp, a few
+KB, fine on a weak signal. The key row (1 2 3, Enter, Esc, arrows, Shift+Tab,
+Ctrl+C) answers a permission prompt right there. It reads only while the
+screen is open, at most twice a second.
+
 **Another Mac's screen, and waking it.** A peer Mac can be granted the screen
 like a phone (`corgi agent screen grant "office-mac" control`, Touch ID on the
 Mac that asks); Corgi Bar lists your peers with Screen, Terminal and Wake.

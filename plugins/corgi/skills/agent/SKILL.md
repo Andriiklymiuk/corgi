@@ -652,6 +652,7 @@ tracking is not enabled yet.
 - Corgi Bar must be running on the Mac: it captures and hosts. Screen Recording (and Accessibility for control) are granted to Corgi Bar, not to corgi.
 - An agent never starts a session. It can tell the person to open the Screen button in Corgi Agents.
 - A shell on a Linux server or peer: `corgi agent term on` and `corgi agent term allow "<peer or phone>"` on that machine, then `corgi agent term <peer>` from this one, Terminal in Corgi Bar, or Settings › Laptop › Terminal in Corgi Agents (Face ID first). No ssh keys or open ports; the pairing link carries it, encrypted end to end.
+- A session's terminal as live text on the phone (Corgi Agents › session › Its terminal): tmux, iTerm, Terminal.app, and VS Code terminals with the corgi VS Code extension 2.35+; keys answer prompts there.
 - Wake a sleeping peer on the same network: `corgi agent wake <peer>`, or Wake in Corgi Bar and Corgi Agents. The peer must have pulsed once on corgi 2.51+, and needs "Wake for network access" on (System Settings › Battery › Options).
 
 ## Acting on the board from elsewhere
