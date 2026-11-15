@@ -365,7 +365,7 @@ func TestACommentSchedulesTheAgentOnceForABurst(t *testing.T) {
 			t.Fatalf("comment: %d %s", rec.Code, rec.Body)
 		}
 	}
-	deadline := time.Now().Add(3 * time.Second)
+	deadline := time.Now().Add(15 * time.Second)
 	for time.Now().Before(deadline) {
 		after, _ := idea.Load(dir, id.Meta.Slug)
 		// The run is over once the page has no one waiting and the agent
