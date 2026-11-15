@@ -453,7 +453,13 @@ By hand, or to check what it did:
    Bash step waits for an answer), `corgi agent harden`, `watch enable --isolate --prune-after 7d`, quiet
    hours, `export TZ=…` before `install`. `corgi agent doctor --away` is the list for a machine nobody
    touches for weeks: updates, lid, power, network, heat, the pulse.
-8. **Verify on both:** `corgi agent peers` names the other side and says who leads each tracker;
+8. **Reach it from the other one (optional, asked for):** on the machine to be opened,
+   `corgi agent term on` and `corgi agent term allow "<other machine>"` for a shell; on a Mac also
+   `corgi agent screen on` and `corgi agent screen grant "<other machine>" control` (Corgi Bar must run
+   there), and "Wake for network access" in System Settings › Battery › Options (Energy on a desktop).
+   Then Corgi Bar › Settings › Remote screen › Your other Macs and servers has Screen, Terminal and Wake;
+   from a shell, `corgi agent term <peer>` and `corgi agent wake <peer>`. Never turn these on unasked.
+9. **Verify on both:** `corgi agent peers` names the other side and says who leads each tracker;
    `corgi agent doctor` is green; the phone's board shows the other machine's sessions under
    "on <name>". `corgi agent task add "…" --on <peer>` puts a task straight on the other machine.
 
