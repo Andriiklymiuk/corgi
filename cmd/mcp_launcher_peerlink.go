@@ -66,6 +66,15 @@ func peerScreenOpen(dir string, in peerScreenIn) (map[string]any, error) {
 		return nil, err
 	}
 	out["peer"] = p.Name
+	if list, ok := out["candidates"].([]any); ok {
+		for _, c := range list {
+			if m, ok := c.(map[string]any); ok {
+				if a, ok := m["addr"].(string); ok {
+					m["addr"] = absoluteRelay(p.URL, a)
+				}
+			}
+		}
+	}
 	return out, nil
 }
 

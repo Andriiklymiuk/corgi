@@ -2552,6 +2552,7 @@ corgi agent screen on              # Corgi Bar starts sharing
 corgi agent screen devices         # paired devices and what each may do
 corgi agent screen grant "iPad" control   # control, watch or off
 corgi agent screen reach nearby    # same network only (default: away too)
+corgi agent screen router off      # away: never ask the router to open ports
 corgi agent screen off             # every session ends, nothing listens
 corgi agent screen log             # the last sessions
 ```
@@ -2560,14 +2561,22 @@ How a session opens:
 
 1. The phone asks the daemon over the sealed pairing channel, signed by a
    Face ID key that lives in the phone's Secure Enclave.
-2. The daemon checks the switch, the device (never a viewer, peer laptop or
-   connector token) and its grant, and hands back a one-time ticket that
-   expires in a minute, the session certificate's fingerprint and the Mac's
-   addresses.
-3. The phone connects to Corgi Bar directly: QUIC with TLS 1.3 and the
-   pinned certificate for the handshake and control, then a fast lane of
+2. The daemon checks the switch, the device (never a viewer or connector
+   token; a peer Mac only with a grant) and its grant, and hands back a
+   one-time ticket that expires in a minute, the session certificate's
+   fingerprint and the Mac's addresses.
+3. The phone connects to Corgi Bar: QUIC with TLS 1.3 and the pinned
+   certificate for the handshake and control, then a fast lane of
    ChaCha20-Poly1305 UDP packets keyed from that TLS session for video and
    pointer. A new device is asked about on the Mac the first time.
+
+Away from home no Tailscale or VPN is needed. The phone tries, at once: the
+Mac's own network, Tailscale or IPv6 when there, and a port the router opened
+(UPnP or NAT-PMP, asked for 30 minutes at a time and closed when the screen
+turns off; `router off` never asks). After 1.5 s with no answer it goes
+through the corgi tunnel the phone already uses: the same encrypted QUIC
+session inside a WebSocket, through a one-time relay ticket that opens a pipe
+to Corgi Bar and nothing else. Slower than direct, and it always works.
 
 Settings live in Corgi Bar › Settings › Remote screen (and in
 `screen/settings.json` in the agent directory): reach, ask on the Mac every

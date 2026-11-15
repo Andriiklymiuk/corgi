@@ -386,6 +386,7 @@ func mountLaunchRoutes(mux *http.ServeMux, token, deviceStore string) {
 	mux.Handle("/launch/stream", launchStream(token, deviceStore))
 	mux.Handle(terminalWSPath, launchTerminalWS(token, deviceStore))
 	mux.Handle("/launch/terminal/peer", launchTerminalPeerWS(token, deviceStore))
+	mux.Handle(screenRelayPath, launchScreenRelay())
 	mux.Handle("/launch/preview/", http.HandlerFunc(previewProxyHandler))
 	for path, h := range launchRoutes {
 		mux.Handle(path, launchAuth(token, h, deviceStore))

@@ -182,12 +182,23 @@ func screenStartSession(w http.ResponseWriter, dir string, d pairing.Device, s *
 		writeLaunchError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	cands := screen.Candidates(host.Port, s.Reach)
+	if s.Reach != screen.ReachNearby {
+		if !s.NoRouter {
+			if c, ok := screenRouter.Candidate(host.Port, host.FastPort, now); ok {
+				cands = append(cands, c)
+			}
+		}
+		if relay, ok := mintScreenRelay(dir, d.TokenHash, d.Name, now); ok {
+			cands = append(cands, relay)
+		}
+	}
 	writeLaunchJSON(w, map[string]any{
 		"ticket":      ticket,
 		"fingerprint": host.Fingerprint,
 		"port":        host.Port,
 		"fastPort":    host.FastPort,
-		"candidates":  screen.Candidates(host.Port, s.Reach),
+		"candidates":  cands,
 		"role":        role,
 		"mac":         macName(),
 		"expires":     now.Add(screen.TicketTTL),
@@ -349,6 +360,9 @@ func applyScreenChange(dir string, in screenSettingsIn, now time.Time) error {
 			s.Devices = devices
 			return nil
 		})
+		if err == nil && (!s.Enabled || s.NoRouter || s.Reach == screen.ReachNearby) {
+			screenRouter.Release()
+		}
 		if err == nil && !s.Enabled {
 			err = screen.ClearHost(dir)
 		}

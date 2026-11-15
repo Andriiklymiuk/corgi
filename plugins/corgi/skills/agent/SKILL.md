@@ -648,7 +648,7 @@ tracking is not enabled yet.
 - `corgi agent screen on|off` is the switch; off ends every session at once.
 - `corgi agent screen devices` lists paired phones and peer Macs with their role; `grant "<name>" control|watch|off` changes one, `forget` makes it be asked again.
 - Another Mac: pair the two as peers (`corgi agent peers invite` here, `corgi agent peers join <url> <code>` there), then on the Mac to be opened `corgi agent screen on` and `corgi agent screen grant "<this Mac>" control`. Corgi Bar › Settings › Remote screen › Your other Macs and servers opens it (Touch ID first), with Terminal and Wake beside it.
-- `corgi agent screen reach nearby` keeps it to the same network.
+- `corgi agent screen reach nearby` keeps it to the same network. Away needs no Tailscale: direct paths first, a router port (`router off` to never ask), then the corgi tunnel.
 - Corgi Bar must be running on the Mac: it captures and hosts. Screen Recording (and Accessibility for control) are granted to Corgi Bar, not to corgi.
 - An agent never starts a session. It can tell the person to open the Screen button in Corgi Agents.
 - A shell on a Linux server or peer: `corgi agent term on` and `corgi agent term allow "<peer or phone>"` on that machine, then `corgi agent term <peer>` from this one, Terminal in Corgi Bar, or Settings › Laptop › Terminal in Corgi Agents (Face ID first). No ssh keys or open ports; the pairing link carries it, encrypted end to end.

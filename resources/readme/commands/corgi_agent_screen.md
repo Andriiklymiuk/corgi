@@ -17,10 +17,15 @@ Mac the first time, and Face ID on the phone guards every session.
   corgi agent screen grant "iPad" control|watch|off
   corgi agent screen forget "iPad"   drop its grant and Face ID key
   corgi agent screen reach nearby|away
+  corgi agent screen router on|off   away: ask the router to open the ports for 30 min (UPnP / NAT-PMP)
   corgi agent screen log             the last sessions
 
+Away from home it connects without Tailscale: first straight to the Mac
+(its network, Tailscale or IPv6 if there, the router's opened port), and
+after 1.5 s through the corgi tunnel, which always works.
+
 ```
-corgi agent screen [on|off|status|devices|grant|forget|reach|log] [flags]
+corgi agent screen [on|off|status|devices|grant|forget|reach|router|log] [flags]
 ```
 
 ### Options

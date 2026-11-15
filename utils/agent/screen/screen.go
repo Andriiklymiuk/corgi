@@ -62,6 +62,7 @@ type Settings struct {
 	Hide        []string          `json:"hide,omitempty"`
 	Devices     map[string]*Grant `json:"devices,omitempty"`
 	Terminal    bool              `json:"terminal,omitempty"`
+	NoRouter    bool              `json:"noRouter,omitempty"`
 }
 
 func (s *Settings) TerminalFor(device string) bool {

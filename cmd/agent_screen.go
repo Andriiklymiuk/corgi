@@ -25,7 +25,7 @@ var (
 )
 
 var agentScreenCmd = &cobra.Command{
-	Use:   "screen [on|off|status|devices|grant|forget|reach|log]",
+	Use:   "screen [on|off|status|devices|grant|forget|reach|router|log]",
 	Short: "Your Mac's screen on your iPhone, iPad or another Mac: turn it on, grant devices, end sessions",
 	Long: `Remote screen lets a paired phone, iPad or Mac see and drive this Mac through
 Corgi Bar. It is off until you turn it on, a new device is asked about on the
@@ -38,7 +38,12 @@ Mac the first time, and Face ID on the phone guards every session.
   corgi agent screen grant "iPad" control|watch|off
   corgi agent screen forget "iPad"   drop its grant and Face ID key
   corgi agent screen reach nearby|away
-  corgi agent screen log             the last sessions`,
+  corgi agent screen router on|off   away: ask the router to open the ports for 30 min (UPnP / NAT-PMP)
+  corgi agent screen log             the last sessions
+
+Away from home it connects without Tailscale: first straight to the Mac
+(its network, Tailscale or IPv6 if there, the router's opened port), and
+after 1.5 s through the corgi tunnel, which always works.`,
 	Args: cobra.MaximumNArgs(3),
 	Run: func(cmd *cobra.Command, args []string) {
 		dir := mustAgentDir()
@@ -91,7 +96,10 @@ var agentScreenVerifyCmd = &cobra.Command{
 	},
 }
 
-var screenTicketDevice string
+var (
+	screenTicketDevice string
+	screenTicketTunnel bool
+)
 
 var agentScreenTicketCmd = &cobra.Command{
 	Use:    "ticket",
@@ -122,6 +130,14 @@ var agentScreenTicketCmd = &cobra.Command{
 		cands := []string{fmt.Sprintf("127.0.0.1:%d", h.Port)}
 		for _, c := range screen.Candidates(h.Port, s.Reach) {
 			cands = append(cands, c.Addr)
+		}
+		if screenTicketTunnel {
+			relay, ok := mintScreenRelay(dir, screenTicketDevice, g.Name, time.Now())
+			base := strings.TrimSuffix(localLauncherURL(), "/app")
+			if !ok || base == "" {
+				exitWithError("agent_screen_ticket", fmt.Errorf("no tunnel ticket: is corgi agent up running?"), 1)
+			}
+			cands = []string{absoluteRelay(base, relay.Addr)}
 		}
 		utils.PrintJSON(map[string]any{"ticket": t, "fingerprint": h.Fingerprint, "port": h.Port, "fastPort": h.FastPort, "candidates": cands, "role": g.Role})
 	},
@@ -187,6 +203,7 @@ func init() {
 	_ = agentScreenCmd.Flags().MarkHidden("event")
 	_ = agentScreenCmd.Flags().MarkHidden("device")
 	agentScreenTicketCmd.Flags().StringVar(&screenTicketDevice, "device", "", "device id from corgi agent screen devices --json")
+	agentScreenTicketCmd.Flags().BoolVar(&screenTicketTunnel, "tunnel", false, "only the tunnel through this Mac's launcher, to test the away fallback")
 	agentScreenCmd.AddCommand(agentScreenHostCmd, agentScreenVerifyCmd, agentScreenSettingsCmd, agentScreenTicketCmd, agentScreenPeerCmd)
 	agentCmd.AddCommand(agentScreenCmd)
 }
@@ -225,6 +242,7 @@ var screenWords = map[string]func(dir string, rest []string) error{
 	"grant":   grantScreen,
 	"forget":  forgetScreen,
 	"reach":   setScreenReach,
+	"router":  setScreenRouter,
 	"log":     printScreenLog,
 }
 
@@ -232,7 +250,7 @@ func runAgentScreen(dir, word string, rest []string) error {
 	if run, ok := screenWords[word]; ok {
 		return run(dir, rest)
 	}
-	return fmt.Errorf("unknown: %s (on, off, status, devices, grant, forget, reach, log)", word)
+	return fmt.Errorf("unknown: %s (on, off, status, devices, grant, forget, reach, router, log)", word)
 }
 
 func setScreenEnabled(dir string, on bool) error {
@@ -301,6 +319,17 @@ func setScreenReach(dir string, rest []string) error {
 	return err
 }
 
+func setScreenRouter(dir string, rest []string) error {
+	if len(rest) != 1 || (rest[0] != "on" && rest[0] != "off") {
+		return fmt.Errorf("router is on (ask the router to open the screen ports while away) or off (the tunnel only)")
+	}
+	_, err := screen.Update(dir, func(s *screen.Settings) error {
+		s.NoRouter = rest[0] == "off"
+		return nil
+	})
+	return err
+}
+
 func printScreenLog(dir string, _ []string) error {
 	if screenLogEvent != "" {
 		return applyScreenChange(dir, screenSettingsIn{Do: "log", Device: screenLogDevice, Event: screenLogEvent}, time.Now())
@@ -333,7 +362,11 @@ func printScreenStatus(dir string) error {
 	if s.Enabled {
 		state = "on"
 	}
-	fmt.Printf("Remote screen: %s · reach %s · idle stop %s\n", state, s.Reach, s.IdleStop)
+	router := "router on"
+	if s.NoRouter {
+		router = "router off"
+	}
+	fmt.Printf("Remote screen: %s · reach %s · %s · idle stop %s\n", state, s.Reach, router, s.IdleStop)
 	if h, _ := o["host"].(*screen.Host); h != nil {
 		fmt.Printf("Corgi Bar is sharing (QUIC %d, fast lane %d)\n", h.Port, h.FastPort)
 	} else if s.Enabled {
