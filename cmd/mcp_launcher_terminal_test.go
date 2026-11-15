@@ -50,7 +50,7 @@ func newTermRig(t *testing.T, role string) *termRig {
 	}
 	mux := http.NewServeMux()
 	mountLaunchRoutes(mux, "", pairing.StorePath(dir))
-	srv := httptest.NewServer(mux)
+	srv := httptest.NewServer(launchCompression(mux))
 	t.Cleanup(srv.Close)
 	return &termRig{dir: dir, srv: srv, key: shared, hash: pairing.HashToken(tok),
 		peer: peers.Peer{Name: "build-server", URL: srv.URL, Token: tok, Key: base64.StdEncoding.EncodeToString(shared)}}
@@ -146,7 +146,7 @@ func TestTerminalWebSocketRefusals(t *testing.T) {
 	if _, err := wsock.Dial(ws+"?ticket="+tk, http.Header{"Authorization": {"Bearer cdev_wrong"}}, 5*time.Second); err == nil {
 		t.Fatal("a stranger used a real ticket")
 	}
-	c, err := wsock.Dial(ws+"?ticket="+tk, http.Header{"Authorization": {"Bearer " + rig.peer.Token}}, 5*time.Second)
+	c, err := wsock.Dial(ws+"?ticket="+tk, http.Header{"Authorization": {"Bearer " + rig.peer.Token}, "Accept-Encoding": {"gzip, deflate, br"}}, 5*time.Second)
 	if err != nil {
 		t.Fatalf("the real ticket was spent by the refused stranger: %v", err)
 	}

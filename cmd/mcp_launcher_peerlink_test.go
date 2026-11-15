@@ -76,7 +76,7 @@ func TestBarTerminalRelayToAPeer(t *testing.T) {
 	if _, err := wsock.Dial(ws, http.Header{"Authorization": {"Bearer " + rig.peer.Token}}, 5*time.Second); err == nil {
 		t.Fatal("a peer token used the bar's relay")
 	}
-	conn, err := wsock.Dial(ws, http.Header{"Authorization": {"Bearer " + bar}}, 10*time.Second)
+	conn, err := wsock.Dial(ws, http.Header{"Authorization": {"Bearer " + bar}, "Accept-Encoding": {"gzip, deflate, br"}}, 10*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}

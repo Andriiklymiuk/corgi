@@ -16,7 +16,7 @@ const gzipFrom = 1024
 
 func launchCompression(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet || !strings.HasPrefix(r.URL.Path, "/launch/") {
+		if r.Method != http.MethodGet || !strings.HasPrefix(r.URL.Path, "/launch/") || strings.EqualFold(r.Header.Get("Upgrade"), "websocket") {
 			next.ServeHTTP(w, r)
 			return
 		}

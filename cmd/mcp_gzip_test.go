@@ -60,3 +60,24 @@ func TestAStreamingLaunchHandlerIsLeftAlone(t *testing.T) {
 		t.Fatalf("got %q flushed=%v", rec.Body.String(), rec.Flushed)
 	}
 }
+
+func TestCompressionLeavesWebSocketUpgradesAlone(t *testing.T) {
+	var hijackable bool
+	h := launchCompression(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, hijackable = w.(http.Hijacker)
+	}))
+	srv := httptest.NewServer(h)
+	defer srv.Close()
+	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/launch/terminal/ws", nil)
+	req.Header.Set("Upgrade", "websocket")
+	req.Header.Set("Connection", "Upgrade")
+	req.Header.Set("Accept-Encoding", "gzip")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if !hijackable {
+		t.Fatal("a websocket upgrade must reach a writer it can take over")
+	}
+}
