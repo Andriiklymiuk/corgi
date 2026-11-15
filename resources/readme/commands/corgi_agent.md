@@ -125,6 +125,7 @@ Getting started:
 * [corgi agent stop](corgi_agent_stop)	 - Stop the agent daemon
 * [corgi agent stream](corgi_agent_stream)	 - Which workspaces a paired phone may read as a conversation
 * [corgi agent task](corgi_agent_task)	 - Tasks of your own on the board: add one for later, pick it up, move it along
+* [corgi agent term](corgi_agent_term)	 - A shell on another corgi machine - a Linux server, a peer laptop - with no ssh keys or open ports
 * [corgi agent timeline](corgi_agent_timeline)	 - What happened in a session, in order: prompts, tool bursts, tests, the pull request and its reviews
 * [corgi agent today](corgi_agent_today)	 - What has been done today - yours and the watch's
 * [corgi agent top](corgi_agent_top)	 - The board in the terminal, live: every session, its standing, what it is doing

@@ -42,11 +42,12 @@ const (
 )
 
 type Grant struct {
-	Name  string    `json:"name"`
-	Role  string    `json:"role"`
-	Key   string    `json:"key,omitempty"`
-	Since time.Time `json:"since"`
-	Last  time.Time `json:"last,omitempty"`
+	Name     string    `json:"name"`
+	Role     string    `json:"role"`
+	Terminal bool      `json:"terminal,omitempty"`
+	Key      string    `json:"key,omitempty"`
+	Since    time.Time `json:"since"`
+	Last     time.Time `json:"last,omitempty"`
 }
 
 type Settings struct {
@@ -60,6 +61,15 @@ type Settings struct {
 	IdleStop    string            `json:"idleStop,omitempty"`
 	Hide        []string          `json:"hide,omitempty"`
 	Devices     map[string]*Grant `json:"devices,omitempty"`
+	Terminal    bool              `json:"terminal,omitempty"`
+}
+
+func (s *Settings) TerminalFor(device string) bool {
+	if !s.Terminal {
+		return false
+	}
+	g, ok := s.Devices[device]
+	return ok && g.Terminal
 }
 
 var DefaultHide = []string{

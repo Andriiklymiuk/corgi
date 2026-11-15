@@ -2510,6 +2510,28 @@ laptop step back from the tracker work while it is away - lid closed on
 battery, or too hot - so a healthy peer takes the new tickets and fixes. It
 takes the lead back once it is on the charger or cool again.
 
+## A shell on a server or a peer, with no ssh keys (2.50)
+
+`corgi agent term` opens a shell on another machine running corgi - a Linux
+server, a laptop that is your peer - over the pairing link that is already
+there: the tunnel or the LAN carries it, every frame is encrypted end to end
+with keys from the pairing and a one-time ticket, and the machine being opened
+decides who may. From the shell, ssh to anything else.
+
+On the machine to open (off until turned on):
+
+```bash
+corgi agent term on
+corgi agent term allow "office-mac"    # a peer laptop or a paired phone
+corgi agent term deny "office-mac"
+corgi agent term status
+```
+
+From another machine: `corgi agent term build-server`. A phone opens one with
+the same Face ID key it uses for the screen. Sessions are logged next to the
+screen sessions (`corgi agent screen log`); an idle shell ends after the
+remote screen's idle stop.
+
 ## The Mac's screen on a phone, an iPad or another Mac (2.49)
 
 Corgi Bar shares the Mac's screen with Corgi Agents on an iPhone, iPad or

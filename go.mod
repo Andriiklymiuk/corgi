@@ -4,6 +4,7 @@ go 1.26.6
 
 require (
 	github.com/briandowns/spinner v1.23.2
+	github.com/creack/pty v1.1.24
 	github.com/klauspost/compress v1.18.7
 	github.com/manifoldco/promptui v0.9.0
 	github.com/mark3labs/mcp-go v0.54.0

@@ -650,6 +650,7 @@ tracking is not enabled yet.
 - `corgi agent screen reach nearby` keeps it to the same network.
 - Corgi Bar must be running on the Mac: it captures and hosts. Screen Recording (and Accessibility for control) are granted to Corgi Bar, not to corgi.
 - An agent never starts a session. It can tell the person to open the Screen button in Corgi Agents.
+- A shell on a Linux server or peer: `corgi agent term on` and `corgi agent term allow "<peer>"` on that machine, then `corgi agent term <peer>` from this one. No ssh keys or open ports; the pairing link carries it, encrypted end to end.
 
 ## Acting on the board from elsewhere
 
