@@ -162,6 +162,7 @@ func applyUserToDaemon(d *daemon.Daemon, dir string, user *config.UserConfig) {
 	d.AutoContinue = user.AutoContinue
 	d.Lid = strings.TrimSpace(user.Lid)
 	d.HeatPause = user.Heat
+	daemon.SetHandoff(user.Handoff)
 	d.Hotspot = strings.TrimSpace(user.Hotspot)
 	d.LearnHotspot = func(ssid string) {
 		_ = writeUserConfigLine(agentUserConfigPath(dir), hotspotLine, "hotspot: "+strconv.Quote(ssid))

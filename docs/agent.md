@@ -2484,6 +2484,68 @@ with a `path` and a `start` script each, `db_services:` with an image and a
 port - then `corgi init` clones what is missing and `corgi run` starts it.
 [docs/getting-started.md](getting-started.md) walks the file.
 
+## Reminders, tidy lessons and handing off (2.49)
+
+**One-off reminders.** `corgi agent later` sets a timer the daemon keeps in
+`timers.json`. When it is due it rings the phone and the desktop, or with
+`--session` types the text into that session, as if you had. A laptop that
+slept through it fires it on waking and says so.
+
+```bash
+corgi agent later 2h "check whether PR #12 got a review"
+corgi agent later tomorrow 9:00 "standup: the migration"
+corgi agent later 45m "look at the CI run again" --session api
+corgi agent later                 # what is waiting
+corgi agent later cancel 3fa2c1
+```
+
+**Dreaming.** Once a week the daemon tidies each workspace's lessons: a
+lesson that says what a newer one says is merged into it, one older than 180
+days or past the newest 60 is put away. What it takes out goes to
+`lessons/<workspace>.dreamed.md` with the reason, and lines you wrote by hand
+stay. `corgi agent lesson dream --dry-run` shows what it would do.
+
+**Handing off.** With peers set up, `handoff: true` in `config.yml` makes this
+laptop step back from the tracker work while it is away - lid closed on
+battery, or too hot - so a healthy peer takes the new tickets and fixes. It
+takes the lead back once it is on the charger or cool again.
+
+## The Mac's screen on a phone, an iPad or another Mac (2.49)
+
+Corgi Bar shares the Mac's screen with Corgi Agents on an iPhone, iPad or
+another Mac: touch it or use the phone as a trackpad, type on a real keyboard,
+pick one window, drop files across, share the clipboard. It is off until you
+turn it on.
+
+```bash
+corgi agent screen on              # Corgi Bar starts sharing
+corgi agent screen devices         # paired devices and what each may do
+corgi agent screen grant "iPad" control   # control, watch or off
+corgi agent screen reach nearby    # same network only (default: away too)
+corgi agent screen off             # every session ends, nothing listens
+corgi agent screen log             # the last sessions
+```
+
+How a session opens:
+
+1. The phone asks the daemon over the sealed pairing channel, signed by a
+   Face ID key that lives in the phone's Secure Enclave.
+2. The daemon checks the switch, the device (never a viewer, peer laptop or
+   connector token) and its grant, and hands back a one-time ticket that
+   expires in a minute, the session certificate's fingerprint and the Mac's
+   addresses.
+3. The phone connects to Corgi Bar directly: QUIC with TLS 1.3 and the
+   pinned certificate for the handshake and control, then a fast lane of
+   ChaCha20-Poly1305 UDP packets keyed from that TLS session for video and
+   pointer. A new device is asked about on the Mac the first time.
+
+Settings live in Corgi Bar › Settings › Remote screen (and in
+`screen/settings.json` in the agent directory): reach, ask on the Mac every
+time, control while locked, idle stop, hidden apps (password managers,
+Messages and Mail by default), clipboard, files (saved in Downloads › Corgi),
+and darkening the Mac's own screen while someone is connected. The menu bar
+shows a red eye during a session; Esc three times on the Mac ends it.
+
 ## A phone app
 
 The Claude app already covers the conversation. What it has no concept of -
