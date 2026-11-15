@@ -16,8 +16,8 @@ import (
 
 const macBarDevicePrefix = "Corgi Agents for Mac"
 
-func screenPhone(d pairing.Device) bool {
-	return !d.Viewer() && !d.Peer() && d.Family == "" && !screenMacBar(d)
+func screenViewer(d pairing.Device) bool {
+	return !d.Viewer() && d.Family == "" && !screenMacBar(d)
 }
 
 func screenMacBar(d pairing.Device) bool {
@@ -91,7 +91,7 @@ func launchScreenHandler(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if !screenPhone(d) {
+	if !screenViewer(d) {
 		writeLaunchError(w, http.StatusForbidden, "this device cannot open the Mac's screen")
 		return
 	}
@@ -406,7 +406,7 @@ func screenOverview(dir string) map[string]any {
 	var rows []screenDeviceRow
 	if store, err := pairing.Load(pairing.StorePath(dir)); err == nil {
 		for _, d := range store.Devices {
-			if !screenPhone(d) {
+			if !screenViewer(d) {
 				continue
 			}
 			row := screenDeviceRow{ID: d.TokenHash, Name: d.Name, Role: screen.RoleAsk}

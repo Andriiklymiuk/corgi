@@ -369,7 +369,7 @@ func runAgentHook(cmd *cobra.Command, args []string) {
 		runAgentTitleHook(id, titleHookStdin, os.Stdout)
 		return
 	}
-	detail, kind := hookDetailAndKind(event, os.Stdin)
+	detail, kind, claudeID := hookPayloadOf(event, os.Stdin)
 
 	if idle, _ := cmd.Flags().GetBool("idle"); isIdleNudge(detail) && !idle {
 		return
@@ -388,6 +388,7 @@ func runAgentHook(cmd *cobra.Command, args []string) {
 	}
 	if _, err := command.Write(dir, command.Command{
 		Action: command.ActionAttention, WorkspaceID: id, Detail: detail, Source: "hook",
+		Link: claudeSessionLink(claudeID, os.Getenv("CLAUDE_CONFIG_DIR")),
 	}); err != nil {
 		return
 	}
@@ -400,17 +401,24 @@ func hookDetail(event string, stdin io.Reader) string {
 }
 
 func hookDetailAndKind(event string, stdin io.Reader) (string, string) {
-	msg, kind := "", ""
+	detail, kind, _ := hookPayloadOf(event, stdin)
+	return detail, kind
+}
+
+func hookPayloadOf(event string, stdin io.Reader) (detail, kind, sessionID string) {
+	msg := ""
 	if stdin != nil {
 		var payload struct {
-			Message string `json:"message"`
-			Event   string `json:"hook_event_name"`
-			Kind    string `json:"notification_type"`
+			Message   string `json:"message"`
+			Event     string `json:"hook_event_name"`
+			Kind      string `json:"notification_type"`
+			SessionID string `json:"session_id"`
 		}
 		if data, err := io.ReadAll(io.LimitReader(stdin, 8<<10)); err == nil {
 			_ = json.Unmarshal(data, &payload)
 			msg = strings.TrimSpace(payload.Message)
 			kind = strings.TrimSpace(payload.Kind)
+			sessionID = strings.TrimSpace(payload.SessionID)
 			if event == "" {
 				event = strings.TrimSpace(payload.Event)
 			}
@@ -418,12 +426,44 @@ func hookDetailAndKind(event string, stdin io.Reader) (string, string) {
 	}
 	switch {
 	case msg != "":
-		return truncateLine(msg, 160), kind
+		return truncateLine(msg, 160), kind, sessionID
 	case event == hookEventStop:
-		return "a session finished its turn", kind
+		return "a session finished its turn", kind, sessionID
 	default:
-		return "a session is waiting for you", kind
+		return "a session is waiting for you", kind, sessionID
 	}
+}
+
+func claudeSessionLink(sessionID, configDir string) string {
+	if sessionID == "" {
+		return ""
+	}
+	base := expandTilde(configDir)
+	if base == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return ""
+		}
+		base = filepath.Join(home, ".claude")
+	}
+	entries, err := os.ReadDir(filepath.Join(base, "sessions"))
+	if err != nil {
+		return ""
+	}
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(base, "sessions", e.Name()))
+		if err != nil {
+			continue
+		}
+		var cs claudeSession
+		if json.Unmarshal(data, &cs) == nil && cs.SessionID == sessionID && strings.HasPrefix(cs.BridgeSessionID, "session_") {
+			return "https://claude.ai/code/" + cs.BridgeSessionID
+		}
+	}
+	return ""
 }
 
 func quietNotification(kind string) bool {

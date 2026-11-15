@@ -6,7 +6,9 @@ import (
 	"testing"
 	"time"
 
+	"andriiklymiuk/corgi/utils/agent/command"
 	"andriiklymiuk/corgi/utils/agent/lessons"
+	"andriiklymiuk/corgi/utils/agent/push"
 	"andriiklymiuk/corgi/utils/agent/sessions"
 	"andriiklymiuk/corgi/utils/agent/timers"
 )
@@ -73,5 +75,20 @@ func TestDreamIfDue(t *testing.T) {
 	d.dreamIfDue(now.Add(time.Hour))
 	if len(lessons.List(d.Dir, "api")) != 1 {
 		t.Fatal("dreaming waits a week")
+	}
+}
+
+func TestAttentionCarriesTheSessionsOwnLink(t *testing.T) {
+	d := trackingDaemon(t)
+	pushed := make(chan push.Message, 2)
+	d.Push = func(m push.Message) { pushed <- m }
+	d.LinkFor = func(string) string { return "https://claude.ai/code?environment=env_x" }
+	d.reportAttention(command.Command{WorkspaceID: "corgi", Detail: "Claude needs your permission", Link: "https://claude.ai/code/session_01ABC"})
+	if m := <-pushed; m.Data["url"] != "https://claude.ai/code/session_01ABC" {
+		t.Fatalf("pushed %v", m.Data)
+	}
+	d.reportAttention(command.Command{WorkspaceID: "corgi", Detail: "another prompt"})
+	if m := <-pushed; m.Data["url"] != "https://claude.ai/code?environment=env_x" {
+		t.Fatalf("no session link falls back to the environment: %v", m.Data)
 	}
 }

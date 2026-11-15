@@ -202,7 +202,7 @@ func peerMay(method, path string) bool {
 		return method == http.MethodPost
 	case "/launch/peers/tasks", "/launch/task":
 		return method == http.MethodPost
-	case "/launch/terminal":
+	case "/launch/terminal", "/launch/screen":
 		return true
 	}
 	return false
@@ -214,7 +214,7 @@ func viewerMay(method, path string) bool {
 	}
 	switch path {
 	case "/launch/transcript", "/launch/picture", "/launch/doctor", "/launch/sessions", "/launch/preview", "/launch/diff", "/launch/run",
-		"/launch/screen", "/launch/screen/host", "/launch/screen/verify", "/launch/screen/settings", "/launch/terminal":
+		"/launch/screen", "/launch/screen/host", "/launch/screen/verify", "/launch/screen/settings", "/launch/terminal", "/launch/screen/peer":
 		return false
 	}
 	return true

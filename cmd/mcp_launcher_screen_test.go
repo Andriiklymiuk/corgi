@@ -183,7 +183,7 @@ func TestScreenRefusesTheWrongDevices(t *testing.T) {
 	_ = runAgentScreen(rig.dir, "on", nil)
 	rig.registerHost(t)
 	fk := newFaceKey(t)
-	for _, who := range []string{"viewer", "peer", "connector", "bar"} {
+	for _, who := range []string{"viewer", "connector", "bar"} {
 		code, _ := rig.call(t, launchScreenHandler, who, "POST", "/launch/screen", fk.start(t, rig.hashes[who], true), "")
 		if code != 403 {
 			t.Errorf("%s got %d", who, code)
@@ -256,8 +256,11 @@ func TestScreenCLIGrantByName(t *testing.T) {
 	if s.Devices[rig.hashes["ipad"]].Role != screen.RoleWatch {
 		t.Fatal("grant by a piece of the name")
 	}
-	if err := runAgentScreen(rig.dir, "grant", []string{"Office Mac", "control"}); err == nil {
-		t.Fatal("a peer laptop cannot be granted the screen")
+	if err := runAgentScreen(rig.dir, "grant", []string{"Office Mac", "control"}); err != nil {
+		t.Fatalf("a peer Mac can be granted the screen: %v", err)
+	}
+	if err := runAgentScreen(rig.dir, "grant", []string{"Shared iPad", "control"}); err == nil {
+		t.Fatal("a viewer-only device cannot be granted the screen")
 	}
 	if err := runAgentScreen(rig.dir, "forget", []string{"iPad mini"}); err != nil {
 		t.Fatal(err)

@@ -586,7 +586,7 @@ func (d *Daemon) reportAttention(c command.Command) {
 		d.requestPublish()
 		return
 	}
-	d.notifyAttention(notifyTitlePrefix+c.WorkspaceID, detail, c.WorkspaceID)
+	d.notifyAttentionAt(notifyTitlePrefix+c.WorkspaceID, detail, c.WorkspaceID, c.Link)
 	d.requestPublish()
 }
 

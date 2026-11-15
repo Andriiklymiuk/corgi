@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"andriiklymiuk/corgi/utils/agent/wake"
 	"context"
 	"encoding/json"
 	"os"
@@ -261,6 +262,9 @@ func LocalPulse(dir, version string) peers.Pulse {
 	p := peers.Pulse{Name: peers.Me(), Version: version, Watches: []string{}, At: time.Now().UnixMilli(), Budget: freeBudget(""), Ignored: watch.IgnoredKeys(dir)}
 	if store != nil {
 		p.Lead = store.Lead
+	}
+	if card, ok := wake.Local(); ok {
+		p.MAC, p.Broadcast = card.MAC, card.Broadcast
 	}
 	if raw, err := os.ReadFile(WatchIdentitiesPath(dir)); err == nil {
 		_ = json.Unmarshal(raw, &p.Watches)

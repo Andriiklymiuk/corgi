@@ -55,10 +55,12 @@ type Peer struct {
 	Budget int `json:"budget,omitempty"`
 	// Unwell is why the peer cannot run fixes right now ("no-credential":
 	// its agent wants a login, "limit": its window is spent); "" when fine.
-	Unwell   string        `json:"unwell,omitempty"`
-	Sessions []PeerSession `json:"sessions,omitempty"`
-	Runs     []PeerRun     `json:"runs,omitempty"`
-	Ignored  []string      `json:"ignored,omitempty"`
+	Unwell    string        `json:"unwell,omitempty"`
+	MAC       string        `json:"mac,omitempty"`
+	Broadcast string        `json:"broadcast,omitempty"`
+	Sessions  []PeerSession `json:"sessions,omitempty"`
+	Runs      []PeerRun     `json:"runs,omitempty"`
+	Ignored   []string      `json:"ignored,omitempty"`
 	// MutedUntil is the peer's mute, as unix millis; a mute set on one
 	// laptop quiets the other too.
 	MutedUntil int64 `json:"mutedUntil,omitempty"`
@@ -67,7 +69,7 @@ type Peer struct {
 // Public is the peer without its token and key: what a listing prints.
 func (p Peer) Public() map[string]any {
 	return map[string]any{"name": p.Name, "url": p.URL, "since": p.Since, "seenAt": p.SeenAt, "alive": p.Alive(time.Now()), "watches": p.Watches, "lead": p.Lead,
-		"version": p.Version, "budget": p.Budget, "unwell": p.Unwell, "sessions": p.Sessions, "runs": p.Runs, "ignored": p.Ignored, "mutedUntil": p.MutedUntil}
+		"version": p.Version, "budget": p.Budget, "unwell": p.Unwell, "sessions": p.Sessions, "runs": p.Runs, "ignored": p.Ignored, "mutedUntil": p.MutedUntil, "wakeable": p.MAC != ""}
 }
 
 // PeerSession is one row of the other laptop's board, enough to show it
@@ -292,12 +294,17 @@ type Pulse struct {
 	Runs       []PeerRun     `json:"runs,omitempty"`
 	Ignored    []string      `json:"ignored,omitempty"`
 	MutedUntil int64         `json:"mutedUntil,omitempty"`
+	MAC        string        `json:"mac,omitempty"`
+	Broadcast  string        `json:"broadcast,omitempty"`
 }
 
 // Absorb records what a pulse said about the peer that sent it.
 func (p *Peer) Absorb(in Pulse, now time.Time) {
 	p.SeenAt, p.Watches, p.Lead, p.Version = now, in.Watches, in.Lead, in.Version
 	p.Budget, p.Unwell, p.Sessions, p.Runs, p.Ignored, p.MutedUntil = in.Budget, in.Unwell, in.Sessions, in.Runs, in.Ignored, in.MutedUntil
+	if in.MAC != "" {
+		p.MAC, p.Broadcast = in.MAC, in.Broadcast
+	}
 	if len(p.Sessions) > 50 {
 		p.Sessions = p.Sessions[:50]
 	}

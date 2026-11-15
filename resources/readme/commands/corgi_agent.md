@@ -137,6 +137,7 @@ Getting started:
 * [corgi agent uninstall](corgi_agent_uninstall)	 - Stop starting agent mode at login
 * [corgi agent up](corgi_agent_up)	 - One command from a stack directory to phone-startable: register, daemon, tunnel, pairing
 * [corgi agent usage](corgi_agent_usage)	 - Every account's limits, where they are heading, and today's numbers
+* [corgi agent wake](corgi_agent_wake)	 - Wake a sleeping peer Mac on this network (Wake-on-LAN)
 * [corgi agent watch](corgi_agent_watch)	 - Watch the tracker and your pull requests: new issues, new comments, reviews - notify, or fix
 * [corgi agent while-away](corgi_agent_while-away)	 - What happened while you were gone
 * [corgi agent windows](corgi_agent_windows)	 - List the editor windows the corgi VS Code extension has connected

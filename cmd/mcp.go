@@ -377,12 +377,15 @@ var launchRoutes = map[string]http.HandlerFunc{
 	"/launch/screen/verify":   launchScreenVerifyHandler,
 	"/launch/screen/settings": launchScreenSettingsHandler,
 	"/launch/terminal":        launchTerminalHandler,
+	"/launch/screen/peer":     launchScreenPeerHandler,
+	"/launch/peers/wake":      launchPeersWakeHandler,
 }
 
 func mountLaunchRoutes(mux *http.ServeMux, token, deviceStore string) {
 	mux.HandleFunc("/app", launcherPageHandler)
 	mux.Handle("/launch/stream", launchStream(token, deviceStore))
 	mux.Handle(terminalWSPath, launchTerminalWS(token, deviceStore))
+	mux.Handle("/launch/terminal/peer", launchTerminalPeerWS(token, deviceStore))
 	mux.Handle("/launch/preview/", http.HandlerFunc(previewProxyHandler))
 	for path, h := range launchRoutes {
 		mux.Handle(path, launchAuth(token, h, deviceStore))

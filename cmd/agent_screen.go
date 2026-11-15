@@ -127,6 +127,34 @@ var agentScreenTicketCmd = &cobra.Command{
 	},
 }
 
+var agentScreenPeerCmd = &cobra.Command{
+	Use:    "peer <name> [open-json]",
+	Short:  "Corgi Bar opens a peer's screen: the challenge to sign, then the ticket",
+	Hidden: true,
+	Args:   cobra.RangeArgs(1, 2),
+	Run: func(cmd *cobra.Command, args []string) {
+		dir := mustAgentDir()
+		if len(args) == 1 {
+			out, err := peerScreenChallenge(dir, args[0])
+			if err != nil {
+				exitWithError("agent_screen_peer", err, 2)
+			}
+			utils.PrintJSON(out)
+			return
+		}
+		var in peerScreenIn
+		if err := json.Unmarshal([]byte(args[1]), &in); err != nil {
+			exitWithError("agent_screen_peer", err, 2)
+		}
+		in.Peer = args[0]
+		out, err := peerScreenOpen(dir, in)
+		if err != nil {
+			exitWithError("agent_screen_peer", err, 1)
+		}
+		utils.PrintJSON(out)
+	},
+}
+
 var agentScreenSettingsCmd = &cobra.Command{
 	Use:    "settings [json]",
 	Short:  "Corgi Bar reads or writes the remote screen settings",
@@ -159,7 +187,7 @@ func init() {
 	_ = agentScreenCmd.Flags().MarkHidden("event")
 	_ = agentScreenCmd.Flags().MarkHidden("device")
 	agentScreenTicketCmd.Flags().StringVar(&screenTicketDevice, "device", "", "device id from corgi agent screen devices --json")
-	agentScreenCmd.AddCommand(agentScreenHostCmd, agentScreenVerifyCmd, agentScreenSettingsCmd, agentScreenTicketCmd)
+	agentScreenCmd.AddCommand(agentScreenHostCmd, agentScreenVerifyCmd, agentScreenSettingsCmd, agentScreenTicketCmd, agentScreenPeerCmd)
 	agentCmd.AddCommand(agentScreenCmd)
 }
 
@@ -170,7 +198,7 @@ func findScreenDevice(dir, name string) (string, string, error) {
 	}
 	var hits []pairing.Device
 	for _, d := range store.Devices {
-		if !screenPhone(d) {
+		if !screenViewer(d) {
 			continue
 		}
 		if strings.EqualFold(d.Name, name) || strings.HasPrefix(d.TokenHash, name) {

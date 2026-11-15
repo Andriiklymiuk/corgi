@@ -69,6 +69,7 @@ type Command struct {
 
 	Event     *sessions.Event `json:"event,omitempty"`
 	SessionID string          `json:"sessionId,omitempty"`
+	Link      string          `json:"link,omitempty"`
 	Index     int             `json:"index,omitempty"`
 	Pinned    bool            `json:"pinned,omitempty"`
 	Direction int             `json:"direction,omitempty"`

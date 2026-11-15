@@ -2527,7 +2527,15 @@ corgi agent term deny "office-mac"
 corgi agent term status
 ```
 
-From another machine: `corgi agent term build-server`. A phone opens one with
+From another machine: `corgi agent term build-server`. Corgi Bar opens the same
+shell in a window, through this Mac's daemon, for any peer.
+
+**Another Mac's screen, and waking it.** A peer Mac can be granted the screen
+like a phone (`corgi agent screen grant "office-mac" control`, Touch ID on the
+Mac that asks); Corgi Bar lists your peers with Screen, Terminal and Wake.
+`corgi agent wake <peer>` sends Wake-on-LAN on this network: every peer says
+how to wake it in its pulses, and the sleeping Mac needs "Wake for network
+access" on. A phone opens one with
 the same Face ID key it uses for the screen. Sessions are logged next to the
 screen sessions (`corgi agent screen log`); an idle shell ends after the
 remote screen's idle stop.
