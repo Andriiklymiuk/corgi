@@ -311,7 +311,7 @@ func (d *Daemon) publishStatus(ctx context.Context) {
 	ticker := time.NewTicker(d.pollInterval(0))
 	defer ticker.Stop()
 	var last []byte
-	var digestChecked time.Time
+	var digestChecked, timersChecked time.Time
 	for {
 		if data, err := json.MarshalIndent(d.Status(), "", "  "); err == nil && !bytes.Equal(data, last) {
 			if writeAtomic(d.StatusPath(), data) == nil {
@@ -321,6 +321,11 @@ func (d *Daemon) publishStatus(ctx context.Context) {
 		if now := time.Now(); now.Sub(digestChecked) >= digestCheckInterval {
 			digestChecked = now
 			d.sendDigestIfDue(now)
+			d.dreamIfDue(now)
+		}
+		if now := time.Now(); now.Sub(timersChecked) >= timerCheckInterval {
+			timersChecked = now
+			d.fireDueTimers(ctx, now)
 		}
 		ticker.Reset(d.pollInterval(0))
 		select {

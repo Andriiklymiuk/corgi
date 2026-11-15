@@ -133,6 +133,9 @@ func hasFallback(spec WatchSpec, log *watch.FixLog, now time.Time) bool {
 // the workspace only when every agent in its order is out. The reason is
 // the first agent's, the one a person would go and fix.
 func laptopUnwell(spec WatchSpec, log *watch.FixLog, now time.Time) string {
+	if why := laptopAway(now); why != "" {
+		return why
+	}
 	first := ""
 	for i, name := range spec.agents() {
 		why := agentUnwell(spec, name, log, now)

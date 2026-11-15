@@ -41,6 +41,9 @@ type UserConfig struct {
 	// Heat: "" pauses the sessions when hot with the lid closed, "pause"
 	// always, "off" never (new runs still wait for it to cool).
 	Heat string `yaml:"heat,omitempty"`
+	// Handoff lets a healthy peer take the tracker work while this laptop
+	// is away: lid closed on battery, or too hot.
+	Handoff bool `yaml:"handoff,omitempty"`
 	// Hotspot is the Wi-Fi to join when the internet is gone for a while;
 	// HotspotBudget ("2GB", "off") how much it may use before new runs hold.
 	Hotspot       string                     `yaml:"hotspot,omitempty"`

@@ -641,6 +641,16 @@ From a phone, `corgi_sessions` is the same board as JSON - call it for "is
 anything waiting on me" or "what is running right now"; it says so when
 tracking is not enabled yet.
 
+## The Mac's screen from a phone, iPad or another Mac
+
+"Show my Mac on the iPad", "let the phone control this Mac", "turn remote screen off":
+
+- `corgi agent screen on|off` is the switch; off ends every session at once.
+- `corgi agent screen devices` lists paired phones with their role; `grant "<name>" control|watch|off` changes one, `forget` makes it be asked again.
+- `corgi agent screen reach nearby` keeps it to the same network.
+- Corgi Bar must be running on the Mac: it captures and hosts. Screen Recording (and Accessibility for control) are granted to Corgi Bar, not to corgi.
+- An agent never starts a session. It can tell the person to open the Screen button in Corgi Agents.
+
 ## Acting on the board from elsewhere
 
 Everything the keys do is a command, so the same board reaches other places:

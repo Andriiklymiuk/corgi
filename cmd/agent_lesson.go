@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -86,9 +87,49 @@ var agentLessonListCmd = &cobra.Command{
 	},
 }
 
+var agentLessonDreamCmd = &cobra.Command{
+	Use:   "dream",
+	Short: "Tidy every workspace's lessons: merge near-duplicates, put away old ones (runs weekly by itself)",
+	Long: `A dreaming pass over the lessons: a lesson that says what a newer one says
+is merged into it, one older than 180 days or past the newest 60 is put
+away. Nothing is lost - what was taken out goes to lessons/<workspace>.dreamed.md
+with the reason. Lines you wrote by hand stay.
+
+  corgi agent lesson dream --dry-run   what it would take out
+  corgi agent lesson dream`,
+	Run: func(cmd *cobra.Command, _ []string) {
+		dir := mustAgentDir()
+		opt := lessons.DefaultDream
+		opt.DryRun, _ = cmd.Flags().GetBool("dry-run")
+		reports, err := lessons.DreamAll(dir, time.Now(), opt)
+		if err != nil {
+			exitWithError("agent_lesson", err, 1)
+		}
+		if utils.JSONOutput {
+			utils.PrintJSON(reports)
+			return
+		}
+		if len(reports) == 0 {
+			fmt.Println("No lessons yet.")
+			return
+		}
+		verb := "put away"
+		if opt.DryRun {
+			verb = "would put away"
+		}
+		for _, r := range reports {
+			fmt.Printf("%s: %d lessons, %s %d\n", r.Workspace, r.Before, verb, len(r.Dropped))
+			for _, d := range r.Dropped {
+				fmt.Printf("  - %s  (%s)\n", d.Lesson.Text, d.Why)
+			}
+		}
+	},
+}
+
 func init() {
+	agentLessonDreamCmd.Flags().Bool("dry-run", false, "say what would be put away, change nothing")
 	agentLessonAddCmd.Flags().String("workspace", "", "The workspace (default: the one this directory is in)")
 	agentLessonListCmd.Flags().String("workspace", "", "The workspace (default: the one this directory is in)")
-	agentLessonCmd.AddCommand(agentLessonAddCmd, agentLessonListCmd)
+	agentLessonCmd.AddCommand(agentLessonAddCmd, agentLessonListCmd, agentLessonDreamCmd)
 	agentCmd.AddCommand(agentLessonCmd)
 }
