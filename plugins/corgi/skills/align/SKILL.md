@@ -23,6 +23,9 @@ questions and the people comment (the `idea` skill).
 Read the request, then the code it points at (`grep`, `rg`, `git log -5`, the compose
 file). Facts are your job, never the user's: file names, current behaviour, which service
 owns a route, what a flag does today. Main session only; no subagents.
+Before planning a new command, flag or file, find the one that may already do it
+(`corgi --help`, `corgi agent --help`, `corgi vocab <word>`, the docs, the project's own CLI
+help): name the closest one and why it falls short, or extend it instead.
 
 Then answer one question: **does any other reading of the request change what you
 would build?** Not the wording, not the style - the work.

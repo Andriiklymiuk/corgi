@@ -4,6 +4,7 @@ import (
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/agent/push"
 	"context"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -300,5 +301,39 @@ func TestEveryRunCommitsAsTheWorkspace(t *testing.T) {
 	}
 	if identityNote(WatchSpec{Dir: "/w/unknown"}) != "" {
 		t.Fatal("no identity, no line")
+	}
+}
+
+func TestAFreshCloneCommitsAsTheWorkspaceThroughTheEnvironment(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("no git")
+	}
+	git := func(dir string, env []string, args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+		cmd.Env = append(append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null"), env...)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	ws := t.TempDir()
+	git(ws, nil, "init", "-q")
+	git(ws, nil, "config", "user.name", "Work Self")
+	git(ws, nil, "config", "user.email", "work@example.com")
+	env := identityEnv(ws)
+	if len(env) != 4 {
+		t.Fatalf("env %v", env)
+	}
+	scratch := t.TempDir()
+	git(scratch, nil, "init", "-q")
+	git(scratch, nil, "config", "user.email", "someone-else@example.com")
+	git(scratch, env, "commit", "-q", "--allow-empty", "-m", "fix")
+	if got := git(scratch, nil, "log", "-1", "--format=%ae %ce %an"); got != "work@example.com work@example.com Work Self" {
+		t.Fatalf("committed as %q", got)
+	}
+	if identityEnv("") != nil {
+		t.Fatal("no workspace folder sets nothing")
 	}
 }

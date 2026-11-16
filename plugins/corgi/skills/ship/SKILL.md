@@ -16,6 +16,10 @@ build compiling ≠ shipped. **Ground truth = a new IPA/AAB on disk + a "Submitt
 never the exit code. Long + unattended → background + poll.
 
 ## Before you ship
+- **Store text changes only when asked.** Review notes, release notes, description and
+  keywords are what a store reviewer and every buyer read. Change them only when the person
+  asked for that text in this conversation; when a new feature seems to need it, show the
+  old and the new line and ask.
 - **Render gate (`mobile` skill).** Native-invisible change (shader, particles, 3D scene,
   Skia) compiles + ships magenta / square / blank. Drive on device + read the screenshot
   first. Green build ≠ verified build.

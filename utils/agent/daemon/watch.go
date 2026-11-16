@@ -1408,6 +1408,21 @@ var gitIdentity = func(dir string) (string, string) {
 	return read("user.name"), read("user.email")
 }
 
+func identityEnv(dir string) []string {
+	if dir == "" {
+		return nil
+	}
+	name, email := gitIdentity(dir)
+	if email == "" {
+		return nil
+	}
+	env := []string{"GIT_AUTHOR_EMAIL=" + email, "GIT_COMMITTER_EMAIL=" + email}
+	if name != "" {
+		env = append(env, "GIT_AUTHOR_NAME="+name, "GIT_COMMITTER_NAME="+name)
+	}
+	return env
+}
+
 func identityNote(spec WatchSpec) string {
 	if spec.Dir == "" {
 		return ""
@@ -1597,7 +1612,7 @@ func (d *Daemon) runFix(ctx context.Context, spec WatchSpec, e watch.Event) {
 	if d.Pickup != nil {
 		d.Pickup(spec.Workspace, e)
 	}
-	env := withForgeShims(d.Dir, headlessEnv(spec.ConfigDir, os.Getenv("CORGI_OMIT")))
+	env := withForgeShims(d.Dir, append(headlessEnv(spec.ConfigDir, os.Getenv("CORGI_OMIT")), identityEnv(spec.Dir)...))
 	fmt.Fprintf(logFile, "=== %s %s %s\n", time.Now().Format(time.RFC3339), e.Kind, e.Ref)
 	before, hadBefore := usage.ReadLimits(spec.ConfigDir)
 	started := time.Now()
