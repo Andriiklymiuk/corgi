@@ -383,6 +383,7 @@ var launchRoutes = map[string]http.HandlerFunc{
 	"/launch/peers/wake":        launchPeersWakeHandler,
 	"/launch/screen/hands":      launchHandsHandler,
 	"/launch/screen/hands/next": launchHandsNextHandler,
+	"/launch/screen/do":         launchScreenDoHandler,
 }
 
 func mountLaunchRoutes(mux *http.ServeMux, token, deviceStore string) {

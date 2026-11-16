@@ -2532,13 +2532,21 @@ shell in a window, through this Mac's daemon, for any peer.
 
 **Agents that use a Mac (hands).** An agent can look at and use a Mac through
 Corgi Bar: `corgi_mac_windows` (text, cheap), `corgi_mac_look` (a JPEG, 1280 px
-by default), `corgi_mac_act` (click, type, keys, scroll, drag), `corgi_mac_open`.
+by default), `corgi_mac_act` (click, type, keys, scroll, drag), `corgi_mac_open`,
+`corgi_mac_menus` and `corgi_mac_menu` (the front app's menu bar, pressed by path).
 With `peer` it works on another paired Mac; without, on this one. Off until the
 used Mac allows it: `corgi agent hands allow "office-mac"` (or `here` for this
 Mac's own agents). A banner names the agent while it works and Esc three times
 stops agents for 10 minutes. Hidden apps never show in a screenshot, and over a
 public tunnel the tools are off. The same from a shell: `corgi agent hands
 windows|look|act|open --on <peer>`.
+
+**Comforts in the phone's viewer.** ⋯ › Apps shows the Mac's running apps
+with their icons (tap brings one forward); ⋯ › Menus of the app in front
+lists its menu bar, pressed from the phone. Follow what needs me jumps to the
+window of a session that starts waiting on you, and a tap on a waiting
+session in the rail shows its window (hold it for the session). A snapshot
+goes into a session as a picture, or to the share sheet.
 
 **A session's own terminal, sharp, on the phone.** Corgi Agents › a session ›
 Its terminal shows that session's terminal as text, live: tmux panes (servers

@@ -95,6 +95,30 @@ func registerHandsMCPTools(s *server.MCPServer) {
 		return handsCall(r, handsRequest{Do: "act", Actions: acts, Look: r.GetBool("look", false)})
 	})
 
+	s.AddTool(newCorgiTool("corgi_mac_menus",
+		mcp.WithDescription("The front app's menu bar on a Mac as JSON (titles, enabled, shortcuts, submenus): "+
+			"more reliable than clicking, and cheap. Pair with corgi_mac_menu."+handsToolNote),
+		mcp.WithString("peer", mcp.Description("Peer Mac name; omit for this Mac")),
+	), func(_ context.Context, r mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		return handsCall(r, handsRequest{Do: "menus"})
+	})
+
+	s.AddTool(newCorgiTool("corgi_mac_menu",
+		mcp.WithDescription("Press a menu item of the front app on a Mac by its path, like [\"File\", \"Save\"]."+handsToolNote),
+		mcp.WithString("peer", mcp.Description("Peer Mac name; omit for this Mac")),
+		mcp.WithArray("path", mcp.Required(), mcp.Description("Menu titles from the menu bar down"), mcp.WithStringItems()),
+	), func(_ context.Context, r mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		var path []string
+		if raw, ok := r.GetArguments()["path"].([]any); ok {
+			for _, p := range raw {
+				if s, ok := p.(string); ok {
+					path = append(path, s)
+				}
+			}
+		}
+		return handsCall(r, handsRequest{Do: "menu", Path: path})
+	})
+
 	s.AddTool(newCorgiTool("corgi_mac_open",
 		mcp.WithDescription("Open an app (by name) or a URL on a Mac and bring it to the front."+handsToolNote),
 		mcp.WithString("peer", mcp.Description("Peer Mac name; omit for this Mac")),

@@ -63,6 +63,8 @@ var mcpToolMeta = map[string]toolMeta{
 	"corgi_mac_look":              {Title: "Look at a Mac's screen", Kind: toolReadOnly},
 	"corgi_mac_act":               {Title: "Use a Mac: click, type, keys", Kind: toolDestructive},
 	"corgi_mac_open":              {Title: "Open an app on a Mac", Kind: toolWrite},
+	"corgi_mac_menus":             {Title: "A Mac app's menus", Kind: toolReadOnly},
+	"corgi_mac_menu":              {Title: "Press a Mac menu item", Kind: toolDestructive},
 	"corgi_restart":               {Title: "Restart the stack", Kind: toolWrite},
 	"corgi_restore":               {Title: "Restore a checkpoint", Kind: toolDestructive},
 	"corgi_schema":                {Title: "Compose file schema", Kind: toolReadOnly},

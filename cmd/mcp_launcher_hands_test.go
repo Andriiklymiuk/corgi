@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"andriiklymiuk/corgi/utils/agent/peers"
 	"andriiklymiuk/corgi/utils/agent/screen"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -194,5 +195,52 @@ func TestMacToolsAreOffOverAPublicTunnel(t *testing.T) {
 	res, err := handsCall(mcp.CallToolRequest{}, handsRequest{Do: "windows"})
 	if err != nil || !res.IsError || !strings.Contains(res.Content[0].(mcp.TextContent).Text, "public tunnel") {
 		t.Fatalf("%+v %v", res, err)
+	}
+}
+
+func TestAPhoneWithControlAsksForAppsAndMenus(t *testing.T) {
+	resetHands(t)
+	rig := newTermRig(t, "")
+	bar := rig.barToken(t)
+	_ = runAgentScreen(rig.dir, "on", nil)
+	fakeBar(t, rig, bar, func(j handsJob) handsResult {
+		switch j.Do {
+		case "apps":
+			return handsResult{OK: true, Text: `[{"name":"Safari","bundle":"com.apple.Safari","active":true}]`}
+		case "menu":
+			return handsResult{OK: true, Text: "pressed " + strings.Join(j.Path, " › ")}
+		}
+		return handsResult{OK: true, Text: j.Do}
+	})
+	c := peers.NewClient(rig.peer)
+	var out handsResult
+	ask := func(req handsRequest) error {
+		out = handsResult{}
+		return c.Call(context.Background(), "/launch/screen/do", req, &out)
+	}
+	if err := ask(handsRequest{Do: "apps"}); err == nil || !strings.Contains(err.Error(), "not control") {
+		t.Fatalf("watch-only or ungranted is refused: %v", err)
+	}
+	if _, err := screen.Update(rig.dir, func(s *screen.Settings) error {
+		s.Devices[rig.hash] = &screen.Grant{Name: "office-mac", Role: screen.RoleControl}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := ask(handsRequest{Do: "apps", Icons: true}); err != nil || !strings.Contains(out.Text, "Safari") {
+		t.Fatalf("apps: %+v %v", out, err)
+	}
+	if err := ask(handsRequest{Do: "menu", Path: []string{"File", "Save"}}); err != nil || out.Text != "pressed File › Save" {
+		t.Fatalf("menu: %+v %v", out, err)
+	}
+	if err := ask(handsRequest{Do: "act", Actions: []handsAction{{Do: "click"}}}); err == nil {
+		t.Fatal("a phone clicks through the stream, not this route")
+	}
+	if err := ask(handsRequest{Do: "menu", Path: []string{"File"}}); err == nil {
+		t.Fatal("a menu path needs the item too")
+	}
+	_ = runAgentScreen(rig.dir, "off", nil)
+	if err := ask(handsRequest{Do: "apps"}); err == nil {
+		t.Fatal("screen off refuses")
 	}
 }

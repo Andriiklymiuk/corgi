@@ -84,6 +84,8 @@ them.
 | `corgi_mac_look` | `peer?, window?, max?` | JPEG + size | coordinates for act are these pixels |
 | `corgi_mac_act` | `peer?, actions[], look?` | text (+ JPEG) | click, double, right, move, drag, type, key, scroll, wait |
 | `corgi_mac_open` | `peer?, app?, url?` | text | brings it to the front |
+| `corgi_mac_menus` | `peer?` | JSON menu bar of the front app | more reliable than clicking |
+| `corgi_mac_menu` | `peer?, path[]` | text | presses e.g. `["File","Save"]` |
 
 Off until the used Mac runs `corgi agent hands allow <peer|here>`; it shows a banner, Esc three
 times stops agents for 10 minutes. Only when the user asked to operate that Mac.

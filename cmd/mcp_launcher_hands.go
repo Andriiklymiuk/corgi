@@ -50,6 +50,8 @@ type handsRequest struct {
 	Look    bool          `json:"look,omitempty"`
 	App     string        `json:"app,omitempty"`
 	URL     string        `json:"url,omitempty"`
+	Path    []string      `json:"path,omitempty"`
+	Icons   bool          `json:"icons,omitempty"`
 }
 
 type handsJob struct {
@@ -78,13 +80,21 @@ type handsHub struct {
 
 var hands = &handsHub{jobs: make(chan *handsJob, 8), pending: map[string]chan handsResult{}}
 
-var handsDoes = map[string]bool{"look": true, "act": true, "windows": true, "open": true}
+var handsDoes = map[string]bool{"look": true, "act": true, "windows": true, "open": true, "apps": true, "menus": true, "menu": true, "activate": true}
+
+var viewerDoes = map[string]bool{"windows": true, "apps": true, "menus": true, "menu": true, "activate": true}
 
 var handsActionDoes = map[string]bool{"click": true, "double": true, "right": true, "move": true, "drag": true, "type": true, "key": true, "scroll": true, "wait": true}
 
 func (r handsRequest) validate() error {
 	if !handsDoes[r.Do] {
-		return errors.New("do is look, act, windows or open")
+		return errors.New("do is look, act, windows, open, apps, menus, menu or activate")
+	}
+	if r.Do == "menu" && (len(r.Path) < 2 || len(r.Path) > 6) {
+		return errors.New("menu takes a path from the menu bar, like [\"File\", \"Save\"]")
+	}
+	if r.Do == "activate" && strings.TrimSpace(r.App) == "" {
+		return errors.New("activate takes an app name or bundle id")
 	}
 	if r.Do == "act" {
 		if len(r.Actions) == 0 || len(r.Actions) > 40 {
@@ -302,8 +312,47 @@ func launchHandsBar() http.Handler {
 	})
 }
 
+func launchScreenDoHandler(w http.ResponseWriter, r *http.Request) {
+	dir, d, ok := screenDevice(w, r)
+	if !ok {
+		return
+	}
+	if r.Method != http.MethodPost {
+		writeLaunchError(w, http.StatusMethodNotAllowed, postOnlyMessage)
+		return
+	}
+	s, err := screen.Load(dir)
+	if err != nil || !s.Enabled {
+		writeLaunchError(w, http.StatusForbidden, "remote screen is off on "+macName())
+		return
+	}
+	if s.RoleFor(d.TokenHash) != screen.RoleControl {
+		writeLaunchError(w, http.StatusForbidden, d.Name+" may watch "+macName()+", not control it")
+		return
+	}
+	var req handsRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&req); err != nil {
+		writeLaunchError(w, http.StatusBadRequest, "could not read the request")
+		return
+	}
+	if !viewerDoes[req.Do] {
+		writeLaunchError(w, http.StatusBadRequest, "do is windows, apps, menus, menu or activate")
+		return
+	}
+	if err := req.validate(); err != nil {
+		writeLaunchError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	out, err := hands.run(r.Context(), req, d.Name)
+	if err != nil {
+		writeLaunchError(w, http.StatusServiceUnavailable, err.Error())
+		return
+	}
+	writeLaunchJSON(w, out)
+}
+
 func serveHandsNext(w http.ResponseWriter, r *http.Request, dir string) {
-	if s, err := screen.Load(dir); err != nil || !anyHands(s) {
+	if s, err := screen.Load(dir); err != nil || (!anyHands(s) && !s.Enabled) {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
