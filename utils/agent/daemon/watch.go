@@ -25,7 +25,9 @@ import (
 )
 
 const (
-	unattendedRunNote = "\n\nNobody is reading this run as it happens. Never ask a question, never offer options or wait for a choice: "
+	unattendedRunNote = "\n\nNever search the whole home folder or / (find ~, find /, grep -r ~): macOS blocks other apps' folders, warns the person, and it costs minutes. " +
+		"A skill's own files sit in the skill's base directory; corgi commands say where corgi's things are. " +
+		"Nobody is reading this run as it happens. Never ask a question, never offer options or wait for a choice: "
 	itIsPrefix        = "it is "
 	notStartedPrefix  = "not started: "
 )

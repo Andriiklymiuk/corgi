@@ -54,7 +54,8 @@ and run `corgi docs commands <the skill>` after any edit that names a corgi comm
 
 ## Retro mode (sessions named)
 1. **Read the primary source, not your memory of it.** Default to this session. For more, run
-   `python3 references/mine_sessions.py --last 30` (every `~/.claude*/projects`): tool errors, the same
+   `python3 <this skill's base directory>/references/mine_sessions.py --last 30` (it reads every
+   `~/.claude*/projects`; never search the home folder for the script or the transcripts): tool errors, the same
    failing call sent twice, skill use, where the person stepped in. Open the transcript behind any
    line you will act on. Its output holds real project data and stays out of the skill. In a corgi
    workspace, the unattended runs count too: `corgi agent scorecard`, `corgi agent selfcheck`,

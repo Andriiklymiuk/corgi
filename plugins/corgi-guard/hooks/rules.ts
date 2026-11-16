@@ -2,6 +2,9 @@ const unsplitSet = /\bset\s+--\s+"?\$(?!\{=)[A-Za-z_]\w*/
 const bashPipeStatus = /\$\{?PIPESTATUS\b/
 const rmCorgiTree = /\brm\s+-(?:[a-zA-Z]*r[a-zA-Z]*f|[a-zA-Z]*f[a-zA-Z]*r)[a-zA-Z]*\s+[^;&|]*\/tmp\/corgi-(?:wt|review)\b/
 
+const searchesEverything = new RegExp(String.raw`(?:^|[;&|(]\s*|\s)(?:find\s+(?:-[HLP]\s+)*|(?:grep|egrep)\s+(?:[^;&|\n]*\s)?-[a-zA-Z]*[rR][a-zA-Z]*\s+(?:[^;&|\n]*\s)?|rg\s+(?:[^;&|\n]*\s)?)(?:~|\$HOME|\$\{HOME\}|/Users(?:/[^\s/;&|]+)?|/)/?(?=\s|$|[;&|)])`)
+const shallow = /-maxdepth\s+[0-2]\b/
+
 const postsComment = /\b(?:gh\s+(?:pr|issue)\s+(?:comment|review)|gh\s+api\b[^\n]*comments|glab\s+(?:mr|issue)\s+note|corgi\s+agent\s+watch\s+(?:pr\s+)?comment)\b/
 const correctionOnTop = /\b(?:ignore|disregard)\s+my\s+(?:(?:last|earlier|previous|above)\s+)?(?:comment|message|reply|note)s?\b|(?:^|["'\n])\s*correction\s*[:-]|\bmy\s+(?:last|earlier|previous)\s+(?:comment|message|reply|note)\s+was\s+wrong\b/i
 
@@ -38,6 +41,13 @@ export function refusal(raw: string): string | undefined {
   if (bashPipeStatus.test(command)) {
     return '`$PIPESTATUS` is blank in zsh, so the check reads nothing and passes. ' +
       'Use `$pipestatus[1]` here, or run the script with `bash`.'
+  }
+  for (const segment of command.split(/[;&|]+/)) {
+    if (searchesEverything.test(` ${segment.trim()}`) && !shallow.test(segment)) {
+      return 'Searching the whole home folder or / walks into other apps\' private folders: macOS blocks it, warns the person, and it takes minutes. ' +
+        'Search where the thing lives: the repository, `~/.claude*/projects` for transcripts, the skill\'s base directory for its files, ' +
+        'or ask corgi (`corgi context --json`, `corgi agent history`). A shallow look at ~ (`-maxdepth 2`) is fine.'
+    }
   }
   if (rmCorgiTree.test(command)) {
     return '`rm -rf` is refused in a hardened workspace. Take a fresh path instead: ' +

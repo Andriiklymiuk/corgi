@@ -1,6 +1,18 @@
 import { describe, expect, test } from 'claude-code/testing'
 
 describe('corgi-guard', () => {
+  test('refuses a search over the whole home folder or /, allows a scoped or shallow one', async ($, on) => {
+    on('tool.call', { tool: 'Bash' }, () => ({ result: { stdout: 'ok', stderr: '', interrupted: false }, text: 'ok' }))
+    for (const command of ['find ~ -name mine_sessions.py', 'find / -name "*.jsonl" 2>/dev/null', 'grep -rn corgi $HOME', 'rg token ~']) {
+      const got = await $.tool.call({ tool: 'Bash', command })
+      expect(String(got.deny ?? got.text)).toContain("other apps' private folders")
+    }
+    for (const command of ['find ~/.claude/projects -name "*.jsonl"', 'find ~ -maxdepth 2 -name ".corgi*"', 'grep -rn corgi src', 'find . -name "*.go"']) {
+      const got = await $.tool.call({ tool: 'Bash', command })
+      expect(got.deny).toBe(undefined)
+    }
+  })
+
   test('refuses set -- $pair before it runs, with the fix', async ($, on) => {
     let ran = 0
     on('tool.call', { tool: 'Bash' }, () => {
