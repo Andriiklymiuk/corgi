@@ -204,7 +204,11 @@ func (d *Daemon) routineReport(spec WatchSpec, e watch.Event, out string, failed
 	if len(links) > 0 {
 		body = watch.PullLines(body, links)
 	}
-	go d.notifyAttentionAt(notifyTitlePrefix+spec.Workspace, body, spec.Workspace, report.URL)
+	link := report.URL
+	if link == "" {
+		link = fileLink(logPath)
+	}
+	go d.ring(attention{title: notifyTitlePrefix + spec.Workspace, body: body, workspace: spec.Workspace, link: link, run: e.Key})
 }
 
 var headlineLabel = regexp.MustCompile(`(?i)^(headline|digest[^:]{0,40}):\s*`)

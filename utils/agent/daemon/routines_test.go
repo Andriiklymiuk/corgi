@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"andriiklymiuk/corgi/utils"
+	"andriiklymiuk/corgi/utils/agent/push"
 	"context"
 	"os/exec"
 	"strings"
@@ -229,6 +230,39 @@ func TestAPushNamesTheRoutineOnce(t *testing.T) {
 	for in, want := range cases {
 		if got := withoutName(in, "retro"); got != want {
 			t.Errorf("withoutName(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestARoutineReportOpensItsRunNotAnEmptyChat(t *testing.T) {
+	d := dynDaemon(t)
+	d.loadWatchFiles()
+	pushed := make(chan push.Message, 4)
+	d.Push = func(m push.Message) { pushed <- m }
+	var opened []string
+	var mu sync.Mutex
+	d.NotifyWithLink = func(_, _, link string) {
+		mu.Lock()
+		opened = append(opened, link)
+		mu.Unlock()
+	}
+	d.LinkFor = func(string) string { return "https://claude.ai/code?environment=env_x" }
+	spec := WatchSpec{Workspace: "corgi"}
+	e, _ := RoutineEvent("corgi", config.Routine{Name: "retro", Kind: "retro"}, time.Date(2026, 11, 16, 10, 4, 0, 0, time.UTC))
+	d.routineReport(spec, e, "Outcome: nothing\nretro: 20 runs, 3 tasks filed", nil, "/tmp/runs/routine_corgi_retro.log")
+	m := <-pushed
+	if m.Data["run"] != e.Key || m.Data["url"] != "file:///tmp/runs/routine_corgi_retro.log" {
+		t.Fatalf("push data: %v", m.Data)
+	}
+	d.routineReport(spec, e, "1 PR opened", nil, "/tmp/x.log", "https://github.com/acme/api/pull/9")
+	if m := <-pushed; m.Data["url"] != "https://github.com/acme/api/pull/9" || m.Data["run"] != e.Key {
+		t.Fatalf("a pull request wins: %v", m.Data)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	for _, l := range opened {
+		if strings.Contains(l, "environment=") {
+			t.Fatalf("a headless run never opens an empty chat: %v", opened)
 		}
 	}
 }

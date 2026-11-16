@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -640,29 +641,49 @@ func (d *Daemon) notifyAttentionKey(title, body, workspaceID, link, key string) 
 }
 
 func (d *Daemon) notifyAttentionFull(title, body, workspaceID, link, key, sessionID string) {
-	if why := d.attentionHeld(workspaceID, key, body, sessionID); why != "" {
-		utils.Infof("agent: (%s) %s: %s\n", why, title, body)
+	d.ring(attention{title: title, body: body, workspace: workspaceID, link: link, key: key, session: sessionID})
+}
+
+type attention struct {
+	title, body, workspace, link, key, session, run string
+}
+
+func (d *Daemon) ring(a attention) {
+	if why := d.attentionHeld(a.workspace, a.key, a.body, a.session); why != "" {
+		utils.Infof("agent: (%s) %s: %s\n", why, a.title, a.body)
 		return
 	}
-	if link == "" && d.LinkFor != nil {
-		link = d.LinkFor(workspaceID)
+	link := a.link
+	if link == "" && a.run == "" && d.LinkFor != nil {
+		link = d.LinkFor(a.workspace)
 	}
 	if d.Push != nil {
-		go d.Push(push.Message{Title: title, Body: body, Category: "inbox", Data: attentionData(workspaceID, link, key, body), Thread: workspaceID})
+		data := attentionData(a.workspace, link, a.key, a.body)
+		if a.run != "" {
+			data["run"] = a.run
+		}
+		go d.Push(push.Message{Title: a.title, Body: a.body, Category: "inbox", Data: data, Thread: a.workspace})
 	}
 	if d.NotifyFocus != nil {
-		if id := d.focusableSession(sessionID, workspaceID); id != "" {
-			d.NotifyFocus(title, body, id, link)
+		if id := d.focusableSession(a.session, a.workspace); id != "" {
+			d.NotifyFocus(a.title, a.body, id, link)
 			return
 		}
 	}
 	if link != "" && d.NotifyWithLink != nil {
-		d.NotifyWithLink(title, body, link)
+		d.NotifyWithLink(a.title, a.body, link)
 		return
 	}
 	if d.Notify != nil {
-		d.Notify(title, body)
+		d.Notify(a.title, a.body)
 	}
+}
+
+func fileLink(path string) string {
+	if path == "" {
+		return ""
+	}
+	return (&url.URL{Scheme: "file", Path: path}).String()
 }
 
 func (d *Daemon) attentionHeld(workspaceID, key, body, sessionID string) string {
