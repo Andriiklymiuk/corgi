@@ -266,3 +266,39 @@ func TestARoutineReportOpensItsRunNotAnEmptyChat(t *testing.T) {
 		}
 	}
 }
+
+func TestARoutineReadsOnlyItsOwnAccountAndFolder(t *testing.T) {
+	e := watch.Event{Kind: watch.KindRoutine, Ref: "routine/retro"}
+	got := routineScope(WatchSpec{Workspace: "onboarding", Dir: "/Users/me/work/IM/onboarding", ConfigDir: "/Users/me/.claude-skp"}, e)
+	for _, want := range []string{"/Users/me/work/IM/onboarding", "/Users/me/.claude-skp", "--root /Users/me/.claude-skp/projects --project /Users/me/work/IM/onboarding", "never another account's"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("missing %q in %q", want, got)
+		}
+	}
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
+	plain := routineScope(WatchSpec{Workspace: "corgi", Dir: "/Users/me/corgi"}, e)
+	if !strings.Contains(plain, "/.claude/projects") {
+		t.Fatalf("no configDir means the default account: %q", plain)
+	}
+	if routineScope(WatchSpec{Workspace: "corgi", Dir: "/x"}, watch.Event{Kind: watch.KindIssueNew}) != "" {
+		t.Fatal("only routines get the scope line")
+	}
+}
+
+func TestEveryRunCommitsAsTheWorkspace(t *testing.T) {
+	prev := gitIdentity
+	defer func() { gitIdentity = prev }()
+	gitIdentity = func(dir string) (string, string) {
+		if dir == "/w/acme" {
+			return "Andrii", "gradli@example.com"
+		}
+		return "", ""
+	}
+	got := identityNote(WatchSpec{Dir: "/w/acme"})
+	if !strings.Contains(got, "Andrii <gradli@example.com>") || !strings.Contains(got, "outside the workspace") {
+		t.Fatalf("%q", got)
+	}
+	if identityNote(WatchSpec{Dir: "/w/unknown"}) != "" {
+		t.Fatal("no identity, no line")
+	}
+}

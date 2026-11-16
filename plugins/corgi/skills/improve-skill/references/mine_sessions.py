@@ -63,15 +63,24 @@ def mine(path, out):
                 out["stepped_in"][skill or "-"].append(said.replace("\n", " ")[:170])
 
 
+def in_project(path, wanted):
+    if not wanted:
+        return True
+    folder = os.path.basename(os.path.dirname(path))
+    return any(folder == w or folder.startswith(w + "-") for w in wanted)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--last", type=int, default=30, help="newest sessions per root")
-    parser.add_argument("--root", action="append")
+    parser.add_argument("--root", action="append", help="a Claude account's projects folder, e.g. ~/.claude-work/projects")
+    parser.add_argument("--project", action="append", help="only sessions run in this folder or below it")
     args = parser.parse_args()
-    roots = args.root or glob.glob(os.path.expanduser("~/.claude*/projects"))
+    roots = [os.path.expanduser(r) for r in args.root] if args.root else glob.glob(os.path.expanduser("~/.claude*/projects"))
+    wanted = [re.sub(r"[^A-Za-z0-9]", "-", os.path.abspath(os.path.expanduser(p))) for p in args.project or []]
     out = {"errors": collections.Counter(), "retries": collections.Counter(), "skills": collections.Counter(), "calls": collections.Counter(), "stepped_in": collections.defaultdict(list)}
     for root in roots:
-        files = sorted((f for f in glob.glob(f"{root}/*/*.jsonl") if os.path.getsize(f) > 20000), key=os.path.getmtime, reverse=True)
+        files = sorted((f for f in glob.glob(f"{root}/*/*.jsonl") if os.path.getsize(f) > 20000 and in_project(f, wanted)), key=os.path.getmtime, reverse=True)
         for path in files[: args.last]:
             mine(path, out)
     print("== errors, most common first")

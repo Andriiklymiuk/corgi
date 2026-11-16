@@ -1386,6 +1386,55 @@ func fixPrompt(e watch.Event) string {
 const postedProof = "What you post goes out under my name: state only what you proved from the code that writes the data, a real row or a real run, and write \"not checked\" or ask a question for the rest. " +
 	"A reviewer's claim is a guess until you check it. A wrong comment of yours gets edited or deleted, never corrected by another comment. "
 
+func claudeAccountDir(spec WatchSpec) string {
+	if spec.ConfigDir != "" {
+		return spec.ConfigDir
+	}
+	if env := os.Getenv("CLAUDE_CONFIG_DIR"); env != "" {
+		return env
+	}
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".claude")
+}
+
+var gitIdentity = func(dir string) (string, string) {
+	read := func(key string) string {
+		out, err := exec.Command("git", "-C", dir, "config", "--get", key).Output()
+		if err != nil {
+			return ""
+		}
+		return strings.TrimSpace(string(out))
+	}
+	return read("user.name"), read("user.email")
+}
+
+func identityNote(spec WatchSpec) string {
+	if spec.Dir == "" {
+		return ""
+	}
+	name, email := gitIdentity(spec.Dir)
+	if email == "" {
+		return ""
+	}
+	who := email
+	if name != "" {
+		who = name + " <" + email + ">"
+	}
+	return "\n\nCommit as " + who + ", this workspace's git identity. In any clone you make outside the workspace, run `git config user.name` and `git config user.email` with these before the first commit; never push a commit under another email."
+}
+
+func routineScope(spec WatchSpec, e watch.Event) string {
+	if e.Kind != watch.KindRoutine || spec.Dir == "" {
+		return ""
+	}
+	account := claudeAccountDir(spec)
+	projects := filepath.Join(account, "projects")
+	return "\n\nThis workspace is " + spec.Dir + " and its agents run on the Claude account in " + account + ". " +
+		"Read only this workspace's own sessions and runs, never another account's or another workspace's: its sessions are in " + projects +
+		", in the folders named after " + spec.Dir + " (the retro reads them with `python3 <improve-skill base directory>/references/mine_sessions.py --root " + projects +
+		" --project " + spec.Dir + " --last 30`), and its runs with `--workspace .`."
+}
+
 func unattendedSuffix(spec WatchSpec, e watch.Event) string {
 	if e.Kind == watch.KindReviewRequested {
 		return unattendedRunNote +
@@ -1479,7 +1528,7 @@ func fixArgs(spec WatchSpec, e watch.Event) []string {
 }
 
 func fixArgsWith(spec WatchSpec, e watch.Event, handover string) []string {
-	prompt := withApprove(fixPrompt(e), spec.Approve) + unattendedSuffix(spec, e)
+	prompt := withApprove(fixPrompt(e), spec.Approve) + routineScope(spec, e) + identityNote(spec) + unattendedSuffix(spec, e)
 	if p, ok := packetFor(spec.Dir, e.Ref); ok {
 		prompt += "\n\nAn earlier run left a handoff for this ticket. Read it first; it is typed state, not a transcript. " +
 			"Its verification was re-run at the current head: " + packetTrust(spec.Dir, p, spec.DoneWhen) + "\n" + p.Markdown()
