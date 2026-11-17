@@ -164,6 +164,10 @@ func launchHandsStateHandler(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if screenMacBar(d) && fromThisMachine(r) {
+		serveHandsState(w, r, "the person at "+macName(), true)
+		return
+	}
 	s, err := screen.Load(dir)
 	if err != nil || !s.Enabled {
 		writeLaunchError(w, http.StatusForbidden, "remote screen is off on "+macName())
@@ -174,7 +178,7 @@ func launchHandsStateHandler(w http.ResponseWriter, r *http.Request) {
 		writeLaunchError(w, http.StatusForbidden, macName()+" turned remote screen off for "+d.Name)
 		return
 	}
-	serveHandsState(w, r, d.Name, role == screen.RoleControl || (screenMacBar(d) && fromThisMachine(r)))
+	serveHandsState(w, r, d.Name, role == screen.RoleControl)
 }
 
 func launchHandsStateLocal() http.Handler {

@@ -206,3 +206,31 @@ func TestStepTextNeverCarriesWhatWasTyped(t *testing.T) {
 		t.Fatalf("long: %q", got)
 	}
 }
+
+func TestTheMacsOwnBarPausesAgentsWithTheScreenOff(t *testing.T) {
+	resetHands(t)
+	rig := newTermRig(t, "")
+	bar := rig.barToken(t)
+	post := func(token string, forwarded bool) int {
+		req, _ := http.NewRequest(http.MethodPost, rig.srv.URL+"/launch/screen/agent", strings.NewReader(`{"do":"pause"}`))
+		req.Header.Set("Authorization", "Bearer "+token)
+		if forwarded {
+			req.Header.Set("X-Forwarded-For", "203.0.113.5")
+		}
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		return res.StatusCode
+	}
+	if code := post(bar, true); code == http.StatusOK {
+		t.Fatal("a bar token used from elsewhere is not the Mac's own bar")
+	}
+	if code := post(bar, false); code != http.StatusOK {
+		t.Fatalf("the Mac's bar pauses with remote screen off: %d", code)
+	}
+	if st := hands.state(time.Now()); !st.Paused || !strings.Contains(st.PausedBy, "the person at") {
+		t.Fatalf("%+v", st)
+	}
+}
