@@ -653,7 +653,7 @@ tracking is not enabled yet.
 - An agent never starts a session. It can tell the person to open the Screen button in Corgi Agents.
 - A shell on a Linux server or peer: `corgi agent term on` and `corgi agent term allow "<peer or phone>"` on that machine, then `corgi agent term <peer>` from this one, Terminal in Corgi Bar, or Settings › Laptop › Terminal in Corgi Agents (Face ID first). No ssh keys or open ports; the pairing link carries it, encrypted end to end.
 - A session's terminal as live text on the phone (Corgi Agents › session › Its terminal): tmux, iTerm, Terminal.app, and VS Code terminals with the corgi VS Code extension 2.35+; keys answer prompts there.
-- An agent using a Mac: `corgi_mac_windows` first (text), then `corgi_mac_look` / `corgi_mac_act` / `corgi_mac_open` with `peer` for another Mac. Needs `corgi agent hands allow <peer|here>` on the used Mac; only when the user asked to operate it.
+- An agent using a Mac: `corgi_mac_windows` first (text), then `corgi_mac_look` / `corgi_mac_act` / `corgi_mac_open` with `peer` for another Mac. Needs `corgi agent hands allow <peer|here>` on the used Mac; only when the user asked to operate it. A call that says a person took the Mac means you are paused: wait a minute and try that step again, do not work around it. `corgi agent hands log` shows what agents did there.
 - Wake a sleeping peer on the same network: `corgi agent wake <peer>`, or Wake in Corgi Bar and Corgi Agents. The peer must have pulsed once on corgi 2.51+, and needs "Wake for network access" on (System Settings › Battery › Options).
 
 ## Acting on the board from elsewhere

@@ -76,6 +76,13 @@ type handsHub struct {
 	jobs     chan *handsJob
 	pending  map[string]chan handsResult
 	lastPoll time.Time
+	holder   string
+	step     int
+	lastStep time.Time
+	steps    []handsStep
+	pausedBy string
+	pausedAt time.Time
+	waiting  bool
 }
 
 var hands = &handsHub{jobs: make(chan *handsJob, 8), pending: map[string]chan handsResult{}}
@@ -137,6 +144,11 @@ func (h *handsHub) run(ctx context.Context, req handsRequest, by string) (handsR
 	if !h.barListening(time.Now()) {
 		return handsResult{}, errors.New("Corgi Bar is not running on " + macName() + ", or agents are not allowed there: corgi agent hands allow")
 	}
+	if !viewerDoes[req.Do] || agentWork(ctx) {
+		if err := h.admit(req, by, time.Now()); err != nil {
+			return handsResult{}, err
+		}
+	}
 	job := &handsJob{ID: newHandsID(), handsRequest: req, By: by}
 	done := make(chan handsResult, 1)
 	h.mu.Lock()
@@ -190,6 +202,26 @@ func (h *handsHub) finish(r handsResult) bool {
 		ch <- r
 	}
 	return ok
+}
+
+type agentWorkKey struct{}
+
+func asAgentWork(ctx context.Context) context.Context {
+	return context.WithValue(ctx, agentWorkKey{}, true)
+}
+
+func agentWork(ctx context.Context) bool {
+	on, _ := ctx.Value(agentWorkKey{}).(bool)
+	return on
+}
+
+func handsKeyOK(r *http.Request) bool {
+	dir, err := agentDir()
+	if err != nil {
+		return false
+	}
+	key, err := handsKey(dir)
+	return err == nil && loopbackRequest(r) && subtle.ConstantTimeCompare([]byte(r.Header.Get(handsKeyHeader)), []byte(key)) == 1
 }
 
 func handsKeyPath(dir string) string { return filepath.Join(dir, "screen", "hands.key") }
@@ -278,8 +310,14 @@ func serveHands(w http.ResponseWriter, r *http.Request, dir, who, name string) {
 		writeLaunchError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	_ = screen.Log(dir, screen.Session{Device: who, Name: name, Role: "agent", Event: req.Do, At: time.Now()})
-	out, err := hands.run(r.Context(), req, name)
+	entry := screen.Session{Device: who, Name: name, Role: "agent", Event: req.Do, Detail: stepText(req), At: time.Now()}
+	out, err := hands.run(asAgentWork(r.Context()), req, name)
+	if err != nil {
+		entry.Failed = err.Error()
+	} else if !out.OK {
+		entry.Failed = out.Error
+	}
+	_ = screen.Log(dir, entry)
 	if err != nil {
 		writeLaunchError(w, http.StatusServiceUnavailable, err.Error())
 		return

@@ -11,7 +11,8 @@ import (
 )
 
 const handsToolNote = " The Mac must allow it first (corgi agent hands allow on that Mac) and shows a banner while you work. " +
-	"Use only when the user asked you to operate that Mac; never to get around a permission prompt. Omit peer for this Mac."
+	"Use only when the user asked you to operate that Mac; never to get around a permission prompt. Omit peer for this Mac. " +
+	"If a call says a person took the Mac, you are paused: do nothing else on that Mac, wait a minute, then try the same step again."
 
 func handsToolResult(out handsResult, err error) (*mcp.CallToolResult, error) {
 	if err != nil {

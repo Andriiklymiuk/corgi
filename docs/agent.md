@@ -2536,10 +2536,28 @@ by default), `corgi_mac_act` (click, type, keys, scroll, drag), `corgi_mac_open`
 `corgi_mac_menus` and `corgi_mac_menu` (the front app's menu bar, pressed by path).
 With `peer` it works on another paired Mac; without, on this one. Off until the
 used Mac allows it: `corgi agent hands allow "office-mac"` (or `here` for this
-Mac's own agents). A banner names the agent while it works and Esc three times
-stops agents for 10 minutes. Hidden apps never show in a screenshot, and over a
+Mac's own agents). While an agent works the Mac's edge glows and a banner names
+it. A click or a key from you, Pause in the banner, Pause on the phone, or
+`corgi agent hands pause` stops it before its next step: the agent is told a
+person took the Mac and to try the step again later, and nothing reaches the
+Mac until **Let it carry on** (`corgi agent hands resume`). A pause nobody
+lifts ends after 30 minutes; Esc three times ends every session and pauses too.
+Every call is written to the Mac's log with what it was (a menu path, an app,
+the kinds of action) and whether it went through, never what was typed:
+`corgi agent hands log`. An agent never types into a password field, and into
+a terminal only when the Mac allows it (Corgi Bar › Settings › Remote screen ›
+Let agents type in a terminal, off by default). Hidden apps never show in a screenshot, and over a
 public tunnel the tools are off. The same from a shell: `corgi agent hands
 windows|look|act|open --on <peer>`.
+
+**Mirror and Fit, and the rest of the viewer (2.56).** Mirror shows the Mac's
+whole display. Fit sends the part of it shaped like the phone, at full
+sharpness, and moves it along when the pointer pushes an edge. Picture is Sharp
+(60 frames, most bits), Smooth or Fast; when the screen stops moving the Mac
+sends a sharper frame by itself. The keys above the key row follow the app in
+front (Back and Reload in a browser, Build and Run in Xcode), and the phone's
+keyboard comes up when a text field on the Mac takes the focus. Pair a phone
+from the Mac: Corgi Bar › Settings › Remote screen › Show QR.
 
 **Comforts in the phone's viewer.** ⋯ › Apps shows the Mac's running apps
 with their icons (tap brings one forward); ⋯ › Menus of the app in front

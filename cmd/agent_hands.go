@@ -166,6 +166,9 @@ On the Mac to be used:
   corgi agent hands allow here           agents on this Mac may use it
   corgi agent hands deny "office-mac"
   corgi agent hands status
+  corgi agent hands pause                stop agents before their next step
+  corgi agent hands resume               let them carry on
+  corgi agent hands log                  what agents did here, newest first
 
 From any machine (the same as the corgi_mac_* MCP tools):
   corgi agent hands windows --on studio
@@ -384,7 +387,96 @@ var agentHandsBarDoneCmd = &cobra.Command{
 	},
 }
 
+func handsStateCall(method, do string) (handsState, error) {
+	var body []byte
+	if do != "" {
+		body, _ = json.Marshal(handsStateRequest{Do: do})
+	}
+	code, raw, err := localHandsRequest(method, handsStatePath, body, 10*time.Second)
+	if err != nil {
+		return handsState{}, err
+	}
+	if code != http.StatusOK {
+		return handsState{}, errors.New(strings.TrimSpace(string(raw)))
+	}
+	var st handsState
+	return st, json.Unmarshal(raw, &st)
+}
+
+func handsStateLine(st handsState) string {
+	switch {
+	case st.Paused && st.Waiting:
+		return "Paused by " + st.PausedBy + ": an agent waits to carry on. corgi agent hands resume"
+	case st.Paused:
+		return "Paused by " + st.PausedBy + ". corgi agent hands resume"
+	case st.Active:
+		return fmt.Sprintf("An agent from %s is using this Mac, step %d. corgi agent hands pause", st.By, st.Step)
+	}
+	return "No agent is using this Mac"
+}
+
+func setHandsPause(do string) func(cmd *cobra.Command, args []string) {
+	return func(cmd *cobra.Command, args []string) {
+		st, err := handsStateCall(http.MethodPost, do)
+		if err != nil {
+			exitWithError("agent_hands", err, 1)
+		}
+		if utils.JSONOutput {
+			utils.PrintJSON(st)
+			return
+		}
+		fmt.Println(handsStateLine(st))
+	}
+}
+
+var agentHandsPauseCmd = &cobra.Command{Use: "pause", Short: "Stop agents before their next step on this Mac, until resume", Args: cobra.NoArgs, Run: setHandsPause("pause")}
+var agentHandsResumeCmd = &cobra.Command{Use: "resume", Short: "Let paused agents carry on", Args: cobra.NoArgs, Run: setHandsPause("resume")}
+
+var handsLogCount int
+
+var agentHandsLogCmd = &cobra.Command{
+	Use:   "log",
+	Short: "What agents did on this Mac, newest first, and whether one is at work now",
+	Args:  cobra.NoArgs,
+	Run: func(cmd *cobra.Command, args []string) {
+		recent, err := screen.Recent(mustAgentDir(), 2000)
+		if err != nil {
+			exitWithError("agent_hands", err, 1)
+		}
+		steps := make([]screen.Session, 0, handsLogCount)
+		for _, s := range recent {
+			if s.Role == "agent" && len(steps) < handsLogCount {
+				steps = append(steps, s)
+			}
+		}
+		st, stateErr := handsStateCall(http.MethodGet, "")
+		if utils.JSONOutput {
+			out := map[string]any{"steps": steps}
+			if stateErr == nil {
+				out["now"] = st
+			}
+			utils.PrintJSON(out)
+			return
+		}
+		if stateErr == nil {
+			fmt.Println(handsStateLine(st))
+		}
+		for _, s := range steps {
+			line := s.At.Local().Format("Jan 02 15:04:05") + "  " + s.Name + "  " + s.Event
+			if s.Detail != "" {
+				line += " · " + s.Detail
+			}
+			if s.Failed != "" {
+				line += "  (failed: " + s.Failed + ")"
+			}
+			fmt.Println(line)
+		}
+	},
+}
+
 func init() {
+	agentHandsLogCmd.Flags().IntVarP(&handsLogCount, "count", "n", 40, "how many steps to show")
+	agentHandsCmd.AddCommand(agentHandsPauseCmd, agentHandsResumeCmd, agentHandsLogCmd)
 	agentHandsBarDoneCmd.Flags().StringVar(&handsDoneFile, "file", "", "the result JSON")
 	agentHandsCmd.AddCommand(agentHandsBarNextCmd, agentHandsBarDoneCmd)
 	for _, c := range []*cobra.Command{agentHandsLookCmd, agentHandsWindowsCmd, agentHandsActCmd, agentHandsOpenCmd} {

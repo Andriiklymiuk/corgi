@@ -384,6 +384,7 @@ var launchRoutes = map[string]http.HandlerFunc{
 	"/launch/screen/hands":      launchHandsHandler,
 	"/launch/screen/hands/next": launchHandsNextHandler,
 	"/launch/screen/do":         launchScreenDoHandler,
+	"/launch/screen/agent":      launchHandsStateHandler,
 }
 
 func mountLaunchRoutes(mux *http.ServeMux, token, deviceStore string) {
@@ -394,6 +395,7 @@ func mountLaunchRoutes(mux *http.ServeMux, token, deviceStore string) {
 	mux.Handle(screenRelayPath, launchScreenRelay())
 	mux.Handle(handsLocalPath, launchHandsLocal(deviceStore))
 	mux.Handle(handsBarPath, launchHandsBar())
+	mux.Handle(handsStatePath, launchHandsStateLocal())
 	mux.Handle("/launch/preview/", http.HandlerFunc(previewProxyHandler))
 	for path, h := range launchRoutes {
 		mux.Handle(path, launchAuth(token, h, deviceStore))

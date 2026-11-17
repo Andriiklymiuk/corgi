@@ -496,6 +496,8 @@ type Session struct {
 	Role   string    `json:"role"`
 	Addr   string    `json:"addr,omitempty"`
 	Event  string    `json:"event"`
+	Detail string    `json:"detail,omitempty"`
+	Failed string    `json:"failed,omitempty"`
 	At     time.Time `json:"at"`
 }
 
