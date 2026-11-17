@@ -10,30 +10,24 @@ func TestAllowedRedirectURI(t *testing.T) {
 	t.Setenv("CORGI_MCP_OAUTH_CLIENT_HOSTS", "")
 	hosts := newOAuthClientHosts(nil, nil)
 	cases := map[string]bool{
-		"http://localhost/callback":                             true,
-		"http://localhost:53421/callback":                       true,
-		"http://127.0.0.1:8080/cb":                              true,
-		"https://127.0.0.1/cb":                                  true,
-		"http://[::1]:9/cb":                                     true,
-		"https://claude.ai/api/mcp/auth_callback":               true,
-		"https://x.claude.com/cb":                               true,
-		"https://CLAUDE.AI/cb":                                  true,
-		"https://claude.ai.evil.example/cb":                     false,
-		"http://claude.ai/cb":                                   false,
-		"https://evil.example/cb":                               false,
-		"https://localhost.evil.example/cb":                     false,
-		"https://claude.ai/cb#frag":                             false,
-		"https://user@claude.ai/cb":                             false,
-		"claude.ai/cb":                                          false,
-		"":                                                      false,
-		"http://10.0.0.1/cb":                                    false,
-		"https://notclaude.ai/cb":                               false,
-		"https://chatgpt.com/connector_platform_oauth_redirect": true,
-		"https://chatgpt.com/connector/oauth/abc123":            true,
-		"https://global.consent.azure-apim.net/redirect/corgi":  true,
-		"https://consent.azure-apim.net/redirect/corgi":         false,
-		"https://chatgpt.com.evil.example/connector/oauth/abc":  false,
-		"http://chatgpt.com/connector_platform_oauth_redirect":  false,
+		"http://localhost/callback":               true,
+		"http://localhost:53421/callback":         true,
+		"http://127.0.0.1:8080/cb":                true,
+		"https://127.0.0.1/cb":                    true,
+		"http://[::1]:9/cb":                       true,
+		"https://claude.ai/api/mcp/auth_callback": true,
+		"https://x.claude.com/cb":                 true,
+		"https://CLAUDE.AI/cb":                    true,
+		"https://claude.ai.evil.example/cb":       false,
+		"http://claude.ai/cb":                     false,
+		"https://evil.example/cb":                 false,
+		"https://localhost.evil.example/cb":       false,
+		"https://claude.ai/cb#frag":               false,
+		"https://user@claude.ai/cb":               false,
+		"claude.ai/cb":                            false,
+		"":                                        false,
+		"http://10.0.0.1/cb":                      false,
+		"https://notclaude.ai/cb":                 false,
 	}
 	for raw, want := range cases {
 		if got := hosts.allowedRedirectURI(raw); got != want {
@@ -73,6 +67,29 @@ func TestSameRedirectURI(t *testing.T) {
 	for _, c := range cases {
 		if got := sameRedirectURI(c.reg, c.req); got != c.want {
 			t.Errorf("sameRedirectURI(%q, %q) = %v", c.reg, c.req, got)
+		}
+	}
+}
+
+func TestChatGPTAndCopilotStudioRedirectsAreBuiltIn(t *testing.T) {
+	t.Setenv("CORGI_MCP_OAUTH_CLIENT_HOSTS", "")
+	hosts := newOAuthClientHosts(nil, nil)
+	for _, uri := range []string{
+		"https://chatgpt.com/connector_platform_oauth_redirect",
+		"https://chatgpt.com/connector/oauth/abc123",
+		"https://global.consent.azure-apim.net/redirect/corgi",
+	} {
+		if !hosts.allowedRedirectURI(uri) {
+			t.Errorf("%s must be allowed", uri)
+		}
+	}
+	for _, uri := range []string{
+		"https://consent.azure-apim.net/redirect/corgi",
+		"https://chatgpt.com.evil.example/connector/oauth/abc",
+		"http://chatgpt.com/connector_platform_oauth_redirect",
+	} {
+		if hosts.allowedRedirectURI(uri) {
+			t.Errorf("%s must be refused", uri)
 		}
 	}
 }
