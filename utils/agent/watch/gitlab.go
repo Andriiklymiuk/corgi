@@ -123,6 +123,9 @@ func (g *GitLab) Poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, erro
 		if since != "" {
 			next["notesSince"] = since
 		}
+		asks, asksSince := g.selfAskedReviews(ctx, base, cursor["reviewsSince"], time.Now())
+		events = append(events, asks...)
+		next["reviewsSince"] = asksSince
 	}
 	return events, next, nil
 }
@@ -197,13 +200,14 @@ func (g *GitLab) todoEvent(t gitlabTodo) (Event, bool) {
 }
 
 type gitlabMyMR struct {
-	IID       int64          `json:"iid"`
-	ProjectID int64          `json:"project_id"`
-	Title     string         `json:"title"`
-	WebURL    string         `json:"web_url"`
-	State     string         `json:"state"`
-	UpdatedAt string         `json:"updated_at"`
-	Refs      gitlabMyMRRefs `json:"references"`
+	IID       int64                  `json:"iid"`
+	ProjectID int64                  `json:"project_id"`
+	Title     string                 `json:"title"`
+	WebURL    string                 `json:"web_url"`
+	State     string                 `json:"state"`
+	UpdatedAt string                 `json:"updated_at"`
+	Refs      gitlabMyMRRefs         `json:"references"`
+	Author    gitlabTodoTargetAuthor `json:"author"`
 }
 
 type gitlabMyMRRefs struct {
@@ -288,6 +292,86 @@ func (g *GitLab) newestNoteOn(ctx context.Context, base string, mr gitlabMyMR, s
 		}, true
 	}
 	return Event{}, false
+}
+
+const (
+	gitlabSelfAskSettle   = time.Minute
+	gitlabSelfAskLookback = 24 * time.Hour
+)
+
+// GitLab makes no to-do item when my own token adds me as a reviewer (a CI job
+// or a script that assigns reviewers), so the to-do list never shows that
+// request. This reads the open merge requests I review that moved since the last
+// round and raises the ones whose newest review request for me is my own. A
+// request waits a minute first: notes the same automation posts under my name
+// then fall before the event's time and do not count as a review of mine.
+func (g *GitLab) selfAskedReviews(ctx context.Context, base, since string, now time.Time) ([]Event, string) {
+	if since == "" {
+		since = now.Add(-gitlabSelfAskLookback).UTC().Format(time.RFC3339Nano)
+	}
+	endpoint := base + "/api/v4/merge_requests?scope=all&state=opened&order_by=updated_at&sort=desc&per_page=50" +
+		"&reviewer_username=" + url.QueryEscape(g.Me) + "&updated_after=" + url.QueryEscape(since)
+	var mrs []gitlabMyMR
+	if err := g.getInto(ctx, endpoint, &mrs); err != nil {
+		return nil, since
+	}
+	sinceAt, _ := time.Parse(time.RFC3339, since)
+	next := latestMRUpdate(mrs, sinceAt)
+	var events []Event
+	for _, mr := range mrs {
+		if isMe(g.Me, mr.Author.Username) {
+			continue
+		}
+		var notes []gitlabNote
+		notesURL := fmt.Sprintf("%s/api/v4/projects/%d/merge_requests/%d/notes?sort=desc&order_by=created_at&per_page=100", base, mr.ProjectID, mr.IID)
+		if err := g.getInto(ctx, notesURL, &notes); err != nil {
+			next = sinceAt
+			continue
+		}
+		ask, ok := selfAskNote(notes, g.Me)
+		if !ok {
+			continue
+		}
+		askedAt, _ := time.Parse(time.RFC3339, ask.CreatedAt)
+		if now.Sub(askedAt) < gitlabSelfAskSettle {
+			if again := askedAt.Add(-time.Second); again.Before(next) {
+				next = again
+			}
+			continue
+		}
+		events = append(events, Event{
+			Key:    "gitlab:review:" + strconv.FormatInt(ask.ID, 10),
+			Source: g.Name(),
+			Kind:   KindReviewRequested,
+			Ref:    firstOr(mr.Refs.Full, gitlabRefFromURL(mr.WebURL, mr.IID)),
+			Title:  mr.Title,
+			URL:    mr.WebURL,
+			Author: mr.Author.Username,
+			State:  mr.State,
+			At:     askedAt.Add(gitlabSelfAskSettle),
+		})
+	}
+	return events, next.UTC().Format(time.RFC3339Nano)
+}
+
+// selfAskNote is the newest system note asking me for a review, when I wrote it.
+func selfAskNote(notes []gitlabNote, me string) (gitlabNote, bool) {
+	for _, n := range notes {
+		if !n.System {
+			continue
+		}
+		_, asked, found := strings.Cut(n.Body, "requested review from")
+		if !found {
+			continue
+		}
+		asked, _, _ = strings.Cut(asked, "removed review request")
+		for _, word := range strings.Fields(asked) {
+			if strings.HasPrefix(word, "@") && isMe(me, strings.TrimRight(word[1:], ",")) {
+				return n, isMe(me, n.Author.Username)
+			}
+		}
+	}
+	return gitlabNote{}, false
 }
 
 func gitlabRefFromURL(webURL string, iid int64) string {

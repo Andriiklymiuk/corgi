@@ -137,7 +137,7 @@ func TestGitLabLearnsWhoIAm(t *testing.T) {
 	if _, _, err := g2.Poll(context.Background(), cursor); err != nil {
 		t.Fatal(err)
 	}
-	if f.requests.Load()-before != 2 || g2.Me != "me" {
+	if f.requests.Load()-before != 3 || g2.Me != "me" {
 		t.Fatalf("requests = %d, me = %q", f.requests.Load()-before, g2.Me)
 	}
 }
@@ -180,6 +180,10 @@ func TestGitLabNotesOnMyMergeRequests(t *testing.T) {
 			  "target_url":"https://gitlab.com/acme/api/-/merge_requests/5","body":"pipeline","created_at":"2026-09-22T10:00:00Z",
 			  "project":{"path_with_namespace":"acme/api"},"target":{"iid":5,"title":"Retries","author":{"username":"me"}},"author":{"username":"me"}}]`))
 		case "/api/v4/merge_requests":
+			if r.URL.Query().Get("reviewer_username") != "" {
+				_, _ = w.Write([]byte(`[]`))
+				return
+			}
 			if r.URL.Query().Get("scope") != "created_by_me" || r.URL.Query().Get("state") != "opened" {
 				t.Errorf("merge requests query = %s", r.URL.RawQuery)
 			}
@@ -336,4 +340,74 @@ func TestGitLabTellsAReviewOfMineSinceTheAsk(t *testing.T) {
 	}
 	var teller ReviewTeller = g
 	_ = teller
+}
+
+func TestGitLabRaisesAReviewIAskedOfMyselfWhichMakesNoToDo(t *testing.T) {
+	now := time.Now().UTC()
+	fresh := now.Add(-10 * time.Second).Format(time.RFC3339)
+	var sawSince string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v4/todos":
+			_, _ = w.Write([]byte(`[]`))
+		case "/api/v4/merge_requests":
+			if r.URL.Query().Get("reviewer_username") != "me" {
+				_, _ = w.Write([]byte(`[]`))
+				return
+			}
+			if r.URL.Query().Get("scope") != "all" || r.URL.Query().Get("state") != "opened" {
+				t.Errorf("reviewer query = %s", r.URL.RawQuery)
+			}
+			sawSince = r.URL.Query().Get("updated_after")
+			_, _ = w.Write([]byte(`[
+			  {"iid":5,"project_id":42,"title":"By my token","web_url":"https://gitlab.com/acme/api/-/merge_requests/5","state":"opened",
+			   "updated_at":"2026-09-22T10:05:00Z","references":{"full":"acme/api!5"},"author":{"username":"ann"}},
+			  {"iid":6,"project_id":42,"title":"By a teammate","web_url":"https://gitlab.com/acme/api/-/merge_requests/6","state":"opened",
+			   "updated_at":"2026-09-22T10:04:00Z","references":{"full":"acme/api!6"},"author":{"username":"ann"}},
+			  {"iid":7,"project_id":42,"title":"My own","web_url":"https://gitlab.com/acme/api/-/merge_requests/7","state":"opened",
+			   "updated_at":"2026-09-22T10:03:00Z","references":{"full":"acme/api!7"},"author":{"username":"me"}},
+			  {"iid":8,"project_id":42,"title":"Just asked","web_url":"https://gitlab.com/acme/api/-/merge_requests/8","state":"opened",
+			   "updated_at":"2026-09-22T10:02:00Z","references":{"full":"acme/api!8"},"author":{"username":"ann"}}]`))
+		case "/api/v4/projects/42/merge_requests/5/notes":
+			_, _ = w.Write([]byte(`[
+			  {"id":52,"body":"Review request sent to the team chat","system":false,"created_at":"2026-09-22T10:00:02Z","author":{"username":"me"}},
+			  {"id":51,"body":"requested review from @bob and @me","system":true,"created_at":"2026-09-22T10:00:00Z","author":{"username":"me"}},
+			  {"id":50,"body":"requested review from @me","system":true,"created_at":"2026-09-22T09:00:00Z","author":{"username":"ann"}}]`))
+		case "/api/v4/projects/42/merge_requests/6/notes":
+			_, _ = w.Write([]byte(`[
+			  {"id":61,"body":"requested review from @bob and removed review request for @me","system":true,"created_at":"2026-09-22T10:01:00Z","author":{"username":"me"}},
+			  {"id":60,"body":"requested review from @me","system":true,"created_at":"2026-09-22T10:00:00Z","author":{"username":"ann"}}]`))
+		case "/api/v4/projects/42/merge_requests/8/notes":
+			_, _ = w.Write([]byte(`[{"id":81,"body":"requested review from @me","system":true,"created_at":"` + fresh + `","author":{"username":"me"}}]`))
+		default:
+			t.Errorf("unexpected request %s", r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	g := &GitLab{URL: srv.URL, Token: "tok", Me: "me", MeID: "7"}
+
+	events, next, err := g.Poll(context.Background(), Cursor{"notesSince": "2026-09-22T09:00:00Z", "reviewsSince": "2026-09-22T09:30:00Z"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sawSince != "2026-09-22T09:30:00Z" {
+		t.Errorf("updated_after = %q", sawSince)
+	}
+	if len(events) != 1 {
+		t.Fatalf("events = %+v, want only the request my own token made", events)
+	}
+	e := events[0]
+	if e.Key != "gitlab:review:51" || e.Kind != KindReviewRequested || e.Ref != "acme/api!5" || e.Author != "ann" || e.Mine ||
+		e.URL != "https://gitlab.com/acme/api/-/merge_requests/5" || e.Title != "By my token" {
+		t.Errorf("review event = %+v", e)
+	}
+	if want := time.Date(2026, 9, 22, 10, 1, 0, 0, time.UTC); !e.At.Equal(want) {
+		t.Errorf("At = %v, want %v: after the notes the automation posted under my name", e.At, want)
+	}
+	again, _ := time.Parse(time.RFC3339, next["reviewsSince"])
+	asked, _ := time.Parse(time.RFC3339, fresh)
+	if !again.Before(asked) {
+		t.Errorf("reviewsSince = %q, want before %q so the request still settling is read again", next["reviewsSince"], fresh)
+	}
 }
