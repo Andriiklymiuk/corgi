@@ -321,9 +321,11 @@ to clear. No shell → print that exact command for the user to run.
 ## manualRun is reference-only
 
 A service or db_service with `manualRun: true` is described in `corgi-compose.yml` so the
-stack is complete, but corgi never starts it and no skill changes it. Exclude it from
-service maps, dependency graphs, test runs, and branches. When a fix would have to land
-there, stop and flag it out of band.
+stack is complete, but corgi never starts it and no skill changes it as part of a
+change. Exclude it from service maps, dependency graphs, test runs, and branches. When a
+story's change would have to land there, stop and flag it out of band. Reading it is not
+changing it: a review's consumer sweep greps it, and a consumer that breaks there is a
+finding like any other - on your own PR, fixed in its own PR in that repo.
 
 ## Team skills
 

@@ -38,6 +38,16 @@ Read every hit that *builds the same thing* the diff changed - a context object,
   the same shape, and name the ones left open. `blocking` when the guard is a security
   control, else a question.
 
+- **Meaning changed, name kept.** A status value keeps its wire name so installed
+  clients keep parsing it, but now means "renewed, still in force" instead of
+  "lapsed". Every type checks and every test passes. The breaks are in the places
+  that turn it into words: an assistant whose own system prompt never learned the
+  new meaning calls the policy "expired" next to a green "Renewed" tag; another
+  service renders the raw dates into a model prompt, so its chat says the same. No
+  grep for the changed symbol finds them - grep the field name in every repo on
+  disk, reference-only ones included, and read each hit that labels, templates,
+  exports or prompts with it.
+
 ## 2. Config delivery
 
 ```bash
@@ -108,6 +118,10 @@ Run the gate:
 corgi exec <svc> --service-dir <svc>="$W" -- <coverage script>   # $W = the P1 evidence worktree
 ```
 
+- A criterion asks for a colour; the new tests assert only the label text. Set the
+  badge back to red and every test stays green. Map each criterion to the test that
+  turns red when it breaks; the criterion with none is the finding.
+
 Quote the numbers in the finding. "Weak tests" without a number is an opinion.
 
 ## 5. Deployed contract
@@ -137,6 +151,19 @@ git grep -n "<count or phrase the diff changed>" -- '*.md' .env.example
 - `.env.example` says the app refuses to boot without the secret; the code only
   warns. That is a safety property described wrong - `blocking`.
 - A CLAUDE.md sentence promises read/enforce parity that item 1 just showed is false.
+
+The sentences the diff *writes* are claims too, and the easiest to miss on your own
+PR, because they state what the author believes:
+
+- An assistant instruction says "a policy whose status is EXPIRED has renewed and
+  still covers them". The status is computed from the end date alone, and the tools
+  also return terminated contracts, which read EXPIRED too. A client asking about an
+  old cancelled policy is told it still covers them. Run each new rule against every
+  value its reader meets (each enum value, null, deleted, terminated) - this one is
+  `blocking`.
+- A schema description says every past-dated contract "is shown as Renewed"; both
+  apps show it only on an active contract. A nit on its own, but it is the contract
+  text the next reader trusts.
 
 ## 7. Edges the happy path hides
 

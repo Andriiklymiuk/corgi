@@ -69,6 +69,10 @@ old way.
 
 - Grep every reader and writer of what changed: other resolvers, jobs, admin tools,
   AI/MCP tools, seeds, exports, notification templates, other repos.
+- A value that keeps its name but changes meaning breaks no type and no test. Follow
+  it to every place that turns it into words - label maps, prompt builders (an
+  assistant with its own system prompt is a second reader), templates, and other
+  services that render it - in every repo on disk, reference-only ones too.
 - Snapshots copied from it (a name stored on another row, a cached label) do not
   follow a rename or a status change.
 - "The client's X" when a client can now have several: every place that picks one
@@ -114,6 +118,8 @@ old way.
 - The module under test mocked away; a new public method covered only through mocks.
 - Each changed rule needs a test that fails on the base commit. Put the bug back in
   your head: which test turns red?
+- Each acceptance criterion the PR claims to meet needs one too. A test titled "shows
+  the green badge" that asserts only the label passes with the badge red.
 - A migration or SQL the CI never runs against a real database: run it locally and
   say so.
 - An eval or threshold that passes when one run does the wrong thing.
