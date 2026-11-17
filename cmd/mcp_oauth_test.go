@@ -189,7 +189,7 @@ func TestOAuthRegisterRefusals(t *testing.T) {
 		`{"redirect_uris":["http://claude.ai/cb"]}`:     "invalid_redirect_uri",
 		`{"redirect_uris":[]}`:                          "invalid_redirect_uri",
 		`{"redirect_uris":["http://localhost/cb"],"token_endpoint_auth_method":"private_key_jwt"}`: "invalid_client_metadata",
-		`{"redirect_uris":["http://localhost/cb"],"grant_types":["client_credentials"]}`:               "invalid_client_metadata",
+		`{"redirect_uris":["http://localhost/cb"],"grant_types":["client_credentials"]}`:           "invalid_client_metadata",
 		`not json`: "invalid_client_metadata",
 	}
 	for body, want := range cases {
