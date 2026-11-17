@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"slices"
 	"strings"
 	"time"
@@ -272,6 +273,32 @@ func (oa *oauthServer) authorizeAccessToken(header string) bool {
 	return false
 }
 
+func tokenClientCredentials(r *http.Request) (id, secret string) {
+	if user, pass, ok := r.BasicAuth(); ok {
+		if u, err := url.QueryUnescape(user); err == nil {
+			user = u
+		}
+		if p, err := url.QueryUnescape(pass); err == nil {
+			pass = p
+		}
+		return user, pass
+	}
+	return r.PostForm.Get("client_id"), r.PostForm.Get("client_secret")
+}
+
+func (oa *oauthServer) clientSecretOKLocked(clientID, secret string) bool {
+	c, ok := oa.state.findClient(clientID)
+	if !ok || c.SecretHash == "" {
+		return true
+	}
+	return subtle.ConstantTimeCompare([]byte(pairing.HashToken(secret)), []byte(c.SecretHash)) == 1
+}
+
+func oauthClientError(w http.ResponseWriter) {
+	w.Header().Set("WWW-Authenticate", `Basic realm="corgi"`)
+	oauthError(w, http.StatusUnauthorized, "invalid_client", "the client secret is missing or wrong")
+}
+
 func (oa *oauthServer) tokenHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusNoContent)
@@ -295,9 +322,14 @@ func (oa *oauthServer) tokenHandler(w http.ResponseWriter, r *http.Request) {
 
 	var resp tokenResponse
 	var err error
+	clientID, clientSecret := tokenClientCredentials(r)
 	switch r.PostForm.Get("grant_type") {
 	case "authorization_code":
-		code, ok := oa.redeemCodeLocked(r.PostForm.Get("code"), r.PostForm.Get("client_id"), r.PostForm.Get("redirect_uri"), r.PostForm.Get("code_verifier"))
+		if !oa.clientSecretOKLocked(clientID, clientSecret) {
+			oauthClientError(w)
+			return
+		}
+		code, ok := oa.redeemCodeLocked(r.PostForm.Get("code"), clientID, r.PostForm.Get("redirect_uri"), r.PostForm.Get("code_verifier"))
 		if !ok {
 			oauthError(w, http.StatusBadRequest, "invalid_grant", "the code is unknown, expired, already used, or the verifier does not match")
 			return
@@ -317,8 +349,12 @@ func (oa *oauthServer) tokenHandler(w http.ResponseWriter, r *http.Request) {
 			oauthError(w, http.StatusBadRequest, "invalid_grant", "the refresh token was already used; the grant is revoked, sign in again")
 			return
 		}
-		if cid := r.PostForm.Get("client_id"); cid != "" && cid != fam.ClientID {
+		if clientID != "" && clientID != fam.ClientID {
 			oauthError(w, http.StatusBadRequest, "invalid_grant", "the refresh token belongs to another client")
+			return
+		}
+		if !oa.clientSecretOKLocked(fam.ClientID, clientSecret) {
+			oauthClientError(w)
 			return
 		}
 		resp, err = oa.rotateLocked(i)

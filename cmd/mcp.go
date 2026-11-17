@@ -55,7 +55,7 @@ func init() {
 	mcpCmd.Flags().Bool("viewer", false, "The device that pairs in this window only reads: the board, the inbox, the brief - never a transcript, never a button (with --pair).")
 	mcpCmd.Flags().Bool("bind-all", false, "Let --http listen on a non-loopback address (0.0.0.0, a LAN IP). Off, a bare port binds 127.0.0.1.")
 	mcpCmd.Flags().Bool("no-oauth", false, "Do not serve the OAuth sign-in (Connect button) beside /mcp; the Authorization header path still works.")
-	mcpCmd.Flags().StringSlice("oauth-client-host", nil, "Extra host whose https redirect URIs OAuth clients may use (claude.ai and claude.com are built in). Also CORGI_MCP_OAUTH_CLIENT_HOSTS, comma-separated.")
+	mcpCmd.Flags().StringSlice("oauth-client-host", nil, "Extra host whose https redirect URIs OAuth clients may use (claude.ai, claude.com, chatgpt.com and global.consent.azure-apim.net are built in). Also CORGI_MCP_OAUTH_CLIENT_HOSTS, comma-separated.")
 	mcpCmd.Flags().StringSlice("allow-origin", nil, "Extra browser Origin allowed on /mcp (scheme://host[:port]); loopback origins and the tunnel's are always allowed. Also CORGI_MCP_ALLOWED_ORIGINS, comma-separated.")
 	rootCmd.AddCommand(mcpCmd)
 }

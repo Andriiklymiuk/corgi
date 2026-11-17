@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"andriiklymiuk/corgi/utils/agent/pairing"
 )
 
 const (
@@ -148,16 +150,17 @@ func (oa *oauthServer) protectedResourceMetadata() map[string]any {
 func (oa *oauthServer) authorizationServerMetadata() map[string]any {
 	issuer := oa.issuerURL()
 	return map[string]any{
-		"issuer":                                issuer,
-		"authorization_endpoint":                issuer + oauthAuthorizePath,
-		"token_endpoint":                        issuer + oauthTokenPath,
-		"registration_endpoint":                 issuer + oauthRegisterPath,
-		"revocation_endpoint":                   issuer + oauthRevokePath,
-		"response_types_supported":              []string{"code"},
-		"grant_types_supported":                 []string{"authorization_code", "refresh_token"},
-		"code_challenge_methods_supported":      []string{"S256"},
-		"token_endpoint_auth_methods_supported": []string{"none"},
-		"client_id_metadata_document_supported": true,
+		"issuer":                                         issuer,
+		"authorization_endpoint":                         issuer + oauthAuthorizePath,
+		"token_endpoint":                                 issuer + oauthTokenPath,
+		"registration_endpoint":                          issuer + oauthRegisterPath,
+		"revocation_endpoint":                            issuer + oauthRevokePath,
+		"response_types_supported":                       []string{"code"},
+		"grant_types_supported":                          []string{"authorization_code", "refresh_token"},
+		"code_challenge_methods_supported":               []string{"S256"},
+		"token_endpoint_auth_methods_supported":          []string{"none", "client_secret_post", "client_secret_basic"},
+		"client_id_metadata_document_supported":          true,
+		"authorization_response_iss_parameter_supported": true,
 	}
 }
 
@@ -230,7 +233,7 @@ func (oa *oauthServer) registrationRefusal(req registerRequest) (code, msg strin
 	}
 	for _, u := range req.RedirectURIs {
 		if !oa.hosts.allowedRedirectURI(u) {
-			return "invalid_redirect_uri", "redirect URI not allowed: " + u + " (loopback, or https to claude.ai / claude.com / an --oauth-client-host)"
+			return "invalid_redirect_uri", "redirect URI not allowed: " + u + " (loopback, or https to claude.ai, claude.com, chatgpt.com, global.consent.azure-apim.net or an --oauth-client-host)"
 		}
 	}
 	for _, g := range req.GrantTypes {
@@ -243,8 +246,8 @@ func (oa *oauthServer) registrationRefusal(req registerRequest) (code, msg strin
 			return "invalid_client_metadata", "unsupported response_type " + rt
 		}
 	}
-	if m := req.TokenEndpointAuthMethod; m != "" && m != "none" {
-		return "invalid_client_metadata", "token_endpoint_auth_method must be none; corgi issues no client secrets"
+	if m := req.TokenEndpointAuthMethod; m != "" && m != "none" && !secretAuthMethod(m) {
+		return "invalid_client_metadata", "token_endpoint_auth_method is none, client_secret_post or client_secret_basic"
 	}
 	return "", ""
 }
@@ -279,7 +282,17 @@ func (oa *oauthServer) registerHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := oa.now()
-	oa.state.addClient(oauthClient{ID: id, Name: name, RedirectURIs: req.RedirectURIs, CreatedAt: now}, now)
+	client := oauthClient{ID: id, Name: name, RedirectURIs: req.RedirectURIs, CreatedAt: now}
+	method, secret := "none", ""
+	if secretAuthMethod(req.TokenEndpointAuthMethod) {
+		method = req.TokenEndpointAuthMethod
+		if secret, err = randomToken("corgi_secret_"); err != nil {
+			oauthError(w, http.StatusInternalServerError, "server_error", "could not mint a client secret")
+			return
+		}
+		client.SecretHash = pairing.HashToken(secret)
+	}
+	oa.state.addClient(client, now)
 	if err := oa.saveLocked(); err != nil {
 		oauthError(w, http.StatusInternalServerError, "server_error", "could not record the client: "+err.Error())
 		return
@@ -287,16 +300,25 @@ func (oa *oauthServer) registerHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set(headerContentType, mimeJSON)
 	w.Header().Set(headerCacheControl, "no-store")
 	w.WriteHeader(http.StatusCreated)
-	body, _ := json.Marshal(map[string]any{
+	answer := map[string]any{
 		"client_id":                  id,
 		"client_id_issued_at":        now.Unix(),
 		"client_name":                name,
 		"redirect_uris":              req.RedirectURIs,
 		"grant_types":                []string{"authorization_code", "refresh_token"},
 		"response_types":             []string{"code"},
-		"token_endpoint_auth_method": "none",
-	})
+		"token_endpoint_auth_method": method,
+	}
+	if secret != "" {
+		answer["client_secret"] = secret
+		answer["client_secret_expires_at"] = 0
+	}
+	body, _ := json.Marshal(answer)
 	_, _ = w.Write(body)
+}
+
+func secretAuthMethod(m string) bool {
+	return m == "client_secret_post" || m == "client_secret_basic"
 }
 
 func oauthError(w http.ResponseWriter, status int, code, description string) {

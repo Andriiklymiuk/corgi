@@ -2534,6 +2534,8 @@ shell in a window, through this Mac's daemon, for any peer.
 Corgi Bar: `corgi_mac_windows` (text, cheap), `corgi_mac_look` (a JPEG, 1280 px
 by default), `corgi_mac_act` (click, type, keys, scroll, drag), `corgi_mac_open`,
 `corgi_mac_menus` and `corgi_mac_menu` (the front app's menu bar, pressed by path).
+`corgi_mac_apps` lists the running apps, `corgi_mac_activate` brings one forward, and
+`corgi_mac_state` says whether an agent may work now: free, at work, or paused by a person.
 With `peer` it works on another paired Mac; without, on this one. Off until the
 used Mac allows it: `corgi agent hands allow "office-mac"` (or `here` for this
 Mac's own agents). While an agent works the Mac's edge glows and a banner names

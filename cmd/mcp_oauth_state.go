@@ -25,6 +25,7 @@ type oauthClient struct {
 	Name         string    `json:"name"`
 	RedirectURIs []string  `json:"redirectUris"`
 	CreatedAt    time.Time `json:"createdAt"`
+	SecretHash   string    `json:"secretHash,omitempty"`
 }
 
 type rotatedHash struct {

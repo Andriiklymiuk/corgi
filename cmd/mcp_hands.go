@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"strings"
 	"time"
 
@@ -86,7 +87,22 @@ func registerHandsMCPTools(s *server.MCPServer) {
 		mcp.WithDescription("Use a Mac: click, double, right (right click), move, drag, type, key (like cmd+s, enter, esc, tab, up), "+
 			"scroll, wait. Coordinates are pixels of the last corgi_mac_look picture. look:true returns a picture after."+handsToolNote),
 		mcp.WithString("peer", mcp.Description("Peer Mac name; omit for this Mac")),
-		mcp.WithArray("actions", mcp.Required(), mcp.Description(`In order, e.g. [{"do":"click","x":640,"y":400},{"do":"type","text":"hello"},{"do":"key","keys":"cmd+s"},{"do":"scroll","dy":-400},{"do":"drag","x":1,"y":2,"x2":3,"y2":4},{"do":"wait","ms":500}]`), mcp.Items(map[string]any{"type": "object"})),
+		mcp.WithArray("actions", mcp.Required(), mcp.Description(`In order, e.g. [{"do":"click","x":640,"y":400},{"do":"type","text":"hello"},{"do":"key","keys":"cmd+s"},{"do":"scroll","dy":-400},{"do":"drag","x":1,"y":2,"x2":3,"y2":4},{"do":"wait","ms":500}]`), mcp.Items(map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"do":   map[string]any{"type": "string", "enum": []string{"click", "double", "right", "move", "drag", "type", "key", "scroll", "wait"}},
+				"x":    map[string]any{"type": "integer", "description": "pixels of the last picture"},
+				"y":    map[string]any{"type": "integer"},
+				"x2":   map[string]any{"type": "integer", "description": "drag end"},
+				"y2":   map[string]any{"type": "integer"},
+				"text": map[string]any{"type": "string", "description": "for type"},
+				"keys": map[string]any{"type": "string", "description": "for key, like cmd+s"},
+				"dx":   map[string]any{"type": "integer", "description": "scroll right"},
+				"dy":   map[string]any{"type": "integer", "description": "scroll down"},
+				"ms":   map[string]any{"type": "integer", "description": "for wait, up to 5000"},
+			},
+			"required": []string{"do"},
+		})),
 		mcp.WithBoolean("look", mcp.Description("Return a screenshot after the actions")),
 	), func(_ context.Context, r mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		acts, err := parseHandsActions(r.GetArguments()["actions"])
@@ -120,6 +136,35 @@ func registerHandsMCPTools(s *server.MCPServer) {
 		return handsCall(r, handsRequest{Do: "menu", Path: path})
 	})
 
+	s.AddTool(newCorgiTool("corgi_mac_apps",
+		mcp.WithDescription("The apps running on a Mac as JSON (name, bundle id, which is in front): cheap, no picture."+handsToolNote),
+		mcp.WithString("peer", mcp.Description("Peer Mac name; omit for this Mac")),
+	), func(_ context.Context, r mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		return handsCall(r, handsRequest{Do: "apps"})
+	})
+
+	s.AddTool(newCorgiTool("corgi_mac_activate",
+		mcp.WithDescription("Bring a running app to the front on a Mac, by name or bundle id. Do it before corgi_mac_menus or typing."+handsToolNote),
+		mcp.WithString("peer", mcp.Description("Peer Mac name; omit for this Mac")),
+		mcp.WithString("app", mcp.Required(), mcp.Description("App name or bundle id, like Xcode or com.apple.Safari")),
+	), func(_ context.Context, r mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		return handsCall(r, handsRequest{Do: "activate", App: r.GetString("app", "")})
+	})
+
+	s.AddTool(newCorgiTool("corgi_mac_state",
+		mcp.WithDescription("Whether an agent may work on this Mac right now: who has it, whether a person paused agents, and the last steps taken. "+
+			"Read-only. Call it after a step was refused to see if you may try again; only a person lifts a pause."),
+	), func(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		if !dangerousTunnelToolsAllowed(mcpPublicTunnelActive.Load()) {
+			return mcp.NewToolResultError(handsTunnelBlockedMsg), nil
+		}
+		st, err := handsStateCall(http.MethodGet, "")
+		if err != nil {
+			return mcp.NewToolResultError(mcpErrorText(err.Error())), nil
+		}
+		return mcp.NewToolResultText(handsStateText(st)), nil
+	})
+
 	s.AddTool(newCorgiTool("corgi_mac_open",
 		mcp.WithDescription("Open an app (by name) or a URL on a Mac and bring it to the front."+handsToolNote),
 		mcp.WithString("peer", mcp.Description("Peer Mac name; omit for this Mac")),
@@ -128,4 +173,25 @@ func registerHandsMCPTools(s *server.MCPServer) {
 	), func(_ context.Context, r mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		return handsCall(r, handsRequest{Do: "open", App: r.GetString("app", ""), URL: r.GetString("url", "")})
 	})
+}
+
+func handsStateText(st handsState) string {
+	var b strings.Builder
+	switch {
+	case st.Paused:
+		b.WriteString("paused by " + st.PausedBy + ": do nothing on this Mac until a person lets agents carry on")
+	case st.Active:
+		b.WriteString("an agent from " + st.By + " is at work, step " + itoaInt(st.Step))
+	default:
+		b.WriteString("free: no agent is at work and nobody paused agents")
+	}
+	n := len(st.Steps)
+	for i := max(0, n-8); i < n; i++ {
+		step := st.Steps[i]
+		b.WriteString("\n" + step.At.Local().Format("15:04:05") + " " + step.By + " " + step.Do)
+		if step.Text != "" {
+			b.WriteString(" · " + step.Text)
+		}
+	}
+	return b.String()
 }

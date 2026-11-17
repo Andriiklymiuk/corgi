@@ -37,7 +37,7 @@ func cleanClientName(raw, fallback string) string {
 	return name
 }
 
-var builtinOAuthClientHosts = []string{"claude.ai", "claude.com"}
+var builtinOAuthClientHosts = []string{"claude.ai", "claude.com", "chatgpt.com", "global.consent.azure-apim.net"}
 
 type oauthClientHosts struct {
 	hosts []string

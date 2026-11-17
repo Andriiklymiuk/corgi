@@ -11,6 +11,8 @@ import (
 
 	"andriiklymiuk/corgi/utils/agent/peers"
 	"andriiklymiuk/corgi/utils/agent/screen"
+
+	"github.com/mark3labs/mcp-go/mcp"
 )
 
 func TestAPausedAgentWaitsUntilThePersonLetsItCarryOn(t *testing.T) {
@@ -232,5 +234,64 @@ func TestTheMacsOwnBarPausesAgentsWithTheScreenOff(t *testing.T) {
 	}
 	if st := hands.state(time.Now()); !st.Paused || !strings.Contains(st.PausedBy, "the person at") {
 		t.Fatalf("%+v", st)
+	}
+}
+
+func mcpToolText(t *testing.T, res *mcp.CallToolResult) string {
+	t.Helper()
+	if res == nil || len(res.Content) == 0 {
+		t.Fatal("no content")
+	}
+	text, _ := res.Content[0].(mcp.TextContent)
+	return text.Text
+}
+
+func TestTheMacToolsObeyAPauseAndReportIt(t *testing.T) {
+	t.Setenv("CORGI_MCP_ALLOW_DANGEROUS_TUNNEL", "")
+	prev := mcpPublicTunnelActive.Load()
+	mcpPublicTunnelActive.Store(false)
+	defer mcpPublicTunnelActive.Store(prev)
+	resetHands(t)
+	rig := newTermRig(t, "peer")
+	bar := rig.barToken(t)
+	if err := os.WriteFile(filepath.Join(rig.dir, mcpAddrName), []byte(strings.TrimPrefix(rig.srv.URL, "http://")), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	agentHandsAllowCmd.Run(agentHandsAllowCmd, []string{"here"})
+	var seen []string
+	fakeBar(t, rig, bar, func(j handsJob) handsResult {
+		seen = append(seen, j.Do+":"+j.App)
+		return handsResult{OK: true, Text: j.Do + " ok"}
+	})
+	res, err := handsCall(mcp.CallToolRequest{}, handsRequest{Do: "activate", App: "Xcode"})
+	if err != nil || res.IsError || mcpToolText(t, res) != "activate ok" {
+		t.Fatalf("activate: %+v %v", res, err)
+	}
+	res, _ = handsCall(mcp.CallToolRequest{}, handsRequest{Do: "apps"})
+	if res.IsError {
+		t.Fatalf("apps: %+v", res)
+	}
+	st, _ := handsStateCall(http.MethodGet, "")
+	if text := handsStateText(st); !strings.Contains(text, "is at work, step 2") || !strings.Contains(text, "activate · Xcode") {
+		t.Fatalf("state: %q", text)
+	}
+	if _, err := handsStateCall(http.MethodPost, "pause"); err != nil {
+		t.Fatal(err)
+	}
+	for _, do := range []string{"windows", "look", "menus", "apps"} {
+		res, _ = handsCall(mcp.CallToolRequest{}, handsRequest{Do: do})
+		if !res.IsError || !strings.Contains(mcpToolText(t, res), "took the Mac") {
+			t.Fatalf("%s while paused: %+v", do, res)
+		}
+	}
+	if len(seen) != 2 {
+		t.Fatalf("a paused agent reaches nothing on the Mac: %v", seen)
+	}
+	st, _ = handsStateCall(http.MethodGet, "")
+	if text := handsStateText(st); !strings.HasPrefix(text, "paused by ") {
+		t.Fatalf("state while paused: %q", text)
+	}
+	if text := handsStateText(handsState{}); !strings.HasPrefix(text, "free") {
+		t.Fatalf("free: %q", text)
 	}
 }

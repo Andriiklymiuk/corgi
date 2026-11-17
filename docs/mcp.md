@@ -121,13 +121,56 @@ request header `Authorization` = `Bearer corgi_dev_…` from
 looking at; the phone's Settings mints one too). A phone's own token is
 refused on `/mcp`.
 
+#### ChatGPT, Claude Desktop, Microsoft Copilot Studio
+
+The same endpoint serves all three. What differs is where each one asks for it.
+
+| Client | How it connects | What to enter |
+|--------|-----------------|---------------|
+| Claude Desktop, Claude Code | stdio on this machine | `{ "mcpServers": { "corgi": { "command": "corgi", "args": ["mcp"] } } }` in the client's config. Nothing leaves the machine, and the `corgi_mac_*` tools work |
+| Claude.ai, Claude Desktop connector | Streamable HTTP + sign-in | Settings › Connectors › Add custom connector › the `https://…/mcp` URL |
+| ChatGPT | Streamable HTTP + sign-in | Settings › Apps & Connectors › Advanced › Developer mode on, then Create › the `https://…/mcp` URL, Authentication: OAuth |
+| Microsoft Copilot Studio | Streamable HTTP + sign-in | Agent › Tools › Add a tool › New tool › Model Context Protocol › the `https://…/mcp` URL, Authentication: OAuth 2.0 › Dynamic discovery |
+
+ChatGPT and Copilot Studio rename these menus often; look for the place that
+adds a custom MCP server. The URL is the public one `corgi mcp --http … --tunnel` or `corgi agent up`
+prints. Each client finds the sign-in by itself (RFC 9728 → RFC 8414),
+registers (RFC 7591), and sends you to corgi's consent page, where you
+approve it on the machine: nobody signs in without you at that page.
+
+What corgi does so each of them fits:
+
+- **Redirects.** `chatgpt.com` and `global.consent.azure-apim.net` (the
+  host Copilot Studio's connectors return to) are accepted beside
+  `claude.ai` and `claude.com`. Anything else needs `--oauth-client-host`.
+- **Issuer identification** (RFC 9207): every redirect back carries `iss`
+  and the metadata says so, which lets ChatGPT use its one fixed redirect.
+- **Client secrets.** A client that registers with `client_secret_post` or
+  `client_secret_basic` gets a secret and must show it at the token
+  endpoint, on refresh too; corgi keeps only its hash. A public client
+  (`none`) needs no secret. PKCE `S256` is required either way.
+- **Tool shape.** Every tool has a title, a read-only / destructive hint,
+  a name of letters, digits and `_`, a description under 1024 characters
+  and an input schema with no `$ref`, `anyOf` or untyped array: the strict
+  subset every client takes. A test holds all of them to it.
+- **Transport.** Streamable HTTP only on `/mcp` (no legacy SSE endpoint),
+  which is what Copilot Studio requires.
+
+Over a public tunnel the `corgi_mac_*` tools answer that they are off: a
+screenshot or a click must not travel through someone else's cloud. Use
+them from Claude Code or Claude Desktop on a paired machine (stdio).
+
+Copilot Studio freezes the tool list when the tool is added: after a corgi
+upgrade that adds tools, refresh the tool in the agent. It also caps how
+many tools one agent takes; corgi serves about 75.
+
 #### What the sign-in serves
 
 | Path | Purpose |
 |------|---------|
 | `/.well-known/oauth-protected-resource[/mcp]` | RFC 9728: who the authorization server is (corgi itself) |
-| `/.well-known/oauth-authorization-server[/mcp]` | RFC 8414: endpoints, `S256`, `none`, `client_id_metadata_document_supported` |
-| `POST /oauth/register` | RFC 7591 dynamic registration: public clients, allowlisted redirect URIs, `corgi_client_…` ids, newest 200 kept |
+| `/.well-known/oauth-authorization-server[/mcp]` | RFC 8414: endpoints, `S256`, `none` / `client_secret_post` / `client_secret_basic`, `client_id_metadata_document_supported`, `authorization_response_iss_parameter_supported` |
+| `POST /oauth/register` | RFC 7591 dynamic registration: public clients, or a client secret when asked for one, allowlisted redirect URIs, `corgi_client_…` ids, newest 200 kept |
 | `GET /oauth/authorize` | PKCE `S256` required; client and redirect URI are checked **before** anything can redirect |
 | `POST /oauth/approve`, `GET /oauth/pending/<id>` | the consent page's approve and poll |
 | `POST /oauth/token` | `authorization_code` and `refresh_token`, form-encoded; refresh tokens rotate |
@@ -138,7 +181,7 @@ Claude and ChatGPT prefer): corgi fetches the document from an allowlisted
 host only, refuses any address that resolves to a private or loopback
 range, follows no redirects, and caches per `Cache-Control` for at most a
 day. Redirect URIs are loopback on any port (RFC 8252) or `https` to
-`claude.ai`, `claude.com` or a host passed with `--oauth-client-host`
+`claude.ai`, `claude.com`, `chatgpt.com`, `global.consent.azure-apim.net` or a host passed with `--oauth-client-host`
 (repeatable; also `CORGI_MCP_OAUTH_CLIENT_HOSTS`, comma-separated; a
 single-label host such as `com` is ignored). Nothing else, so the endpoint
 cannot be used as an open redirect.

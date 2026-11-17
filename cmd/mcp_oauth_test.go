@@ -87,7 +87,7 @@ func TestOAuthMetadataDocuments(t *testing.T) {
 		if body["client_id_metadata_document_supported"] != true {
 			t.Errorf("%s: CIMD flag missing", path)
 		}
-		if m, _ := body["token_endpoint_auth_methods_supported"].([]any); len(m) != 1 || m[0] != "none" {
+		if m, _ := body["token_endpoint_auth_methods_supported"].([]any); len(m) != 3 || m[0] != "none" {
 			t.Errorf("%s token auth methods = %v", path, body["token_endpoint_auth_methods_supported"])
 		}
 		if m, _ := body["code_challenge_methods_supported"].([]any); len(m) != 1 || m[0] != "S256" {
@@ -188,7 +188,7 @@ func TestOAuthRegisterRefusals(t *testing.T) {
 		`{"redirect_uris":["https://evil.example/cb"]}`: "invalid_redirect_uri",
 		`{"redirect_uris":["http://claude.ai/cb"]}`:     "invalid_redirect_uri",
 		`{"redirect_uris":[]}`:                          "invalid_redirect_uri",
-		`{"redirect_uris":["http://localhost/cb"],"token_endpoint_auth_method":"client_secret_basic"}`: "invalid_client_metadata",
+		`{"redirect_uris":["http://localhost/cb"],"token_endpoint_auth_method":"private_key_jwt"}`: "invalid_client_metadata",
 		`{"redirect_uris":["http://localhost/cb"],"grant_types":["client_credentials"]}`:               "invalid_client_metadata",
 		`not json`: "invalid_client_metadata",
 	}

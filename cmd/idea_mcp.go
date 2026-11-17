@@ -73,7 +73,15 @@ func registerIdeaMCPTools(s *server.MCPServer) {
 		mcp.WithDescription("Replace the page's markdown (the whole page), or its split into tickets, or both. Use it after reading the page, when a comment asks for a change; then reply to the comment with corgi_idea_comment (by agent, changed true)."),
 		slugOpt,
 		mcp.WithString("markdown", mcp.Description("The whole page")),
-		mcp.WithArray("tickets", mcp.Description("The split: [{title, body, after:[1-based numbers]}]"), mcp.Items(map[string]any{"type": "object"})),
+		mcp.WithArray("tickets", mcp.Description("The split: [{title, body, after:[1-based numbers]}]"), mcp.Items(map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"title": map[string]any{"type": "string"},
+				"body":  map[string]any{"type": "string"},
+				"after": map[string]any{"type": "array", "items": map[string]any{"type": "integer"}, "description": "1-based numbers of the tickets this one waits for"},
+			},
+			"required": []string{"title"},
+		})),
 	), jsonHandler(ideaToolEdit))
 
 	s.AddTool(newCorgiTool("corgi_idea_set",

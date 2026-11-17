@@ -84,6 +84,9 @@ them.
 | `corgi_mac_look` | `peer?, window?, max?` | JPEG + size | coordinates for act are these pixels |
 | `corgi_mac_act` | `peer?, actions[], look?` | text (+ JPEG) | click, double, right, move, drag, type, key, scroll, wait |
 | `corgi_mac_open` | `peer?, app?, url?` | text | brings it to the front |
+| `corgi_mac_apps` | `peer?` | JSON: running apps, which is in front | cheap |
+| `corgi_mac_activate` | `peer?, app` | text | bring a running app forward before menus or typing |
+| `corgi_mac_state` | - | text: free, at work, or paused by a person + last steps | call after a refused step; only a person lifts a pause |
 | `corgi_mac_menus` | `peer?` | JSON menu bar of the front app | more reliable than clicking |
 | `corgi_mac_menu` | `peer?, path[]` | text | presses e.g. `["File","Save"]` |
 
