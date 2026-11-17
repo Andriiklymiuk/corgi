@@ -22,17 +22,28 @@ type chatRequest struct {
 	Workspace string
 }
 
+type chatEditRequest struct {
+	Message   string
+	Text      string
+	As        string
+	Workspace string
+}
+
 type slackDefaults struct {
 	PostTo         string
 	ReplyAs        string
 	ReviewChannels []string
 }
 
-func chatTarget(req chatRequest, state *watch.State, def *slackDefaults) (watch.SlackTarget, error) {
-	target := watch.SlackTarget{As: strings.TrimSpace(req.As)}
-	if target.As == "" && def != nil {
-		target.As = def.ReplyAs
+func chatVoice(as string, def *slackDefaults) string {
+	if as = strings.TrimSpace(as); as == "" && def != nil {
+		return strings.TrimSpace(def.ReplyAs)
 	}
+	return as
+}
+
+func chatTarget(req chatRequest, state *watch.State, def *slackDefaults) (watch.SlackTarget, error) {
+	target := watch.SlackTarget{As: chatVoice(req.As, def)}
 	if key := strings.TrimSpace(req.Reply); key != "" {
 		parts := strings.Split(key, ":")
 		if len(parts) != 3 || parts[0] != "slack" {
@@ -73,15 +84,20 @@ func slackDefaultsFor(dir, workspace string) *slackDefaults {
 	return nil
 }
 
+func chatPoster(dir, workspace string, state *watch.State) *watch.SlackPoster {
+	poster := watch.NewSlackPoster(watch.LoadSecretsFor(dir, workspace))
+	poster.Team = state.SourceIdentity("slack", "team")
+	poster.Gate = sendgate.For(dir)
+	return poster
+}
+
 func runChatPost(req chatRequest) error {
 	dir := mustAgentDir()
 	if req.Workspace == "" {
 		req.Workspace, _ = currentWorkspaceID(dir)
 	}
-	poster := watch.NewSlackPoster(watch.LoadSecretsFor(dir, req.Workspace))
 	state := watch.LoadState(dir)
-	poster.Team = state.SourceIdentity("slack", "team")
-	poster.Gate = sendgate.For(dir)
+	poster := chatPoster(dir, req.Workspace, state)
 
 	target, err := chatTarget(req, state, slackDefaultsFor(dir, req.Workspace))
 	if err != nil {
@@ -119,6 +135,31 @@ func runChatPost(req chatRequest) error {
 	return nil
 }
 
+func runChatEdit(req chatEditRequest) error {
+	msg, err := watch.ParseSlackMessage(req.Message)
+	if err != nil {
+		return err
+	}
+	text := strings.TrimSpace(req.Text)
+	if text == "" {
+		return fmt.Errorf("nothing to say: pass the new text after the message")
+	}
+	dir := mustAgentDir()
+	if req.Workspace == "" {
+		req.Workspace, _ = currentWorkspaceID(dir)
+	}
+	poster := chatPoster(dir, req.Workspace, watch.LoadState(dir))
+	edited, err := poster.Update(context.Background(), msg, chatVoice(req.As, slackDefaultsFor(dir, req.Workspace)), text)
+	if err != nil {
+		return err
+	}
+	utils.Infof("edited as %s: %s\n", edited.As, edited.Permalink)
+	if utils.JSONOutput {
+		utils.PrintJSON(map[string]any{"edited": true, "channel": edited.Channel, "ts": edited.TS, "permalink": edited.Permalink, "as": edited.As})
+	}
+	return nil
+}
+
 func mcpChatPost(r mcp.CallToolRequest) (any, error) {
 	if as := strings.TrimSpace(r.GetString("as", "")); strings.EqualFold(as, "me") {
 		return nil, fmt.Errorf("a session may not post under your name: leave `as` out and the workspace's replyAs decides, or run `corgi agent chat post --as me` yourself")
@@ -150,7 +191,8 @@ be taken back, so it is never the accidental default.
 
   corgi agent chat post "deploy is out" --to '#backend'
   corgi agent chat post "on it" --reply slack:C0RE:1726000400.000100
-  corgi agent chat react slack:C0RE:1726000400.000100 white_check_mark`,
+  corgi agent chat react slack:C0RE:1726000400.000100 white_check_mark
+  corgi agent chat edit https://acme.slack.com/archives/C0RE/p1726000400000100 "on it - PR is up"`,
 }
 
 var agentChatPostCmd = &cobra.Command{
@@ -183,6 +225,30 @@ var agentChatReactCmd = &cobra.Command{
 	},
 }
 
+var agentChatEditCmd = &cobra.Command{
+	Use:   "edit <message> <new text>",
+	Short: "Change the text of a message already posted",
+	Long: `Rewrites a posted message in place instead of posting a second one: the
+announce that gained a pull request, a status line that moved on.
+<message> is the message's link (Copy link in Slack) or its event key; a
+?thread_ts= on the link is ignored.
+
+Slack lets only the author edit a message, so speak in the voice that posted
+it: --as bot for what the app said, --as me for what you said. Without --as
+the workspace's replyAs decides, as for post. A refusal says which voice to
+try.
+
+  corgi agent chat edit https://acme.slack.com/archives/C0RE/p1726000400000100 "deploy is out, all green"
+  corgi agent chat edit slack:C0RE:1726000400.000100 "on it - PR is up" --as me
+  corgi agent chat announce --edit <link> "[ABC-12] Phone field" <url> <url> <url>`,
+	Args: cobra.ExactArgs(2),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		as, _ := cmd.Flags().GetString("as")
+		ws, _ := cmd.Flags().GetString("workspace")
+		return runChatEdit(chatEditRequest{Message: args[0], Text: args[1], As: as, Workspace: ws})
+	},
+}
+
 func init() {
 	p := agentChatPostCmd.Flags()
 	p.String("to", "", "Channel to post in: #name, @handle for a direct message, or a channel id")
@@ -193,6 +259,9 @@ func init() {
 	r := agentChatReactCmd.Flags()
 	r.String("as", "", "Voice: bot or me")
 	r.String("workspace", "", "Workspace whose token to use; omitted means the one you are in")
-	agentChatCmd.AddCommand(agentChatPostCmd, agentChatReactCmd)
+	e := agentChatEditCmd.Flags()
+	e.String("as", "", "Voice that posted the message: bot or me")
+	e.String("workspace", "", "Workspace whose token and defaults to use; omitted means the one you are in")
+	agentChatCmd.AddCommand(agentChatPostCmd, agentChatReactCmd, agentChatEditCmd)
 	agentCmd.AddCommand(agentChatCmd)
 }

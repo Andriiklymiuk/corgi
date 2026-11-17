@@ -1053,7 +1053,11 @@ this run opened (one call per story), bare URLs only. Posts title, then link
 alone for one PR or one `repo: link` line per PR for several, in workspace's review channel, in voice workspace configured; no
 review channel configured → prints one line, posts nothing - don't work around
 that, never post with `chat post` yourself. Skip for story that opened
-nothing, and for re-run whose PRs announced before.
+nothing, and for re-run whose PRs all announced before. Re-run that opened a
+new PR for story already announced → edit that post, never a second one:
+`corgi agent chat announce --edit <post link> "<[KEY] story title>" <every pr-url, old + new>`
+(link = what first announce printed, or Slack's Copy link; same voice - Slack
+lets only author edit, refusal names `--as` to try).
 
 ---
 

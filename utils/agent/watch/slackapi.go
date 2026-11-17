@@ -119,10 +119,7 @@ func (a *slackAPI) do(req *http.Request, method string, out any) error {
 		return fmt.Errorf("slack %s: %v", method, err)
 	}
 	if !envelope.OK {
-		if envelope.Needed != "" {
-			return fmt.Errorf("slack %s: %s (needs %s)", method, firstNonBlank(envelope.Error, "not ok"), envelope.Needed)
-		}
-		return fmt.Errorf("slack %s: %s", method, firstNonBlank(envelope.Error, "not ok"))
+		return &slackError{Method: method, Code: firstNonBlank(envelope.Error, "not ok"), Needed: envelope.Needed}
 	}
 	if out == nil {
 		return nil
@@ -131,6 +128,27 @@ func (a *slackAPI) do(req *http.Request, method string, out any) error {
 		return fmt.Errorf("slack %s: %v", method, err)
 	}
 	return nil
+}
+
+type slackError struct {
+	Method string
+	Code   string
+	Needed string
+}
+
+func (e *slackError) Error() string {
+	if e.Needed != "" {
+		return fmt.Sprintf("slack %s: %s (needs %s)", e.Method, e.Code, e.Needed)
+	}
+	return fmt.Sprintf("slack %s: %s", e.Method, e.Code)
+}
+
+func slackErrorCode(err error) string {
+	var se *slackError
+	if errors.As(err, &se) {
+		return se.Code
+	}
+	return ""
 }
 
 func firstNonBlank(a, b string) string {

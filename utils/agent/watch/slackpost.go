@@ -105,6 +105,66 @@ func (p *SlackPoster) Post(ctx context.Context, target SlackTarget, text string)
 		Permalink: slackPermalink(p.Team, res.Channel, res.TS, target.ThreadTS)}, nil
 }
 
+func (p *SlackPoster) Update(ctx context.Context, msg SlackMessage, as, text string) (SlackPosted, error) {
+	api, voice, err := p.voice(as)
+	if err != nil {
+		return SlackPosted{}, err
+	}
+	if msg.Channel == "" || msg.TS == "" {
+		return SlackPosted{}, fmt.Errorf("edit: no message named: pass %s", slackMessageForms)
+	}
+	body := map[string]any{"channel": msg.Channel, "ts": msg.TS, "text": text}
+	var res struct {
+		Channel string `json:"channel"`
+		TS      string `json:"ts"`
+	}
+	if err := p.send(ctx, api, "chat.update", msg.Channel+"/"+msg.TS, "edit:"+voice+":"+text, body, &res); err != nil {
+		return SlackPosted{}, p.editRefused(err, msg, voice)
+	}
+	channel, ts := firstNonBlank(res.Channel, msg.Channel), firstNonBlank(res.TS, msg.TS)
+	return SlackPosted{Channel: channel, TS: ts, As: voice,
+		Permalink: slackPermalink(firstNonBlank(msg.Team, p.Team), channel, ts, "")}, nil
+}
+
+func voiceName(as string) string {
+	if as == "me" {
+		return "you"
+	}
+	return "the bot"
+}
+
+func (p *SlackPoster) otherVoice(as string) (string, bool) {
+	if as == "me" {
+		return "bot", p.Bot != nil
+	}
+	return "me", p.User != nil
+}
+
+func (p *SlackPoster) editRefused(err error, msg SlackMessage, as string) error {
+	other, hasOther := p.otherVoice(as)
+	tryOther := "only whoever posted it can change it"
+	if hasOther {
+		tryOther = "try --as " + other
+	}
+	switch slackErrorCode(err) {
+	case "cant_update_message":
+		return fmt.Errorf("edit refused: Slack lets only a message's author edit it, and this one was not posted as %s - %s (%w)", voiceName(as), tryOther, err)
+	case "message_not_found":
+		return fmt.Errorf("no message at %s in %s: check the link (a deleted message cannot be edited), or it was posted in the other voice - %s (%w)", msg.TS, msg.Channel, tryOther, err)
+	case "edit_window_closed":
+		return fmt.Errorf("edit refused: this workspace no longer allows editing that message (its edit window closed) - post a new one instead (%w)", err)
+	case "channel_not_found", "not_in_channel":
+		return fmt.Errorf("%s cannot see channel %s - %s, or add the app to the channel (%w)", voiceName(as), msg.Channel, tryOther, err)
+	case "is_inactive", "is_archived":
+		return fmt.Errorf("edit refused: channel %s is archived or frozen, so its messages cannot change (%w)", msg.Channel, err)
+	case "msg_too_long":
+		return fmt.Errorf("edit refused: the new text is too long for one Slack message - shorten it (%w)", err)
+	case "no_text":
+		return fmt.Errorf("edit refused: the new text is empty - pass what the message should say (%w)", err)
+	}
+	return err
+}
+
 func (p *SlackPoster) React(ctx context.Context, target SlackTarget, emoji string) error {
 	api, _, err := p.voice(target.As)
 	if err != nil {

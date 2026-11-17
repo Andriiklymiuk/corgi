@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"github.com/mark3labs/mcp-go/mcp"
 	"strings"
 	"testing"
@@ -66,5 +67,34 @@ func TestASessionCannotAskToSpeakAsThePerson(t *testing.T) {
 	req.Params.Arguments = map[string]any{"text": "approved", "as": "ME"}
 	if _, err := mcpChatPost(req); err == nil || !strings.Contains(err.Error(), "under your name") {
 		t.Fatalf("the check is on the meaning, not the spelling: %v", err)
+	}
+}
+
+func TestChatEditChecksTheMessageBeforeAnyToken(t *testing.T) {
+	t.Setenv("CORGI_DATA_DIR", t.TempDir())
+	t.Setenv("SLACK_USER_TOKEN", "")
+	t.Setenv("SLACK_BOT_TOKEN", "")
+
+	for _, ref := range []string{"", "github:acme/api#1", "https://acme.slack.com/archives/C0RE", "slack:C0RE:latest"} {
+		if err := runChatEdit(chatEditRequest{Message: ref, Text: "new", Workspace: "acme"}); err == nil {
+			t.Fatalf("%q names no message and must be refused", ref)
+		}
+	}
+	link := "https://acme.slack.com/archives/C0RE/p1726000400000100"
+	if err := runChatEdit(chatEditRequest{Message: link, Text: "  ", Workspace: "acme"}); err == nil || !strings.Contains(err.Error(), "new text") {
+		t.Fatalf("an empty edit would blank the message: %v", err)
+	}
+	if err := runChatEdit(chatEditRequest{Message: link, Text: "new", Workspace: "acme"}); !errors.Is(err, watch.ErrNoSlackToken) {
+		t.Fatalf("with no token stored it says so: %v", err)
+	}
+
+	if got := chatVoice("", &slackDefaults{ReplyAs: "me"}); got != "me" {
+		t.Fatalf("an edit speaks in the workspace's replyAs, as a post does: %q", got)
+	}
+	if got := chatVoice(" bot ", &slackDefaults{ReplyAs: "me"}); got != "bot" {
+		t.Fatalf("--as beats replyAs: %q", got)
+	}
+	if found, _, err := agentChatCmd.Find([]string{"edit"}); err != nil || found != agentChatEditCmd {
+		t.Fatalf("chat edit is a subcommand: %v", err)
 	}
 }

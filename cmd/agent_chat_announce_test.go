@@ -1,6 +1,9 @@
 package cmd
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestAnnounceText(t *testing.T) {
 	got := announceText("[ABC-12] Policy request from the insurer", []string{
@@ -31,5 +34,49 @@ func TestAnnounceChannel(t *testing.T) {
 	}
 	if got := announceChannel("", nil); got != "" {
 		t.Fatal(got)
+	}
+}
+
+func TestAnnounceEditSendsTheBodyAFreshAnnounceWould(t *testing.T) {
+	t.Setenv("CORGI_DATA_DIR", t.TempDir())
+	args := []string{"[ABC-12] Phone field",
+		"https://github.com/acme/api/pull/5",
+		"https://github.com/acme/web/pull/9",
+		"https://github.com/acme/mobile/pull/301",
+		"https://gitlab.com/acme/svc/onboarding/-/merge_requests/12",
+	}
+	var posted []chatRequest
+	var edited []chatEditRequest
+	post := func(r chatRequest) error { posted = append(posted, r); return nil }
+	edit := func(r chatEditRequest) error { edited = append(edited, r); return nil }
+
+	if err := runAnnounce(args, announceOptions{To: "#reviews", As: "me", Workspace: "acme"}, post, edit); err != nil {
+		t.Fatal(err)
+	}
+	link := "https://acme.slack.com/archives/C0RE/p1726000400000100"
+	if err := runAnnounce(args, announceOptions{Edit: link, As: "me", Workspace: "acme"}, post, edit); err != nil {
+		t.Fatal(err)
+	}
+	if len(posted) != 1 || len(edited) != 1 {
+		t.Fatalf("one post and one edit, never both: %d posts, %d edits", len(posted), len(edited))
+	}
+	if edited[0].Text != posted[0].Text || posted[0].Text != announceText(args[0], args[1:]) {
+		t.Fatalf("the edit carries exactly the announce body:\npost:\n%s\nedit:\n%s", posted[0].Text, edited[0].Text)
+	}
+	if edited[0].Message != link || edited[0].As != "me" || edited[0].Workspace != "acme" {
+		t.Fatalf("the edit names the message and keeps the voice and workspace: %+v", edited[0])
+	}
+
+	if err := runAnnounce(args, announceOptions{Edit: link, To: "#reviews"}, post, edit); err == nil || !strings.Contains(err.Error(), "--to") {
+		t.Fatalf("the message names its own channel, so --to with --edit is refused: %v", err)
+	}
+	if err := runAnnounce(args[:1], announceOptions{Edit: link}, post, edit); err == nil || !strings.Contains(err.Error(), "nothing to announce") {
+		t.Fatalf("an edit without pull requests would wipe the post: %v", err)
+	}
+	if len(posted) != 1 || len(edited) != 1 {
+		t.Fatalf("refusals send nothing: %d posts, %d edits", len(posted), len(edited))
+	}
+	if agentChatAnnounceCmd.Flags().Lookup("edit") == nil {
+		t.Fatal("announce has --edit")
 	}
 }

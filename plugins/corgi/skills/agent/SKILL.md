@@ -752,7 +752,7 @@ Bot:
 | mentions of me → phone | `search:read`, `users:read` (the smallest token) |
 | + a review channel read (a teammate's post with PR links = one review) | + `channels:read`, `channels:history` (`groups:*` for a private channel) |
 | + DMs count as mentions | + `im:read`, `im:history` |
-| + answer in the thread / `chat announce` as me | + `chat:write` |
+| + answer in the thread / `chat announce` / `chat edit` as me | + `chat:write` |
 | + the ✅ on a reviewed post | + `reactions:write` |
 
 Pitfalls: the granular `search:read.*` and any `admin.*` scope are

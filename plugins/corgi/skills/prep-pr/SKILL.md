@@ -54,7 +54,8 @@ a human flips it to ready. Multi-repo → one PR per repo, sibling links in each
 contract lines on every side.
 
 The PR is announced the moment it is up (`corgi agent chat announce`, run from the
-workspace; the ticket moves to review through the `tracker` skill when the user asked
+workspace; a PR joining a story already announced → `announce --edit <post link>` with
+every PR, not a second post; the ticket moves to review through the `tracker` skill when the user asked
 for that) - never after CI, which is watched in the background and reported when it
 ends. Offer, don't do: post the spec comment.
 
