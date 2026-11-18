@@ -148,14 +148,35 @@ receipt - a session's are on the invoice.
 			return
 		}
 		fmt.Printf("%-24s %10s %9s %5s\n", strings.ToUpper(by), "TOKENS", "USD", "RUNS")
+		var most int64
 		for _, r := range rows {
-			line := fmt.Sprintf("%-24s %10s %9s %5s", r.Key, sessions.Tokens(r.Tokens), usdWord(r.USD), zeroBlank(r.Runs))
+			most = max(most, r.Tokens)
+		}
+		for _, r := range rows {
+			line := fmt.Sprintf("%-24s %10s %9s %5s  %s", r.Key, sessions.Tokens(r.Tokens), usdWord(r.USD), zeroBlank(r.Runs), shareBar(r.Tokens, most, costBarWidth))
+			line = strings.TrimRight(line, " ")
 			if r.DayCap > 0 {
 				line += "   cap " + sessions.Tokens(r.DayCap) + "/day"
 			}
 			fmt.Println(line)
 		}
 	},
+}
+
+const costBarWidth = 20
+
+func shareBar(value, most int64, width int) string {
+	if value <= 0 || most <= 0 || width <= 0 {
+		return ""
+	}
+	eighths := int((value*int64(width)*8 + most/2) / most)
+	eighths = max(eighths, 1)
+	blocks := []rune(" ▏▎▍▌▋▊▉")
+	bar := strings.Repeat("█", eighths/8)
+	if rest := eighths % 8; rest > 0 {
+		bar += string(blocks[rest])
+	}
+	return bar
 }
 
 func usdWord(v float64) string {

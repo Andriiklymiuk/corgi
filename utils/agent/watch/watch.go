@@ -1791,11 +1791,13 @@ func (l *FixLog) SetCost(key string, usd float64, tokens int64) {
 }
 
 type Cost struct {
-	USD    float64  `json:"usd"`
-	Tokens int64    `json:"tokens"`
-	Runs   int      `json:"runs"`
-	Models []string `json:"models,omitempty"`
-	Agents []string `json:"agents,omitempty"`
+	USD    float64 `json:"usd"`
+	Tokens int64   `json:"tokens"`
+	Runs   int     `json:"runs"`
+	// Minutes is how long the finished runs took, added up.
+	Minutes int      `json:"minutes,omitempty"`
+	Models  []string `json:"models,omitempty"`
+	Agents  []string `json:"agents,omitempty"`
 }
 
 func (c *Cost) AddWorker(agent, models string) {
@@ -1823,6 +1825,7 @@ func (l *FixLog) CostFor(workspace, ref string) Cost {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	var c Cost
+	var spent time.Duration
 	for _, r := range l.Started {
 		if r.Workspace != workspace || r.Ref != ref || strings.HasPrefix(r.Error, notStartedText) {
 			continue
@@ -1830,10 +1833,14 @@ func (l *FixLog) CostFor(workspace, ref string) Cost {
 		c.Runs++
 		c.USD += r.CostUSD
 		c.Tokens += r.Tokens
+		if took := r.FinishedAt.Sub(r.StartedAt); r.Done() && took > 0 {
+			spent += took
+		}
 		if !r.NeverRan() {
 			c.AddWorker(r.Harness, r.Model)
 		}
 	}
+	c.Minutes = int(spent.Round(time.Minute) / time.Minute)
 	return c
 }
 

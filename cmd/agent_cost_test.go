@@ -54,3 +54,18 @@ func TestCostByRepoDayAndBot(t *testing.T) {
 		t.Fatal("by what?")
 	}
 }
+
+func TestTheBarIsTheShareOfTheLargestRow(t *testing.T) {
+	if got := shareBar(100, 100, 10); got != "██████████" {
+		t.Fatalf("the largest fills the width: %q", got)
+	}
+	if got := shareBar(50, 100, 10); got != "█████" {
+		t.Fatalf("half: %q", got)
+	}
+	if got := shareBar(1, 1000, 10); got != "▏" {
+		t.Fatalf("a small one still shows: %q", got)
+	}
+	if got := shareBar(0, 100, 10); got != "" {
+		t.Fatalf("nothing is nothing: %q", got)
+	}
+}

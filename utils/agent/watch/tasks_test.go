@@ -139,3 +139,17 @@ func TestTheSameSourceIsAddedOnce(t *testing.T) {
 		t.Fatalf("want 3 tasks, got %d", len(LoadTasks(dir).Tasks))
 	}
 }
+
+func TestACardsCostCountsTheMinutesOfFinishedRuns(t *testing.T) {
+	start := time.Date(2026, 11, 18, 9, 0, 0, 0, time.UTC)
+	l := &FixLog{Started: []FixRecord{
+		{Workspace: "api", Ref: "ABC-1", StartedAt: start, FinishedAt: start.Add(26 * time.Minute), Tokens: 100},
+		{Workspace: "api", Ref: "ABC-1", StartedAt: start.Add(time.Hour), FinishedAt: start.Add(time.Hour + 4*time.Minute + 40*time.Second), Tokens: 50},
+		{Workspace: "api", Ref: "ABC-1", StartedAt: start.Add(2 * time.Hour)},
+		{Workspace: "api", Ref: "ABC-2", StartedAt: start, FinishedAt: start.Add(time.Hour)},
+	}}
+	c := l.CostFor("api", "ABC-1")
+	if c.Runs != 3 || c.Tokens != 150 || c.Minutes != 31 {
+		t.Fatalf("two finished runs, 26m + 4m40s: %+v", c)
+	}
+}

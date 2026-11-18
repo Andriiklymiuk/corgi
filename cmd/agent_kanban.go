@@ -63,6 +63,7 @@ type CardCost struct {
 	Tokens   int64    `json:"tokens"`
 	Runs     int      `json:"runs"`
 	Sessions int      `json:"sessions"`
+	Minutes  int      `json:"minutes,omitempty"`
 	Models   []string `json:"models,omitempty"`
 	Agents   []string `json:"agents,omitempty"`
 }
@@ -466,6 +467,7 @@ func addRunCost(c *KanbanCard, cost watch.Cost) {
 	c.Cost.USD += cost.USD
 	c.Cost.Tokens += cost.Tokens
 	c.Cost.Runs = cost.Runs
+	c.Cost.Minutes = cost.Minutes
 	for _, m := range cost.Models {
 		c.Cost.Models = appendFold(c.Cost.Models, m)
 	}
