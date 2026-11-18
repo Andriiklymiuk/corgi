@@ -45,7 +45,11 @@ func launchTerminalHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.Method == http.MethodGet {
-		writeLaunchJSON(w, map[string]any{"enabled": s.Terminal, "allowed": s.TerminalFor(d.TokenHash), "machine": macName(), "shell": term.Shell(), "workspaces": terminalWorkspaces()})
+		status := map[string]any{"enabled": s.Terminal, "allowed": s.TerminalFor(d.TokenHash), "machine": macName(), "shell": term.Shell()}
+		if s.TerminalFor(d.TokenHash) {
+			status["workspaces"] = terminalWorkspaces()
+		}
+		writeLaunchJSON(w, status)
 		return
 	}
 	if r.Method != http.MethodPost {

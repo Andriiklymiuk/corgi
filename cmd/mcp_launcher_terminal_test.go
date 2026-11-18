@@ -256,3 +256,24 @@ func TestATerminalStartsInAKnownWorkspaceOnly(t *testing.T) {
 		t.Fatalf("workspaces %+v", list)
 	}
 }
+
+func TestWorkspacesAreListedOnlyToADeviceThatMayOpenATerminal(t *testing.T) {
+	rig := newScreenRig(t)
+	registry := &workspace.Registry{}
+	registry.Upsert(workspace.Workspace{ID: "acme", AbsPath: t.TempDir()})
+	if err := workspace.Save(agentRegistryPath(rig.dir), registry); err != nil {
+		t.Fatal(err)
+	}
+	_ = runAgentTerm(rig.dir, "on", nil)
+	if code, out := rig.call(t, launchTerminalHandler, "ipad", "GET", "/launch/terminal", "", ""); code != 200 || out["workspaces"] != nil {
+		t.Fatalf("a device that may not open a terminal saw the workspaces: %d %v", code, out)
+	}
+	if err := applyScreenChange(rig.dir, screenSettingsIn{Do: "terminal", Device: rig.hashes["ipad"], On: true}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	code, out := rig.call(t, launchTerminalHandler, "ipad", "GET", "/launch/terminal", "", "")
+	list, _ := out["workspaces"].([]any)
+	if code != 200 || len(list) != 1 {
+		t.Fatalf("an allowed device gets the list: %d %v", code, out)
+	}
+}
