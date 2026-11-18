@@ -1738,6 +1738,9 @@ While you are away:
   gzipped with an `ETag`, so a phone on cellular reading the board every few
   seconds pulls a tenth of the bytes, and nothing when nothing changed
   (2.31.34).
+- **How fast it answers.** Every `/launch` route is timed. `GET /launch/timings`
+  lists them slowest first (count, p50, p95, max in ms, last 256 calls each),
+  and the same list is kept in `timings.json` in the agent directory (2.58.1).
 - **The lid.** A closing lid lets the screen sleep and mutes the Mac until it
   opens; `corgi agent status` and the status file's `laptop` say the degrees,
   the battery, the lid, the network and how many sessions are paused.

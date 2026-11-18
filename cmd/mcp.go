@@ -398,8 +398,9 @@ func mountLaunchRoutes(mux *http.ServeMux, token, deviceStore string) {
 	mux.Handle(handsStatePath, launchHandsStateLocal())
 	mux.Handle("/launch/preview/", http.HandlerFunc(previewProxyHandler))
 	for path, h := range launchRoutes {
-		mux.Handle(path, launchAuth(token, h, deviceStore))
+		mux.Handle(path, launchAuth(token, timedLaunchRoute(path, h), deviceStore))
 	}
+	mux.Handle("/launch/timings", launchAuth(token, http.HandlerFunc(launchTimingsHandler), deviceStore))
 }
 
 func mountMCPOAuth(mux *http.ServeMux, addr, token, deviceStore string, opts mcpHTTPOpts, origins *originAllowlist) *oauthServer {
@@ -461,6 +462,7 @@ func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 	ideaAutoAnswerHere = true
 
 	if token != "" || deviceStore != "" {
+		launchTimingsDir = agentDirOrEmpty()
 		mountLaunchRoutes(mux, token, deviceStore)
 	}
 	for _, source := range []string{"linear", "github", "gitlab", "jira", "coralogix"} {
