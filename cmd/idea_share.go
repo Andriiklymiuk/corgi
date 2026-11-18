@@ -219,7 +219,7 @@ func pageToShare(dir string, req shareRequest, now time.Time) (slug string, crea
 }
 
 func updateSharedFile(dir, source, text, by string, now time.Time) (slug string, found, changed bool, err error) {
-	for _, m := range idea.List(dir) {
+	for _, m := range listIdeas(dir) {
 		if m.Source != source {
 			continue
 		}

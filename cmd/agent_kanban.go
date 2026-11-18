@@ -53,6 +53,7 @@ type KanbanCard struct {
 	Pull      *watch.PullStatus `json:"pull,omitempty"`
 	Now       *CardNow          `json:"now,omitempty"`
 	Feature   *CardFeature      `json:"feature,omitempty"`
+	Idea      *CardIdea         `json:"idea,omitempty"`
 	After     []string          `json:"after,omitempty"`
 	UpdatedAt time.Time         `json:"updatedAt"`
 	Standing  sessions.Standing `json:"standing"`
@@ -713,6 +714,7 @@ func gatherKanban(dir, onlyWorkspace string, now time.Time) []KanbanCard {
 		}
 	}
 	cards := buildKanban(in)
+	linkCardsToIdeas(dir, cards)
 	if onlyWorkspace == "" {
 		return cards
 	}
@@ -784,6 +786,9 @@ moving a ticket moves it on the tracker (corgi agent watch move).
 				}
 				if c.Cost != nil {
 					line += " · " + costLine(*c.Cost)
+				}
+				if c.Idea != nil {
+					line += " · idea " + c.Idea.Slug
 				}
 				fmt.Println(line)
 			}

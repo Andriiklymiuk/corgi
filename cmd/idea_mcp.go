@@ -166,7 +166,7 @@ func ideaToolNew(r mcp.CallToolRequest) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	req := ideaRequest{Text: strings.TrimSpace(r.GetString("text", "")), Type: r.GetString("type", ""), Workspace: strings.TrimSpace(r.GetString("workspace", "")), From: r.GetString("markdown", ""), By: "mcp", Model: ideaModel, Tasks: r.GetBool("tasks", true)}
+	req := ideaRequest{Text: strings.TrimSpace(r.GetString("text", "")), Type: r.GetString("type", ""), Workspace: strings.TrimSpace(r.GetString("workspace", "")), From: r.GetString("markdown", ""), By: "mcp", Model: ideaModel, Tasks: r.GetBool("tasks", true), Keep: strings.TrimSpace(r.GetString("workspace", "")) != ""}
 	if req.Text == "" && strings.TrimSpace(req.From) == "" {
 		return nil, fmt.Errorf("say what the page is about")
 	}

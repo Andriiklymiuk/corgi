@@ -148,6 +148,9 @@ type Meta struct {
 	Tags      []string `json:"tags,omitempty"`
 	Summary   string   `json:"summary,omitempty"`
 	Workspace string   `json:"workspace,omitempty"`
+	// Home is the folder in the workspace that holds the page, when it is
+	// kept there (<workspace>/.corgi/ideas/<name>); never written to disk.
+	Home string `json:"home,omitempty"`
 	// Source is the file the page was shared from, so sharing it again
 	// updates this page instead of making another.
 	Source string `json:"source,omitempty"`
@@ -336,7 +339,7 @@ func Create(agentDir, slug, title, doc string, meta Meta, now time.Time) (*Idea,
 	}
 	base := slug
 	for n := 2; ; n++ {
-		if _, err := os.Stat(Dir(agentDir, slug)); os.IsNotExist(err) {
+		if _, err := os.Lstat(Dir(agentDir, slug)); os.IsNotExist(err) {
 			break
 		}
 		slug = fmt.Sprintf("%s-%d", base, n)
@@ -391,6 +394,10 @@ func Load(agentDir, slug string) (*Idea, error) {
 		return nil, fmt.Errorf("%s: %v", filepath.Join(dir, MetaName), err)
 	}
 	id.Meta.Slug = slug
+	if home, ok := Home(agentDir, slug); ok {
+		readLocal(agentDir, slug).fill(&id.Meta)
+		id.Meta.Home = shownHome(home)
+	}
 	if doc, err := os.ReadFile(filepath.Join(dir, DocName)); err == nil {
 		id.Doc = string(doc)
 	}
@@ -426,7 +433,7 @@ func List(agentDir string) []Meta {
 	}
 	var out []Meta
 	for _, e := range entries {
-		if !e.IsDir() || !ValidSlug(e.Name()) {
+		if !ValidSlug(e.Name()) {
 			continue
 		}
 		raw, err := os.ReadFile(filepath.Join(Root(agentDir), e.Name(), MetaName))
@@ -438,6 +445,10 @@ func List(agentDir string) []Meta {
 			continue
 		}
 		m.Slug = e.Name()
+		if home, ok := Home(agentDir, e.Name()); ok {
+			readLocal(agentDir, e.Name()).fill(&m)
+			m.Home = shownHome(home)
+		}
 		out = append(out, m)
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].UpdatedAt.After(out[j].UpdatedAt) })
@@ -455,21 +466,30 @@ func (id *Idea) saveLocked(agentDir string) error {
 	if err := os.MkdirAll(id.Dir, 0o700); err != nil {
 		return err
 	}
-	meta, err := json.MarshalIndent(id.Meta, "", "  ")
+	kept := id.Meta
+	kept.Home = ""
+	mode := os.FileMode(0o600)
+	if _, shared := Home(agentDir, id.Meta.Slug); shared {
+		mode = 0o644
+		if err := writeLocal(agentDir, id.Meta.Slug, takeLocal(&kept)); err != nil {
+			return err
+		}
+	}
+	meta, err := json.MarshalIndent(kept, "", "  ")
 	if err != nil {
 		return err
 	}
-	if err := atomicfile.Write(filepath.Join(id.Dir, MetaName), meta, 0o600); err != nil {
+	if err := atomicfile.Write(filepath.Join(id.Dir, MetaName), meta, mode); err != nil {
 		return err
 	}
-	if err := atomicfile.Write(filepath.Join(id.Dir, DocName), []byte(id.Doc), 0o600); err != nil {
+	if err := atomicfile.Write(filepath.Join(id.Dir, DocName), []byte(id.Doc), mode); err != nil {
 		return err
 	}
 	comments, err := json.MarshalIndent(id.Comments, "", "  ")
 	if err != nil {
 		return err
 	}
-	if err := atomicfile.Write(filepath.Join(id.Dir, CommentsName), comments, 0o600); err != nil {
+	if err := atomicfile.Write(filepath.Join(id.Dir, CommentsName), comments, mode); err != nil {
 		return err
 	}
 	Touch(agentDir)

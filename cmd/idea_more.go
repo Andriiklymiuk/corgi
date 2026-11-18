@@ -299,7 +299,7 @@ func ideaDigestPart(m idea.Meta, id *idea.Idea) []string {
 
 func ideaDigestLines(dir string) []string {
 	var rows []digestRow
-	for _, m := range idea.List(dir) {
+	for _, m := range listIdeas(dir) {
 		if m.Status == idea.Built {
 			continue
 		}

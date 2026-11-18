@@ -317,6 +317,7 @@ type ideaRequest struct {
 	Type      string // idea (default), spec, hld, rfc
 	From      string // a page already written: kept as is, the agent only names, tags and splits it
 	Tasks     bool   // put the tickets on the board now
+	Keep      bool   // the workspace was named on purpose: keep the page in its .corgi/ideas folder
 }
 
 func newIdea(dir string, req ideaRequest, now time.Time) (*idea.Idea, []watch.Task, error) {
@@ -367,6 +368,9 @@ func newIdea(dir string, req ideaRequest, now time.Time) (*idea.Idea, []watch.Ta
 	id, err := idea.Create(dir, "", title, page, meta, now)
 	if err != nil {
 		return nil, nil, err
+	}
+	if _, err := keepIdeaInWorkspace(dir, id.Meta.Slug, ws, req.Keep); err != nil {
+		utils.Infof("the page stays on this machine: %v\n", err)
 	}
 	var made []watch.Task
 	if req.Tasks {
@@ -844,6 +848,16 @@ var ideaCmd = &cobra.Command{
       hand it to the agents: tasks on the board, a plan that works through
       them in worktrees, the daemon starts the first
 
+A page with a workspace is kept in that repository, in
+<workspace>/.corgi/ideas/<name>/ - the page, its comments and files, to
+commit with the code so the team has the idea and its threads beside it
+(corgi idea move puts an older page there, or brings one back). Its share
+key never goes into that folder.
+
+  corgi idea new "usage limits with a banner" --workspace api --build
+      the same, and nobody is asked: the page is written, then the agents
+      start on it at once
+
 The page is markdown (corgi idea path <slug> prints where); edit it in any
 editor, the browser follows. Comments, replies, statuses and files sit
 beside it in comments.json. Nothing leaves this machine but what the
@@ -894,6 +908,7 @@ var ideaNewCmd = &cobra.Command{
 			}
 			kindOverride = kind
 		}
+		keep := ws != ""
 		if ws == "" {
 			if cwd, err := os.Getwd(); err == nil {
 				_, ws = workspaceRootFor(cwd)
@@ -904,17 +919,38 @@ var ideaNewCmd = &cobra.Command{
 				exitWithError("idea", err, 2)
 			}
 		}
+		build, _ := cmd.Flags().GetBool("build")
+		slots, _ := cmd.Flags().GetInt("slots")
+		if build && ws == "" {
+			exitWithError("idea", fmt.Errorf("--build needs a workspace to build in: --workspace <id>, or run it inside one"), 2)
+		}
 		if model == "" {
 			model = ideaModel
 		}
 		utils.Infof("writing the page with %s…\n", model)
-		id, tasks, err := newIdea(dir, ideaRequest{Text: text, Workspace: ws, Model: model, By: firstNonEmpty(by, "cli"), Type: typ, From: from, Tasks: !noTasks}, time.Now())
+		id, tasks, err := newIdea(dir, ideaRequest{Text: text, Workspace: ws, Model: model, By: firstNonEmpty(by, "cli"), Type: typ, From: from, Tasks: !noTasks && !build, Keep: keep}, time.Now())
 		if err != nil {
 			exitWithError("idea", err, 1)
 		}
+		var built *ideaBuild
+		if build {
+			utils.Infof("building it in %s, nobody asked…\n", ws)
+			res, err := buildIdea(dir, id.Meta.Slug, ws, "", slots, true)
+			if err != nil {
+				exitWithError("idea", fmt.Errorf("the page is written (%s) but the build did not start: %v", id.Meta.Slug, err), 1)
+			}
+			built = &res
+			if again, err := idea.Load(dir, id.Meta.Slug); err == nil {
+				id = again
+			}
+		}
 		link := ideaLink(dir, id.Meta, true)
 		if utils.JSONOutput {
-			utils.PrintJSON(map[string]any{"idea": id.Meta, "tasks": tasks, "file": filepath.Join(id.Dir, idea.DocName), "link": link, "proposals": len(id.Comments.Comments)})
+			out := map[string]any{"idea": id.Meta, "tasks": tasks, "file": filepath.Join(id.Dir, idea.DocName), "link": link, "proposals": len(id.Comments.Comments)}
+			if built != nil {
+				out["build"] = built
+			}
+			utils.PrintJSON(out)
 			return
 		}
 		fmt.Printf("%s - %s (%s)\n", id.Meta.Slug, firstNonEmpty(id.Meta.Name, id.Meta.Title), id.Meta.Type)
@@ -928,6 +964,10 @@ var ideaNewCmd = &cobra.Command{
 			fmt.Printf("  %-8s %s\n", t.Ref, t.Title)
 		}
 		fmt.Printf("  page: %s\n", filepath.Join(id.Dir, idea.DocName))
+		fmt.Printf("  kept: %s\n", whereIdeaIsKept(id.Meta))
+		if built != nil {
+			fmt.Printf("  %s\n", buildNote(*built, max(slots, 1)))
+		}
 		fmt.Printf("  %d proposal(s) from the agent wait on the page\n", len(id.Comments.Comments))
 		if link != "" {
 			fmt.Printf("  open: %s\n", link)
@@ -985,7 +1025,7 @@ func ideaRows(dir string, withLinks bool) []ideaRow {
 	if withLinks {
 		local, public = ideaLinkBases()
 	}
-	for _, m := range idea.List(dir) {
+	for _, m := range listIdeas(dir) {
 		id, err := idea.Load(dir, m.Slug)
 		if err != nil {
 			continue
@@ -1056,11 +1096,15 @@ var ideaPathCmd = &cobra.Command{
 		if err != nil {
 			exitWithError("idea", err, 2)
 		}
+		folder := id.Dir
+		if real, err := filepath.EvalSymlinks(folder); err == nil {
+			folder = real
+		}
 		if utils.JSONOutput {
-			utils.PrintJSON(map[string]any{"file": filepath.Join(id.Dir, idea.DocName), "dir": id.Dir})
+			utils.PrintJSON(map[string]any{"file": filepath.Join(folder, idea.DocName), "dir": folder, "kept": whereIdeaIsKept(id.Meta)})
 			return
 		}
-		fmt.Println(filepath.Join(id.Dir, idea.DocName))
+		fmt.Println(filepath.Join(folder, idea.DocName))
 	},
 }
 
@@ -1329,7 +1373,7 @@ one terminal you can see.`,
 		}
 		fmt.Println("watching the idea pages; ctrl-c stops")
 		for {
-			for _, m := range idea.List(dir) {
+			for _, m := range listIdeas(dir) {
 				if only != "" && m.Slug != only {
 					continue
 				}
@@ -1468,10 +1512,17 @@ func setIdea(dir, slug string, ch ideaChanges) (*idea.Idea, error) {
 	if err != nil {
 		return nil, err
 	}
-	return idea.Update(dir, slug, func(id *idea.Idea) error {
+	id, err := idea.Update(dir, slug, func(id *idea.Idea) error {
 		applyIdeaChanges(id, ch, build)
 		return nil
 	})
+	if err != nil || ch.Workspace == "" {
+		return id, err
+	}
+	if _, err := keepIdeaInWorkspace(dir, slug, ch.Workspace, true); err != nil {
+		return nil, err
+	}
+	return idea.Load(dir, slug)
 }
 
 func checkIdeaChanges(dir, slug string, ch ideaChanges) (bool, error) {
@@ -1684,20 +1735,21 @@ var ideaRmCmd = &cobra.Command{
 		if err != nil {
 			exitWithError("idea", err, 2)
 		}
-		if err := os.RemoveAll(id.Dir); err != nil {
+		if err := idea.Remove(dir, id.Meta.Slug); err != nil {
 			exitWithError("idea", err, 1)
 		}
-		idea.Touch(dir)
 		fmt.Printf("removed %s\n", args[0])
 	},
 }
 
 func init() {
-	ideaNewCmd.Flags().String("workspace", "", "the workspace it goes into (default: the one you are in; none is fine)")
+	ideaNewCmd.Flags().String("workspace", "", "the workspace it belongs to, builds in and is kept in (<workspace>/.corgi/ideas/<name>); default: the one you are in, kept there only when that folder exists")
 	ideaNewCmd.Flags().String("model", "", "the writer's model: sonnet (default), opus, haiku; a codex model for a codex workspace")
 	ideaNewCmd.Flags().String("kind", "", "run the writer under this agent: claude or codex (default: the workspace's)")
 	ideaNewCmd.Flags().String("by", "", "who asked (default: cli)")
 	ideaNewCmd.Flags().Bool("no-tasks", false, "write the page only; no tasks on the board yet")
+	ideaNewCmd.Flags().Bool("build", false, "do not wait for anyone: write the page, then hand it to the agents at once (tasks, a plan, the first run)")
+	ideaNewCmd.Flags().Int("slots", 1, "with --build: how many tasks run at once")
 	ideaNewCmd.Flags().Bool("open", false, "open the page in the browser when the dashboard runs")
 	ideaNewCmd.Flags().String("type", "", "what kind of page: idea (default), spec, hld, rfc, or the team's own (corgi idea templates)")
 	ideaNewCmd.Flags().String("from", "", "a markdown file you already wrote: kept as is; the agent names, tags and splits it")
@@ -1825,7 +1877,7 @@ func scheduleIdea(dir, slug string, restart bool) {
 func ideaAnswerLoop(ctx context.Context, dir string, every time.Duration) {
 	// A run this process is not making is not running: a page left saying
 	// "answering" by a process that died says so no more.
-	for _, m := range idea.List(dir) {
+	for _, m := range listIdeas(dir) {
 		if m.Answering || m.Mocking {
 			_, _ = idea.Update(dir, m.Slug, func(id *idea.Idea) error { id.Meta.Answering, id.Meta.Mocking = false, false; return nil })
 		}
@@ -1837,7 +1889,7 @@ func ideaAnswerLoop(ctx context.Context, dir string, every time.Duration) {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			for _, m := range idea.List(dir) {
+			for _, m := range listIdeas(dir) {
 				if m.Auto {
 					scheduleIdea(dir, m.Slug, false)
 				}

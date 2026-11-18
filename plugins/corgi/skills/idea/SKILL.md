@@ -76,7 +76,11 @@ as a guest, under your own name (never as "agent" - that is the page's own agent
   an existing repo → `spec`; architecture / design / system → `hld`; decide / propose /
   should we → `rfc`. Say which you picked in one clause; do not ask.
 - `corgi idea new "<the sentence>" --type <t> [--workspace <id>] --json` from inside
-  the workspace when there is one (the agent reads the repository to fit it). A page
+  the workspace when there is one (the agent reads the repository to fit it). With
+  `--workspace` the page is kept in that repository, `<workspace>/.corgi/ideas/<name>/`
+  (page, comments, files: commit them with the code); `corgi idea move <slug>
+  --workspace <id> | --home` moves one later. "Just build it", "no need for my
+  approval" → add `--build`: the page is written and the agents start at once. A page
   the user already wrote: `--from <file.md>` keeps it verbatim and only names, tags
   and splits it.
 - Report: the name, the link (`link` in the JSON; `corgi agent up` when it is empty),

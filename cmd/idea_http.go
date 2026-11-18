@@ -890,7 +890,7 @@ func launchIdeaNew(w http.ResponseWriter, dir string, a ideaAction) {
 			return
 		}
 	}
-	id, tasks, err := newIdea(dir, ideaRequest{Text: text, Workspace: strings.TrimSpace(a.Workspace), Model: ideaModel, By: firstNonEmpty(strings.TrimSpace(a.By), "phone"), Type: a.Type, From: a.Markdown, Tasks: true}, time.Now())
+	id, tasks, err := newIdea(dir, ideaRequest{Text: text, Workspace: strings.TrimSpace(a.Workspace), Model: ideaModel, By: firstNonEmpty(strings.TrimSpace(a.By), "phone"), Type: a.Type, From: a.Markdown, Tasks: true, Keep: strings.TrimSpace(a.Workspace) != ""}, time.Now())
 	if err != nil {
 		writeLaunchError(w, http.StatusBadGateway, err.Error())
 		return
