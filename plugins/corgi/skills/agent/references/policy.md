@@ -18,8 +18,10 @@ restart from a handoff under the same account (`corgi agent carry <session>
 branch by plan task.
 
 **Models** are a policy per phase in the user config (`models:` under a
-workspace or `defaults:`): `plan` and `review` on opus, `execute` and
-`triage` on sonnet/haiku, `escalate` after a failed run, `kinds:` per event.
+workspace or `defaults:`): `plan` and `review` on the largest model, `execute`
+and `triage` on the default or the small one, `escalate` after a failed run,
+`kinds:` per event. Write the alias (`opus`, `sonnet`, `haiku`), not a dated
+id: an alias follows the newest model of its tier, an id goes stale.
 `corgi agent claude --model auto` starts on the policy's `auto` (opusplan by
 default); the unattended runner picks per kind and steps up after a failure.
 
@@ -62,7 +64,7 @@ card is `watch move`; nobody drags one into Running.
 What a card also says (2.40): `now` is the live line of a Running card - the
 session's tool and file, or "a run is on it", with the model and the agent;
 `cost.models` and `cost.agents` are who worked on it, once each (claude,
-codex; `sonnet-4-5`, `gpt-5-codex`); `feature` is the plan (`P-3`) or the
+codex, and each model by its own id); `feature` is the plan (`P-3`) or the
 parent ticket the card is one piece of, `after` the cards it waits for. The
 `features` list in `--json` groups them with a state and `waves`: the cards
 of one wave run side by side, the waves in a row (`TASK-1 → TASK-2 + TASK-3`).

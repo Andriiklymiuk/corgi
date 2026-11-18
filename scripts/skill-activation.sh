@@ -45,6 +45,10 @@ prep-pr|prep my PR
 before-after|attach before and after screenshots to the PR
 align|let's align first, this request could mean two things
 factory|how do we get to a software factory here, what is our next step to run this unattended
+web|check the new billing page in the browser, click through the flow and tell me if the console is clean
+security|do a security review of the order routes, can one user read another user's order
+perf|the orders page takes 3 seconds to load, profile it and make it faster
+deps|update the dependencies in this workspace and fix the audit warnings
 none|what is the capital of France
 CASES
 echo "$pass passed, $fail failed"

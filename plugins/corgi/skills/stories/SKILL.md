@@ -176,8 +176,9 @@ Stands alone. Used if present, never required:
 - **Code-review command** (e.g. `/code-review`) - Phase 3.5 if present; else
   review subagent works everywhere.
 
-Always available, all flow needs: `git`, `gh`/`glab`, `corgi`, `Explore`/`Task`
-agents, tracker MCP.
+Always available, all flow needs: `git`, `gh`/`glab`, `corgi`, tracker MCP. Everything
+else the session offers (a monitor, a push, a browser, a device, a language server):
+`../_shared/session-tools.md`, each with its fallback.
 
 ---
 

@@ -138,6 +138,14 @@ a skill you can already describe from lived evidence.
   quirk conditionally ("if X in your stack…") so the edit helps other apps, not just the
   one you saw it on. A reproducible bug+fix is universal; one app's rendering quirk is not.
 - **Preview before write** - never silently edit a shared skill repo.
+- **Write for the model that reads it now.** State a rule once, in a calm sentence, with
+  its reason; capitals, "non-negotiable" and the same rule three times make a current
+  model over-apply it. Delete a rule the model already follows on its own: it costs
+  context in every session. Never pin a model id or a tool version; name the need and
+  let `../_shared/session-tools.md` map it to a tool and a fallback.
+- **A new rule earns a check.** A trigger that changed → a line in
+  `scripts/skill-activation.sh`. A rule someone once broke → an eval case (`evals/README.md`).
+  Every `corgi …` command in the edit → `corgi docs commands <path>` reads clean.
 - **No path → summary only**, never edit.
 - **One skill at a time**, except a retro the person asked for.
 - **A check beats a rule** when the mistake has a fixed shape.

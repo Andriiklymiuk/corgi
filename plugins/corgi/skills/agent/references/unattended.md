@@ -117,3 +117,44 @@ behaviour), `corgi_agent_mute`, `corgi_agent_attempts` (with `pick`),
 lists the services at a glance and starts, stops, restarts or tests them
 (`/launch/stack`); without one the section stays away. **The whole diff**:
 `/launch/diff?all=1`.
+
+**A session whose terminal is gone**: `corgi agent turn <session> "<message>"`
+runs one headless turn in its checkout under its account (`acceptEdits`,
+nobody to ask; the log is `watch/runs/continue-<id>.log` in the agent dir).
+A session that still has a terminal is typed into with `corgi agent send`,
+never resumed beside itself. `watch enable --headless` does this on its own
+for a message from the phone.
+
+**A run that went the wrong way**: `corgi agent undo <session>` drops every
+uncommitted edit and new file in the session's own worktree; `--worktree`
+removes the worktree and its `corgi/<ref>` branch too. Only for an isolated
+session: one on the user's checkout is refused. It asks first; `--yes` is
+the person's to give, never yours.
+
+**The phone reads a session as a chat** only in workspaces the user opened:
+`corgi agent stream enable --workspace <id>` (or `--all`), `stream disable`,
+`corgi agent stream` to list. Pulled over the sealed link while the chat
+sheet is open; what looks like a secret is scrubbed first.
+
+**A pull request body from the session that made the branch**:
+`corgi agent pr-body <session>` prints it (what was asked, the commits, the
+files, the last test run); `--apply` writes it onto the session's PR.
+
+**A push that a red session cannot make**: `corgi agent guard install` puts
+a pre-push hook in this checkout. A branch whose session has a red
+done-when gate or a red last test run is refused, with the command that
+failed. `corgi agent guard check` is what the hook runs. `CORGI_FORCE=1`
+is the person's override; do not set it for them.
+
+**The machine went quiet**: `corgi agent pulse https://hc-ping.com/<uuid>`
+(then `corgi agent restart`) pings that URL every five minutes, so a
+healthchecks.io, Uptime Kuma or cronitor check alarms the user when the
+daemon stops. `corgi agent pulse off` clears it.
+
+**The whole loop in a container**: `corgi agent container up` builds and
+starts the daemon, the watch and the routines on this Docker host;
+`--host ssh://me@build-1` on a server; `--clone <git url>` registers a
+stack at first start; `--docker` mounts the host's Docker socket so a fix
+can run the stack. `container shell | logs | stop | down | status` for the
+rest. `up` asks once for a Claude token (`claude setup-token` prints one):
+that is the person's step.

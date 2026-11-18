@@ -44,10 +44,14 @@ review pull requests, and keep the work moving while you are away from the desk.
 | `setup` | Sets corgi up end to end on a new machine, or copies this one's workspaces, env files and Claude settings to another (ssh, a link, or a sealed file) |
 | `resume`, `standup`, `summary`, `budget` | Where you were, what you did, where a batch stands, how much usage is left |
 | `mobile`, `ship`, `purchases`, `mobile-screenshots` | Expo / React Native: verify on a device, ship to the stores, in-app purchases, store screenshots |
+| `web` | Verifies a web change in a real browser: drives the page, reads the screenshot, the console and the network |
 | `before-after`, `design-parity`, `showcase` | Visual proof: before/after captures, design comparison, README pictures |
 | `unslop` | A design pass for a UI that looks generated: neutral surfaces, one accent, rows not cards, every state designed, measured contrast |
 | `factory` | How much runs without a person: the ladder, its brakes, the next step |
 | `quality` | A code quality pass: a baseline, real defects hunted by kind, fixed worst first with proof |
+| `security` | A security pass: the ways in, each finding proved on the local stack, fixed worst first |
+| `perf` | Makes a slow page, route, screen or build faster: measured before and after |
+| `deps` | Upgrades dependencies across the workspace: changelog read, one upgrade per commit, the stack booted behind each |
 | `architecture` | How the app or workspace is put together: a map from the code, cycles, hubs and change coupling measured, one seam moved at a time behind a fence rule, decisions written down |
 | `memory`, `improve-skill` | The workspace memory store; refining a skill from a session |
 
@@ -75,6 +79,10 @@ your own accounts:
   `$JIRA_EMAIL` and `$JIRA_API_TOKEN` if you have set them. The token is sent only to
   that Jira site.
 - **Health checks:** the `agent` skill can `curl` your own local or tunnelled app URL.
+- **Your own stack, probed:** `security` sends test requests to localhost or an
+  environment you own; `web` opens your running app in a browser; `perf` times it.
+- **Package registries:** `deps` runs your package manager's own outdated, audit and
+  install commands, and reads release notes from the library's public pages.
 
 Nothing is sent anywhere else.
 

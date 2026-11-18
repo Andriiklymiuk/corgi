@@ -156,8 +156,10 @@ then:
 - **A review is not a wall.** While one item waits on a reviewer, a merge or CI, start
   the next one - stacked on the waiting branch when it needs that code. "When #58 merges
   I start ABC-12" and "say go for the next one" are stops nobody asked for.
-- **Long work is waited for.** A build, a CI run, a deploy runs in the background and is
-  polled to its conclusion; "it's running, check later" is not an end. Before the wait,
+- **Long work is waited for.** A build, a CI run, a deploy runs in the background to its
+  conclusion - the harness reports when a background command ends, so one command that
+  waits on the condition beats a poll every minute; "it's running, check later" is not
+  an end. Before the wait,
   one line: what runs, about how long, and the link to watch it. While it runs, a line
   every few minutes with the phase it is in and what is left, so nobody has to ask
   "so?" - and the next item in the batch gets worked in the meantime, never a foreground
@@ -192,10 +194,18 @@ then:
 
 ## One session by default
 
-Do the work in this session. Parallel agents only when the person asks for them in this
-conversation, or the skill's own step needs one and the load allows it. A batch of agents spends
-the usage limit in a burst and dies on it together, and each returns less than it read. "No
-agents" stands for the rest of the conversation.
+Do the work in this session. Parallel agents, a workflow or a fan-out only when the person
+asks for them in this conversation, or the skill's own step needs one and the load allows it.
+A batch of agents spends the usage limit in a burst and dies on it together, and each returns
+less than it read. "No agents" stands for the rest of the conversation.
+
+## The session's own tools
+
+The harness gains tools faster than a skill can name them: a monitor for logs, a question the
+phone can answer, a push, a file sent to the person, a published page, a language server, a
+browser, a device. `session-tools.md` (next to this file) maps each need to the tool and to
+the fallback when the tool is not there. Read it when a step waits, asks, notifies, shows a
+file or drives a screen.
 
 ## Steps only a person can do
 
