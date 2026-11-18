@@ -17,6 +17,7 @@ import (
 	"andriiklymiuk/corgi/utils/agent/peers"
 	"andriiklymiuk/corgi/utils/agent/screen"
 	"andriiklymiuk/corgi/utils/agent/term"
+	"andriiklymiuk/corgi/utils/agent/workspace"
 	"andriiklymiuk/corgi/utils/agent/wsock"
 )
 
@@ -206,5 +207,52 @@ func TestTerminalCLIWords(t *testing.T) {
 	_ = runAgentTerm(rig.dir, "off", nil)
 	if sizeArg("x", 80) != 80 || sizeArg("120", 80) != 120 || sizeArg("5000", 24) != 24 {
 		t.Fatal("sizes")
+	}
+}
+
+func TestTheMacAppTurnsTerminalOnForOneDevice(t *testing.T) {
+	rig := newTermRig(t, "")
+	now := time.Now()
+	if err := applyScreenChange(rig.dir, screenSettingsIn{Do: "terminal", Device: rig.hash, On: true}, now); err != nil {
+		t.Fatal(err)
+	}
+	s, _ := screen.Load(rig.dir)
+	if !s.Terminal || !s.TerminalFor(rig.hash) {
+		t.Fatalf("allowing a device must turn terminals on too: %+v", s)
+	}
+	if err := applyScreenChange(rig.dir, screenSettingsIn{Do: "terminal", On: false}, now); err != nil {
+		t.Fatal(err)
+	}
+	s, _ = screen.Load(rig.dir)
+	if s.Terminal || s.TerminalFor(rig.hash) || !s.Devices[rig.hash].Terminal {
+		t.Fatalf("the main switch off must refuse everyone and keep each device's choice: %+v", s)
+	}
+	if err := applyScreenChange(rig.dir, screenSettingsIn{Do: "terminal", Device: rig.hash, On: false}, now); err != nil {
+		t.Fatal(err)
+	}
+	if s, _ = screen.Load(rig.dir); s.Devices[rig.hash].Terminal {
+		t.Fatal("the device still may")
+	}
+}
+
+func TestATerminalStartsInAKnownWorkspaceOnly(t *testing.T) {
+	rig := newTermRig(t, "")
+	stack := t.TempDir()
+	registry := &workspace.Registry{}
+	registry.Upsert(workspace.Workspace{ID: "acme", AbsPath: stack})
+	if err := workspace.Save(agentRegistryPath(rig.dir), registry); err != nil {
+		t.Fatal(err)
+	}
+	if got := terminalWorkspaceDir("acme"); got != stack {
+		t.Fatalf("dir %q, want %q", got, stack)
+	}
+	for _, unknown := range []string{"", "nope", "/etc", "../.."} {
+		if got := terminalWorkspaceDir(unknown); got != "" {
+			t.Fatalf("%q resolved to %q", unknown, got)
+		}
+	}
+	list := terminalWorkspaces()
+	if len(list) != 1 || list[0].ID != "acme" {
+		t.Fatalf("workspaces %+v", list)
 	}
 }

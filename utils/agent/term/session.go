@@ -39,18 +39,22 @@ func Shell() string {
 	return "/bin/sh"
 }
 
-func shellCmd() *exec.Cmd {
+func shellCmd(dir string) *exec.Cmd {
 	cmd := exec.Command(Shell(), "-l")
 	home, _ := os.UserHomeDir()
 	if u, err := user.Current(); err == nil && home == "" {
 		home = u.HomeDir
 	}
 	cmd.Dir = home
+	if info, err := os.Stat(dir); dir != "" && err == nil && info.IsDir() {
+		cmd.Dir = dir
+	}
 	cmd.Env = append(os.Environ(), "TERM=xterm-256color", "COLORTERM=truecolor", "CORGI_TERMINAL=1")
 	return cmd
 }
 
 type Session struct {
+	Dir     string
 	box     *Box
 	wire    Wire
 	idle    time.Duration
@@ -76,7 +80,7 @@ func (s *Session) Run(cols, rows uint16) (int, error) {
 		return -1, ErrBusy
 	}
 	defer live.Add(-1)
-	tty, cmd, err := startPTY(shellCmd(), cols, rows)
+	tty, cmd, err := startPTY(shellCmd(s.Dir), cols, rows)
 	if err != nil {
 		return -1, err
 	}

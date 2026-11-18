@@ -404,11 +404,33 @@ func applyScreenChange(dir string, in screenSettingsIn, now time.Time) error {
 			return nil
 		})
 		return err
+	case "terminal":
+		return setTerminalSwitch(dir, in.Device, in.On, now)
 	}
 	return errUnknownScreenChange
 }
 
-var errUnknownScreenChange = errors.New("do must be set, grant, forget, agents or log")
+func setTerminalSwitch(dir, device string, on bool, now time.Time) error {
+	_, err := screen.Update(dir, func(s *screen.Settings) error {
+		if device == "" {
+			s.Terminal = on
+			return nil
+		}
+		g := s.Devices[device]
+		if g == nil {
+			g = &screen.Grant{Name: deviceNameFor(dir, device), Role: screen.RoleAsk, Since: now}
+			s.Devices[device] = g
+		}
+		g.Terminal = on
+		if on {
+			s.Terminal = true
+		}
+		return nil
+	})
+	return err
+}
+
+var errUnknownScreenChange = errors.New("do must be set, grant, forget, agents, terminal or log")
 
 func deviceNameFor(dir, hash string) string {
 	store, err := pairing.Load(pairing.StorePath(dir))
@@ -424,13 +446,15 @@ func deviceNameFor(dir, hash string) string {
 }
 
 type screenDeviceRow struct {
-	ID     string    `json:"id"`
-	Name   string    `json:"name"`
-	Role   string    `json:"role"`
-	Key    bool      `json:"key"`
-	Peer   bool      `json:"peer,omitempty"`
-	Agents bool      `json:"agents,omitempty"`
-	Last   time.Time `json:"last,omitempty"`
+	ID       string    `json:"id"`
+	Name     string    `json:"name"`
+	Role     string    `json:"role"`
+	Key      bool      `json:"key"`
+	Peer     bool      `json:"peer,omitempty"`
+	Agents   bool      `json:"agents,omitempty"`
+	Terminal bool      `json:"terminal,omitempty"`
+	MayTerm  bool      `json:"mayTerminal,omitempty"`
+	Last     time.Time `json:"last,omitempty"`
 }
 
 func screenOverview(dir string) map[string]any {
@@ -441,13 +465,14 @@ func screenOverview(dir string) map[string]any {
 			if !screenViewer(d) {
 				continue
 			}
-			row := screenDeviceRow{ID: d.TokenHash, Name: d.Name, Role: screen.RoleAsk, Peer: d.Peer()}
+			row := screenDeviceRow{ID: d.TokenHash, Name: d.Name, Role: screen.RoleAsk, Peer: d.Peer(), MayTerm: terminalDevice(d)}
 			if g := s.Devices[d.TokenHash]; g != nil {
 				if g.Role != "" {
 					row.Role = g.Role
 				}
 				row.Key = g.Key != ""
 				row.Agents = g.Agents
+				row.Terminal = g.Terminal
 				row.Last = g.Last
 			}
 			rows = append(rows, row)

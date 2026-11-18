@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"andriiklymiuk/corgi/utils/agent/pairing"
 	"andriiklymiuk/corgi/utils/agent/screen"
 	"andriiklymiuk/corgi/utils/agent/term"
+	"andriiklymiuk/corgi/utils/agent/workspace"
 	"andriiklymiuk/corgi/utils/agent/wsock"
 )
 
@@ -43,7 +45,7 @@ func launchTerminalHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.Method == http.MethodGet {
-		writeLaunchJSON(w, map[string]any{"enabled": s.Terminal, "allowed": s.TerminalFor(d.TokenHash), "machine": macName(), "shell": term.Shell()})
+		writeLaunchJSON(w, map[string]any{"enabled": s.Terminal, "allowed": s.TerminalFor(d.TokenHash), "machine": macName(), "shell": term.Shell(), "workspaces": terminalWorkspaces()})
 		return
 	}
 	if r.Method != http.MethodPost {
@@ -57,11 +59,11 @@ func launchTerminalHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	now := time.Now()
 	if !s.Terminal {
-		writeLaunchError(w, http.StatusForbidden, "Terminals are off on "+macName()+": corgi agent term on")
+		writeLaunchError(w, http.StatusForbidden, "Terminals are off on "+macName()+". Turn Terminal on there: Corgi Bar › Settings › Remote screen, or corgi agent term on")
 		return
 	}
 	if !s.TerminalFor(d.TokenHash) {
-		writeLaunchError(w, http.StatusForbidden, d.Name+" may not open a terminal on "+macName()+": corgi agent term allow \""+d.Name+"\" there")
+		writeLaunchError(w, http.StatusForbidden, d.Name+" may not open a terminal on "+macName()+". Turn Terminal on for it there: Corgi Bar › Settings › Remote screen, or corgi agent term allow \""+d.Name+"\"")
 		return
 	}
 	if !d.Peer() {
@@ -132,13 +134,55 @@ func launchTerminalWS(token, storePath string) http.Handler {
 		defer conn.Close()
 		cols, rows := sizeArg(r.URL.Query().Get("cols"), 80), sizeArg(r.URL.Query().Get("rows"), 24)
 		_ = screen.Log(dir, screen.Session{Device: device, Name: name, Role: "terminal", Event: "start", At: time.Now()})
-		code, err := term.NewSession(box, conn, s.IdleStopDuration()).Run(cols, rows)
+		session := term.NewSession(box, conn, s.IdleStopDuration())
+		session.Dir = terminalWorkspaceDir(r.URL.Query().Get("workspace"))
+		code, err := session.Run(cols, rows)
 		event := "end"
 		if err != nil {
 			event = "refused: " + err.Error()
 		}
 		_ = screen.Log(dir, screen.Session{Device: device, Name: name, Role: "terminal", Event: event, Addr: "exit " + strconv.Itoa(code), At: time.Now()})
 	})
+}
+
+type terminalWorkspace struct {
+	ID   string `json:"id"`
+	Path string `json:"path"`
+}
+
+func terminalWorkspaces() []terminalWorkspace {
+	registry, _, err := agentRegistry()
+	if err != nil {
+		return nil
+	}
+	home, _ := os.UserHomeDir()
+	var out []terminalWorkspace
+	for _, ws := range registry.Sorted() {
+		if ws.Status != "" && ws.Status != workspace.StatusOK {
+			continue
+		}
+		shown := ws.AbsPath
+		if home != "" && strings.HasPrefix(shown, home+"/") {
+			shown = "~" + strings.TrimPrefix(shown, home)
+		}
+		out = append(out, terminalWorkspace{ID: ws.ID, Path: shown})
+	}
+	return out
+}
+
+func terminalWorkspaceDir(id string) string {
+	if id == "" {
+		return ""
+	}
+	registry, _, err := agentRegistry()
+	if err != nil {
+		return ""
+	}
+	ws, ok := registry.Find(id)
+	if !ok {
+		return ""
+	}
+	return ws.AbsPath
 }
 
 func sizeArg(s string, def int) uint16 {
