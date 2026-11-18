@@ -146,13 +146,13 @@ This file covers working on a stack. Everything else is in `references/`. Read t
 |---|---|
 | `references/setup.md` | Set up or repair agent mode: the daemon, supervised servers, pairing a phone, notifications on a phone (Telegram, push, the Claude app), `corgi agent doctor`. |
 | `references/remote-start.md` | Start a session from a phone or another device, profiles, the custom connector, the troubleshooting table for remote start. |
-| `references/board.md` | The session board: who is waiting, `corgi agent sessions`, `track`, `windows`, `pin`, `rescan`, hooks. |
+| `references/board.md` | The session board: who is waiting, `corgi agent sessions`, `track`, `windows`, `pin`, `rescan`, hooks; the board in a terminal (`top`, `ask`, `transcript --why`, `dismiss`); two sessions in one repo (`claim`, `cap`). |
 | `references/screen.md` | The Mac's screen and terminal from a phone or another Mac, wake, and agents that use the Mac (`corgi agent hands`, `corgi_mac_*`). |
 | `references/acting.md` | Act on the board from a phone, Telegram, Slack, the VS Code extension or an MCP client: answer, carry, continue, pause a workspace, move, ignore or comment on a watched item, undo or replay a watch. |
 | `references/watch.md` | Watch a tracker or PRs: enable, `notify` or `fix`, tokens (`watch auth`), webhooks, test and run, why a watch fired. |
 | `references/handoffs.md` | Leave, show or verify a handoff (`corgi agent handoff`), the workpad, a blocked run, the kanban columns. |
 | `references/policy.md` | Scope, drift, which model runs what, routines, hardening, own tickets and tasks, "work on it", history of done work, who reviews and as whom. |
-| `references/unattended.md` | What a workspace does on its own: the per-workspace switches (`corgi_watch_switches`, `corgi_watch_set`), several tries at once, bots, reviews from anywhere, other agents on the board, a read-only phone, pairing without a QR, the stack from the phone. |
+| `references/unattended.md` | What a workspace does on its own: the per-workspace switches (`corgi_watch_switches`, `corgi_watch_set`), several tries at once, bots, reviews from anywhere, other agents on the board, a read-only phone, pairing without a QR, the stack from the phone; a session whose terminal is gone (`turn`), `undo`, `stream`, `pr-body`, the push `guard`, `pulse`, the daemon in a container. |
 | `references/peers.md` | More than one laptop or a server: `corgi agent peers` (invite, join, lead, bootstrap), sending a task to a peer. |
 | `references/codex.md` | Codex instead of Claude: what works, hooks, carry to codex. |
 

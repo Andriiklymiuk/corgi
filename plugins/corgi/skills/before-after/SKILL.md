@@ -126,6 +126,12 @@ else moved. Two failures this catches:
 - **Something else moved** - a version banner, a date, an unrelated regression you just
   introduced. The second one is a finding, not a framing problem.
 
+A pixel diff answers both faster than two eyes when the session has one (argent
+`screenshot-diff` on two full-size captures): no changed region means the first failure,
+a changed region away from your panel means the second. Open the pictures all the same.
+A change that is a motion (a transition, a gesture) wants a short recording per side
+instead of a still; `../_shared/session-tools.md` lists the tools.
+
 ## Phase 5 - Attach them
 
 Upload to the forge, then reference them in the PR/MR body. Never link a local path and

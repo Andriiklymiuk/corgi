@@ -1,6 +1,6 @@
 ---
 name: quality
-description: "Use to raise the code quality of a repo or area: \"improve quality\", \"harden this\", \"tech debt pass\", \"audit this repo\", \"what is wrong with this code\". Baseline, real defects worst first, proof. NOT a PR review (review), one tangled function (complexity), module or service boundaries (architecture) or how a screen looks (unslop)."
+description: "Use to raise the code quality of a repo or area: \"improve quality\", \"harden this\", \"tech debt pass\", \"audit this repo\", \"what is wrong with this code\". Baseline, real defects worst first, proof. NOT a PR review (review), one tangled function (complexity), module or service boundaries (architecture), a security pass (security), one slow thing (perf), version upgrades (deps) or how a screen looks (unslop)."
 ---
 
 # Raise code quality
@@ -107,4 +107,5 @@ and Luo et al., [an empirical analysis of flaky tests](https://huang.isis.vander
 
 - **[`review`](../review/SKILL.md)** for a PR or MR, **[`complexity`](../complexity/SKILL.md)** for the function that is a jungle.
 - **[`architecture`](../architecture/SKILL.md)** when the defects come from where the boundaries are.
+- **[`security`](../security/SKILL.md)** for the attacker's view, **[`perf`](../perf/SKILL.md)** for one slow thing, **[`deps`](../deps/SKILL.md)** for upgrades.
 - **[`risk`](../risk/SKILL.md)** to score a change, **[`unslop`](../unslop/SKILL.md)** for how the product looks and feels.

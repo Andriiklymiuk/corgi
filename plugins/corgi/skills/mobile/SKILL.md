@@ -73,6 +73,26 @@ when present, else Maestro) → screenshot → look. Evidence before "works".
    the on-device before/after is the only proof. The fix is usually to make the screen read
    the setting directly and surface the computed value as a *suggestion*, not an override.
 
+## More argent tools, when the list has them
+
+Each is used only when its name is in the session's tool list. Coordinates always come
+from `describe` or the tree an action returns, never from screenshot pixels.
+
+| Need | Tool |
+|---|---|
+| Wait for a screen to settle or an element to appear | `await-ui-element` (`exists`, `visible`, `hidden`, `text`): never a screenshot poll or a fixed sleep |
+| Several known steps in a row (type, enter, scroll three times) | `run-sequence`: one call, one screenshot at the end |
+| Prove two captures differ only where the change is | `screenshot-diff` on two `scale: 1` captures |
+| A motion, a gesture or a transition as proof | `screen-recording-start` / `screen-recording-stop`; attach the file like a picture |
+| A flow worth keeping as a regression test | Load the `argent-create-e2e` skill **before the first launch**: recording is not retroactive |
+| A permission dialog (camera, photos, location, notifications) | `settings-permissions` to grant or reset it before the flow, so the run is repeatable |
+| A fold, a rotation, a shake | `fold` on a foldable, `rotate`, `shake` |
+| A slow screen or a dropped frame | `react-profiler-*` for renders, `native-profiler-*` for the native side; the **[`perf`](../perf/SKILL.md)** skill holds the method |
+| What the app sent to the API | `view-network-logs`, `view-network-request-details` |
+| A real phone on a cable, a TV, a Mac app | Load the matching `argent-*` skill first; each has its own setup |
+
+A device this session did not boot is left running: the next task reuses it.
+
 ## Gotchas
 - **A feature behind a flag, or with no seeded data, can't be driven - force it locally,
   then revert.** Waiting for the flag/data means the UI ships unverified. Add one obvious

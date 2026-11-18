@@ -1,0 +1,31 @@
+schema_version: "1.0"
+name: security-proves-the-finding
+description: A security question about a route ends in a finding with the request that proves it and a list of what was not checked, not in "looks secure" or a list of suspicions.
+tags: [read-only]
+context:
+  scaffold_script: scaffold.sh
+execution:
+  max_turns: 20
+  timeout_seconds: 480
+  allowed_tools: [Skill, Read, Glob, Grep]
+  prompt: |
+    Security review of the order routes in the api: can one user read another user's order? Do not change anything yet.
+
+    This session has no shell and the stack is not running, so give the exact request I should send to prove each finding and the answer that would confirm it.
+graders:
+  - name: fires-security
+    type: tool_used
+    tool: Skill
+    input_match: '"(corgi:)?(corgi-)?security"'
+  - name: finds-the-missing-owner-check
+    type: llm
+    criteria: |
+      Score 1 if the answer says GET /orders/<id> returns an order (and its owner's email) to any caller because the route never checks who is calling or that the order belongs to them. Score 0 if it calls the route safe or misses this.
+  - name: gives-the-proving-request
+    type: llm
+    criteria: |
+      Score 1 if the finding comes with a concrete request to send (for example a curl for GET /orders/o-2 as the other user, or with no token) and the answer that would confirm it (a 200 with the other user's data) or close it (a 401, 403 or 404). Score 0 if the finding is stated with no request to prove it.
+  - name: says-what-was-not-checked
+    type: llm
+    criteria: |
+      Score 1 if the answer states that nothing was run here and names at least one thing that was not checked. Score 0 if it presents the findings as verified by running them, or claims the rest of the service is secure.

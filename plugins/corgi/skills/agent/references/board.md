@@ -61,3 +61,38 @@ touches nothing else in `settings.json`.
 From a phone, `corgi_sessions` is the same board as JSON - call it for "is
 anything waiting on me" or "what is running right now"; it says so when
 tracking is not enabled yet.
+
+## The board from a terminal
+
+```bash
+corgi agent top                              # live, like top: j/k move, a allow, d deny, i interrupt, o open, q quit
+corgi agent ask "what should I look at first?"   # one short answer about the whole board
+corgi agent ask --diff api·APP-412           # what that session's branch does, three lines and a risk word
+corgi agent transcript <session> --json      # the newest 40 entries and the offset after them
+corgi agent transcript <session> --why       # the conversation as steps: what was said, the tools run on it, the files touched
+corgi agent logs <workspace>                 # starts, exits and why (alias: timeline)
+corgi agent dismiss <session>                # free the key of a done, idle or closed session
+corgi agent resolve <name>                   # which workspace a name means, nothing started
+```
+
+- **"Why did it do that?"** → `transcript --why`, not a guess from the diff.
+- **`ask` reads the board only**: sessions, inbox, kanban, workspace names. A question
+  about the code goes to a session in that repo.
+- **`dismiss` never touches the session.** Its next event puts it back on a key. A
+  working or waiting session is refused.
+
+## Sessions that share a repository
+
+```bash
+corgi agent claim auth/refresh.go auth/session.go   # "these files are mine for now"
+corgi agent claims                                  # who holds what
+corgi agent claim --release                         # give all of this session's back
+corgi agent cap 50M                                 # the token budget every session runs under
+corgi agent cap <session> 20M                       # one session's own; `off` removes it
+corgi agent cap --repo api 20M                      # tokens per day for a workspace
+```
+
+A claim is advisory: nothing is locked, the daemon rings once when another session edits
+a claimed file. Claim before a wide edit when `corgi agent claims` shows a second
+session in the repo; release when the PR is up. A cap stops nothing either: the row says
+"over budget" and the daemon rings once.
