@@ -47,11 +47,8 @@ after 1.5 s through the corgi tunnel, which always works.`,
 	Args: cobra.MaximumNArgs(3),
 	Run: func(cmd *cobra.Command, args []string) {
 		dir := mustAgentDir()
-		word := "status"
-		if len(args) > 0 {
-			word = strings.ToLower(args[0])
-		}
-		if err := runAgentScreen(dir, word, args[1:]); err != nil {
+		word, rest := firstWordOr("status", args)
+		if err := runAgentScreen(dir, strings.ToLower(word), rest); err != nil {
 			exitWithError("agent_screen", err, 1)
 		}
 	},

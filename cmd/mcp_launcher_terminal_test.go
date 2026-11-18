@@ -277,3 +277,19 @@ func TestWorkspacesAreListedOnlyToADeviceThatMayOpenATerminal(t *testing.T) {
 		t.Fatalf("an allowed device gets the list: %d %v", code, out)
 	}
 }
+
+func TestACommandWithNoWordShowsItsStatusInsteadOfCrashing(t *testing.T) {
+	if word, rest := firstWordOr("status", nil); word != "status" || len(rest) != 0 {
+		t.Fatalf("no args gave %q %v", word, rest)
+	}
+	if word, rest := firstWordOr("status", []string{"allow", "iPad"}); word != "allow" || len(rest) != 1 || rest[0] != "iPad" {
+		t.Fatalf("two args gave %q %v", word, rest)
+	}
+	rig := newScreenRig(t)
+	if err := runAgentTerm(rig.dir, "status", nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := runAgentScreen(rig.dir, "status", nil); err != nil {
+		t.Fatal(err)
+	}
+}

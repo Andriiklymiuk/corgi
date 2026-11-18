@@ -40,11 +40,8 @@ From another machine:
 	Args: cobra.MaximumNArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 		dir := mustAgentDir()
-		word := "status"
-		if len(args) > 0 {
-			word = args[0]
-		}
-		if err := runAgentTerm(dir, word, args[1:]); err != nil {
+		word, rest := firstWordOr("status", args)
+		if err := runAgentTerm(dir, word, rest); err != nil {
 			exitWithError("agent_term", err, 1)
 		}
 	},
@@ -252,4 +249,11 @@ func firstNonBlank(v ...string) string {
 		}
 	}
 	return ""
+}
+
+func firstWordOr(fallback string, args []string) (string, []string) {
+	if len(args) == 0 {
+		return fallback, nil
+	}
+	return args[0], args[1:]
 }
