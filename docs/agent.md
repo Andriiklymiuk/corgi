@@ -2534,8 +2534,14 @@ corgi agent term deny "office-mac"
 corgi agent term status
 ```
 
+On a Mac the same two switches are in Corgi Bar › Settings › Remote screen ›
+Devices: tick **Terminal** next to the phone or the peer. Ticking one turns
+terminals on for the machine too.
+
 From another machine: `corgi agent term build-server`. Corgi Bar opens the same
-shell in a window, through this Mac's daemon, for any peer.
+shell in a window, through this Mac's daemon, for any peer. Corgi Agents asks
+where to open it first: the home folder or one of the registered workspaces. The
+phone sends the workspace's name, never a path.
 
 **Agents that use a Mac (hands).** An agent can look at and use a Mac through
 Corgi Bar: `corgi_mac_windows` (text, cheap), `corgi_mac_look` (a JPEG, 1280 px
