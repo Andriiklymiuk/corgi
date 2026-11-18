@@ -101,7 +101,7 @@ Quirks:
   the image. Assertions prove presence; the screenshot proves it looks right.
   Attach it when the user asked for screenshots (ticket by default, PR when they
   said PR) or when it shows a reviewer what the diff can't; otherwise it has done
-  its job as your check (SKILL.md Phase 3's screenshot bullet). Story
+  its job as your check (the screenshot rule in `visual-and-webhook-proof.md`). Story
   has a design reference (ticket/bug screenshot, mockup, Figma export)? Read it
   **alongside** the capture and compare spacing, colour, type, icons - don't stop
   at presence.
