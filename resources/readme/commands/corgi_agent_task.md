@@ -20,6 +20,7 @@ a tracker.
   corgi agent task add "Fix the export" --workspace app --run     starts by itself, at level 3 and up
   corgi agent task comment TASK-3 "the total is still wrong"      a run picks it up
   corgi agent task add "Fix it" --workspace app --on build-1      on a peer: a server or another laptop
+  corgi agent task add "Answer the release question" --from "teams:19:abc/1731"   once per source, however often it is added
 
 "Work on it" on the phone or the page is the same as watch work: the task
 moves to Doing at once, the board says a session is on its way, and from the

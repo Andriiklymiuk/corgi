@@ -29,6 +29,9 @@ type Task struct {
 	// page's tags, so the board can group what belongs together.
 	Idea string   `json:"idea,omitempty"`
 	Tags []string `json:"tags,omitempty"`
+	// From names what the task was made from outside a tracker (a mail, a chat
+	// message, a wiki page), so the same one is never added twice.
+	From string `json:"from,omitempty"`
 	// Run asks the daemon to start it unattended; it clears once started.
 	Run bool `json:"run,omitempty"`
 	// Comments is the thread; a person's comment after AnsweredAt wakes a run.
@@ -222,6 +225,29 @@ func (l *TaskLog) Add(title, body, workspace, by string, now time.Time) (Task, e
 	l.Next++
 	l.Tasks = append(l.Tasks, t)
 	return t, l.save()
+}
+
+func (l *TaskLog) AddFrom(source, title, body, workspace, by string, now time.Time) (Task, bool, error) {
+	source = strings.TrimSpace(source)
+	if len(source) > 300 {
+		return Task{}, false, fmt.Errorf("a source is one id or link, under 300 characters")
+	}
+	if source != "" {
+		l.mu.Lock()
+		for _, t := range l.Tasks {
+			if t.From == source {
+				l.mu.Unlock()
+				return t, false, nil
+			}
+		}
+		l.mu.Unlock()
+	}
+	t, err := l.Add(title, body, workspace, by, now)
+	if err != nil || source == "" {
+		return t, err == nil, err
+	}
+	t, err = l.update(t.Ref(), func(t *Task) { t.From = source })
+	return t, err == nil, err
 }
 
 func (l *TaskLog) Find(arg string) (Task, bool) {

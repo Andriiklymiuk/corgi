@@ -12,6 +12,7 @@ corgi agent task add <title> [flags]
 
 ```
       --body string        the description: what to do and how you will know it is done (- reads stdin)
+      --from string        what it was made from - a mail id, a message link, a page link; a second add from the same one adds nothing
   -h, --help               help for add
       --on string          put it on this peer's board: another laptop or a server (corgi agent peers)
       --run                start it now, unattended, where the workspace runs fixes (corgi agent level 3)

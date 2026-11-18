@@ -34,6 +34,7 @@ a tracker.
   corgi agent task add "Fix the export" --workspace app --run     starts by itself, at level 3 and up
   corgi agent task comment TASK-3 "the total is still wrong"      a run picks it up
   corgi agent task add "Fix it" --workspace app --on build-1      on a peer: a server or another laptop
+  corgi agent task add "Answer the release question" --from "teams:19:abc/1731"   once per source, however often it is added
 
 "Work on it" on the phone or the page is the same as watch work: the task
 moves to Doing at once, the board says a session is on its way, and from the
@@ -78,9 +79,18 @@ var agentTaskAddCmd = &cobra.Command{
 				exitWithError("agent_task", fmt.Errorf("%s", why), 2)
 			}
 		}
-		t, err := watch.LoadTasks(dir).Add(title, body, ws, "cli", time.Now())
+		from, _ := cmd.Flags().GetString("from")
+		t, added, err := watch.LoadTasks(dir).AddFrom(from, title, body, ws, "cli", time.Now())
 		if err != nil {
 			exitWithError("agent_task", err, 2)
+		}
+		if !added {
+			if utils.JSONOutput {
+				utils.PrintJSON(map[string]any{"ref": t.Ref(), "key": t.Key(), "task": t, "existing": true})
+				return
+			}
+			fmt.Printf("%s already holds it (%s): %s\n", t.Ref(), t.State, t.Title)
+			return
 		}
 		if run {
 			t, _ = watch.LoadTasks(dir).AskRun(t.Ref(), time.Now())
@@ -354,6 +364,7 @@ func init() {
 	agentTaskAddCmd.Flags().Bool("run", false, "start it now, unattended, where the workspace runs fixes (corgi agent level 3)")
 	agentTaskAddCmd.Flags().String("on", "", "put it on this peer's board: another laptop or a server (corgi agent peers)")
 	agentTaskAddCmd.Flags().String("body", "", "the description: what to do and how you will know it is done (- reads stdin)")
+	agentTaskAddCmd.Flags().String("from", "", "what it was made from - a mail id, a message link, a page link; a second add from the same one adds nothing")
 	agentTaskAddCmd.Flags().String("workspace", "", "the workspace the task is for (default: the one this folder is in)")
 	agentTaskEditCmd.Flags().String("title", "", "a new title")
 	agentTaskEditCmd.Flags().String("body", "", "a new description")

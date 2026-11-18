@@ -1,0 +1,27 @@
+schema_version: "1.0"
+name: chief-puts-a-message-on-the-board
+description: Something that arrived in a chat becomes one card with its source, handed to a session, not work done in the chief's own chat.
+tags: [read-only]
+context:
+  scaffold_script: scaffold.sh
+execution:
+  max_turns: 15
+  timeout_seconds: 300
+  allowed_tools: [Skill, Read, Glob, Grep]
+  prompt: |
+    Be my chief. A teammate wrote in our team chat (message link https://chat.example/t/19/1731) that the api returns 500 on an empty cart and asked for a fix before Friday. I do not want to open another chat. This session has no shell, so give me the exact commands.
+graders:
+  - name: fires-chief
+    type: tool_used
+    tool: Skill
+    input_match: '"(corgi:)?(corgi-)?chief"'
+  - name: a-card-with-its-source
+    type: regex
+    pattern: 'corgi agent task add[^\n]*--from[ =]"?https://chat\.example/t/19/1731'
+  - name: handed-to-a-session
+    type: regex
+    pattern: 'corgi agent watch work|--run'
+  - name: does-not-build-here
+    type: llm
+    criteria: |
+      Score 1 if the answer puts the request on the board and hands the fix to another session or an unattended run, and does not itself write or propose the code change for the 500. Score 0 if the answer contains a code fix, a diff, or starts investigating the bug in this chat.

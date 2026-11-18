@@ -40,6 +40,7 @@ review pull requests, and keep the work moving while you are away from the desk.
 | `suggest`, `suggest-proactive` | Ranked improvement ideas; one a week on the board |
 | `align` | Settles a request that can be read two ways before building |
 | `agent` | Remote Control, the daemon, ticket and review watches, handoffs |
+| `chief` | One chat that runs the rest: mail, chat and trackers become cards, sessions do the work, it looks in on them and says what needs you |
 | `setup` | Sets corgi up end to end on a new machine, or copies this one's workspaces, env files and Claude settings to another (ssh, a link, or a sealed file) |
 | `resume`, `standup`, `summary`, `budget` | Where you were, what you did, where a batch stands, how much usage is left |
 | `mobile`, `ship`, `purchases`, `mobile-screenshots` | Expo / React Native: verify on a device, ship to the stores, in-app purchases, store screenshots |

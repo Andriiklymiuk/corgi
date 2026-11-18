@@ -114,3 +114,28 @@ func TestACommentWakesATaskAndAnAgentReplyDoesNot(t *testing.T) {
 		t.Fatal("an empty comment went through")
 	}
 }
+
+func TestTheSameSourceIsAddedOnce(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Date(2026, 11, 18, 9, 0, 0, 0, time.UTC)
+	l := LoadTasks(dir)
+	first, added, err := l.AddFrom("mail:AAMk-17", "Answer the release question", "", "app", "cli", now)
+	if err != nil || !added || first.From != "mail:AAMk-17" {
+		t.Fatalf("first add: %+v added=%v err=%v", first, added, err)
+	}
+	if _, err := l.Move(first.Ref(), "Done", now.Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	again, added, err := LoadTasks(dir).AddFrom(" mail:AAMk-17 ", "Answer it (again)", "", "app", "cli", now.Add(2*time.Hour))
+	if err != nil || added || again.ID != first.ID || again.State != "Done" {
+		t.Fatalf("a finished one still counts: %+v added=%v err=%v", again, added, err)
+	}
+	other, added, _ := l.AddFrom("", "No source", "", "app", "cli", now)
+	plain, addedPlain, _ := l.AddFrom("", "No source", "", "app", "cli", now)
+	if !added || !addedPlain || other.ID == plain.ID || other.From != "" {
+		t.Fatalf("no source means no matching: %+v %+v", other, plain)
+	}
+	if len(LoadTasks(dir).Tasks) != 3 {
+		t.Fatalf("want 3 tasks, got %d", len(LoadTasks(dir).Tasks))
+	}
+}
