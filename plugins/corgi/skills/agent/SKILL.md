@@ -176,4 +176,4 @@ This file covers working on a stack. Everything else is in `references/`. Read t
 
 ## Reference
 
-Full documentation: `docs/agent.md` in the corgi repository.
+Full documentation: [docs/agent.md](https://github.com/Andriiklymiuk/corgi/blob/main/docs/agent.md).

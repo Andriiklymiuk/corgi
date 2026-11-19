@@ -45,7 +45,7 @@ a red build - say so, stop retriggering, and name who unblocks it.
 
 1. **`corgi upd`.** The pipeline uses `corgi run --feature/--wait`, `corgi init
    --depth`, `corgi test --e2e`, `corgi cache paths` and `corgi env check`; run the
-   current corgi locally and pin the same version in the job (Non-negotiables).
+   current corgi locally and pin the same version in the job (Rules for the job).
 2. **Read `corgi-compose.yml`.** Count `db_services` (each is containers + disk) and
    services. Note every `required:` tool and which are human-only. Check for a
    top-level `e2e:` block - if there is one, the e2e step is `corgi test --e2e`,
@@ -153,7 +153,7 @@ actually lands before trusting the pipeline's evidence; collect the runner's
 own debug directory as a fallback, or run headed under a virtual display
 (xvfb) when the screenshots are the point.
 
-## Non-negotiables
+## Rules for the job
 
 - **Never run the job inside a container** (`jobs.<id>.container:` on GitHub,
   `image:` with dind on GitLab - the shipped `.corgi-setup` fails fast on this,

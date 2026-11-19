@@ -1,8 +1,8 @@
 # GitLab CI
 
 corgi ships a GitLab include, so most of this file is wiring rather than YAML to
-copy. Replace the runner tags, the secrets source, and the participating repos
-with the workspace's real ones.
+copy. Replace the runner tags, the secrets source, the corgi version and the
+participating repos with the workspace's real ones.
 
 ## Workspace repo - the implementation
 
@@ -18,9 +18,9 @@ spec:
 
 include:
   # Pin a tag, not main: an include is fetched fresh on every pipeline.
-  - remote: https://raw.githubusercontent.com/Andriiklymiuk/corgi/v2.28.21/gitlab/corgi.yml
+  - remote: https://raw.githubusercontent.com/Andriiklymiuk/corgi/v<corgi version>/gitlab/corgi.yml
     inputs:
-      corgi_version: "2.28.21"
+      corgi_version: "<corgi version>"   # what `corgi ci init` wrote
       branch: $[[ inputs.branch ]]
       runner_tags: [vm]          # the workspace's shell / docker+machine runner
       wait_timeout: 20m

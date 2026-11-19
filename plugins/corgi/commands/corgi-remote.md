@@ -10,27 +10,28 @@ Run the agent-mode remote setup for the request in `$ARGUMENTS`.
 - Works in a corgi stack **or any git repository**. Neither → tell the user to
   open the project they want phone-startable.
 
-Follow the `agent` skill (load it with the Skill tool: `corgi:agent`) - the
-"Setting it up from a session on the laptop" section is the core flow:
+Follow the `agent` skill (load it with the Skill tool: `corgi:agent`) - its
+`references/remote-start.md` › *Setting it up from a session on the laptop* is the
+core flow:
 
 1. `corgi agent up` (detached; `--json` for structured output). Print the QR /
    pairing URL for the user to scan. Port already held by a healthy corgi MCP →
    it reports as already up; a NEW pairing window needs `corgi agent up --fresh`.
 2. Reboot survival: offer `corgi agent up --at-login` (daemon + endpoint + tunnel at login; `corgi agent install` is the daemon alone).
 3. Permanent URL: offer the named tunnel (`--tunnel-name <name> --tunnel-hostname <host>`,
-   one-time `cloudflared tunnel create` + `route dns` - docs/agent.md carries the
-   steps). Same origin every restart, so the phone never re-pairs.
+   one-time `cloudflared tunnel create` + `route dns` - [docs/agent.md](https://github.com/Andriiklymiuk/corgi/blob/main/docs/agent.md)
+   carries the steps). Same origin every restart, so the phone never re-pairs.
 4. Separate Claude accounts: `corgi agent init --config-dir <dir>` per
    workspace, or `corgi agent profile add <name> --config-dir <dir>` to pick at
    start time. Per-workspace open target (Claude app vs browser vs Chrome) is
    set on the phone launcher itself, not in config.
 5. Session tracking: offer `corgi agent track enable` - every Claude session on
    the machine on a Stream Deck / `corgi agent sessions`, tab titles, and the
-   "waiting on you" line at the top of the phone launcher (skill section
-   *Tracking every session on the machine*).
+   "waiting on you" line at the top of the phone launcher (the skill's
+   `references/board.md`).
 6. Tear-down: `corgi agent down` (daemon + MCP + tunnel).
-7. A list full of `<ws> · main · HH:MM` rows → the skill's *Supervised servers are
-   devices* section; archive the old rows once.
+7. A list full of `<ws> · main · HH:MM` rows → the skill's `references/setup.md` ›
+   *Supervised servers are devices*; archive the old rows once.
 
 Guardrails from the skill hold: never enable `--dangerously-skip-permissions`
 on your own - it is the user's explicit, trusted-config choice; a `sensitive`

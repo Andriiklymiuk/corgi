@@ -16,7 +16,7 @@ Supervised loop. One iteration = one `/corgi-queue` pickup → `stories` (spec g
 - **NOT a scheduler.** One iteration per invocation; host `/loop` / `/schedule` repeats it. No daemon, no inner busy-loop.
 - **NOT a re-implementation.** Pickup lives in `tracker` (Job 4); build + gate + draft PR live in `stories`; PR review lives in `review`. This skill calls them.
 
-## Guardrails (non-negotiable)
+## Guardrails
 
 - **One spec gate per batch, preserved.** Bounded by `maxBatch` (default 3) so one gate covers a sane set.
 - **Draft only. Never auto-merge.**

@@ -12,7 +12,7 @@ before the next:
 
 1. **Capture** the matrix - N screens × iPhone / iPad / Android-phone+tablet × every locale,
    into `/tmp`, then copy into the repo. Drive via deep links + Maestro (the `mobile` skill).
-   Non-negotiables: **one Maestro flow per screen**; **`takeScreenshot` inside the flow**
+   Rules: **one Maestro flow per screen**; **`takeScreenshot` inside the flow**
    (a shell shot after captures home - Maestro relaunches); gate home with
    `extendedWaitUntil` (not `assertVisible … timeout`); **double `waitForAnimationToEnd`**
    to beat the push-slide; **stage to `/tmp`** so Metro's watcher doesn't hot-reload

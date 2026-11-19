@@ -15,17 +15,17 @@ permissions). Show the files before committing.
 - Must run **inside the stack folder** (the one with `corgi-compose.yml`). Not
   there → tell the user to open it first.
 
-Follow the `ci` skill (load it with the Skill tool: `corgi:ci`) end to end: probe the
-installed corgi for the flags you intend to emit, read `corgi-compose.yml` for the
+Follow the `ci` skill (load it with the Skill tool: `corgi:ci`) end to end: `corgi upd`
+and pin that version in the job, read `corgi-compose.yml` for the
 real service and `required:` lists, settle **where CI gets its env files** before
 writing any YAML, then generate the workspace-repo implementation plus the thin
-per-service-repo caller from `references/github-actions.md` or
+per-service-repo caller from the skill's `references/github-actions.md` or
 `references/gitlab-ci.md`.
 
 Honor every guardrail: never emit a job that runs inside a container, always dump
 logs in an always-executed step, always bound the health wait with a timeout, and
-never invent a corgi flag the installed binary does not have - fall back per
-`references/fallbacks.md` or bump corgi instead.
+never invent a corgi flag the installed binary does not have - assert a version
+floor in the job, and bump corgi when a flag is missing.
 
 State the per-run cost (wall clock, and that every participating PR triggers it)
 and show the generated YAML before committing. A pipeline that has not been run

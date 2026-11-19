@@ -4,8 +4,8 @@ description: Drive + verify a mobile (Expo / React Native) change on a device - 
 
 Run the **mobile** verify flow for `$ARGUMENTS`.
 
-- `$ARGUMENTS` = what to verify (a screen / route / change) and/or `ship` for a local
-  build + store submit. Nothing = verify the change just made, on the running device.
+- `$ARGUMENTS` = what to verify (a screen / route / change). Nothing = verify the change
+  just made, on the running device. A local build + store submit is `/corgi-ship`.
 
 Per the `mobile` skill (load it with the Skill tool: `corgi:mobile`):
 
@@ -18,12 +18,8 @@ Per the `mobile` skill (load it with the Skill tool: `corgi:mobile`):
 3. **Drive + assert** with a Maestro flow **file** (`--device <udid>` when two devices
    attached); `screenshot` (`adb … screencap` / `simctl io … screenshot`); crop a detail
    with `sips`; **read** the frame.
-4. **Honor the gotchas** - Maestro `inputText` ASCII-only; local iOS builds run in a
-   **non-login shell** with `LANG=en_US.UTF-8` (else the `visionos` pod error, then
-   `Encoding::CompatibilityError`); background long builds + poll the log; a Metro
-   `--clear` redbox is usually a stale desync (cold reload + `tapOn: Dismiss`); a system
-   dialog over the app reads as `element not found` (dismiss the system button); SceneKit
-   shader failures + a missing `particleImage` only show at runtime (magenta / square
-   particles) → verify on a sim before any TestFlight submit.
+4. **Honor the gotchas** in the skill (Maestro input, the build shell and locale, long
+   builds, system dialogs); framework- and app-specific traps are in its
+   `references/gotchas.md`.
 5. **Verify before done** - screenshot evidence; native visuals need a real on-device
    render, not just a green build.

@@ -29,7 +29,7 @@ handoff to `stories`. Suggests and specs; never implements.
 - **Not** "add dark mode / add AI / add notifications / rewrite in Rust" unless
   the evidence in this stack says so. Slop is the failure mode.
 
-## Guardrails (non-negotiable)
+## Guardrails
 
 - **One pass, in this session.** Read the stack once, keep the evidence in
   your head, then write cards. No agent per lens, no fan-out: a second reader

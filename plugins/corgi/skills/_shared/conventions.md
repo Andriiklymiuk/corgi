@@ -275,7 +275,7 @@ These fail or get refused, unattended or not, and each one costs a turn:
   one. Keep this away from a long chain.
 - **A removal built from a variable or a glob** (`rm -rf "$DIR"/*`): the safety check stops it.
   Name the literal path, or move it aside.
-- **The shell here is zsh, not bash.** `$var` does not split: `set -- $pair` and `for x in $list`
+- **On zsh, bash habits break** (zsh is the macOS default; `echo $0` names the shell). `$var` does not split: `set -- $pair` and `for x in $list`
   see one word; use `read -r a b <<< "$pair"` or `${=list}`. A glob with no match aborts the whole
   command (`no matches found`): quote it, or `(N)` for "maybe none". `$PIPESTATUS` is blank:
   use `$pipestatus[1]`. A word starting with `=` is a command lookup: `echo ====` dies with `==== not

@@ -4,6 +4,8 @@ description: Scaffold a new corgi-compose.yml for the current project by inspect
 
 You are helping the user create a `corgi-compose.yml` in their current working directory.
 
+Load the `corgi` skill first (Skill tool: `corgi:corgi`); the `references/` files below are in it.
+
 ## Step 1 - Survey the project
 
 Before asking anything, look around:
@@ -12,7 +14,7 @@ Before asking anything, look around:
 - `cat` each service's manifest to infer language/runtime and likely port.
 - Check for existing `.env`, `docker-compose.yml`, `Makefile` - pull defaults from them.
 - Note which service dirs ship a `Dockerfile` or their own compose file - those can run with no `start:` scripts at all (see the rung rule in Step 3).
-- Check for an already-existing `corgi-compose.yml`. If present, stop: ask the user whether they want to edit it (read `skills/corgi/references/yml-schema.md` and edit directly; `corgi create` is the interactive editor and needs a TTY) rather than overwrite.
+- Check for an already-existing `corgi-compose.yml`. If present, stop: ask the user whether they want to edit it (read `references/yml-schema.md` and edit directly; `corgi create` is the interactive editor and needs a TTY) rather than overwrite.
 
 Present what you found before asking anything.
 
@@ -20,7 +22,7 @@ Present what you found before asking anything.
 
 Ask one question at a time. Skip anything obvious from Step 1. Likely questions:
 
-- **Which databases?** (User may say "postgres" - use references/db-drivers.md to pick the exact driver, default port, env prefix.)
+- **Which databases?** (User may say "postgres" - use `references/db-drivers.md` to pick the exact driver, default port, env prefix.)
 - **Any AWS services needed locally?** (If yes → use `driver: localstack` with `queues:` / `buckets:`.)
 - **Which services need to wait on which dbs?** (Becomes `depends_on_db:` with `envAlias`.)
 - **Any cross-service calls?** (Becomes `depends_on_services:`.)
@@ -31,7 +33,7 @@ Don't ask about flags the user would never think about (e.g. `manualRun`, `runne
 
 ## Step 3 - Generate the yml
 
-Use `skills/corgi/references/yml-schema.md` for exact key names. Structure:
+Use `references/yml-schema.md` for exact key names. Structure:
 
 ```yaml
 name: <project>
@@ -56,7 +58,7 @@ Rules of thumb:
 - Use `envAlias: ""` for the primary db of a service; only set an alias when the service talks to more than one db of the same driver.
 - For `services` where the repo is already cloned locally, use `path: ./<dirname>` and omit `cloneFrom:`.
 - Don't invent `start:` commands - read each service's `package.json` scripts / Makefile / README to find the right one.
-- **Smallest rung first**: a service whose repo ships a working `Dockerfile` (or its own compose file) needs no `beforeStart`/`start` - corgi builds and runs the container automatically. Emit just `cloneFrom`/`path` (+ `port` if the Dockerfile has no `EXPOSE`). Add scripts only when the user wants hot reload / a native toolchain; both can coexist and `corgi run --docker` flips to containers. Details: `skills/corgi/references/yml-schema.md#dockerfile-services-when-start-is-optional`.
+- **Smallest rung first**: a service whose repo ships a working `Dockerfile` (or its own compose file) needs no `beforeStart`/`start` - corgi builds and runs the container automatically. Emit just `cloneFrom`/`path` (+ `port` if the Dockerfile has no `EXPOSE`). Add scripts only when the user wants hot reload / a native toolchain; both can coexist and `corgi run --docker` flips to containers. Details: `references/yml-schema.md#dockerfile-services-when-start-is-optional`.
 
 ## Step 4 - Verify before handoff
 
@@ -65,10 +67,10 @@ Rules of thumb:
 3. If doctor passes, tell the user:
    > `corgi-compose.yml` is ready. Run `corgi run` in a separate terminal to start everything. Come back and I'll `corgi status` to verify health.
 
-Do **not** run `corgi run` yourself unless the user explicitly asks and understands it will occupy a background shell - see `skills/corgi/references/long-running.md`.
+Do **not** run `corgi run` yourself unless the user explicitly asks and understands it will occupy a background shell - see `references/long-running.md`.
 
 ## If the user gets stuck
 
-- Missing tools → `skills/corgi/references/debugging.md`.
-- Can't pick a driver → show the relevant rows from `skills/corgi/references/db-drivers.md` with a recommendation.
+- Missing tools → `references/debugging.md`.
+- Can't pick a driver → show the relevant rows from `references/db-drivers.md` with a recommendation.
 - Existing `.env` has values corgi would overwrite → set `ignore_env: true` on that service and explain the trade-off.

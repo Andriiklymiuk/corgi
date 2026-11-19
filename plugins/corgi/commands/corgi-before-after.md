@@ -5,7 +5,7 @@ description: Capture the same screen on the base branch and on yours and attach 
 Run the corgi **before-after** flow for `$ARGUMENTS`.
 
 - `$ARGUMENTS` = a PR/MR link or number to attach the result to, plus optionally the
-  screen to capture ("the White Label campaign brief", a deep link, a route). Empty →
+  screen to capture ("the checkout screen", a deep link, a route). Empty →
   the current branch's PR/MR, and ask which screen if the diff touches more than one.
 - The base to compare against is the PR/MR's target branch, or the service's base
   branch when run on a bare branch.

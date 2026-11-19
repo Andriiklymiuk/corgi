@@ -11,7 +11,7 @@ Read `../_shared/conventions.md` first.
 
 A corgi workspace remembers things not in git or code: **why** a driver/port/template was chosen, how a past **incident** was fixed, **domain** facts, recurring **fixes**. Store is `.corgi/memory/` - committed, shared by the team via the repo, keyed to the `corgi-compose.yml` stack. This skill is the convention; `suggest`/`debug`/`stories`/`review` reference it.
 
-## Guardrails (non-negotiable)
+## Guardrails
 
 - **Opt-in.** No `.corgi/memory/` → reads skip silently (no memory is not an error); writes **offer** to create the store, never force it.
 - **No secrets, ever.** Store is committed. Never write a credential, token, API key, password, connection string with a password, private hostname, or PII. Record *that* a secret exists and where it's configured ("import needs `STRIPE_KEY` in the api env"), never the value. `corgi memory lint` fails the store on a key-shaped string.

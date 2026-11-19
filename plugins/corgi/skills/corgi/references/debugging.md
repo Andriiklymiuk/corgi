@@ -117,7 +117,7 @@ If `corgi tunnel <svc>` falls back to Quick mode despite a `tunnel:` block being
 - Confirm the env var resolves. Hostname `${VAR}` is read from shell env → `<service-dir>/.env` → `env/source/<svc>.env`. If unset everywhere, expect a strict error (`env vars not set for tunnel.hostname: …`), not a silent Quick fallback.
 - If error path missing too, suspect stale binary: rebuild from source and re-test before debugging further.
 
-See repo-root `docs/tunnel.md` for full provider matrix + Quick Tunnel limitations.
+See [docs/tunnel.md](https://github.com/Andriiklymiuk/corgi/blob/main/docs/tunnel.md) for full provider matrix + Quick Tunnel limitations.
 
 ## "It was working yesterday" recipes
 
