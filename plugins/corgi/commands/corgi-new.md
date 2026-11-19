@@ -4,7 +4,7 @@ description: Scaffold a new corgi-compose.yml for the current project by inspect
 
 You are helping the user create a `corgi-compose.yml` in their current working directory.
 
-Load the `corgi` skill first (Skill tool: `corgi:corgi`); every `references/` file below is its.
+Load the `corgi` skill first (Skill tool: `corgi:corgi`); the `references/` files below are in it.
 
 ## Step 1 - Survey the project
 
