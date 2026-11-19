@@ -94,17 +94,47 @@ func TestAttentionCarriesTheSessionsOwnLink(t *testing.T) {
 }
 
 func attentionDaemon(t *testing.T) (*Daemon, chan push.Message, chan string) {
+	d, pushed, away, _ := attentionDaemonRetracting(t)
+	return d, pushed, away
+}
+
+func attentionDaemonRetracting(t *testing.T) (*Daemon, chan push.Message, chan string, chan string) {
 	t.Helper()
 	old := permissionSettle
 	permissionSettle = 60 * time.Millisecond
 	t.Cleanup(func() { permissionSettle = old })
 	d := trackingDaemon(t)
-	pushed, away := make(chan push.Message, 2), make(chan string, 2)
+	pushed, away, retracted := make(chan push.Message, 2), make(chan string, 2), make(chan string, 2)
 	d.Push = func(m push.Message) { pushed <- m }
-	d.NotifyAway = func(_, body, _ string) { away <- body }
+	d.NotifyAway = func(_, body, _ string) func() {
+		away <- body
+		return func() { retracted <- body }
+	}
+	d.Sessions.OnTransition = d.onSessionTransition
 	d.Sessions.Apply(sessions.Event{Name: "SessionStart", SessionID: "s1", Cwd: t.TempDir()})
 	d.Sessions.Apply(sessions.Event{Name: "Notification", SessionID: "s1", Notification: "permission_prompt", Message: "Claude needs your permission"})
-	return d, pushed, away
+	return d, pushed, away, retracted
+}
+
+func TestAttentionAnsweredLateTakesItsPostBack(t *testing.T) {
+	d, _, away, retracted := attentionDaemonRetracting(t)
+	d.reportAttention(command.Command{WorkspaceID: "corgi", Detail: "Claude needs your permission", SessionID: "s1"})
+	select {
+	case <-away:
+	case <-time.After(time.Second):
+		t.Fatal("the post was never sent")
+	}
+	select {
+	case body := <-retracted:
+		t.Fatalf("taken back while still waiting: %s", body)
+	case <-time.After(permissionSettle):
+	}
+	d.Sessions.Apply(sessions.Event{Name: "PostToolUse", SessionID: "s1", Tool: "Bash"})
+	select {
+	case <-retracted:
+	case <-time.After(time.Second):
+		t.Fatal("an answered prompt keeps its post")
+	}
 }
 
 func TestAttentionAnsweredHereNeverReachesThePhone(t *testing.T) {
@@ -153,5 +183,19 @@ func TestAttentionStillWaitingReachesThePhoneAfterTheSettle(t *testing.T) {
 		if !wait() {
 			t.Fatal("a prompt nobody answered must reach the phone and the webhook")
 		}
+	}
+}
+
+func TestAttentionSaysWhichSessionAndWhatItAsks(t *testing.T) {
+	d, _, away := attentionDaemon(t)
+	d.Sessions.Apply(sessions.Event{Name: "PermissionRequest", SessionID: "s1", Tool: "Bash", Subject: "go test ./..."})
+	d.reportAttention(command.Command{WorkspaceID: "corgi", Detail: "Claude needs your permission", SessionID: "s1"})
+	select {
+	case body := <-away:
+		if body != "Claude needs your permission\nBash go test ./..." {
+			t.Fatalf("post body: %q", body)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("the post was never sent")
 	}
 }

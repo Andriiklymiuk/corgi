@@ -160,6 +160,10 @@ per-story review, draft PR, grouped report.
   CLAUDE.md/AGENTS.md may forbid specific commands (dev server that breaks build,
   script that mutates state). Triage from forbidden command = noise -
   rerun documented way before believing it.
+- **Nothing unasked leaves or lands.** Before an edit that deletes a switch, flag or
+  behaviour the ask did not name, or an install or build on a device, say it in one
+  line and keep it out of the diff unless the person agrees. Unattended: leave it
+  out. List each such item under **Not asked** in the report.
 - **Don't spam ticket.** One comment per story (spec, QA section folded in),
   updated in place on re-runs - never pile of new comments.
 

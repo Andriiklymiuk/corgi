@@ -250,6 +250,9 @@ func (d *Daemon) stillWaiting(id string, since time.Time, subject string) bool {
 func (d *Daemon) onSessionTransition(s sessions.Session, from, to sessions.Status, now time.Time) {
 	label := firstNonEmpty(s.Display, s.Label)
 	d.recordWait(s, from, label, now)
+	if to == sessions.StatusWorking || (from == sessions.StatusNeedsInput && to != sessions.StatusNeedsInput) {
+		d.retractAwayPosts(s.ID)
+	}
 	if to == sessions.StatusDone && from == sessions.StatusWorking {
 		d.swaps.Add(1)
 		go func() {

@@ -1453,6 +1453,7 @@ func describeWatchParts(wc *config.WatchConfig) []string {
 		{wc.AfterMerge != "", "then the ticket goes to " + wc.AfterMerge + subtaskColumn(wc.AfterMergeSubtasks)},
 		{wc.Batch > 1, fmt.Sprintf("up to %d tickets arriving together share one run", wc.Batch)},
 		{wc.Approve, "review requests approved when clean"},
+		{reviewsWait(wc.ReviewDelay), "reviews wait " + strings.TrimSpace(wc.ReviewDelay)},
 		{wc.Bots, "bot comments count"},
 		{wc.AutoAllow == config.AutoAllowReads, "reads allowed by policy"},
 		{len(wc.DoneWhen) > 0, "done when " + strings.Join(wc.DoneWhen, " and ")},
@@ -1466,6 +1467,11 @@ func describeWatchParts(wc *config.WatchConfig) []string {
 		}
 	}
 	return parts
+}
+
+func reviewsWait(delay string) bool {
+	d, err := watch.ParseAge(delay)
+	return err == nil && d > 0
 }
 
 func planReviewWords(policy string) string {

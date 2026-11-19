@@ -123,5 +123,8 @@ export function hint(command: string, text: string): string | undefined {
     return 'The stored Slack token is dead, so nothing was posted. Tell the user in one line, with the text to paste themselves, ' +
       'and the fix: `corgi agent watch auth slack --token <new token>` (`corgi agent doctor` names which token).'
   }
+  if (/No module named '?PIL'?/.test(text)) {
+    return 'PIL is not installed here. Resize, crop or convert with `sips` (macOS) or `magick`; do not pip install.'
+  }
   return undefined
 }

@@ -288,11 +288,12 @@ func addWebhookNotify(d *daemon.Daemon, url string) {
 	if n := combinedNotifier(d.Notify, hook); n != nil {
 		d.Notify = n
 	}
-	d.NotifyAway = func(title, body, link string) {
+	retractable := webhookRetractableNotifier(url, nil)
+	d.NotifyAway = func(title, body, link string) func() {
 		if link == "" {
 			link = launcherURL()
 		}
-		linked(title, body, link)
+		return retractable(title, body, link)
 	}
 }
 

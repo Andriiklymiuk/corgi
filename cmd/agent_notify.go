@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -120,6 +121,14 @@ func webhookNotifier(rawURL string, client *http.Client) func(title, body string
 }
 
 func webhookLinkNotifier(rawURL string, client *http.Client) func(title, body, link string) {
+	send := webhookRetractableNotifier(rawURL, client)
+	if send == nil {
+		return nil
+	}
+	return func(title, body, link string) { send(title, body, link) }
+}
+
+func webhookRetractableNotifier(rawURL string, client *http.Client) func(title, body, link string) func() {
 	u, err := url.Parse(strings.TrimSpace(rawURL))
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 		return nil
@@ -133,12 +142,15 @@ func webhookLinkNotifier(rawURL string, client *http.Client) func(title, body, l
 	// the URL is the secret for most webhooks, so the ledger keeps a hash of it
 	sum := sha256.Sum256([]byte(target))
 	family, dest := "webhook", shape+":"+hex.EncodeToString(sum[:6])
-	return func(title, body, link string) {
+	return func(title, body, link string) func() {
 		if err := gate.Allow(family, dest, title+"\n"+body+"\n"+link); err != nil {
 			utils.Infof("agent: notification not sent (%v): %s\n", err, title)
-			return
+			return nil
 		}
+		posted := make(chan int64, 1)
 		go func() {
+			var id int64
+			defer func() { posted <- id }()
 			req, err := buildNotifyRequest(shape, target, title, body, link)
 			if err != nil {
 				return
@@ -147,13 +159,51 @@ func webhookLinkNotifier(rawURL string, client *http.Client) func(title, body, l
 			if err != nil {
 				return
 			}
+			defer resp.Body.Close()
 			if resp.StatusCode == http.StatusTooManyRequests {
 				secs, _ := strconv.Atoi(strings.TrimSpace(resp.Header.Get("Retry-After")))
 				gate.Pause(family, time.Duration(secs)*time.Second)
 			}
-			_ = resp.Body.Close()
+			if shape == webhookTelegram {
+				id = telegramMessageID(resp.Body)
+			}
 		}()
+		if shape != webhookTelegram {
+			return nil
+		}
+		return func() {
+			if id := <-posted; id != 0 {
+				deleteTelegramMessage(client, target, id)
+			}
+			posted <- 0
+		}
 	}
+}
+
+func telegramMessageID(body io.Reader) int64 {
+	var sent struct {
+		Result struct {
+			MessageID int64 `json:"message_id"`
+		} `json:"result"`
+	}
+	_ = json.NewDecoder(io.LimitReader(body, 64<<10)).Decode(&sent)
+	return sent.Result.MessageID
+}
+
+func deleteTelegramMessage(client *http.Client, target string, id int64) {
+	u, err := url.Parse(target)
+	if err != nil || !strings.HasSuffix(u.Path, "/sendMessage") {
+		return
+	}
+	chat := telegramChatID(target)
+	u.Path = strings.TrimSuffix(u.Path, "sendMessage") + "deleteMessage"
+	u.RawQuery = ""
+	payload, _ := json.Marshal(map[string]any{"chat_id": chat, "message_id": id})
+	resp, err := client.Post(u.String(), "application/json", bytes.NewReader(payload))
+	if err != nil {
+		return
+	}
+	_ = resp.Body.Close()
 }
 
 const (

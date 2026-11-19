@@ -155,3 +155,29 @@ func TestALinkTheBodyAlreadyNamesIsNotAddedAgain(t *testing.T) {
 		t.Fatalf("a link the body does not name is still added: %s", raw)
 	}
 }
+
+func TestATelegramPostCanBeTakenBack(t *testing.T) {
+	calls := make(chan string, 2)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		calls <- r.URL.Path + " " + string(body)
+		_, _ = w.Write([]byte(`{"ok":true,"result":{"message_id":77}}`))
+	}))
+	defer srv.Close()
+	posted := make(chan int64, 1)
+	posted <- telegramMessageID(strings.NewReader(`{"ok":true,"result":{"message_id":77}}`))
+	if id := <-posted; id != 77 {
+		t.Fatalf("message id %d", id)
+	}
+	deleteTelegramMessage(srv.Client(), srv.URL+"/botT/sendMessage?chat_id=5", 77)
+	got := <-calls
+	if !strings.HasPrefix(got, "/botT/deleteMessage ") || !strings.Contains(got, `"message_id":77`) || !strings.Contains(got, `"chat_id":"5"`) {
+		t.Fatalf("delete call: %s", got)
+	}
+	deleteTelegramMessage(srv.Client(), srv.URL+"/hooks/other", 77)
+	select {
+	case extra := <-calls:
+		t.Fatalf("a webhook that is not Telegram was asked to delete: %s", extra)
+	default:
+	}
+}

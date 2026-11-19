@@ -91,6 +91,16 @@ describe('corgi-guard', () => {
     expect((checks.context ?? []).join(' ')).toContain('until [')
   })
 
+  test('a python script that wants PIL is pointed at sips and magick', async ($, on) => {
+    on('tool.call', { tool: 'Bash' }, () => ({
+      isError: true as const,
+      result: 'failed',
+      text: "Exit code 1 ModuleNotFoundError: No module named 'PIL'",
+    }))
+    const ran = await $.tool.call({ tool: 'Bash', command: 'python3 resize.py shot.png' })
+    expect((ran.context ?? []).join(' ')).toContain('sips')
+  })
+
   test('words in a heredoc or single quotes are data, not shell', async ($, on) => {
     on('tool.call', { tool: 'Bash' }, () => ({ result: { stdout: 'ok', stderr: '', interrupted: false }, text: 'ok' }))
     const doc = "python3 - <<'EOF'\nreadme = '''- `set -- $pair` in zsh leaves the word empty'''\nEOF\ngrep -n mods README.md"

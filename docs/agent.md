@@ -428,6 +428,8 @@ is restarted. Note also that `corgi notifications test` only exercises the
 **A prompt you answer at the laptop stays at the laptop.** When a session asks
 for you, the desktop rings at once; the phone push and the `notifyUrl` post wait
 ten seconds and are dropped if the session is working again by then (2.62).
+A Telegram post that did go out is deleted once the session is answered, so the
+chat holds only what still waits; other webhooks cannot take a post back.
 
 Trusted config only: the URL receives restart reasons, so a committed repo file
 can never set it. Treat the value as a secret - a Telegram token lets anyone

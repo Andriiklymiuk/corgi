@@ -67,6 +67,7 @@ type Daemon struct {
 	peersHeardAt    atomic.Int64
 	attentionMu     sync.Mutex
 	recentAttention map[string]time.Time
+	awayPosts       map[string][]func()
 	mergeMu         sync.Mutex
 	mergeFailed     map[string]mergeFailure
 	limitWatch      map[string]bool
@@ -106,7 +107,7 @@ type Daemon struct {
 	NotifyWithLink   func(title, body, link string)
 	NotifyFocus      func(title, body, sessionID, link string)
 	NotifyHere       func(title, body string)
-	NotifyAway       func(title, body, link string)
+	NotifyAway       func(title, body, link string) func()
 	LinkFor          func(workspaceID string) string
 	Pickup           func(workspace string, e watch.Event)
 	ClaimTicket      func(workspace string, e watch.Event) (ok bool, holder string, err error)
@@ -612,18 +613,74 @@ func (d *Daemon) ringAwayIfUnanswered(a attention, sessionID string) {
 		return
 	}
 	link := d.linkOf(a)
+	detail := a.body
+	a.body = d.attentionWords(sessionID, a.workspace, detail)
 	d.ringHere(a, link)
 	asked := time.Now()
 	time.AfterFunc(permissionSettle, func() {
 		if d.answeredSince(sessionID, asked) {
-			d.forgetAttention(a.workspace, a.body)
+			d.forgetAttention(a.workspace, detail)
 			utils.Infof("agent: (answered here) %s: %s\n", a.title, a.body)
 			return
 		}
-		if MutedUntil(d.Dir).IsZero() {
-			d.ringAway(a, link)
+		if !MutedUntil(d.Dir).IsZero() {
+			return
+		}
+		a.body = d.attentionWords(sessionID, a.workspace, detail)
+		if retract := d.ringAway(a, link); retract != nil {
+			d.keepAwayPost(sessionID, retract)
 		}
 	})
+}
+
+const awayPostsKept = 8
+
+func (d *Daemon) keepAwayPost(sessionID string, retract func()) {
+	if d.answeredSince(sessionID, time.Time{}) {
+		go retract()
+		return
+	}
+	d.attentionMu.Lock()
+	defer d.attentionMu.Unlock()
+	if d.awayPosts == nil {
+		d.awayPosts = map[string][]func(){}
+	}
+	posts := append(d.awayPosts[sessionID], retract)
+	if len(posts) > awayPostsKept {
+		posts = posts[len(posts)-awayPostsKept:]
+	}
+	d.awayPosts[sessionID] = posts
+}
+
+func (d *Daemon) retractAwayPosts(sessionID string) {
+	d.attentionMu.Lock()
+	posts := d.awayPosts[sessionID]
+	delete(d.awayPosts, sessionID)
+	d.attentionMu.Unlock()
+	for _, retract := range posts {
+		go retract()
+	}
+}
+
+const attentionSubjectLimit = 120
+
+func (d *Daemon) attentionWords(sessionID, workspaceID, detail string) string {
+	s, err := d.Sessions.Lookup(sessionID)
+	if err != nil {
+		return detail
+	}
+	lines := []string{detail}
+	if name := firstNonEmpty(s.Title, s.Display); name != "" && name != workspaceID && !strings.Contains(detail, name) {
+		lines = append(lines, name)
+	}
+	if s.Pending != nil && s.Pending.Tool != "" {
+		asked := strings.TrimSpace(s.Pending.Tool + " " + s.Pending.Subject)
+		if r := []rune(asked); len(r) > attentionSubjectLimit {
+			asked = string(r[:attentionSubjectLimit-1]) + "…"
+		}
+		lines = append(lines, asked)
+	}
+	return strings.Join(lines, "\n")
 }
 
 func (d *Daemon) answeredSince(sessionID string, asked time.Time) bool {
@@ -711,7 +768,7 @@ func (d *Daemon) linkOf(a attention) string {
 	return a.link
 }
 
-func (d *Daemon) ringAway(a attention, link string) {
+func (d *Daemon) ringAway(a attention, link string) func() {
 	if d.Push != nil {
 		data := attentionData(a.workspace, link, a.key, a.body)
 		if a.run != "" {
@@ -720,8 +777,9 @@ func (d *Daemon) ringAway(a attention, link string) {
 		go d.Push(push.Message{Title: a.title, Body: a.body, Category: "inbox", Data: data, Thread: a.workspace})
 	}
 	if d.NotifyAway != nil {
-		d.NotifyAway(a.title, a.body, link)
+		return d.NotifyAway(a.title, a.body, link)
 	}
+	return nil
 }
 
 func (d *Daemon) ringHere(a attention, link string) {

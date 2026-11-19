@@ -392,5 +392,6 @@ Run steps 1-5 **per PR in set** - cluster threads by repo, one checkout per repo
 **Mode B (address review):**
 - **Explicit target only - never infer-and-push.** PR/MR must come from link, bare number, or story-id user gave; must be **your own** branch (you can push). Someone else's PR / producer you don't own → stay in Mode A (comment), never write. One target ambiguous between several PRs → ask, don't pick.
 - **Writes branch - bounded.** Edit + push PR's **own** branch only; **draft stays draft, never force-push, never merge, never approve.**
+- **Nothing unasked leaves or lands.** A fix that deletes a switch, flag or behaviour no thread asked for, or an install or build on a device: say it in one line first and keep it out of the push unless the person agrees; unattended, leave it out. List each under **Not asked** in the report.
 - **Pushing is the point.** Addressing feedback on own PR already asked for push: print preview and push, no "shall I push?". Only user's own words in this conversation hold it ("don't push", "just show me the fixes").
 - **Don't blind-apply.** Wrong / out-of-scope suggestion gets reasoned reply, not commit. **Resolve only threads you addressed**; leave pushed-back ones open. **Minimum diff.**
