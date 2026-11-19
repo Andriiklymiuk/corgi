@@ -42,7 +42,7 @@ the newest rollouts' `rate_limits` (`usage.ReadCodexWindow`): 98 % or
 reached, before its reset, is `limit`, wherever codex stands in the order. Adding another agent is one more
 entry in `utils/agent/harness`.
 
-**One session, either harness (2.30.17).** `harness.Open` is what a person's
+**One session, either harness.** `harness.Open` is what a person's
 session asks for - permission mode, model, instructions, resume, first
 prompt - and each harness spells it (`OpenArgs`): claude `--permission-mode
 bypassPermissions --model --append-system-prompt --resume --fork-session`,

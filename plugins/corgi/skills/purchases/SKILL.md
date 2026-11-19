@@ -23,9 +23,8 @@ places. Derive everything else (the store grid, the metadata below) FROM this mo
 they can't drift.
 
 ## Version-control the IAP review notes
-The per-IAP "how a reviewer tests this purchase" steps used to live only in App Store
-Connect (and often only for ONE product), so they were easy to lose + drift. Make them a
-code artifact:
+The per-IAP "how a reviewer tests this purchase" steps kept only in App Store Connect
+(often for ONE product) are easy to lose and drift. Make them a code artifact:
 - **Source:** a small RN-free module that, for every product in the catalog, emits a
   templated review note (steps to find + buy it, platforms, which product is under review),
   keyed by category. RN-free so a plain `bun`/`node` script can run it.

@@ -256,7 +256,7 @@ corgi agent watch enable --states "Ready for dev"
 
 With no `--states` the watch takes every open ticket **except the ones in
 flight** - In Progress, Code review, QA and the like, which someone already
-has (2.30.4). Naming such a column in `--states` takes it anyway, so "In
+has. Naming such a column in `--states` takes it anyway, so "In
 Progress" belongs there only when the team parks ready work in it. A ticket
 a live session is on - its ticket or its branch names it, on this laptop or a
 peer - is never picked, whatever the column.
@@ -428,7 +428,7 @@ https (works once `gh auth login` ran).
 By hand, or to check what it did:
 
 1. **Steps 1 and 2 as above, on the new machine.** On a server: the curl installer instead of brew,
-   `claude auth login` prints a URL to open anywhere and a code to paste back; `docs/agent.md`
+   `claude auth login` prints a URL to open anywhere and a code to paste back; [docs/agent.md](https://github.com/Andriiklymiuk/corgi/blob/main/docs/agent.md)
    "Running it on a server" is the full list (git identity, `gh`/`glab` login, the plugin, linger, TZ).
    Register the same stacks **under the same workspace names**: a task sent across looks for its
    checkout by that name.

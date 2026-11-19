@@ -51,7 +51,7 @@ self-heals: when the holder is identifiably corgi's own server, `up` stops it
 and opens a fresh tunnel + pairing window instead of refusing. For a launcher
 URL that survives restarts - and a phone that stays paired, since the origin
 never changes - pass `--tunnel-name <name> --tunnel-hostname <host>` (cloudflared
-named tunnel; both flags, see docs/agent.md). The mirror is `corgi agent down`: stops the
+named tunnel; both flags, see [docs/agent.md](https://github.com/Andriiklymiuk/corgi/blob/main/docs/agent.md)). The mirror is `corgi agent down`: stops the
 daemon AND the detached MCP + tunnel (`agent stop` stops only the daemon).
 `corgi agent restart` is `down` + `up --fresh` in one. `corgi upd` runs it
 itself when the daemon was set up with `corgi agent install` (it says so, or

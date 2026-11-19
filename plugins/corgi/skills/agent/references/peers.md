@@ -29,7 +29,7 @@ per laptop - those are not shared work.
 - `corgi agent task send TASK-3 --to <name>` - move a task and its thread. A task
   waiting for a run also moves by itself once its machine is silent for 10 minutes.
 
-What the pulse carries (2.29.1): each laptop's board (sessions, tickets,
+What the pulse carries: each laptop's board (sessions, tickets,
 branches, what waits), its unattended runs of the day (running, failed with
 why, blocked), the tickets it ignored, how much of its five-hour window is
 free, and whether it can work at all. So:

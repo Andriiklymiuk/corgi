@@ -27,7 +27,7 @@ CLI or the phone's repo sheet, no restart:
   machine-wide, not a watch flag: a wake or an open lid by day rings once.
   It is for a trip - `corgi agent away` turns it on, `lid off` when back.
 - `--merge-unread` (level 5): low-risk pull requests a run opened merge with nobody
-  reading them; the rest wait for a person. See docs/software-factory.md.
+  reading them; the rest wait for a person. See [docs/software-factory.md](https://github.com/Andriiklymiuk/corgi/blob/main/docs/software-factory.md).
 - `--hand-over`, `--auto-merge`: feedback typed into the session on
   the branch; a ready pull request merged.
 - `--after-merge "<column>"`: once **every** pull request of a run is

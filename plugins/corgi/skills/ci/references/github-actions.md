@@ -1,7 +1,7 @@
 # GitHub Actions
 
-A starting point, not a drop-in. Replace the service list, the secrets source, and
-the e2e command with the workspace's real ones.
+A starting point, not a drop-in. Replace the service list, the secrets source, the
+corgi version and the e2e command with the workspace's real ones.
 
 ## Workspace repo - the implementation
 
@@ -20,7 +20,7 @@ on:
       corgi-version:
         required: false
         type: string
-        default: "2.28.21"   # what `corgi ci init` wrote; keep it at the version the workspace runs
+        default: "<corgi version>"   # what `corgi ci init` wrote: the version the workspace runs
     secrets:
       REPO_TOKEN:
         required: true
