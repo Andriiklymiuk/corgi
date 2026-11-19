@@ -22,7 +22,7 @@ Identify in compose:
 - `db_services.<name>`: driver, port(s), credentials, version, healthCheck, seed source, `additional.*`, manualRun.
 - `services.<name>`: path/cloneFrom, branch, port, portAlias, healthCheck, manualRun, ignore_env, autoSourceEnv, copyEnvFromFilePath, environment, exports, runner, beforeStart/start/afterStart, scripts, tunnel, depends_on_db, depends_on_services.
 
-Only describe what is present. See `references/yml-schema.md` for unknown fields.
+Only describe what is present. An unknown field → `corgi vocab <key>`, or the `corgi` skill's `references/yml-schema.md` (load it with the Skill tool: `corgi:corgi`).
 
 ## Step 1.5 - README scrape (best-effort, terse)
 
@@ -57,7 +57,7 @@ Detect cycles in `depends_on_services`; surface in warnings.
 
 ## Step 3 - Write the doc
 
-Follow `references/describe-output.md` exactly. **Compactness rules (mandatory):**
+Follow the `corgi` skill's `references/describe-output.md` exactly. **Compactness rules:**
 
 1. **Skip empty/default fields.** No `_not set_`, no `none`, no `-` rows for missing fields. Field absent → omit line.
 2. **No project metadata table** unless `useDocker` or `useAwsVpn` is set. Title + optional blockquote description is enough.

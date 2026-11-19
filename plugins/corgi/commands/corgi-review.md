@@ -12,7 +12,7 @@ modes - route from the verb:
   intent (P1.5), per-repo standards note (P2), review each PR anchored to its diff with evidence from the
   whole tree - callers and twins, config delivery, dependency source, what the tests
   assert (P3),
-  cross-service contract pass (P3.5), preview then act by authorship (P4 - posts on other people's PRs without asking; `--yes` skips printing it), post
+  cross-service contract pass (P3.5), verify + prune the findings (P3.6), preview then act by authorship (P4 - posts on other people's PRs without asking; `--yes` skips printing it), post
   summary + inline suggestions (P5), grouped report (P6).
   Approves when nothing blocks (no blocking finding, not a draft, CI not red, no
   conflict) unless the user said "don't approve" or an unattended prompt says not to.
