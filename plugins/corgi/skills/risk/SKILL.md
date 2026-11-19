@@ -34,7 +34,7 @@ Two targets:
   from the diff once it exists. Use it to decide *before* building whether the story
   is one an agent may take alone or one that needs a human in the loop.
 
-## Guardrails (non-negotiable)
+## Guardrails
 - **Every point on the card cites evidence** - a file, a hunk, a test name, a CI
   status, a ticket line. A risk you cannot point at is not on the card. No generic
   advice ("consider adding tests"), no filler, no repeating the diff summary.

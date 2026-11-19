@@ -12,7 +12,7 @@ Bring up a corgi stack - or a slice - from chat. Boot **detached**, wait until
 read from the repo (`corgi-compose.yml`, `Makefile`, `README`); never hard-coded,
 never company-specific.
 
-## Guardrails (non-negotiable)
+## Guardrails
 
 - **Detached only - never a synchronous foreground `corgi run`.** Blocks
   indefinitely streaming logs; a sync Bash call hangs until the 10-min timeout and

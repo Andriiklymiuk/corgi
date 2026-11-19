@@ -32,7 +32,7 @@ provider is read from the repo (`README`/`CLAUDE.md`), never hard-coded, queried
 demand. Work in order; **stop the moment the cause is explained** - don't run the
 whole ladder for a one-liner.
 
-## Guardrails (non-negotiable)
+## Guardrails
 
 - **Never foreground a `corgi run` from a Bash call** - `beforeStart` runs inline
   _before_ run-state is written and `corgi run` streams forever, so a sync call hangs

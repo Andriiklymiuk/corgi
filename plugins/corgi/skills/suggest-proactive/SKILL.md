@@ -30,7 +30,7 @@ Two ways it runs:
   [/abs/workspace]`: the same flow, with a person maybe present.
   `references/schedule-config.md` covers `/schedule` and `CronCreate`.
 
-## Guardrails (non-negotiable)
+## Guardrails
 
 - **One idea per run**, at most `maxPerWeek` (default 1, hard ceiling 3) -
   `corgi suggest-history check` says when the week is spent.

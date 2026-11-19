@@ -376,7 +376,7 @@ Run steps 1-5 **per PR in set** - cluster threads by repo, one checkout per repo
 5. **Preview → push.** Print fixes + replies for whole set once (P4 - printed on way, not question; `--yes` skips printing) → commit (repo style, issue key, no AI trailer) → `git push` each branch → post thread replies. **Draft stays draft; no force-push, no merge, no approve.** Fork PR / no push access → post replies only, say so.
 6. **Report** - grouped by PR: per thread **applied** (commit/line) / **pushed back** (reason) / **needs you** (question); + each PR's push result + link. Multi-repo → state producer-first push order.
 
-## Guardrails (non-negotiable)
+## Guardrails
 
 **Both modes:** **no secret values** echoed into comments/replies - flag location + that secret present, never paste. **Human voice** - terse, kind, specific (problem + fix); each comment and suggestion one or two lines, not paragraph; no AI-attribution trailer, no walls, match repo's density. Post only what genuinely helps - few sharp comments beat many; drop low-value nits, don't pad count. Posted **summary body** is plain prose - few short sentences, at most couple bullets, way person types into PR box. Not structured document: no `##` section headers, no long numbered-question lists, no pasted spec / code-map dumps. Report shape belongs in terminal output (P6), never comment. No tables in comment, acceptance criteria included (P3): met criteria one sentence, unmet one line. **Never suggest adding comment to code.** Reviewer's job is removing ones that don't earn place, not planting more - if line needs explaining, fix in suggestion is clearer name or smaller function.
 

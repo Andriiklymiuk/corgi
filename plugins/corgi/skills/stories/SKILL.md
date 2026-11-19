@@ -144,7 +144,7 @@ Not installed → equivalent inline: settle approach with user, plan into spec, 
 first, verify before push. Either way flows back here - same spec doc, one gate,
 per-story review, draft PR, grouped report.
 
-## Guardrails (non-negotiable)
+## Guardrails
 
 - Read `../_shared/conventions.md` first (attribution, `manualRun`, preflight, worktrees).
 - **Draft PRs/MRs only.** Never merge, never force-push. PR leaves draft only through
