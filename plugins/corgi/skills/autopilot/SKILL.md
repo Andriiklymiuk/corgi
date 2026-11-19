@@ -1,13 +1,13 @@
 ---
 name: autopilot
-description: "Use for a SUPERVISED loop that drains the ticket queue into draft PRs: \"autopilot\", \"keep shipping the queue\", \"drain the backlog overnight\". One spec gate per batch, never merges. NOT a single batch (/corgi-queue)."
+description: "Use for a SUPERVISED loop that drains the ticket queue into draft PRs: \"autopilot\", \"keep shipping the queue\", \"drain the backlog overnight\". One spec gate per batch, never merges. NOT a single batch (/corgi:queue)."
 ---
 
 # Corgi autopilot
 
 **Done when:** this iteration's heartbeat is emitted: the batch reached draft PRs, or its spec gate is staged and waiting, or the queue was empty.
 
-Supervised loop. One iteration = one `/corgi-queue` pickup → `stories` (spec gate → branch per service → tests → review → draft PR) → emit heartbeat → back off → repeat on host scheduler. Inherits corgi's one-spec-gate-per-batch guarantee + draft-PR-only rule; adds visible progress + clean kill switch. **Orchestration only - calls queue/stories/review skills, never re-implements them.**
+Supervised loop. One iteration = one `/corgi:queue` pickup → `stories` (spec gate → branch per service → tests → review → draft PR) → emit heartbeat → back off → repeat on host scheduler. Inherits corgi's one-spec-gate-per-batch guarantee + draft-PR-only rule; adds visible progress + clean kill switch. **Orchestration only - calls queue/stories/review skills, never re-implements them.**
 
 ## What it is NOT
 
@@ -36,7 +36,7 @@ Supervised loop. One iteration = one `/corgi-queue` pickup → `stories` (spec g
 
 ## Phase 1 - Resolve a batch (delegate to tracker pickup)
 
-- **Run `tracker` Job 4 (pickup)** with configured **scope** (from `$ARGUMENTS`; default `agent` queue). Do **not** re-implement scope/drift logic - call the skill. It filters not-In-Progress/not-Done/not-blocked and drift-skips merged/in-flight tickets.
+- **Run `tracker` Job 4 (pickup)** with configured **scope** (from `$ARGUMENTS`; default `agent` queue; or `in ready` / `from backlog` / `most impactful` / `bugs` / explicit keys). Flags in `$ARGUMENTS`: `--max-batch N` sets `maxBatch`, `--review-after` chains the `review` skill on the new draft PRs (off by default), `--until <when>` and `--max-iterations N` set the stop conditions. Do **not** re-implement scope/drift logic - call the skill. It filters not-In-Progress/not-Done/not-blocked and drift-skips merged/in-flight tickets.
 - **Cap to `maxBatch`** (default 3): top N ready picks this iteration; rest wait for the next.
 - **Empty / all-drift** → record `idle`, jump to Phase 3 (heartbeat) then Phase 4 (backoff). Not an error.
 
@@ -64,8 +64,8 @@ Then print one human line: `autopilot · iter <i> · built N · skipped M · awa
 ## Scheduling - /loop and /schedule
 
 Autopilot does not schedule itself. Use the host harness:
-- **Recurring (foreground-ish):** `/loop 1h /corgi-autopilot` - re-runs one iteration every hour while the session is open.
-- **Cron (remote routine):** `/schedule` a routine running `/corgi-autopilot` on a cron (e.g. nightly) to drain the queue unattended; unattended iterations stop at the spec gate (Phase 2) and wait.
+- **Recurring (foreground-ish):** `/loop 1h /corgi:autopilot` - re-runs one iteration every hour while the session is open.
+- **Cron (remote routine):** `/schedule` a routine running `/corgi:autopilot` on a cron (e.g. nightly) to drain the queue unattended; unattended iterations stop at the spec gate (Phase 2) and wait.
 Each scheduled run is a fresh agent session - the durable `corgi autopilot` state file (mode + heartbeat) is how iterations coordinate.
 
 ## Kill switch / pause / state

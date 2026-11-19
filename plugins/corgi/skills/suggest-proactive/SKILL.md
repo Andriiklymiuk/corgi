@@ -1,6 +1,6 @@
 ---
 name: suggest-proactive
-description: "Use when corgi should push ideas by itself: \"run suggest every week\", \"put the proactive bot on\", \"why did the bot propose X\", or a routine invoking /corgi-suggest-proactive. NOT on-demand ideas (suggest)."
+description: "Use when corgi should push ideas by itself: \"run suggest every week\", \"put the proactive bot on\", \"why did the bot propose X\", or a routine invoking /corgi:suggest-proactive. NOT on-demand ideas (suggest)."
 ---
 
 # Corgi proactive suggest - the Proactive bot
@@ -26,7 +26,7 @@ Two ways it runs:
   The watch's caps, quiet hours and budget apply. The run is filed under the
   bot (`corgi agent bot show proactive`), its headline is one inbox row, the
   task is on the board. `corgi agent routine run suggest` runs it now.
-- **By hand or from another scheduler** - `/corgi-suggest-proactive
+- **By hand or from another scheduler** - `/corgi:suggest-proactive
   [/abs/workspace]`: the same flow, with a person maybe present.
   `references/schedule-config.md` covers `/schedule` and `CronCreate`.
 

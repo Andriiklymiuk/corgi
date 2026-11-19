@@ -425,6 +425,10 @@ starts, so a `notifyUrl` written under a running daemon reaches nothing until it
 is restarted. Note also that `corgi notifications test` only exercises the
 **desktop** path - `corgi agent notify test` is the one that posts to the URL.
 
+**A prompt you answer at the laptop stays at the laptop.** When a session asks
+for you, the desktop rings at once; the phone push and the `notifyUrl` post wait
+ten seconds and are dropped if the session is working again by then (2.62).
+
 Trusted config only: the URL receives restart reasons, so a committed repo file
 can never set it. Treat the value as a secret - a Telegram token lets anyone
 post as that bot, so never paste it into a chat, a commit or an issue. If one

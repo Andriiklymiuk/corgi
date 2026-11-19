@@ -1582,10 +1582,10 @@ const launcherPageHTML = `<!doctype html>
   <div data-pane="laptop" hidden>
   <details class="tips" id="tips" hidden>
     <summary><span>On the laptop</span><span class="tips-hint">setup commands</span></summary>
-    <button class="tip" data-copy="/corgi-remote">
+    <button class="tip" data-copy="/corgi:remote">
       <span class="tip-t">Set it all up, guided</span>
       <span class="tip-d">With the corgi plugin installed, this skill walks Claude Code through registering the repo, the tunnel and login start.</span>
-      <span class="tip-cmd"><code>/corgi-remote</code><span class="tip-copy">COPY</span></span>
+      <span class="tip-cmd"><code>/corgi:remote</code><span class="tip-copy">COPY</span></span>
     </button>
     <button class="tip" data-copy="corgi agent init">
       <span class="tip-t">Add another repo</span>

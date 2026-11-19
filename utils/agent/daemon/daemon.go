@@ -105,6 +105,8 @@ type Daemon struct {
 	Notify           func(title, body string)
 	NotifyWithLink   func(title, body, link string)
 	NotifyFocus      func(title, body, sessionID, link string)
+	NotifyHere       func(title, body string)
+	NotifyAway       func(title, body, link string)
 	LinkFor          func(workspaceID string) string
 	Pickup           func(workspace string, e watch.Event)
 	ClaimTicket      func(workspace string, e watch.Event) (ok bool, holder string, err error)
@@ -587,8 +589,52 @@ func (d *Daemon) reportAttention(c command.Command) {
 		d.requestPublish()
 		return
 	}
-	d.notifyAttentionAt(notifyTitlePrefix+c.WorkspaceID, detail, c.WorkspaceID, c.Link)
+	a := attention{title: notifyTitlePrefix + c.WorkspaceID, body: detail, workspace: c.WorkspaceID, link: c.Link}
+	if d.tracksSession(c.SessionID) {
+		d.ringAwayIfUnanswered(a, c.SessionID)
+	} else {
+		d.ring(a)
+	}
 	d.requestPublish()
+}
+
+func (d *Daemon) tracksSession(id string) bool {
+	if id == "" || d.Sessions == nil {
+		return false
+	}
+	s, err := d.Sessions.Lookup(id)
+	return err == nil && s.ID == id
+}
+
+func (d *Daemon) ringAwayIfUnanswered(a attention, sessionID string) {
+	if why := d.attentionHeld(a.workspace, a.key, a.body, a.session); why != "" {
+		utils.Infof("agent: (%s) %s: %s\n", why, a.title, a.body)
+		return
+	}
+	link := d.linkOf(a)
+	d.ringHere(a, link)
+	asked := time.Now()
+	time.AfterFunc(permissionSettle, func() {
+		if d.answeredSince(sessionID, asked) {
+			d.forgetAttention(a.workspace, a.body)
+			utils.Infof("agent: (answered here) %s: %s\n", a.title, a.body)
+			return
+		}
+		if MutedUntil(d.Dir).IsZero() {
+			d.ringAway(a, link)
+		}
+	})
+}
+
+func (d *Daemon) answeredSince(sessionID string, asked time.Time) bool {
+	s, err := d.Sessions.Lookup(sessionID)
+	return err == nil && s.Status == sessions.StatusWorking && s.StatusSince.After(asked)
+}
+
+func (d *Daemon) forgetAttention(workspaceID, detail string) {
+	d.attentionMu.Lock()
+	defer d.attentionMu.Unlock()
+	delete(d.recentAttention, workspaceID+"\x00"+detail)
 }
 
 const attentionRepeatWindow = 10 * time.Minute
@@ -653,10 +699,19 @@ func (d *Daemon) ring(a attention) {
 		utils.Infof("agent: (%s) %s: %s\n", why, a.title, a.body)
 		return
 	}
-	link := a.link
-	if link == "" && a.run == "" && d.LinkFor != nil {
-		link = d.LinkFor(a.workspace)
+	link := d.linkOf(a)
+	d.ringAway(a, link)
+	d.ringHere(a, link)
+}
+
+func (d *Daemon) linkOf(a attention) string {
+	if a.link == "" && a.run == "" && d.LinkFor != nil {
+		return d.LinkFor(a.workspace)
 	}
+	return a.link
+}
+
+func (d *Daemon) ringAway(a attention, link string) {
 	if d.Push != nil {
 		data := attentionData(a.workspace, link, a.key, a.body)
 		if a.run != "" {
@@ -664,6 +719,12 @@ func (d *Daemon) ring(a attention) {
 		}
 		go d.Push(push.Message{Title: a.title, Body: a.body, Category: "inbox", Data: data, Thread: a.workspace})
 	}
+	if d.NotifyAway != nil {
+		d.NotifyAway(a.title, a.body, link)
+	}
+}
+
+func (d *Daemon) ringHere(a attention, link string) {
 	if d.NotifyFocus != nil {
 		if id := d.focusableSession(a.session, a.workspace); id != "" {
 			d.NotifyFocus(a.title, a.body, id, link)
@@ -674,8 +735,12 @@ func (d *Daemon) ring(a attention) {
 		d.NotifyWithLink(a.title, a.body, link)
 		return
 	}
-	if d.Notify != nil {
-		d.Notify(a.title, a.body)
+	notify := d.Notify
+	if d.NotifyAway != nil && d.NotifyHere != nil {
+		notify = d.NotifyHere
+	}
+	if notify != nil {
+		notify(a.title, a.body)
 	}
 }
 

@@ -20,7 +20,7 @@ setting: it is what the watch settings add up to, so `watch enable` and `level` 
 
 | Level | You | Agents | Turn it on |
 |---|---|---|---|
-| 1 You drive | start each session | do what you ask | `/corgi-review`, `/corgi-run`, any skill |
+| 1 You drive | start each session | do what you ask | `/corgi:review`, `/corgi:run`, any skill |
 | 2 It tells you | get rung, start the work | watch trackers and PRs | `corgi agent level 2` |
 | 3 It drafts, you review | read every diff | take tickets to draft PRs | `corgi agent level 3` |
 | 4 It works a shift | write specs and checks, read PRs | run in worktrees, on a clock, in plans | `corgi agent level 4 --done-when "..."`, `corgi agent plan`, `corgi agent routine` |
@@ -120,7 +120,7 @@ Catching up on old news is silent: a pull request found merged after more than a
 Every automatic trigger is an accelerator. Fit a brake first.
 
 - **Checks:** `--done-when`, `corgi agent guard`, `corgi agent scope`, CI.
-- **Review by something that reads the diff cold:** `/corgi-review`, the second reviewer in `stories`.
+- **Review by something that reads the diff cold:** `/corgi:review`, the second reviewer in `stories`.
 - **A person:** `--plan-review`, a human merge, a cap on runs (`--max-per-day`, `--limit-ceiling`).
 
 Add one trigger at a time, throttled. Open the throttle when `corgi agent scorecard` shows runs ending green.

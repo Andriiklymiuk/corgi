@@ -41,7 +41,7 @@ installing a missing tool asks unless `--yes`.
 
 In the project directory:
 
-- No `corgi-compose.yml`? Offer `/corgi-new` (writes one with Claude) or
+- No `corgi-compose.yml`? Offer `/corgi:new` (writes one with Claude) or
   `corgi create` (a starter), or `corgi run -l` for an example. Do not go on
   to agent mode without a directory the user actually works in; agent mode
   works in any git repo, compose or not.

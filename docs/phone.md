@@ -121,7 +121,7 @@ Claude Code is the default. With an order, every unattended run - a fix, a bot, 
 <p align="center"><img src="media/codex.gif" width="760" alt="corgi agent workspaces agents claude,codex; track enable hooks Codex's notify; a PR comment fixed by claude, the next one by codex when claude's window is spent; corgi agent codex"></p>
 <p align="center"><sub>Claude first, Codex when it cannot: the same board, another agent.</sub></p>
 
-`corgi agent down` turns everything off, and nothing runs again until you start it. macOS and Linux - a headless server too, where the phone and Telegram are the screen ([running it on a server](agent.md#running-it-on-a-server)). With the plugin, `/corgi-remote` walks you through the whole setup. Full guide: [docs/agent.md](agent.md).
+`corgi agent down` turns everything off, and nothing runs again until you start it. macOS and Linux - a headless server too, where the phone and Telegram are the screen ([running it on a server](agent.md#running-it-on-a-server)). With the plugin, `/corgi:remote` walks you through the whole setup. Full guide: [docs/agent.md](agent.md).
 
 ## Talk to your laptop from any Claude
 

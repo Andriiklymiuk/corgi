@@ -17,7 +17,7 @@ one sentence of review guidance, and a card that names the exact places to look.
 
 Three modes:
 
-- **assess** - score and print the card. Edits nothing. The default for `/corgi-risk`.
+- **assess** - score and print the card. Edits nothing. The default for `/corgi:risk`.
 - **stamp** - assess, then write the card into the PR/MR description (idempotent,
   behind a preview). What `stories` does when it opens a draft and what `review` offers
   on an existing one.

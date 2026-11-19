@@ -1,14 +1,15 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Action, Here, Snapshot, Waiting } from '../types'
+import type { Action, Here, Limit, Snapshot, Waiting } from '../types'
 import {
-  actionsIn, budgetOf, cardsOf, failureOf, fiveHourOf, glyph, hereLine, hereOf, readBoard, sessionsOf, settle, signature, stackOf, statusText, waitingOf,
+  actionsIn, blame, budgetOf, cardsOf, failureOf, fiveHourOf, glyph, hereLine, hereOf, limitOf, readBoard, sessionsOf, settle, signature, stackOf, statusText, waitingOf,
 } from './board'
 
 const waiting = atom({ plugin: 'corgi-band', key: 'waiting' } as const, [] as Waiting[])
 const here = atom({ plugin: 'corgi-band', key: 'here' } as const, null as Here | null)
 const actions = atom({ plugin: 'corgi-band', key: 'actions' } as const, [] as Action[])
+const limit = atom({ plugin: 'corgi-band', key: 'limit' } as const, null as Limit | null)
 const hidden = atom({ plugin: 'corgi-band', key: 'hidden' } as const, '')
 const snapshot = atom({ plugin: 'corgi-band', key: 'snapshot' } as const, null as Snapshot | null)
 
@@ -59,6 +60,8 @@ async function refresh($: EngineInterface): Promise<boolean> {
   await update($, waiting, () => list)
   const mine = hereOf(board, me.id) ?? null
   await update($, here, () => mine)
+  const near = limitOf(board, me.configDir, now) ?? null
+  await update($, limit, () => near)
   $.ui.status(statusText(list.length, fiveHourOf(board, me.configDir, now)))
   if (me.wantsPane) await refreshPane($)
   return true
@@ -153,10 +156,12 @@ export const register: Register = on => {
     const labels = actionsIn(e.command)
     if (labels.length === 0) return next(e)
     const ran = await next(e)
-    const why = ran.deny ?? failureOf(ran.isError === true, ran.text ?? '')
-    if (why !== undefined) await update($, actions, list => [...list, ...settle(labels, why)].slice(-6))
-    if (why !== undefined) {
-      $.ui.toast(`corgi: ${labels.join(', ')} failed - ${why}`, { timeoutMs: 8000 })
+    const text = ran.deny ?? ran.text ?? ''
+    const why = failureOf(ran.isError === true, text)
+    if (why === undefined) {
+      await update($, actions, list => list.filter(a => !labels.includes(a.label)))
+    } else {
+      await update($, actions, list => [...list, ...settle(blame(labels, text), why)].slice(-6))
     }
     return ran
   }).catch(($, e, next) => next(e))
@@ -165,12 +170,19 @@ export const register: Register = on => {
     const list = await read($, waiting)
     const failed = e.props.isWorking ? [] : await read($, actions)
     const mine = e.props.isWorking ? null : await read($, here)
-    const isHidden = (await read($, hidden)) === signature(list, failed, mine ?? undefined)
-    if (e.props.hasSurvey || isHidden || (list.length === 0 && failed.length === 0 && mine === null)) {
+    const near = e.props.isWorking ? null : await read($, limit)
+    const shownNow = signature(list, failed, mine ?? undefined, near ?? undefined)
+    const isHidden = (await read($, hidden)) === shownNow
+    if (e.props.hasSurvey || isHidden || (list.length === 0 && failed.length === 0 && mine === null && near === null)) {
       return next(e)
     }
     const { Box, Button, Text } = $.ui.resolve(e)
     const shown = list.slice(0, 3)
+    const answer = async (id: string, word: string) => {
+      const out = await $.process.run(['corgi', 'agent', 'answer', id, word]).catch(() => undefined)
+      if (out?.exitCode !== 0) await $.process.run(['corgi', 'agent', 'focus', id]).catch(() => undefined)
+      await refresh($)
+    }
 
     return (
       <Box flexDirection="column">
@@ -180,6 +192,10 @@ export const register: Register = on => {
             <Text wrap="truncate-end">
               {w.name} waits on you: {w.what}{' '}
             </Text>
+            {w.canAnswer && <Button key={`allow-${w.id}`} label="Allow" onPress={() => void answer(w.id, 'allow')} />}
+            {w.canAnswer && <Text> </Text>}
+            {w.canAnswer && <Button key={`deny-${w.id}`} label="Deny" onPress={() => void answer(w.id, 'deny')} />}
+            {w.canAnswer && <Text> </Text>}
             <Button
               key={`focus-${w.id}`}
               label="Focus"
@@ -197,6 +213,19 @@ export const register: Register = on => {
             )}
           </Box>
         )}
+        {near !== null && (
+          <Box>
+            <Text color="yellow">◐ </Text>
+            <Text wrap="truncate-end">5-hour limit at {near.percent}% </Text>
+            {near.carryTo !== undefined && (
+              <Button
+                key="carry"
+                label={`Carry to ${near.carryTo}`}
+                onPress={() => void $.process.run(['corgi', 'agent', 'carry', me.id, '--profile', near.carryTo!]).catch(() => undefined)}
+              />
+            )}
+          </Box>
+        )}
         {failed.map((a, i) => (
           <Box key={`f-${i}`}>
             <Text color="red">✗ </Text>
@@ -211,7 +240,7 @@ export const register: Register = on => {
             label="Hide"
             plain
             dimColor
-            onPress={() => update($, hidden, () => signature(list, failed, mine ?? undefined))}
+            onPress={() => update($, hidden, () => shownNow)}
           />
         </Box>
       </Box>

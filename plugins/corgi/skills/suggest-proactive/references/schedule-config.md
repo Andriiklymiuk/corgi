@@ -21,7 +21,7 @@ enable --workspace <id>`); without `--bot` the routine runs plain, same prompt, 
 ## Without the daemon
 
 - **`/schedule`** makes a cloud routine on a cron that outlives the terminal:
-  `cron "23 9 * * 1"`, prompt `Run /corgi-suggest-proactive in workspace /abs/path`.
+  `cron "23 9 * * 1"`, prompt `Run /corgi:suggest-proactive in workspace /abs/path`.
   The job fires with no implied cwd, so the prompt names the absolute path.
 - **`CronCreate`** is session-only: fires while the REPL is idle, dies with the
   session, a recurring one expires after 7 days. Good for a one-off trial

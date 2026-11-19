@@ -20,7 +20,7 @@ corgi clones with plain `git`, so your existing SSH keys or credential helper ar
 
 ## Joining a team that already uses corgi
 
-`git pull`, then `corgi run`. No `corgi-compose.yml` yet? You don't have to hand-write it - `corgi create` (or `/corgi-new` with Claude) inspects the repos and scaffolds one. Adding corgi is a single committed file, and teammates who don't use it aren't affected, since everything corgi generates is gitignored.
+`git pull`, then `corgi run`. No `corgi-compose.yml` yet? You don't have to hand-write it - `corgi create` (or `/corgi:new` with Claude) inspects the repos and scaffolds one. Adding corgi is a single committed file, and teammates who don't use it aren't affected, since everything corgi generates is gitignored.
 
 ## When the first run trips up
 

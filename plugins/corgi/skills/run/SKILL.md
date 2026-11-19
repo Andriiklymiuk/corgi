@@ -236,7 +236,7 @@ block the gate on it.
   it so the user isn't surprised (harmless headless).
 - Watch logs: `corgi logs --service <x>` (detached always captures logs). Stop:
   `corgi stop` (or `corgi stop --service <x>`; runs `afterStart`, brings dbs down).
-  Unhealthy → "run the **debug** skill / `/corgi-debug`".
+  Unhealthy → "run the **debug** skill / `/corgi:debug`".
 - See it: `corgi open [services...]` opens each service's `http://localhost:<port>` (with
   `--json` or no terminal it prints the URLs instead). One live pane of run state plus each
   repo's branch, PR and CI: `corgi mission-control --watch` (`mc`; `--json` is one snapshot).

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { actionsIn, failureOf, fiveHourOf, hereOf, statusText, waitingOf } from '../hooks/board'
+import { actionsIn, blame, failureOf, fiveHourOf, hereOf, statusText, waitingOf } from '../hooks/board'
 
 describe('board helpers', () => {
   test('names the outward actions in a command', () => {
@@ -15,6 +15,13 @@ describe('board helpers', () => {
     expect(failureOf(false, 'Error: slack conversations.list: token_revoked\nUsage:')).toBe('Error: slack conversations.list: token_revoked')
     expect(failureOf(true, 'Exit code 1\n ! [rejected] main -> main (fetch first)')).toContain('[rejected]')
     expect(failureOf(false, 'posted as bot: https://x.slack.com/p1')).toBe(undefined)
+    expect(failureOf(true, '[Request interrupted by user for tool use]')).toBe(undefined)
+  })
+
+  test('blames the action the output names, or all of them when it names none', () => {
+    expect(blame(['gh pr create', 'git push'], ' ! [rejected] main -> main (fetch first)')).toEqual(['git push'])
+    expect(blame(['gh pr create', 'git push'], 'pull request create failed: GraphQL: no commits')).toEqual(['gh pr create'])
+    expect(blame(['gh pr create', 'git push'], 'error: something else')).toEqual(['gh pr create', 'git push'])
   })
 
   test('lists other sessions that wait, not this one', () => {
@@ -25,7 +32,7 @@ describe('board helpers', () => {
         { id: 'b2', status: 'working', title: 'busy' },
       ],
     }
-    expect(waitingOf(board, 'me')).toEqual([{ id: 'a1', name: 'ABC-8 stories', what: 'Bash rm -rf build' }])
+    expect(waitingOf(board, 'me')).toEqual([{ id: 'a1', name: 'ABC-8 stories', what: 'Bash rm -rf build', canAnswer: true }])
   })
 
   test('says the budget only while its window is the current one and high', () => {

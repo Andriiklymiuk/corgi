@@ -349,12 +349,12 @@ PR) is not run inside a corgi flow, the two would fight. None fits → say nothi
 ## Compose preflight
 
 Skills that read the workspace start with `ls corgi-compose.yml *.corgi-compose.yml` in
-cwd. None → tell the user to open the stack folder (or run `/corgi-new`); never guess a
+cwd. None → tell the user to open the stack folder (or run `/corgi:new`); never guess a
 layout. Read only the keys you need: `services.<name>.{path,cloneFrom,manualRun,
 depends_on_services}`, `db_services`, `exports` (one key: `corgi vocab <key>`; the
 whole schema: `../corgi/references/yml-schema.md`). `corgi context --json` gives the same picture plus
 each repo's branch, dirty files and service status in one call. Don't render the whole
-project with `/corgi-describe` or `--describe`.
+project with `/corgi:describe` or `--describe`.
 
 Per repo: forge from `git -C <dir> remote get-url origin` (`github.com` → `gh`, `gitlab`
 → `glab`; a batch may span both); base from

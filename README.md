@@ -72,7 +72,7 @@ corgi-compose.yml  ─►  corgi run
 
 > **Agents & CI:** use `corgi run --detach` then `corgi status --ready --timeout 2m` instead of the foreground commands above - they return instead of blocking. See [agents & scripting](docs/agents.md).
 
-No `corgi-compose.yml` yet? `corgi create` writes a starter one, or `/corgi-new` writes one with Claude.
+No `corgi-compose.yml` yet? `corgi create` writes a starter one, or `/corgi:new` writes one with Claude.
 
 ## What the file looks like
 

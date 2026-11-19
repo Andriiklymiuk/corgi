@@ -1,11 +1,11 @@
 ---
 name: describe-output
-description: Output template for /corgi-describe - compact Markdown structure plus Mermaid diagram conventions. Read when producing or reviewing a corgi-services.md doc.
+description: Output template for /corgi:describe - compact Markdown structure plus Mermaid diagram conventions. Read when producing or reviewing a corgi-services.md doc.
 ---
 
-# `/corgi-describe` output format
+# `/corgi:describe` output format
 
-The slash command `/corgi-describe` writes a single Markdown file (default: `docs/corgi-services.md`). Goal: **compact**. Reader scans once, sees relationships, drills only into services they care about. Skip every empty/default field. Don't restate the schema - describe **this** project.
+The slash command `/corgi:describe` writes a single Markdown file (default: `docs/corgi-services.md`). Goal: **compact**. Reader scans once, sees relationships, drills only into services they care about. Skip every empty/default field. Don't restate the schema - describe **this** project.
 
 ## Compactness rules (enforced)
 

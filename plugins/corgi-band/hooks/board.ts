@@ -1,4 +1,4 @@
-import type { Action, Here, PaneCard, PaneService, PaneSession, Waiting } from '../types'
+import type { Action, Here, Limit, PaneCard, PaneService, PaneSession, Waiting } from '../types'
 
 type BoardSession = {
   id: string
@@ -8,14 +8,15 @@ type BoardSession = {
   label?: string
   detail?: string
   configDir?: string
-  pending?: { tool?: string; subject?: string } | null
+  pending?: { tool?: string; subject?: string; risk?: string } | null
+  overlap?: { id?: string; session?: string; files?: string[] }[] | null
   standing?: { word?: string; why?: string } | null
   context?: { percent?: number } | null
 }
 type Window = { percent?: number; resetsAt?: string }
 type Board = {
   sessions?: BoardSession[]
-  accounts?: { configDir?: string; limits?: { fiveHour?: Window; sevenDay?: Window } }[]
+  accounts?: { profile?: string; agent?: string; configDir?: string; limits?: { fiveHour?: Window; sevenDay?: Window } }[]
 }
 
 export function readBoard(stdout: string): Board | undefined {
@@ -35,6 +36,7 @@ export function waitingOf(board: Board, me: string): Waiting[] {
         id: s.id,
         name: s.title || s.display || s.label || s.id.slice(0, 8),
         what: clip(pending || s.detail || 'a question', 60),
+        canAnswer: Boolean(s.pending?.tool) && s.pending?.risk !== 'destructive',
       }
     })
 }
@@ -61,18 +63,50 @@ export function hereOf(board: Board, me: string): Here | undefined {
   const context = s.context?.percent
   const showWord = worthSaying.has(word)
   const showContext = context !== undefined && context >= contextWorthSaying
-  if (!showWord && !showContext) return undefined
+  const overlap = overlapOf(board, s)
+  if (!showWord && !showContext && overlap === undefined) return undefined
   return {
     word: showWord ? word : '',
     why: showWord ? clip(why, 70) : '',
     context: showContext ? context : undefined,
     fix: showWord ? fixes[word]?.(why) : undefined,
+    overlap,
   }
 }
 
+function overlapOf(board: Board, s: BoardSession): string | undefined {
+  const o = (s.overlap ?? []).find(x => (x.files ?? []).length > 0)
+  if (o === undefined) return undefined
+  const other = (board.sessions ?? []).find(x => x.id === o.id || x.id === o.session)
+  const who = other?.title || other?.display || other?.label || o.session || 'another session'
+  const files = o.files ?? []
+  const names = files.slice(0, 2).map(f => f.split('/').pop()).join(', ')
+  return clip(`${who} edits the same files: ${names}${files.length > 2 ? ` +${files.length - 2}` : ''}`, 80)
+}
+
 export function hereLine(h: Here): string {
-  const parts = [h.word && (h.why ? `${h.word} · ${h.why}` : h.word), h.context !== undefined && `context ${h.context}%`].filter(Boolean)
+  const parts = [
+    h.word && (h.why ? `${h.word} · ${h.why}` : h.word),
+    h.context !== undefined && `context ${h.context}%`,
+    h.overlap,
+  ].filter(Boolean)
   return parts.join(' · ')
+}
+
+const limitWorthSaying = 90
+const roomToCarry = 70
+
+export function limitOf(board: Board, configDir: string, now: number): Limit | undefined {
+  const percent = fiveHourOf(board, configDir, now)
+  if (percent === undefined || percent < limitWorthSaying) return undefined
+  const mine = (board.accounts ?? []).find(a => (a.configDir ?? '') === configDir)
+  const used = (w?: Window) => (w?.percent === undefined || (w.resetsAt !== undefined && Date.parse(w.resetsAt) < now) ? 0 : w.percent)
+  const others = (board.accounts ?? [])
+    .filter(a => a !== mine && a.profile && (a.agent ?? 'claude') === (mine?.agent ?? 'claude'))
+    .map(a => ({ profile: a.profile!, used: Math.max(used(a.limits?.fiveHour), used(a.limits?.sevenDay)) }))
+    .filter(a => a.used < roomToCarry)
+    .sort((a, b) => a.used - b.used)
+  return { percent, carryTo: others[0]?.profile }
 }
 
 export function fiveHourOf(board: Board, configDir: string, now: number): number | undefined {
@@ -115,7 +149,10 @@ export function actionsIn(command: string): string[] {
   return found
 }
 
+const stoppedByPerson = /Request interrupted by user|doesn't want to proceed with this tool use|tool use was rejected/i
+
 export function failureOf(isError: boolean, text: string): string | undefined {
+  if (stoppedByPerson.test(text)) return undefined
   const line = text.split('\n').map(l => l.trim()).find(l => /^(error|fatal|refused|rejected|denied)\b|token_revoked|invalid_auth|! \[rejected\]/i.test(l))
   if (line !== undefined) return clip(line.replace(/^Exit code \d+\s*/, ''), 80)
   if (!isError) return undefined
@@ -123,12 +160,25 @@ export function failureOf(isError: boolean, text: string): string | undefined {
   return clip(first ?? 'failed', 80)
 }
 
+const tells: [RegExp, RegExp][] = [
+  [/^git push$/, /\[rejected\]|failed to push|non-fast-forward|remote:|could not read from remote|src refspec|has no upstream/i],
+  [/^gh pr /, /\bgh\b|pull request|graphql|http \d{3}|gh auth/i],
+  [/^glab mr /, /\bglab\b|merge request|http \d{3}/i],
+  [/^Slack post$/, /slack|token_revoked|invalid_auth|channel_not_found|not_in_channel/i],
+]
+
+export function blame(labels: string[], text: string): string[] {
+  if (labels.length < 2) return labels
+  const told = labels.filter(label => tells.some(([is, says]) => is.test(label) && says.test(text)))
+  return told.length > 0 ? told : labels
+}
+
 export function settle(labels: string[], why: string | undefined): Action[] {
   return labels.map(label => (why === undefined ? { label, isDone: true } : { label, isDone: false, why }))
 }
 
-export function signature(waiting: Waiting[], actions: Action[], here?: Here): string {
-  return JSON.stringify([waiting.map(w => w.id + w.what), actions, here ? hereLine(here) : ''])
+export function signature(waiting: Waiting[], actions: Action[], here?: Here, limit?: Limit): string {
+  return JSON.stringify([waiting.map(w => w.id + w.what), actions, here ? hereLine(here) : '', limit ? limit.percent : ''])
 }
 
 function bare(s: string | undefined): string {

@@ -20,7 +20,7 @@ Lookup, not reading: `corgi vocab <command>` and `corgi vocab --<flag>` answer f
 | `--privateToken <token>` | Auth token for cloning private repos listed in `cloneFrom:` |
 | `--silent` | Suppress welcome / informational output |
 | `--fromScratch` | Wipe `.corgi/corgi_services/` before running |
-| `--describe` | During parse, dump each db/service/required as indented JSON. Does **not** short-circuit - `corgi run --describe` prints then still runs. For a rendered, side-effect-free doc use `/corgi-describe`. |
+| `--describe` | During parse, dump each db/service/required as indented JSON. Does **not** short-circuit - `corgi run --describe` prints then still runs. For a rendered, side-effect-free doc use `/corgi:describe`. |
 | `--dockerContext <ctx>` | `default`, `orbctl`, or `colima` |
 
 ## Commands

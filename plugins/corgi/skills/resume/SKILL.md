@@ -48,10 +48,10 @@ Pick one, first match wins:
 
 - dirty work on a story branch → `corgi test --changed --base <base>`, then the
   `prep-pr` skill.
-- branch pushed, PR open → `/corgi-review <link>`, or watch CI.
-- stack unhealthy → `/corgi-debug`.
-- everything clean, stack down → `/corgi-run`.
-- nothing in flight → `/corgi-queue` to pick a ticket.
+- branch pushed, PR open → `/corgi:review <link>`, or watch CI.
+- stack unhealthy → `/corgi:debug`.
+- everything clean, stack down → `/corgi:run`.
+- nothing in flight → `/corgi:queue` to pick a ticket.
 
 Say why in half a sentence. If `brief` says the session ended on a usage limit, put
 `corgi agent usage` (the `budget` skill) before anything else.

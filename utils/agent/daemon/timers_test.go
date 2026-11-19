@@ -92,3 +92,66 @@ func TestAttentionCarriesTheSessionsOwnLink(t *testing.T) {
 		t.Fatalf("no session link falls back to the environment: %v", m.Data)
 	}
 }
+
+func attentionDaemon(t *testing.T) (*Daemon, chan push.Message, chan string) {
+	t.Helper()
+	old := permissionSettle
+	permissionSettle = 60 * time.Millisecond
+	t.Cleanup(func() { permissionSettle = old })
+	d := trackingDaemon(t)
+	pushed, away := make(chan push.Message, 2), make(chan string, 2)
+	d.Push = func(m push.Message) { pushed <- m }
+	d.NotifyAway = func(_, body, _ string) { away <- body }
+	d.Sessions.Apply(sessions.Event{Name: "SessionStart", SessionID: "s1", Cwd: t.TempDir()})
+	d.Sessions.Apply(sessions.Event{Name: "Notification", SessionID: "s1", Notification: "permission_prompt", Message: "Claude needs your permission"})
+	return d, pushed, away
+}
+
+func TestAttentionAnsweredHereNeverReachesThePhone(t *testing.T) {
+	d, pushed, away := attentionDaemon(t)
+	ask := command.Command{WorkspaceID: "corgi", Detail: "Claude needs your permission", SessionID: "s1"}
+	d.reportAttention(ask)
+	d.Sessions.Apply(sessions.Event{Name: "PostToolUse", SessionID: "s1", Tool: "Bash", At: time.Now().Add(time.Millisecond)})
+	select {
+	case m := <-pushed:
+		t.Fatalf("an answered prompt was pushed: %v", m)
+	case body := <-away:
+		t.Fatalf("an answered prompt went to the webhook: %s", body)
+	case <-time.After(4 * permissionSettle):
+	}
+	if d.repeatedAttention("corgi", "Claude needs your permission", time.Now()) {
+		t.Fatal("the next prompt with the same words must ring again")
+	}
+}
+
+func TestAttentionStillWaitingReachesThePhoneAfterTheSettle(t *testing.T) {
+	d, pushed, away := attentionDaemon(t)
+	d.reportAttention(command.Command{WorkspaceID: "corgi", Detail: "Claude needs your permission", SessionID: "s1"})
+	select {
+	case <-pushed:
+		t.Fatal("pushed before the settle")
+	case <-time.After(permissionSettle / 3):
+	}
+	for _, wait := range []func() bool{
+		func() bool {
+			select {
+			case <-pushed:
+				return true
+			case <-time.After(time.Second):
+				return false
+			}
+		},
+		func() bool {
+			select {
+			case <-away:
+				return true
+			case <-time.After(time.Second):
+				return false
+			}
+		},
+	} {
+		if !wait() {
+			t.Fatal("a prompt nobody answered must reach the phone and the webhook")
+		}
+	}
+}

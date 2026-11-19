@@ -284,19 +284,14 @@ func addWebhookNotify(d *daemon.Daemon, url string) {
 		utils.Infof("⚠ notifyUrl %q is not a usable http(s) URL - webhook notifications are off\n", url)
 		return
 	}
+	d.NotifyHere = d.Notify
 	if n := combinedNotifier(d.Notify, hook); n != nil {
 		d.Notify = n
 	}
-	desktop := d.NotifyWithLink
-	d.NotifyWithLink = func(title, body, link string) {
-		if desktop != nil {
-			desktop(title, body, link)
+	d.NotifyAway = func(title, body, link string) {
+		if link == "" {
+			link = launcherURL()
 		}
-		linked(title, body, link)
-	}
-	focus := d.NotifyFocus
-	d.NotifyFocus = func(title, body, sessionID, link string) {
-		focus(title, body, sessionID, link)
 		linked(title, body, link)
 	}
 }

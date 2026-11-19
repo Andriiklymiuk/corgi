@@ -16,7 +16,7 @@ behaviour did not move. Three modes:
 - **report** - measure and rank, edit nothing. What `review` runs on a PR.
 - **gate** - pass/fail on a diff. What `stories` runs before its per-service gate.
 - **refactor** - measure, fix the worst first, re-measure, report. The default for
-  `/corgi-complexity`.
+  `/corgi:complexity`.
 
 Scope is **the diff**, not the repo: touched functions versus `<base>`. A whole-repo
 scan ("where are the hotspots") is a separate ask and stays read-only unless the user

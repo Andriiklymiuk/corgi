@@ -9,7 +9,7 @@ execution:
   timeout_seconds: 600
   allowed_tools: [Skill, Read, Glob, Grep]
   prompt: |
-    Run /corgi-suggest-proactive in this workspace. Nobody is at the desk and this session has no shell: end with the exact commands that put the idea on the board and record it.
+    Run /corgi:suggest-proactive in this workspace. Nobody is at the desk and this session has no shell: end with the exact commands that put the idea on the board and record it.
 graders:
   - name: fires-proactive
     type: tool_used

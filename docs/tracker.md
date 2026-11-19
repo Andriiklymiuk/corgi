@@ -1,6 +1,6 @@
 # Tracker & queue - plan and pick up work
 
-The `tracker` skill and the `/corgi-queue` command are the **front of the corgi
+The `tracker` skill and the `/corgi:queue` command are the **front of the corgi
 agent loop**: they read your issue tracker (Linear or Jira) **and** your
 `corgi-compose.yml`, tie each ticket to its real code state, and turn that into a
 plan, a triaged inbox, or build-ready work handed straight to the `stories` skill.
@@ -14,7 +14,7 @@ suggest  →  tracker / queue  →  stories  →  review  →  you land it
 The full loop: **suggest → plan → stories → review**, with `run`/`debug` operating
 throughout. `suggest` is upstream - it proposes work before it's even a ticket.
 
-`suggest` can also run **proactively on a schedule** (`/corgi-suggest-proactive` armed
+`suggest` can also run **proactively on a schedule** (`/corgi:suggest-proactive` armed
 via `/schedule`): each run reuses the suggest ranking, dedupes the top idea against open
 tickets + recently-dismissed ones, and - behind the same tracker write gate - either
 proposes it (default) or, only if you opt in, files **one** rate-limited **draft** ticket.
@@ -38,10 +38,10 @@ on intent.
 
 | Job | Say something like | What you get |
 |-----|--------------------|--------------|
-| **Status / standup** | "where are we", "what's blocked", "are we on track", `/corgi-tracker standup` | the cycle/sprint reconciled against real PRs + CI, leading with blockers and drift, plus a burn read |
+| **Status / standup** | "where are we", "what's blocked", "are we on track", `/corgi:tracker standup` | the cycle/sprint reconciled against real PRs + CI, leading with blockers and drift, plus a burn read |
 | **Triage** | "sort and prioritize the new bugs", "any duplicates" | per-issue label / priority / assignee / dup / needs-info proposals, applied behind one confirm |
 | **Decompose** | "break EPIC-9 into tickets", "turn this feature into stories" | ordered, service-mapped tickets (producer → consumer) created under the epic |
-| **Pickup** | "find me something to work on", `/corgi-queue` | build-ready tickets handed to `stories` → draft PRs |
+| **Pickup** | "find me something to work on", `/corgi:queue` | build-ready tickets handed to `stories` → draft PRs |
 
 ## The superpower: ticket ↔ code correlation
 
@@ -52,23 +52,23 @@ flags the drift the tracker can't see:
 | Tracker says | Code says | It reports |
 |--------------|-----------|------------|
 | In Progress | no branch/PR | **not actually started** |
-| In Progress | open PR, CI red | **blocked on CI** → `/corgi-debug` |
+| In Progress | open PR, CI red | **blocked on CI** → `/corgi:debug` |
 | Todo / Backlog | PR merged | **stale - close it** |
 | Done | PR open | **premature done** |
-| any | open PR, no review | **needs a reviewer** → `/corgi-review` |
+| any | open PR, no review | **needs a reviewer** → `/corgi:review` |
 
 ## Pickup scopes
 
-`/corgi-queue` resolves what to build from your words (default = the `agent` queue):
+`/corgi:queue` resolves what to build from your words (default = the `agent` queue):
 
 ```
-/corgi-queue                    # tickets labelled `agent` that are ready
-/corgi-queue in ready           # your Ready status column
-/corgi-queue from backlog       # the backlog
-/corgi-queue most impactful     # highest-priority ready work first (= "most roi")
-/corgi-queue bugs               # ready bug-type tickets (built bug-tier: red test first)
-/corgi-queue ABC-140 ABC-141    # exactly these tickets
-/loop 1h /corgi-queue           # keep draining on a schedule (you still approve each spec)
+/corgi:queue                    # tickets labelled `agent` that are ready
+/corgi:queue in ready           # your Ready status column
+/corgi:queue from backlog       # the backlog
+/corgi:queue most impactful     # highest-priority ready work first (= "most roi")
+/corgi:queue bugs               # ready bug-type tickets (built bug-tier: red test first)
+/corgi:queue ABC-140 ABC-141    # exactly these tickets
+/loop 1h /corgi:queue           # keep draining on a schedule (you still approve each spec)
 ```
 
 Every scope filters to **not In Progress / not Done / not blocked**, then
@@ -91,10 +91,10 @@ Picking one ticket quietly engages the rest of the loop:
 3. As each branch is created, **stories moves the ticket to In-Progress and assigns it
    to you** (states resolved from the tracker, never hardcoded), then **to Code Review /
    In Review when its draft PR opens** (if your team has that state). The In-Progress
-   move also stops a looping `/corgi-queue` from grabbing the same ticket twice.
-4. It then points you to the next steps: **`/corgi-review`** to review against your
-   standards + the ticket, **`/corgi-run --service-branch …`** to see the branch live,
-   **`/corgi-debug`** if CI is red - then you land it (`gh pr merge` / `glab mr merge`).
+   move also stops a looping `/corgi:queue` from grabbing the same ticket twice.
+4. It then points you to the next steps: **`/corgi:review`** to review against your
+   standards + the ticket, **`/corgi:run --service-branch …`** to see the branch live,
+   **`/corgi:debug`** if CI is red - then you land it (`gh pr merge` / `glab mr merge`).
 
 ## Guardrails
 

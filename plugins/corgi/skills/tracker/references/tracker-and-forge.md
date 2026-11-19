@@ -99,5 +99,5 @@ never hardcode the name** - teams rename it ("In Progress", "Doing", "Code Revie
 
 Idempotent: skip if already in that state / already assigned. **Don't steal an
 existing assignee** - self-assign only when unassigned. **No review-type state on the
-team → leave it In Progress.** The in-progress move keeps a looping `/corgi-queue`
+team → leave it In Progress.** The in-progress move keeps a looping `/corgi:queue`
 from re-picking an in-flight ticket (auto-pick takes only not-In-Progress tickets).

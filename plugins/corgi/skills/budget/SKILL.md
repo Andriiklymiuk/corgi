@@ -56,7 +56,7 @@ One verdict line: which window binds, when it lifts, whether the current pace is
   for the session that will hit the wall; it moves the conversation, not just the
   account. Take the session name from `corgi agent sessions`.
 - No other account → say how long until the reset and suggest queueing the work
-  (`/corgi-queue` later) rather than starting a long build now.
+  (`/corgi:queue` later) rather than starting a long build now.
 - Never carry, stop, or dismiss a session yourself; print the command.
 - Work is in flight when the limit hits and nobody carries it → leave a handoff
   (`../_shared/conventions.md`, *Stopping with work left*): `--done` what is finished,

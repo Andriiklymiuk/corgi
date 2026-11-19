@@ -35,7 +35,7 @@ Never silently edit the user's compose to change a port - confirm first, because
 User is in the wrong directory, or the file is named non-default. Options:
 - `cd` to the repo root.
 - Use `-f <path>` to point at a custom filename.
-- If this is a new project, scaffold one: see `/corgi-new`.
+- If this is a new project, scaffold one: see `/corgi:new`.
 
 ### "failed to clone <repo>"
 

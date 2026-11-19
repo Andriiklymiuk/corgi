@@ -387,7 +387,7 @@ func runAgentHook(cmd *cobra.Command, args []string) {
 		return
 	}
 	if _, err := command.Write(dir, command.Command{
-		Action: command.ActionAttention, WorkspaceID: id, Detail: detail, Source: "hook",
+		Action: command.ActionAttention, WorkspaceID: id, Detail: detail, Source: "hook", SessionID: claudeID,
 		Link: claudeSessionLink(claudeID, os.Getenv("CLAUDE_CONFIG_DIR")),
 	}); err != nil {
 		return

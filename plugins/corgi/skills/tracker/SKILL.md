@@ -56,11 +56,11 @@ Read-only; no checkout. Then flag drift:
 | Tracker | Code | Report as |
 |---------|------|-----------|
 | In Progress | no branch/PR | **not started** |
-| In Progress | open PR, CI red | **blocked on CI** → `/corgi-debug` |
+| In Progress | open PR, CI red | **blocked on CI** → `/corgi:debug` |
 | In Review | no PR | drift - nothing to review |
 | Todo/Backlog | PR merged | **stale - close** (gate) |
 | Done | PR open | **premature done** |
-| any | open PR, no review | needs a reviewer → `/corgi-review` |
+| any | open PR, no review | needs a reviewer → `/corgi:review` |
 
 Hold one cache; the jobs below read it, never re-query.
 
@@ -69,7 +69,7 @@ Hold one cache; the jobs below read it, never re-query.
 Group the cache, lead with **blockers + drift**, each line carrying PR + CI:
 ```
 Cycle 24 · day 6/10 · 14 issues
-🔴 ABC-122 api  Webhook retries  PR #255 open, CI ✗  → /corgi-debug
+🔴 ABC-122 api  Webhook retries  PR #255 open, CI ✗  → /corgi:debug
    ABC-130 web  New onboarding   In Progress 4d, no branch ⚠
 🟢 ABC-118 api  Add phone field  PR #251 draft, CI ✓ → ready to land
 ✅ Done 5 · 🗒 Todo 3 · ⏳ Stale 1 (ABC-077, 23d)
@@ -144,8 +144,8 @@ gate.**
 4. **Hand picked keys to `stories`** - it builds and, as each branch is created,
    **moves the ticket to in-progress + self-assigns** (then → the team's review state
    when its draft PR opens) - `stories` Phases 3 & 5. The in-progress move de-dupes a
-   looping `/corgi-queue` (auto-pick takes only not-In-Progress). Loop
-   `/loop 1h /corgi-queue` to keep draining on a schedule (each round's batch still
+   looping `/corgi:queue` (auto-pick takes only not-In-Progress). Loop
+   `/loop 1h /corgi:queue` to keep draining on a schedule (each round's batch still
    passes the one spec gate - not zero-touch). Empty / all-drift → say so.
 
 ## The write gate

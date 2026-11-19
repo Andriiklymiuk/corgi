@@ -55,7 +55,7 @@ review pull requests, and keep the work moving while you are away from the desk.
 | `architecture` | How the app or workspace is put together: a map from the code, cycles, hubs and change coupling measured, one seam moved at a time behind a fence rule, decisions written down |
 | `memory`, `improve-skill` | The workspace memory store; refining a skill from a session |
 
-Each skill has a slash command under `commands/` (`/corgi-run`, `/corgi-review`, ...).
+Each skill is its own slash command (`/corgi:run`, `/corgi:review`, ...). Four commands have no skill: `/corgi:describe`, `/corgi:new`, `/corgi:queue` and `/corgi:remote`.
 
 ## What the plugin runs and sends
 

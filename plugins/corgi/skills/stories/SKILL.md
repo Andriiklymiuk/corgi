@@ -185,7 +185,7 @@ else the session offers (a monitor, a push, a browser, a device, a language serv
 ## Phase 0 - Read workspace from corgi-compose.yml
 
 1. Locate compose file (preflight in `../_shared/conventions.md`). None →
-   `/corgi-new` first, or ask which repos; don't guess layout.
+   `/corgi:new` first, or ask which repos; don't guess layout.
    **Pasted context may not be this workspace.** Diff, MR body, ticket or
    screenshot in prompt can come from other product entirely - may be *example of shape wanted*, not target. Never identify
    workspace by hunting filesystem for code matching paste: confirm
@@ -194,7 +194,7 @@ else the session offers (a monitor, a push, a browser, a device, a language serv
 2. **Read yaml, extract only needed keys** -
    `services.<name>.{path,cloneFrom,manualRun}`, `depends_on_services`, `exports`
    (schema: `skills/corgi/references/yml-schema.md`). Don't render whole
-   project: `/corgi-describe` too many tokens; `corgi --describe` dumps JSON then
+   project: `/corgi:describe` too many tokens; `corgi --describe` dumps JSON then
    still runs command. Build:
    - **Service → dir map.** `path:` (local) or `cloneFrom:` (clone target) = repo you branch in. `cloneFrom` not on disk → `corgi init` clones first.
    - **Dependency/order graph** from `depends_on_services` + `exports`/
@@ -224,7 +224,7 @@ else the session offers (a monitor, a push, a browser, a device, a language serv
 - **"Find/pick what to work on"**, nothing named → **don't guess tickets.** Resolve
   via `tracker` skill's **pickup** - `agent` queue (label `agent`, not In
   Progress/Done), drift-skipped - confirm picks, build here. Same selection as
-  `/corgi-queue`: selection in `tracker`, building here.
+  `/corgi:queue`: selection in `tracker`, building here.
 
 **Tracker issue:** fetch, **view screenshots**, read real code paths.
 
@@ -495,7 +495,7 @@ ticketed story's branch created (post sign-off):
   **Don't steal** - assigned to someone else → leave, note who; unassigned → take.
 
 Idempotent - skip if already set; skip no-ticket + blocked. In-progress move
-also stops looping `/corgi-queue` re-grabbing story in flight (auto-pick takes
+also stops looping `/corgi:queue` re-grabbing story in flight (auto-pick takes
 only not-In-Progress). **Review** transition fires later, at draft PR - Phase 5.
 
 **Pick branch vs worktree per repo - check the working tree first:**
@@ -813,7 +813,7 @@ issue link.
 ## Phase 5.5 - Review loop on the opened PRs/MRs (always, before the report)
 
 Phase 3.5 reviewed each story's raw diff mid-flight; this = **closing check on
-actual PRs/MRs** - run **`review` skill** (`/corgi-review` engine) on
+actual PRs/MRs** - run **`review` skill** (`/corgi:review` engine) on
 every PR/MR this run opened, don't just hand reviewer hint line. Skip
 blocked/failed stories.
 
@@ -862,7 +862,7 @@ with nuance. No-ticket → short `[<slug>]` tag as key. Under each block:
   (`--service-dir` at live impl worktree belongs to Phase 3 gate, code still
   uncommitted.)
 - **Review hint** → after link(s) per actionable (non-blocked) story, one line
-  per PR/MR: `↳ review it: /corgi-review <pr-or-mr-link>` - hands reviewer to
+  per PR/MR: `↳ review it: /corgi:review <pr-or-mr-link>` - hands reviewer to
   `review` skill (checks diff against repo standards + ticket, posts inline
   suggestions). Skip blocked/failed.
 - **CI line (when watched)** → one line per PR/MR after link: `✓ CI green` or
@@ -909,7 +909,7 @@ Example (rendered as markdown, not fenced):
 
 risk 7/10 high · auto-approve: no - cross-service contract
 ✓ review clean (1 round)
-↳ review it: /corgi-review https://github.com/<org>/api/pull/41 https://github.com/<org>/web/pull/37
+↳ review it: /corgi:review https://github.com/<org>/api/pull/41 https://github.com/<org>/web/pull/37
 ▶ corgi run --with-deps --service-branch api=feature/ABC-200/user-phone --service-branch web=feature/ABC-200/user-phone
 
 ## [ABC-125] api - BLOCKED - which auth scope gates the endpoint?
