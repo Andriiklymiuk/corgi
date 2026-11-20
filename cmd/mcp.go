@@ -460,6 +460,8 @@ func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 	// This process answers the comments on its own as they arrive.
 	mux.Handle("/idea/", ideaOpenHandler(token, deviceStore))
 	ideaAutoAnswerHere = true
+	mux.Handle(boardSharePath, boardShareHandler())
+	mux.Handle(boardSharePath+"/", boardShareHandler())
 
 	if token != "" || deviceStore != "" {
 		launchTimingsDir = agentDirOrEmpty()

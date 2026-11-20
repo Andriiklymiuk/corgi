@@ -55,6 +55,12 @@ type KanbanCard struct {
 	Feature   *CardFeature      `json:"feature,omitempty"`
 	Idea      *CardIdea         `json:"idea,omitempty"`
 	After     []string          `json:"after,omitempty"`
+	Links     []watch.TaskLink  `json:"links,omitempty"`
+	Owner     string            `json:"owner,omitempty"`
+	Priority  string            `json:"priority,omitempty"`
+	Due       string            `json:"due,omitempty"`
+	Overdue   bool              `json:"overdue,omitempty"`
+	WaitsFor  []string          `json:"waitsFor,omitempty"`
 	UpdatedAt time.Time         `json:"updatedAt"`
 	Standing  sessions.Standing `json:"standing"`
 }
@@ -205,7 +211,7 @@ func (b *kanbanBoard) placeEvent(e watch.Event) {
 	if e.Parent != "" && c.Feature == nil {
 		c.Feature = &CardFeature{Ref: e.Parent, Title: firstLineOf(e.ParentTitle)}
 	}
-	if len(e.Links) > 0 {
+	if len(e.Links) > 0 && e.Kind != watch.KindTask {
 		b.links[e.Workspace+"/"+e.Ref] = e.Links
 	}
 	if e.Kind == watch.KindTask {

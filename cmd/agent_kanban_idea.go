@@ -1,6 +1,9 @@
 package cmd
 
 import (
+	"strings"
+	"time"
+
 	"andriiklymiuk/corgi/utils/agent/idea"
 	"andriiklymiuk/corgi/utils/agent/watch"
 )
@@ -38,6 +41,13 @@ func linkCardsToIdeas(dir string, cards []KanbanCard) {
 				pages[m.Slug] = m
 			}
 			local, public = ideaLinkBases()
+		}
+		if t, ok := tasks.Find(cards[i].Ref); ok {
+			cards[i].Links, cards[i].Owner, cards[i].Priority, cards[i].Due = t.LinkRows(), t.Owner, t.Priority, t.Due
+			cards[i].Overdue, cards[i].WaitsFor = t.Overdue(time.Now()), tasks.OpenBlockers(t)
+			if len(cards[i].WaitsFor) > 0 && cards[i].Column != ColDone {
+				cards[i].Column, cards[i].Why = ColBlocked, "waits for "+strings.Join(cards[i].WaitsFor, ", ")
+			}
 		}
 		cards[i].Idea = ideaOfCard(cards[i], func(ref string) string {
 			t, _ := tasks.Find(ref)

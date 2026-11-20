@@ -4185,13 +4185,19 @@ func sortInboxRows(out []inboxRow) {
 }
 
 type ticketRequest struct {
-	Key       string `json:"key"`
-	Do        string `json:"do"`
-	Status    string `json:"status"`
-	Title     string `json:"title"`
-	Body      string `json:"body"`
-	Workspace string `json:"workspace"`
-	Ref       string `json:"ref"`
+	Key       string   `json:"key"`
+	Do        string   `json:"do"`
+	Status    string   `json:"status"`
+	Title     string   `json:"title"`
+	Body      string   `json:"body"`
+	Workspace string   `json:"workspace"`
+	Ref       string   `json:"ref"`
+	Links     []string `json:"links"`
+	Owner     string   `json:"owner"`
+	Force     bool     `json:"force"`
+	Priority  *string  `json:"priority"`
+	Due       *string  `json:"due"`
+	BlockedBy []string `json:"blockedBy"`
 }
 
 type ticketCall struct {
@@ -4347,11 +4353,38 @@ func taskRowAction(c ticketCall, do string) {
 			_ = watch.LoadState(c.dir).Ignore(c.event.Key)
 		}
 		out = func(t watch.Task) map[string]any { return map[string]any{"done": t.Ref() + " removed"} }
+	case "link":
+		t, err = tasks.Link(c.event.Key, c.req.Links, now)
+		out = func(t watch.Task) map[string]any {
+			return map[string]any{"done": t.Ref() + " linked", "links": t.LinkRows()}
+		}
+	case "unlink":
+		for _, link := range c.req.Links {
+			if t, err = tasks.Unlink(c.event.Key, link, now); err != nil {
+				break
+			}
+		}
+		out = func(t watch.Task) map[string]any {
+			return map[string]any{"done": t.Ref() + " unlinked", "links": t.LinkRows()}
+		}
 	case "assign":
 		c.done(map[string]any{"done": c.event.Ref + " is yours already"})
 		return
+	case "claim":
+		t, err = tasks.Claim(c.event.Key, c.claimant(), c.req.Force, now)
+		out = func(t watch.Task) map[string]any {
+			return map[string]any{"done": t.Ref() + " is " + t.Owner + "'s", "owner": t.Owner}
+		}
+	case "release":
+		t, err = tasks.Release(c.event.Key, now)
+		out = func(t watch.Task) map[string]any { return map[string]any{"done": t.Ref() + " is free"} }
+	case "plan":
+		t, err = planTaskRow(tasks, c, now)
+		out = func(t watch.Task) map[string]any {
+			return map[string]any{"done": t.Ref() + " planned", "priority": t.Priority, "due": t.Due, "blockedBy": t.BlockedBy}
+		}
 	default:
-		c.fail(http.StatusBadRequest, "a task takes move, close, edit, remove or ignore")
+		c.fail(http.StatusBadRequest, "a task takes move, close, edit, remove, link, unlink, claim, release, plan or ignore")
 		return
 	}
 	if err != nil {
@@ -4359,6 +4392,38 @@ func taskRowAction(c ticketCall, do string) {
 		return
 	}
 	c.done(out(t))
+}
+
+func (c ticketCall) claimant() string {
+	if who := strings.TrimSpace(c.req.Owner); who != "" {
+		return who
+	}
+	if device, ok := authorizedDeviceFull(pairing.StorePath(c.dir), c.r.Header.Get("Authorization")); ok && device.Name != "" {
+		return device.Name
+	}
+	return c.from()
+}
+
+func planTaskRow(tasks *watch.TaskLog, c ticketCall, now time.Time) (watch.Task, error) {
+	t, ok := tasks.Find(c.event.Key)
+	if !ok {
+		return t, fmt.Errorf("no task %s", c.event.Ref)
+	}
+	var err error
+	if c.req.Priority != nil {
+		if t, err = tasks.SetPriority(c.event.Key, *c.req.Priority, now); err != nil {
+			return t, err
+		}
+	}
+	if c.req.Due != nil {
+		if t, err = tasks.SetDue(c.event.Key, *c.req.Due, now); err != nil {
+			return t, err
+		}
+	}
+	if c.req.BlockedBy != nil {
+		t, err = tasks.SetBlockedBy(c.event.Key, c.req.BlockedBy, now)
+	}
+	return t, err
 }
 
 func trackerRowAction(c ticketCall, do string) {

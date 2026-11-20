@@ -31,7 +31,13 @@ type Task struct {
 	Tags []string `json:"tags,omitempty"`
 	// From names what the task was made from outside a tracker (a mail, a chat
 	// message, a wiki page), so the same one is never added twice.
-	From string `json:"from,omitempty"`
+	From      string    `json:"from,omitempty"`
+	Links     []string  `json:"links,omitempty"`
+	Owner     string    `json:"owner,omitempty"`
+	ClaimedAt time.Time `json:"claimedAt,omitzero"`
+	Priority  string    `json:"priority,omitempty"`
+	Due       string    `json:"due,omitempty"`
+	BlockedBy []int     `json:"blockedBy,omitempty"`
 	// Run asks the daemon to start it unattended; it clears once started.
 	Run bool `json:"run,omitempty"`
 	// Comments is the thread; a person's comment after AnsweredAt wakes a run.
@@ -58,7 +64,8 @@ func (t Task) Key() string { return fmt.Sprintf("task:%d", t.ID) }
 
 func (t Task) Event() Event {
 	return Event{Key: t.Key(), Source: "task", Kind: KindTask, Workspace: t.Workspace, Ref: t.Ref(),
-		Title: t.Title, Body: t.WithThread(), State: t.State, Mine: true, At: t.UpdatedAt, Labels: t.Tags}
+		Title: t.Title, Body: t.WithThread(), State: t.State, Mine: true, At: t.UpdatedAt, Labels: t.Tags,
+		Links: t.Links, Assignee: t.Owner}
 }
 
 // TaskAgent is who the runs comment as. Its own comments wake nothing.
@@ -438,7 +445,7 @@ func (l *TaskLog) Wanted() []Task {
 	defer l.mu.Unlock()
 	out := []Task{}
 	for _, t := range l.Tasks {
-		if t.WantsRun() && t.MovedTo == "" {
+		if t.WantsRun() && t.MovedTo == "" && !l.blockedLocked(t) {
 			out = append(out, t)
 		}
 	}
@@ -466,6 +473,7 @@ func (l *TaskLog) AddCopy(from Task, peer string, now time.Time) (Task, error) {
 	}
 	return l.update(t.Ref(), func(c *Task) {
 		c.Idea, c.Tags, c.Comments, c.AnsweredAt, c.Run = from.Idea, from.Tags, from.Comments, from.AnsweredAt, from.Run
+		c.Links, c.Priority, c.Due = from.Links, from.Priority, from.Due
 		c.Origin = &TaskOrigin{Peer: peer, ID: from.ID, CreatedAt: from.CreatedAt}
 	})
 }
@@ -560,4 +568,15 @@ func LoadTaskCopies(agentDir, peer string) (TaskCopies, bool) {
 		return TaskCopies{}, false
 	}
 	return c, true
+}
+
+func (l *TaskLog) blockedLocked(t Task) bool {
+	for _, id := range t.BlockedBy {
+		for _, other := range l.Tasks {
+			if other.ID == id && finishedState(other.State) == "" {
+				return true
+			}
+		}
+	}
+	return false
 }

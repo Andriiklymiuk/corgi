@@ -115,7 +115,8 @@ var agentTaskListCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, _ []string) {
 		dir := mustAgentDir()
 		all, _ := cmd.Flags().GetBool("all")
-		tasks := watch.LoadTasks(dir).Tasks
+		log := watch.LoadTasks(dir)
+		tasks := log.ByPriority()
 		if utils.JSONOutput {
 			utils.PrintJSON(map[string]any{"tasks": tasks, "columns": watch.TaskColumns})
 			return
@@ -143,7 +144,11 @@ var agentTaskListCmd = &cobra.Command{
 				if t.Workspace != "" {
 					ws = "  " + t.Workspace
 				}
-				fmt.Printf("  %-8s %s%s\n", t.Ref(), t.Title, ws)
+				plan := ""
+				if words := taskPlanWords(log, t); words != "" {
+					plan = "  [" + words + "]"
+				}
+				fmt.Printf("  %-8s %s%s%s\n", t.Ref(), t.Title, ws, plan)
 			}
 		}
 	},
@@ -356,6 +361,122 @@ var agentTaskCommentCmd = &cobra.Command{
 	},
 }
 
+func taskChanged(dir string, t watch.Task, err error, said string) {
+	if err != nil {
+		exitWithError("agent_task", err, 2)
+	}
+	nudgePlans(dir)
+	if utils.JSONOutput {
+		utils.PrintJSON(map[string]any{"ref": t.Ref(), "task": t, "links": t.LinkRows()})
+		return
+	}
+	fmt.Printf("%s %s\n", t.Ref(), said)
+}
+
+var agentTaskLinkCmd = &cobra.Command{
+	Use:   "link <TASK-n> <url>...",
+	Short: "Tie a task to a Jira or Linear ticket, a GitHub or GitLab pull request, or any page",
+	Args:  cobra.MinimumNArgs(2),
+	Run: func(cmd *cobra.Command, args []string) {
+		dir := mustAgentDir()
+		tasks, now := watch.LoadTasks(dir), time.Now()
+		if rm, _ := cmd.Flags().GetBool("rm"); rm {
+			var t watch.Task
+			var err error
+			for _, link := range args[1:] {
+				if t, err = tasks.Unlink(args[0], link, now); err != nil {
+					break
+				}
+			}
+			taskChanged(dir, t, err, fmt.Sprintf("holds %d link(s)", len(t.Links)))
+			return
+		}
+		t, err := tasks.Link(args[0], args[1:], now)
+		taskChanged(dir, t, err, fmt.Sprintf("holds %d link(s)", len(t.Links)))
+	},
+}
+
+var agentTaskClaimCmd = &cobra.Command{
+	Use:   "claim <TASK-n>",
+	Short: "Say a task is yours, so no other person or agent starts it",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		dir := mustAgentDir()
+		who, _ := cmd.Flags().GetString("as")
+		force, _ := cmd.Flags().GetBool("force")
+		if who = strings.TrimSpace(who); who == "" {
+			who = peers.Me()
+		}
+		t, err := watch.LoadTasks(dir).Claim(args[0], who, force, time.Now())
+		taskChanged(dir, t, err, "is "+who+"'s")
+	},
+}
+
+var agentTaskReleaseCmd = &cobra.Command{
+	Use:   "release <TASK-n>",
+	Short: "Give a claimed task back to the board",
+	Args:  cobra.ExactArgs(1),
+	Run: func(_ *cobra.Command, args []string) {
+		dir := mustAgentDir()
+		t, err := watch.LoadTasks(dir).Release(args[0], time.Now())
+		taskChanged(dir, t, err, "is free")
+	},
+}
+
+var agentTaskSetCmd = &cobra.Command{
+	Use:   "set <TASK-n>",
+	Short: "Give a task a priority, a due date, or the tasks it waits for",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		dir := mustAgentDir()
+		tasks, now := watch.LoadTasks(dir), time.Now()
+		t, ok := tasks.Find(args[0])
+		if !ok {
+			exitWithError("agent_task", fmt.Errorf("no task %s", args[0]), 2)
+		}
+		var err error
+		if cmd.Flags().Changed("priority") {
+			priority, _ := cmd.Flags().GetString("priority")
+			if t, err = tasks.SetPriority(args[0], priority, now); err != nil {
+				exitWithError("agent_task", err, 2)
+			}
+		}
+		if cmd.Flags().Changed("due") {
+			due, _ := cmd.Flags().GetString("due")
+			if t, err = tasks.SetDue(args[0], due, now); err != nil {
+				exitWithError("agent_task", err, 2)
+			}
+		}
+		if cmd.Flags().Changed("blocked-by") {
+			blockers, _ := cmd.Flags().GetStringSlice("blocked-by")
+			if t, err = tasks.SetBlockedBy(args[0], blockers, now); err != nil {
+				exitWithError("agent_task", err, 2)
+			}
+		}
+		taskChanged(dir, t, nil, taskPlanWords(tasks, t))
+	},
+}
+
+func taskPlanWords(tasks *watch.TaskLog, t watch.Task) string {
+	words := []string{}
+	if t.Priority != "" {
+		words = append(words, t.Priority)
+	}
+	if t.Due != "" {
+		words = append(words, "due "+t.Due)
+	}
+	if t.Owner != "" {
+		words = append(words, "@"+t.Owner)
+	}
+	if open := tasks.OpenBlockers(t); len(open) > 0 {
+		words = append(words, "waits for "+strings.Join(open, ", "))
+	}
+	for _, link := range t.LinkRows() {
+		words = append(words, link.Label)
+	}
+	return strings.Join(words, " · ")
+}
+
 func init() {
 	agentTaskCommentCmd.Flags().String("by", "you", "who is saying it")
 	agentTaskSendCmd.Flags().String("to", "", "the peer to move it to (corgi agent peers lists them)")
@@ -370,6 +491,13 @@ func init() {
 	agentTaskEditCmd.Flags().String("body", "", "a new description")
 	agentTaskEditCmd.Flags().String("workspace", "", "a new workspace")
 	agentTaskListCmd.Flags().Bool("all", false, "finished ones too")
+	agentTaskLinkCmd.Flags().Bool("rm", false, "take these links off instead")
+	agentTaskClaimCmd.Flags().String("as", "", "the name to claim it under (default: this machine's name)")
+	agentTaskClaimCmd.Flags().Bool("force", false, "take it even when someone else holds it")
+	agentTaskSetCmd.Flags().String("priority", "", "urgent, high, medium, low or none; the highest starts first")
+	agentTaskSetCmd.Flags().String("due", "", "the day it is due, like 2026-12-01, or none")
+	agentTaskSetCmd.Flags().StringSlice("blocked-by", nil, "tasks that must finish first (TASK-3,TASK-4); empty clears it")
+	agentTaskCmd.AddCommand(agentTaskLinkCmd, agentTaskClaimCmd, agentTaskReleaseCmd, agentTaskSetCmd)
 	agentTaskCmd.AddCommand(agentTaskCommentCmd, agentTaskSendCmd, agentTaskAddCmd, agentTaskListCmd, agentTaskMoveCmd, agentTaskDoneCmd, agentTaskEditCmd, agentTaskRmCmd)
 	agentCmd.AddCommand(agentTaskCmd)
 }

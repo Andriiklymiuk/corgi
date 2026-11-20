@@ -68,6 +68,7 @@ type Daemon struct {
 	attentionMu     sync.Mutex
 	recentAttention map[string]time.Time
 	awayPosts       map[string][]func()
+	postThreads     postThreads
 	mergeMu         sync.Mutex
 	mergeFailed     map[string]mergeFailure
 	limitWatch      map[string]bool
@@ -749,6 +750,7 @@ func (d *Daemon) notifyAttentionFull(title, body, workspaceID, link, key, sessio
 
 type attention struct {
 	title, body, workspace, link, key, session, run string
+	story                                           string
 }
 
 func (d *Daemon) ring(a attention) {
@@ -757,7 +759,7 @@ func (d *Daemon) ring(a attention) {
 		return
 	}
 	link := d.linkOf(a)
-	d.ringAway(a, link)
+	d.ringAwayThreaded(a, link)
 	d.ringHere(a, link)
 }
 
@@ -777,7 +779,7 @@ func (d *Daemon) ringAway(a attention, link string) func() {
 		go d.Push(push.Message{Title: a.title, Body: a.body, Category: "inbox", Data: data, Thread: a.workspace})
 	}
 	if d.NotifyAway != nil {
-		return d.NotifyAway(a.title, a.body, link)
+		return d.NotifyAway(a.title, firstNonEmpty(a.story, a.body), link)
 	}
 	return nil
 }

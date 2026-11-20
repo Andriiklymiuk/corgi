@@ -53,6 +53,19 @@ and `task done TASK-3` when nothing is left. `corgi agent refresh` reloads
 everything now - sessions rescanned, every tracker polled, the board
 published - when a person says the board looks stale.
 
+**A task's links, owner and order**: `corgi agent task link TASK-3 <url>…`
+ties it to a Jira or Linear ticket or a GitHub or GitLab pull request (`--rm`
+takes one off). `corgi agent task claim TASK-3 [--as name]` says who holds it
+and `release` gives it back: the daemon does not start a task another name
+holds. `corgi agent task set TASK-3 --priority high --due 2026-12-01
+--blocked-by TASK-2` orders the queue: highest priority first, and a task that
+waits for another stays in Blocked until that one is finished.
+
+**Show the board to a teammate**: `corgi agent kanban share --workspace api
+--for 7d --label "for Anna"` prints a read-only link once. It shows titles,
+columns, owners and links, never a description or a comment. `--list` shows the
+open links, `--off <id>` closes one.
+
 `corgi agent kanban [--workspace X] [--json]` is one card per ticket in a
 column corgi works out - Inbox, Ready (deferred, or a handoff waiting),
 Running (a run or a session on the branch), Blocked, Review (a PR is open),

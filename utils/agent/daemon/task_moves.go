@@ -34,7 +34,12 @@ func (d *Daemon) syncTasksWith(ctx context.Context, p peers.Peer) {
 
 func (d *Daemon) syncTasksVia(peer string, call func(in, out any) error) {
 	tasksMu.Lock()
-	wanted := watch.LoadTasks(d.Dir).Wanted()
+	wanted := []watch.Task{}
+	for _, t := range watch.LoadTasks(d.Dir).Wanted() {
+		if !t.HeldByAnother(peers.Me()) {
+			wanted = append(wanted, t)
+		}
+	}
 	tasksMu.Unlock()
 	if len(wanted) > tasksSentAtOnce {
 		wanted = wanted[:tasksSentAtOnce]

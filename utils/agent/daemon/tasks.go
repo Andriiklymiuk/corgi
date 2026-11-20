@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"andriiklymiuk/corgi/utils"
+	"andriiklymiuk/corgi/utils/agent/peers"
 	"andriiklymiuk/corgi/utils/agent/watch"
 )
 
@@ -31,10 +32,27 @@ func (d *Daemon) advanceTasks(ctx context.Context) {
 	}
 	d.takeOverTasks(now)
 	tasks := watch.LoadTasks(d.Dir)
-	for _, t := range tasks.Tasks {
+	for _, t := range tasks.ByPriority() {
+		if open := tasks.OpenBlockers(t); len(open) > 0 {
+			if t.WantsRun() {
+				d.sayTaskWaits(t, "blocked by "+strings.Join(open, ", "))
+			}
+			continue
+		}
+		if t.HeldByAnother(peers.Me()) {
+			if t.WantsRun() {
+				d.sayTaskWaits(t, "claimed by "+t.Owner)
+			}
+			continue
+		}
 		spec, ok := d.taskRunnable(t, now)
 		if !ok || !d.claimFix(t.Workspace, t.Ref()) {
 			continue
+		}
+		if t.Owner == "" {
+			if claimed, err := tasks.Claim(t.Ref(), peers.Me(), false, now); err == nil {
+				t = claimed
+			}
 		}
 		e := t.Event()
 		_, _ = tasks.Started(t.Ref(), now)
