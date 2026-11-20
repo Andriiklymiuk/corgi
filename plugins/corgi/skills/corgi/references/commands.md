@@ -17,7 +17,7 @@ Lookup, not reading: `corgi vocab <command>` and `corgi vocab --<flag>` answer f
 | `-l, --exampleList` | Print available examples from the corgi_examples repo |
 | `-o, --runOnce` | Run services once and exit rather than loop-watching |
 | `-g, --global` | Use a globally-registered compose path by name |
-| `--privateToken <token>` | Auth token for cloning private repos listed in `cloneFrom:` |
+| `--privateToken YOUR_API_KEY` | Auth token for cloning private repos listed in `cloneFrom:` |
 | `--silent` | Suppress welcome / informational output |
 | `--fromScratch` | Wipe `.corgi/corgi_services/` before running |
 | `--describe` | During parse, dump each db/service/required as indented JSON. Does **not** short-circuit - `corgi run --describe` prints then still runs. For a rendered, side-effect-free doc use `/corgi:describe`. |
@@ -458,7 +458,7 @@ Installs asynchronous Claude Code hooks into the **account** settings (`~/.claud
 
 Where notifications go when you are away from the machine. Without it they stop at the laptop.
 
-- `corgi agent notify telegram --token <TOKEN>` - the whole setup: validates the token, waits while you message the bot, resolves the chat id, writes `notifyUrl`, sends a test. `--chat-id` skips the wait.
+- `corgi agent notify telegram --token YOUR_API_KEY` - the whole setup: validates the token, waits while you message the bot, resolves the chat id, writes `notifyUrl`, sends a test. `--chat-id` skips the wait.
 - `corgi agent notify set <url>` - a Slack or Discord webhook (or a self-hosted ntfy topic). The payload is chosen from the host.
 - `corgi agent notify show` - the destination with its secret masked. `corgi agent notify test` posts to it.
 - **`corgi agent restart` after any change** - the daemon attaches the webhook at startup.
@@ -525,7 +525,7 @@ Prints schema reference to stdout. `--generate` regenerates cobra docs (maintain
 
 ### `corgi upgrade` (alias: `update`)
 
-Upgrade via Homebrew to the latest GitHub release. Safe no-op if already current.
+Moves corgi to its newest release, through the way it was installed. Safe no-op if already current.
 
 ### `corgi version` (alias: `-v`, `--version`)
 

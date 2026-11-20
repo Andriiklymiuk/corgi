@@ -215,7 +215,7 @@ block the gate on it.
   `corgi ps --json` (status running + a live pid) + a bounded
   `corgi logs --service <x> --idle 2s`. A port-less db whose port comes from a driver
   default (notably the `supabase` driver) is invisible to the gate even when others
-  are probed - cross-check out-of-band (`curl` its health URL / `corgi ps --json` /
+  are probed - cross-check out-of-band (request its health URL / `corgi ps --json` /
   `docker ps`). **Never report ready on a no-op exit 0.**
 - **Timeout (exit 1) - don't hang, don't retry blindly.** Final JSON lists each
   target `healthy:false`. Before handing off, separate **crashed-after-boot** from

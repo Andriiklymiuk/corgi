@@ -39,7 +39,7 @@ User is in the wrong directory, or the file is named non-default. Options:
 
 ### "failed to clone <repo>"
 
-- Private repo: pass `--privateToken <token>` or make sure SSH keys are set up.
+- Private repo: pass `--privateToken YOUR_API_KEY` or make sure SSH keys are set up.
 - Branch doesn't exist: check `services.<name>.branch`.
 - Wrong URL: verify `cloneFrom:`.
 

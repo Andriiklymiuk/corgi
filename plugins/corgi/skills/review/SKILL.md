@@ -82,8 +82,7 @@ Grep callers, open dependency source, run coverage gate or probe there; `git wor
 Scan **input**, **each PR/MR body**, AND **branch name** (`headRefName`/`source_branch` - e.g. `feature/ABC-123/...` carries `ABC-123`) for ticket references: `linear.app/…`, `atlassian.net/…`, or bare `ABC-123` key. **Dedupe keys across whole set first** - shared ticket (common api+web case) fetched **once**, intent note reused by every PR referencing it, same as P2's per-repo note. Never re-fetch same key per PR.
 
 - **Linear** → `mcp__linear-server__get_issue` (+ comments); view screenshots by `curl`-ing signed `uploads.linear.app` URLs (expire ~5 min - re-fetch issue for fresh URLs) then read.
-- **Jira** → `mcp__atlassian__getJiraIssue` (+ comments). Returns attachment metadata only, no MCP tool returns bytes (`../_shared/tracker-mcp.md`): with `$JIRA_EMAIL`/`$JIRA_API_TOKEN` in env, `curl -u
-  "$JIRA_EMAIL:$JIRA_API_TOKEN" -L -o <file> "<content-url>"` then read; otherwise ask user to download and share file. `getAccessibleAtlassianResources` for site if needed.
+- **Jira** → `mcp__atlassian__getJiraIssue` (+ comments). Returns attachment metadata only, no MCP tool returns bytes (`../_shared/tracker-mcp.md`): `corgi agent watch attachment "<content-url>" --out <dir>` saves it with the workspace's Jira login (it prints the path), then read; otherwise ask user to download and share file. `getAccessibleAtlassianResources` for site if needed.
 
 **Extract whole intent, not just acceptance criteria** - tickets carry the why:
 - Description + acceptance criteria.

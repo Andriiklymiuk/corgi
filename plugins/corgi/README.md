@@ -74,10 +74,9 @@ your own accounts:
 - **Your tracker (Linear / Jira), through the MCP server you connected:** ticket reads,
   spec comments and status changes.
 - **Jira attachments:** when a ticket's screenshot cannot be read through the MCP
-  server, `stories` and `review` download it with `curl` from your own Jira site, using
-  `$JIRA_EMAIL` and `$JIRA_API_TOKEN` if you have set them. The token is sent only to
-  that Jira site.
-- **Health checks:** the `agent` skill can `curl` your own local or tunnelled app URL.
+  server, `stories` and `review` save it with `corgi agent watch attachment`. corgi signs in
+  with the Jira login you gave it and sends that login only to your own Jira site.
+- **Health checks:** the `agent` skill can request your own local or tunnelled app URL.
 - **Your own stack, probed:** `security` sends test requests to localhost or an
   environment you own; `web` opens your running app in a browser; `perf` times it.
 - **Package registries:** `deps` runs your package manager's own outdated, audit and

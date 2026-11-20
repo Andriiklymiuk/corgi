@@ -156,5 +156,5 @@ starts the daemon, the watch and the routines on this Docker host;
 `--host ssh://me@build-1` on a server; `--clone <git url>` registers a
 stack at first start; `--docker` mounts the host's Docker socket so a fix
 can run the stack. `container shell | logs | stop | down | status` for the
-rest. `up` asks once for a Claude token (`claude setup-token` prints one):
+rest. `up` asks once for the Claude sign-in the container will use (`claude setup-token` makes it):
 that is the person's step.

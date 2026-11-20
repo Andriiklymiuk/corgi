@@ -829,6 +829,11 @@ Linear key, a self-hosted GitLab.
 Tokens are never written into the repository. They live in the user-level
 agent directory, mode 0600, next to the machine-wide ones.
 
+A variable in the environment works too, and a stored token beats it:
+LINEAR_API_KEY, JIRA_URL, JIRA_EMAIL, JIRA_API_TOKEN, GITHUB_TOKEN,
+GITLAB_TOKEN, GITLAB_URL, SLACK_USER_TOKEN, SLACK_BOT_TOKEN,
+SENTRY_AUTH_TOKEN, SENTRY_URL.
+
   corgi agent watch auth jira --token xxx --url https://acme.atlassian.net --email me@acme.com --local
   corgi agent watch auth linear --clear --local`,
 	Args: cobra.ExactArgs(1),

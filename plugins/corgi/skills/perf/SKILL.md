@@ -36,7 +36,7 @@ noise.
 
 | The slow thing | Measure with |
 |---|---|
-| An API route | `curl -sS -o /dev/null -w '%{time_total}\n' <url>` in a loop; the service's own timing log through `corgi logs --service <svc> --grep '<route>'` |
+| An API route | request the URL in a loop and print each total time (curl's `-w '%{time_total}'` write-out, body thrown away); the service's own timing log through `corgi logs --service <svc> --grep '<route>'` |
 | A database query | `EXPLAIN (ANALYZE, BUFFERS)` through `corgi exec <service> -- <the repo's db shell>`; the query log for count per request |
 | A web page | The browser's performance trace and network panel (the `web` skill's driver); Lighthouse in the repo's CI when it has it |
 | A React Native screen | argent `react-profiler-*` for renders and commits, `native-profiler-*` for the native side, on a release-like build |

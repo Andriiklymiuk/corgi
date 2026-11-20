@@ -236,15 +236,15 @@ else the session offers (a monitor, a push, a browser, a device, a language serv
   links. `duplicateOf` / `relatedTo` / parent epic often already carries or shipped
   work - see _Already shipped?_ below.
 - Screenshots - **visual/QA bug from text alone = guess. Get image.**
-  - **Linear** = `curl` the `uploads.linear.app` URL (signed, expires ~5 min -
+  - **Linear** = fetch the `uploads.linear.app` URL to a file (signed, expires ~5 min -
     re-fetch issue for fresh URL), read.
   - **Jira** = `getJiraIssue` gives attachment **metadata only** (filename +
     `content` URL `/rest/api/3/attachment/content/<id>`), no bytes.
     **`mcp__atlassian__fetch` won't get bytes** - ARIs only; attachment id
     mis-resolves to wrong issue. No MCP tool returns bytes. Jira URL needs
-    auth header you don't hold. So: 1. Have creds (`$JIRA_EMAIL`/`$JIRA_API_TOKEN`)?
-    `curl -u "$JIRA_EMAIL:$JIRA_API_TOKEN" -L -o /tmp/<name> "<content-url>"`, read.
-    Usually not in env. 2. No creds / 401 / 403 → **stop guessing. Ask user to
+    auth header you don't hold. So: 1. `corgi agent watch attachment "<content-url>" --out /tmp/ticket-files`
+    prints the saved file's path: read it. It signs in with the workspace's own Jira login
+    (`corgi agent watch auth jira`) and only on that Jira site. 2. Jira not set up / 401 / 403 → **stop guessing. Ask user to
     download + share path** (`~/Downloads`), `ls -t ~/Downloads | head`, read.
 - **Local / user-pointed design assets.** User names folder/file
   (`design-screenshots/`, Figma export on disk, "see mockup") → read direct,
