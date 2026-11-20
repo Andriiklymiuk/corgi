@@ -13,8 +13,14 @@ Two checks keep the plugin honest after every edit to a skill:
 ## Run them
 
 ```
-claude plugin eval plugins/corgi --scaffold --allow-tools Edit Write --judge-model sonnet -j 3 --no-publish
+make pluginEvals
 ```
+
+The cases live here, outside `plugins/corgi/`, because the plugin itself holds only
+text. `claude plugin eval` reads cases from below the plugin, so the target links
+`plugins/corgi/evals` to this folder (the link is git-ignored), then runs
+`claude plugin eval plugins/corgi --scaffold --allow-tools Edit Write --judge-model sonnet -j 3 --no-publish`.
+Pass more flags with `ARGS="--runs 1 --case review-*"`.
 
 `--scaffold` is not optional: every case builds its workspace with its
 `scaffold.sh` (one small Python api, a `corgi-compose.yml`, a local bare

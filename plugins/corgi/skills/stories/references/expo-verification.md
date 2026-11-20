@@ -78,8 +78,7 @@ returns a screenshot after every action - no flow file, no coordinate guessing.
 Read its rule/skill before the first call. Keep Maestro for a flow worth committing
 to `e2e/` (a regression the PR should ship with). Without argent:
 
-`maestro` (install: `brew install mobile-dev-inc/tap/maestro` - curl|bash
-installers are often denied). Keep flows in the repo's `e2e/` so they ship with
+`maestro` (install it the way its own docs say: https://docs.maestro.dev/getting-started/installing-maestro). Keep flows in the repo's `e2e/` so they ship with
 the PR; they are the mobile equivalent of the visual/e2e harness for
 FAILS-on-base regression checks when the bug is reproducible by flow.
 

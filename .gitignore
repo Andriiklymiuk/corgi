@@ -60,4 +60,6 @@ docs/film/music.*
 
 *.ips
 # claude plugin eval reports
-plugins/corgi/evals/results/
+plugin-evals/corgi/results/
+plugins/corgi/evals
+__pycache__/

@@ -115,6 +115,10 @@ test\:cov \
 fmt-check \
 coverage-check
 
+pluginEvals: ## run the plugin's eval cases (plugin-evals/corgi) with and without the plugin
+	@[ -e plugins/corgi/evals ] || ln -s ../../plugin-evals/corgi plugins/corgi/evals
+	claude plugin eval plugins/corgi --scaffold --allow-tools Edit Write --judge-model sonnet -j 3 --no-publish $(ARGS)
+
 showcase: ## redraw docs/media (terminal mockups + gifs) with Chrome
 	scripts/capture-showcase.sh
 

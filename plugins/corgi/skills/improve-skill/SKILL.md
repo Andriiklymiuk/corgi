@@ -54,7 +54,7 @@ and run `corgi docs commands <the skill>` after any edit that names a corgi comm
 
 ## Retro mode (sessions named)
 1. **Read the primary source, not your memory of it.** Default to this session. For more, run
-   `python3 <this skill's base directory>/references/mine_sessions.py --last 30` (it reads every
+   `corgi agent helper mine-sessions --last 30` (the program ships inside corgi; if corgi does not know `helper`, run `corgi upd` first; it reads every
    `~/.claude*/projects`; for one workspace add `--root <its account>/projects --project <its folder>`,
    as a routine's prompt names them; never search the home folder for the script or the transcripts): tool errors, the same
    failing call sent twice, skill use, where the person stepped in. Open the transcript behind any
@@ -144,7 +144,7 @@ a skill you can already describe from lived evidence.
   context in every session. Never pin a model id or a tool version; name the need and
   let `../_shared/session-tools.md` map it to a tool and a fallback.
 - **A new rule earns a check.** A trigger that changed → a line in
-  `scripts/skill-activation.sh`. A rule someone once broke → an eval case (`evals/README.md`).
+  `scripts/skill-activation.sh`. A rule someone once broke → an eval case (`plugin-evals/corgi/README.md` in the corgi repository).
   Every `corgi …` command in the edit → `corgi docs commands <path>` reads clean.
 - **No path → summary only**, never edit.
 - **One skill at a time**, except a retro the person asked for.

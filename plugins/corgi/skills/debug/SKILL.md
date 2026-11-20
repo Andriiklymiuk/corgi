@@ -41,6 +41,9 @@ whole ladder for a one-liner.
 - **Never poll for a log line.** Waiting for "migrations done" or "Listening on" is
   `corgi logs --service <x> --wait-for "<regexp>" --timeout <d>` - it blocks, exits 0
   on match and 1 on timeout. A sleep-and-read loop costs a tool call per iteration.
+- **Watch the errors while you work.** Start this once in the background (the Monitor tool, or
+  `run_in_background: true`) and read what it prints as you go:
+  `corgi logs --all --idle 0 --grep '(?i)\b(error|panic|fatal|exception|traceback|5[0-9]{2} )\b' --silent`
 - **Bound every read.** Logs via idle-limited `corgi logs` (`--idle <Ns>`); raw files
   via `Read(limit: ~100)`. Never an unbounded read of a `.log`/`.state.json` (logs
   cap at 50MB).

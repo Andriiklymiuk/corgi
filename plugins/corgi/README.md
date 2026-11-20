@@ -59,14 +59,13 @@ Each skill is its own slash command (`/corgi:run`, `/corgi:review`, ...). Four c
 
 ## What the plugin runs and sends
 
-The plugin ships Markdown instructions and one monitor; it has no server, no hooks and
+The plugin ships Markdown instructions only; it has no server, no hooks, no monitor and
 no telemetry of its own. Everything it does goes through tools on your machine, under
 your own accounts:
 
 - **Local commands:** `corgi`, `git`, `gh` / `glab`, and the test, build and lint
-  commands of your own repositories. The `stack-errors` monitor runs
-  `corgi logs --all` while the `debug` skill works, to show error lines from your
-  running services.
+  commands of your own repositories. The `debug` skill runs `corgi logs --all`
+  while it works, to show error lines from your running services.
 - **Your forge (GitHub / GitLab), with your `gh` / `glab` login:** `review` posts review
   comments on other people's pull requests; `stories`, `prep-pr` and `review` push
   branches and open draft pull requests in your repositories. They never force-push;
@@ -98,8 +97,8 @@ https://github.com/Andriiklymiuk/corgi/issues.
 
 ## Evals
 
-`evals/` holds the cases `claude plugin eval` runs with and without the plugin; see
-`evals/README.md`.
+The cases `claude plugin eval` runs with and without the plugin live outside the plugin, in
+`plugin-evals/corgi/` of the corgi repository (`make pluginEvals` runs them).
 
 ## License
 

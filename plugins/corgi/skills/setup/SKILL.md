@@ -406,7 +406,7 @@ timezone on Linux, pairs the two as peers and, with `--lead`, hands the unattend
 with `--with-tokens`, inside the ssh session, never on a command line. `--dangerously-skip-permissions` is
 for a server nobody answers (add `corgi agent harden` there). It ends with what is left by hand: `claude auth
 login` and `gh auth login` on the other machine, and a stable tunnel. `--with-env` also copies each
-workspace's git-ignored `.env`, `.npmrc` and `.yarnrc.yml`; `--with-claude` copies every Claude account's
+workspace's git-ignored `.env` and the other local settings files a checkout needs to build; `--with-claude` copies every Claude account's
 settings, rules, skills, memories, MCP servers and plugin list (never the login). Workspaces land at the same
 place under the new home, so the Claude memories follow them; `--dir ~/dev` puts them all in one folder.
 
@@ -581,11 +581,8 @@ It is a real device with a name: `corgi mcp devices list` shows it,
 
 Codex, Cursor, Cline, Droid, an in-house agent - do not tell them corgi has
 no plugin for their tool. The skills are plain Markdown in the repository and
-the `skills` CLI installs them anywhere:
-
-```bash
-npx skills add Andriiklymiuk/corgi
-```
+the `skills` CLI installs them anywhere. Point them to its own instructions
+(https://skills.sh) and have them add the repository `Andriiklymiuk/corgi`.
 
 Then say which skills matter for what they actually do, rather than listing
 all of them. The frontmatter must stay valid YAML for this to work: a

@@ -1,8 +1,0 @@
-[
-  {
-    "name": "stack-errors",
-    "command": "${CLAUDE_PLUGIN_ROOT}/monitors/stack-errors.sh",
-    "when": "on-skill-invoke:debug",
-    "description": "error lines from every running service of the stack, while the debug skill works"
-  }
-]

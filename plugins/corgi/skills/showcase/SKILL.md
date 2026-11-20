@@ -281,7 +281,7 @@ minute or more) outgrows the frame-by-frame gif. The rules above hold, plus:
 
 ### Music and sound
 
-`references/soundtrack.py` (next to this file) makes the whole track: a
+`corgi agent helper soundtrack` (the program ships inside corgi; `corgi upd` if corgi does not know `helper`) makes the whole track: a
 music bed arranged from loops, plus synthesized UI sounds on cue. Needs
 `ffmpeg` and `numpy soundfile scipy`.
 
@@ -294,7 +294,7 @@ music bed arranged from loops, plus synthesized UI sounds on cue. Needs
   loop:
 
   ```sh
-  python3 references/soundtrack.py list "/Library/Audio/Apple Loops/Apple" "07 Chillwave"
+  corgi agent helper soundtrack list "/Library/Audio/Apple Loops/Apple" "07 Chillwave"
   ```
 
 - **One spec per video.** The script arranges the loops on the bar grid:
@@ -313,7 +313,7 @@ music bed arranged from loops, plus synthesized UI sounds on cue. Needs
 - **Mix, mux, level, look:**
 
   ```sh
-  python3 references/soundtrack.py mix sound.json mix.wav
+  corgi agent helper soundtrack mix sound.json mix.wav
   ffmpeg -y -i video.mp4 -i mix.wav -map 0:v -map 1:a -af loudnorm=I=-16:TP=-1.5:LRA=11 \
     -ar 48000 -c:v copy -c:a aac -b:a 192k -shortest -movflags +faststart video-sound.mp4
   ffmpeg -y -i mix.wav -lavfi showspectrumpic=s=1200x400 spectrum.png
