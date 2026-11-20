@@ -45,6 +45,7 @@ type sharedCard struct {
 	Triage     bool             `json:"triage,omitempty"`
 	Cycle      string           `json:"cycle,omitempty"`
 	Task       bool             `json:"task,omitempty"`
+	Trail      []CardStep       `json:"trail,omitempty"`
 	Comments   int              `json:"comments,omitempty"`
 	UpdatedAt  time.Time        `json:"updatedAt"`
 }
@@ -60,7 +61,7 @@ func webLink(link string) string {
 func sharedCardOf(c KanbanCard) sharedCard {
 	out := sharedCard{Ref: c.Ref, Title: c.Title, URL: webLink(c.URL), Workspace: c.Workspace, Column: c.Column, Why: c.Why,
 		Owner: c.Owner, Priority: c.Priority, Due: c.Due, Overdue: c.Overdue, WaitsFor: c.WaitsFor, UpdatedAt: c.UpdatedAt,
-		Unreviewed: c.Unreviewed, Triage: c.Triage, Cycle: c.Cycle, Task: c.Kind == string(watch.KindTask)}
+		Unreviewed: c.Unreviewed, Triage: c.Triage, Cycle: c.Cycle, Task: c.Kind == string(watch.KindTask), Trail: c.Trail}
 	if out.URL != "" {
 		out.Source = watch.LinkSource(out.URL)
 	}

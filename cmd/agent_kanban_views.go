@@ -153,3 +153,67 @@ func savedViewNames(views map[string]cardFilter) []string {
 	sort.Strings(names)
 	return names
 }
+
+const (
+	stepDone = "done"
+	stepNow  = "now"
+	stepBack = "back"
+	stepTodo = "todo"
+)
+
+func stepState(done, now bool) string {
+	switch {
+	case done:
+		return stepDone
+	case now:
+		return stepNow
+	}
+	return stepTodo
+}
+
+func pullSteps(c KanbanCard, merged bool) (checks, review string) {
+	checks, review = stepTodo, stepTodo
+	if merged {
+		return stepDone, stepDone
+	}
+	if c.Pull == nil {
+		return checks, review
+	}
+	checks = map[string]string{"passing": stepDone, "failing": stepBack, "pending": stepNow}[c.Pull.Checks]
+	review = map[string]string{"approved": stepDone, "changes": stepBack, "pending": stepNow}[c.Pull.Review]
+	return firstNonEmptyString(checks, stepTodo), firstNonEmptyString(review, stepTodo)
+}
+
+func cardTrail(c KanbanCard) []CardStep {
+	if c.Fix == nil && c.Pull == nil {
+		return nil
+	}
+	running := c.Fix != nil && c.Fix.Running
+	hasPull := c.Pull != nil || (c.Fix != nil && len(c.Fix.PRs) > 0)
+	merged := c.Pull != nil && c.Pull.State == "merged"
+	steps := []CardStep{{"started", stepDone}, {"pull request", stepState(hasPull, running)}}
+	if c.Fix != nil && c.Fix.Judge != "" && c.Fix.Judge != watch.JudgeSkipped {
+		judged := stepBack
+		if c.Fix.Judge == watch.JudgePassed {
+			judged = stepDone
+		}
+		steps = append(steps, CardStep{"judge", judged})
+	}
+	checks, review := pullSteps(c, merged)
+	return append(steps, CardStep{"checks", checks}, CardStep{"review", review}, CardStep{"merged", stepState(merged, false)})
+}
+
+func markTrails(cards []KanbanCard) {
+	for i := range cards {
+		cards[i].Trail = cardTrail(cards[i])
+	}
+}
+
+func trailLine(steps []CardStep) string {
+	marks := map[string]string{stepDone: "✓", stepNow: "…", stepBack: "✗", stepTodo: "·"}
+	parts := make([]string, 0, len(steps))
+	for _, s := range steps {
+		parts = append(parts, marks[s.State]+" "+s.Step)
+	}
+	return strings.Join(parts, "  ")
+}

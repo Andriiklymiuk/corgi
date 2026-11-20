@@ -320,6 +320,19 @@ type WatchConfig struct {
 	Rebase             bool     `yaml:"rebase,omitempty"`
 	Lessons            bool     `yaml:"lessons,omitempty"`
 	PlanReview         string   `yaml:"planReview,omitempty"`
+	Judge              int      `yaml:"judge,omitempty"`
+}
+
+const JudgeMaxRounds = 3
+
+func JudgeRounds(n int) int {
+	switch {
+	case n < 0:
+		return 0
+	case n > JudgeMaxRounds:
+		return JudgeMaxRounds
+	}
+	return n
 }
 
 const AutoAllowReads = "reads"
@@ -422,6 +435,10 @@ func (m *ModelPolicy) ForKind(kind string) string {
 	}
 }
 
+func (m *ModelPolicy) ForReview() string {
+	return pick(m, func(p ModelPolicy) string { return p.Review }, ModelReviewDefault)
+}
+
 func (m *ModelPolicy) ForEscalation() string {
 	return pick(m, func(p ModelPolicy) string { return p.Escalate }, ModelEscalateDefault)
 }
@@ -494,6 +511,9 @@ func overlayWatch(base, over *WatchConfig) *WatchConfig {
 	}
 	if merged.PlanReview == "" {
 		merged.PlanReview = base.PlanReview
+	}
+	if merged.Judge == 0 {
+		merged.Judge = base.Judge
 	}
 	if len(merged.FixKinds) == 0 {
 		merged.FixKinds = base.FixKinds

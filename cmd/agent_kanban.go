@@ -64,6 +64,7 @@ type KanbanCard struct {
 	Triage      bool              `json:"triage,omitempty"`
 	Cycle       string            `json:"cycle,omitempty"`
 	Unreviewed  string            `json:"unreviewed,omitempty"`
+	Trail       []CardStep        `json:"trail,omitempty"`
 	inOpenCycle bool
 	UpdatedAt   time.Time         `json:"updatedAt"`
 	Standing    sessions.Standing `json:"standing"`
@@ -127,6 +128,13 @@ type CardFix struct {
 	Outcome   string    `json:"outcome"`
 	PRs       []string  `json:"prs,omitempty"`
 	Branch    string    `json:"branch,omitempty"`
+	Judge     string    `json:"judge,omitempty"`
+	JudgeNote string    `json:"judgeNote,omitempty"`
+}
+
+type CardStep struct {
+	Step  string `json:"step"`
+	State string `json:"state"`
 }
 
 type CardHand struct {
@@ -296,7 +304,7 @@ func (b *kanbanBoard) placeRun(r watch.FixRecord) {
 		}
 		return
 	}
-	c.Fix = &CardFix{Running: !r.Done(), StartedAt: r.StartedAt, Outcome: r.Outcome(), PRs: r.PRs, Branch: r.Branch}
+	c.Fix = &CardFix{Running: !r.Done(), StartedAt: r.StartedAt, Outcome: r.Outcome(), PRs: r.PRs, Branch: r.Branch, Judge: r.Judge, JudgeNote: r.JudgeNote}
 	nameCardFromRun(c, r)
 	b.columnForRun(c, r)
 }
@@ -306,6 +314,10 @@ func (b *kanbanBoard) columnForRun(c *KanbanCard, r watch.FixRecord) {
 	case !r.Done():
 		c.Column, c.Why = ColRunning, "a run started "+roughAge(b.in.now.Sub(r.StartedAt))+" ago"
 		c.Now = &CardNow{Doing: "a run is on it", Model: r.Model, Agent: firstNonEmpty(r.Harness, "claude"), Since: r.StartedAt}
+	case r.Judge == watch.JudgeSentBack && c.Column != ColDone:
+		c.Column, c.Why = ColReady, "sent back by the judge: "+firstLineOf(r.JudgeNote)
+	case r.Judge == watch.JudgeStopped && c.Column != ColDone:
+		c.Column, c.Why = ColBlocked, "the judge stopped: "+firstLineOf(r.JudgeNote)
 	case len(r.PRs) > 0 && c.Column != ColDone:
 		c.Column, c.Why = ColReview, r.Outcome()
 	case strings.TrimSpace(r.Error) != "" && c.Session == nil && (c.Column == ColRunning || c.Column == ColInbox):
@@ -726,6 +738,7 @@ func gatherKanban(dir, onlyWorkspace string, now time.Time) []KanbanCard {
 	cards := buildKanban(in)
 	linkCardsToIdeas(dir, cards)
 	markUnreviewed(cards, now)
+	markTrails(cards)
 	if onlyWorkspace == "" {
 		return cards
 	}
@@ -807,6 +820,9 @@ moving a ticket moves it on the tracker (corgi agent watch move).
 				}
 				if c.Unreviewed != "" {
 					line += " · " + c.Unreviewed
+				}
+				if len(c.Trail) > 0 {
+					line += "\n                 " + trailLine(c.Trail)
 				}
 				fmt.Println(line)
 			}

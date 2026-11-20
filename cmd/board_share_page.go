@@ -26,6 +26,7 @@ article{background:var(--panel);border:1px solid var(--line);border-radius:8px;p
 .ref{font-variant-numeric:tabular-nums;color:var(--dim);text-decoration:none}
 a.ref:hover,.chip:hover{color:var(--accent)}
 .title{margin:4px 0 6px;font-weight:500;overflow-wrap:anywhere}
+.trail{display:flex;gap:10px;flex-wrap:wrap;margin-top:6px;font-size:11px;color:var(--dim)}
 .why{font-size:12px;color:var(--dim);overflow-wrap:anywhere}
 .row{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
 .chip{font-family:inherit;background:none;cursor:default;font-size:11px;border:1px solid var(--line);border-radius:999px;padding:1px 8px;color:var(--dim);text-decoration:none;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
@@ -67,6 +68,14 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
     a.appendChild(top);
     a.appendChild(el('div','title',c.title||c.ref));
     if(c.why)a.appendChild(el('div','why',c.why));
+    if(c.trail&&c.trail.length){
+      var t=el('div','trail');
+      c.trail.forEach(function(s){
+        var mark={done:'\u2713',now:'\u2026',back:'\u2717',todo:'\u00b7'}[s.state]||'\u00b7';
+        t.appendChild(el('span','step '+(s.state==='done'?'live':s.state==='back'?'late':''),mark+' '+s.step));
+      });
+      a.appendChild(t);
+    }
     var row=el('div','row');
     if(c.priority)row.appendChild(el('span','chip '+(c.priority==='urgent'?'urgent':c.priority==='high'?'high':''),c.priority));
     if(c.owner)row.appendChild(el('span','chip','@'+c.owner));

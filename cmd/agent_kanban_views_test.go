@@ -183,3 +183,43 @@ func TestGuestOnAWorkspaceLinkCannotTouchAnotherWorkspace(t *testing.T) {
 		t.Fatalf("status = %d: %s", rec.Code, rec.Body.String())
 	}
 }
+
+func TestCardTrailSaysWhereTheWorkStands(t *testing.T) {
+	line := func(c KanbanCard) string { return trailLine(cardTrail(c)) }
+	if got := cardTrail(KanbanCard{}); got != nil {
+		t.Fatalf("a card with no run has a trail: %v", got)
+	}
+	for name, tc := range map[string]struct {
+		card KanbanCard
+		want string
+	}{
+		"running":   {KanbanCard{Fix: &CardFix{Running: true}}, "✓ started  … pull request  · checks  · review  · merged"},
+		"sent back": {KanbanCard{Fix: &CardFix{PRs: []string{"x"}, Judge: watch.JudgeSentBack}}, "✓ started  ✓ pull request  ✗ judge  · checks  · review  · merged"},
+		"passed":    {KanbanCard{Fix: &CardFix{PRs: []string{"x"}, Judge: watch.JudgePassed}, Pull: &watch.PullStatus{State: "open", Checks: "pending", Review: "changes"}}, "✓ started  ✓ pull request  ✓ judge  … checks  ✗ review  · merged"},
+		"merged":    {KanbanCard{Pull: &watch.PullStatus{State: "merged"}}, "✓ started  ✓ pull request  ✓ checks  ✓ review  ✓ merged"},
+		"skipped":   {KanbanCard{Fix: &CardFix{PRs: []string{"x"}, Judge: watch.JudgeSkipped}, Pull: &watch.PullStatus{State: "open", Checks: "failing"}}, "✓ started  ✓ pull request  ✗ checks  · review  · merged"},
+	} {
+		if got := line(tc.card); got != tc.want {
+			t.Errorf("%s:\n got %s\nwant %s", name, got, tc.want)
+		}
+	}
+}
+
+func TestSentBackAndStoppedRunsMoveTheCard(t *testing.T) {
+	now := time.Now()
+	place := func(judge string) *KanbanCard {
+		b := &kanbanBoard{in: kanbanInputs{now: now}}
+		c := &KanbanCard{Column: ColInbox}
+		b.columnForRun(c, watch.FixRecord{StartedAt: now.Add(-time.Hour), FinishedAt: now, PRs: []string{"https://github.com/a/b/pull/1"}, Judge: judge, JudgeNote: "a.go:1 has no check\nmore"})
+		return c
+	}
+	if c := place(watch.JudgeSentBack); c.Column != ColReady || c.Why != "sent back by the judge: a.go:1 has no check" {
+		t.Fatalf("sent back: %s %q", c.Column, c.Why)
+	}
+	if c := place(watch.JudgeStopped); c.Column != ColBlocked || !strings.HasPrefix(c.Why, "the judge stopped") {
+		t.Fatalf("stopped: %s %q", c.Column, c.Why)
+	}
+	if c := place(watch.JudgePassed); c.Column != ColReview {
+		t.Fatalf("passed: %s", c.Column)
+	}
+}

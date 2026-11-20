@@ -953,10 +953,19 @@ type FixRecord struct {
 	// GreenAt is when the checks of the pull request it worked on passed after it
 	GreenAt time.Time `json:"greenAt,omitzero"`
 	// Said is the outcome the run reported: pushed, replied, nothing or blocked
-	Said string     `json:"said,omitempty"`
-	Left []LeftItem `json:"left,omitempty"`
-	Gaps []Gap      `json:"gaps,omitempty"`
+	Said      string     `json:"said,omitempty"`
+	Left      []LeftItem `json:"left,omitempty"`
+	Gaps      []Gap      `json:"gaps,omitempty"`
+	Judge     string     `json:"judge,omitempty"`
+	JudgeNote string     `json:"judgeNote,omitempty"`
 }
+
+const (
+	JudgePassed   = "passed"
+	JudgeSentBack = "sent back"
+	JudgeStopped  = "stopped"
+	JudgeSkipped  = "skipped"
+)
 
 func (r FixRecord) Done() bool { return !r.FinishedAt.IsZero() }
 
@@ -1769,6 +1778,49 @@ func (l *FixLog) SetOutcome(key, outcome string) {
 	for i := len(l.Started) - 1; i >= 0; i-- {
 		if l.Started[i].Key == key {
 			l.Started[i].Said = outcome
+			_ = l.save()
+			return
+		}
+	}
+}
+
+func (l *FixLog) SetJudge(key, verdict, note string) {
+	if key == "" {
+		return
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for i := len(l.Started) - 1; i >= 0; i-- {
+		if l.Started[i].Key == key {
+			l.Started[i].Judge, l.Started[i].JudgeNote = verdict, note
+			_ = l.save()
+			return
+		}
+	}
+}
+
+func (l *FixLog) SentBack(workspace, ref string) (rounds int, lastNote string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for _, r := range l.Started {
+		if r.Workspace == workspace && r.Ref == ref && r.Judge == JudgeSentBack {
+			rounds++
+			lastNote = r.JudgeNote
+		}
+	}
+	return rounds, lastNote
+}
+
+func (l *FixLog) AddCost(key string, usd float64, tokens int64) {
+	if key == "" {
+		return
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for i := len(l.Started) - 1; i >= 0; i-- {
+		if l.Started[i].Key == key {
+			l.Started[i].CostUSD += usd
+			l.Started[i].Tokens += tokens
 			_ = l.save()
 			return
 		}

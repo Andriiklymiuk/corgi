@@ -59,6 +59,7 @@ const (
 	watchFlagDoneWhen           = "done-when"
 	watchFlagAutoAllow          = "auto-allow"
 	watchFlagPlanReview         = "plan-review"
+	watchFlagJudge              = "judge"
 	watchFlagAutoFor            = "auto-for"
 	watchFlagDaysOff            = "days-off"
 	watchFlagDryRun             = "dry-run"
@@ -291,6 +292,13 @@ var agentWatchEnableCmd = &cobra.Command{
 				return err
 			}
 			wc.AutoAllow = policy
+		}
+		if flags.Changed(watchFlagJudge) {
+			rounds, _ := flags.GetInt(watchFlagJudge)
+			if rounds < 0 || rounds > config.JudgeMaxRounds {
+				return fmt.Errorf("--judge is 0 (off) to %d: how many times the judge may send one piece of work back", config.JudgeMaxRounds)
+			}
+			wc.Judge = rounds
 		}
 		if flags.Changed(watchFlagPlanReview) {
 			v, _ := flags.GetString(watchFlagPlanReview)
@@ -1125,7 +1133,7 @@ func watchSpecOf(dir string, w workspace.Workspace, resolved config.Resolved) (d
 	spec := daemon.WatchSpec{Workspace: w.ID, Dir: w.AbsPath, ConfigDir: expandTilde(resolved.ConfigDir), Kind: resolved.Kind, Agents: resolved.AgentOrder(), Bin: expandTilde(resolved.Bin), Project: wc.Project, Repos: wc.Repos,
 		Rules:    watch.Rules{Enabled: true, Labels: wc.Labels, States: wc.States, Assignee: wc.Assignee, Comments: wc.Comments, PRs: wc.PRs, CI: wc.CI, Reviews: wc.Reviews, From: wc.From, Bots: wc.Bots, Errors: wc.Errors},
 		Interval: 3 * time.Minute, Action: "notify", SkipPermissions: resolved.DangerouslySkipPermissions,
-		MaxFixesPerHour: wc.MaxFixesPerHour, MaxFixesPerDay: wc.MaxFixesPerDay, LimitCeiling: wc.LimitCeiling, MaxFixesTotal: wc.MaxFixesTotal, CapSince: wc.CapSince, Quiet: wc.Quiet, NightShift: wc.NightShift, FixKinds: wc.FixKinds, MergeUnread: wc.MergeUnread, DoneWhen: wc.DoneWhen, PlanReview: wc.PlanReview, Lease: wc.Lease, Isolate: wc.Isolate, RunDB: wc.RunDB, Slots: wc.Slots, Batch: wc.Batch, RerunCI: wc.RerunCI, Silent: wc.Silent, NoRetry: wc.NoRetry, ReviewStatus: wc.ReviewStatus, Approve: wc.Approve, Models: resolved.Models, Routines: resolved.Routines}
+		MaxFixesPerHour: wc.MaxFixesPerHour, MaxFixesPerDay: wc.MaxFixesPerDay, LimitCeiling: wc.LimitCeiling, MaxFixesTotal: wc.MaxFixesTotal, CapSince: wc.CapSince, Quiet: wc.Quiet, NightShift: wc.NightShift, FixKinds: wc.FixKinds, MergeUnread: wc.MergeUnread, DoneWhen: wc.DoneWhen, PlanReview: wc.PlanReview, Judge: wc.Judge, Lease: wc.Lease, Isolate: wc.Isolate, RunDB: wc.RunDB, Slots: wc.Slots, Batch: wc.Batch, RerunCI: wc.RerunCI, Silent: wc.Silent, NoRetry: wc.NoRetry, ReviewStatus: wc.ReviewStatus, Approve: wc.Approve, Models: resolved.Models, Routines: resolved.Routines}
 	if wc.Action == "fix" {
 		spec.Action = "fix"
 	}
@@ -1461,6 +1469,7 @@ func describeWatchParts(wc *config.WatchConfig) []string {
 		{wc.Rebase, "rebased when main moves"},
 		{wc.Lessons, "lessons written down"},
 		{wc.PlanReview != "", "plan reviewed " + planReviewWords(wc.PlanReview)},
+		{config.JudgeRounds(wc.Judge) > 0, fmt.Sprintf("a judge reads each pull request, sends back up to %d times", config.JudgeRounds(wc.Judge))},
 	} {
 		if p.on {
 			parts = append(parts, p.text)
@@ -1593,6 +1602,7 @@ func init() {
 	f.Bool("rebase", false, "Rebase a session's branch onto main where it sits when the session stops behind main with a clean tree and no conflicts (a branch that would conflict is typed into the session under --hand-over)")
 	f.Int(watchFlagCompactAt, 0, "Type /compact into a session past this much context the next time it stops - 85 is where the board goes red; 0 is off")
 	f.String(watchFlagDoneWhen, "", "What finished means here, comma separated: commands run in the session's directory when it stops with changes - `go test ./...,pnpm lint`; a red one is typed back as the next message. Empty is off")
+	f.Int(watchFlagJudge, 0, "After a run opens a pull request, the review model reads the diff with no tools and passes it or sends it back with what is wrong. The number is how many times one piece of work may be sent back (1 to 3); after that a person decides. 0 is off")
 	f.String(watchFlagPlanReview, "", "Stop for a human before code on a story: always, risk>=N (the story's forecast, 1 to 10), or off. Off means the stories skill gates as today; on, the spec waits for an answer - from the terminal or the phone - before a branch is cut")
 	f.String(watchFlagAutoAllow, "", "Answer a permission prompt for a tool that only reads - Read, Grep, Glob, a web search, a question for you - on the daemon's own: reads, or off (Bash always waits for a person; iTerm2 and tmux sessions only)")
 	f.Bool("ci", false, "Also builds that went red on something of mine - the one kind that brings its own test for done")

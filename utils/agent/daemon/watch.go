@@ -65,6 +65,7 @@ type WatchSpec struct {
 	Action          string
 	DoneWhen        []string
 	PlanReview      string
+	Judge           int
 	Approve         bool
 	Lease           bool
 	ReviewStatus    string
@@ -1870,6 +1871,7 @@ func (d *Daemon) fixDone(ctx context.Context, run fixRun) {
 	}
 	body, note := fixDoneBody(e, links, out)
 	d.watchState.Fixes.Finish(e.Key, links, note, "", time.Now())
+	body += d.judgeRun(ctx, run, links)
 	d.replyOnTask(e, strings.TrimSpace(strings.Join(append(append([]string{}, links...), note), " ")))
 	d.watchState.Fixes.SetOutcome(e.Key, watch.OutcomeOf(e.Kind, out))
 	d.watchState.Fixes.SetLeft(e.Key, watch.LeftFor(out))

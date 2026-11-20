@@ -61,6 +61,12 @@ holds. `corgi agent task set TASK-3 --priority high --due 2026-12-01
 --blocked-by TASK-2` orders the queue: highest priority first, and a task that
 waits for another stays in Blocked until that one is finished.
 
+**A judge on finished work**: `corgi agent watch enable … --judge 2` has the review model read each
+pull request a run opens (the diff only, no tools) and pass it or send it back with the defect and its
+line; the number is how many times one piece of work may go back (1 to 3). After that, or on the same
+objection twice, the card says "the judge stopped" and waits for a person. Off unless asked for.
+`corgi agent kanban` prints each card's trail: started, pull request, judge, checks, review, merged.
+
 **Triage, cycles, views**: a task added with `--triage` (and every task an agent or a guest adds) waits
 in `corgi agent task triage` until `task accept TASK-7`; `task snooze TASK-7 --for 3d` puts it to sleep.
 `corgi agent cycle start --days 7`, `cycle add TASK-3 TASK-4`, `cycle` (where it stands) and `cycle close`

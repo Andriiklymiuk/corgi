@@ -117,6 +117,8 @@ type Daemon struct {
 	Push             func(m push.Message)
 	Chat             func(ctx context.Context, workspace string, target watch.SlackTarget, text, emoji string) error
 	Isolate          func(dir, branch string) ([]string, error)
+	PullDiff         func(ctx context.Context, dir, link string) (string, error)
+	JudgeSays        func(ctx context.Context, spec WatchSpec, prompt string) (string, error)
 	IsolateRepos     func(dir, branch string, projects []string) ([]string, error)
 	RunStack         func(dir, branch, mode string) string
 	ReleaseStack     func(dir, branch string)
