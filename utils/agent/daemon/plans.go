@@ -77,7 +77,8 @@ func (d *Daemon) startPlanTask(ctx context.Context, spec WatchSpec, p watch.Plan
 		return true, false
 	}
 	e := t.Event()
-	e.Body = planTaskBody(p, t)
+	e.Body = planTaskBody(p, t) + planTaskBuildsOn(p, tasks, t)
+	e.Bases = planTaskBases(p, tasks, t)
 	_, _ = tasks.Move(t.Ref(), "Doing", now)
 	d.watchState.Fixes.StartFor(e, now)
 	d.spawnFix(ctx, spec, e)
@@ -153,6 +154,48 @@ func planTaskBody(p watch.Plan, t watch.Task) string {
 	b.WriteString("Other tasks of the plan are run by other sessions in their own worktrees; do only this one, and do not touch what another task owns.\n\n")
 	b.WriteString(t.Body)
 	return b.String()
+}
+
+func planTaskBuildsOn(p watch.Plan, tasks *watch.TaskLog, t watch.Task) string {
+	var lines []string
+	for _, pt := range p.Tasks {
+		if pt.ID != t.ID {
+			continue
+		}
+		for _, id := range pt.After {
+			dep, ok := tasks.Find(fmt.Sprintf("TASK-%d", id))
+			if !ok {
+				continue
+			}
+			line := fmt.Sprintf("- %s %s (%s)", dep.Ref(), dep.Title, strings.ToLower(dep.State))
+			if len(dep.Links) > 0 {
+				line += " " + strings.Join(dep.Links, " ")
+			}
+			lines = append(lines, line)
+		}
+	}
+	if len(lines) == 0 {
+		return ""
+	}
+	return "\n\nThis task builds on these, which ran before it. Read what they changed before you start, and reuse it instead of writing it again:\n" + strings.Join(lines, "\n")
+}
+
+func planTaskBases(p watch.Plan, tasks *watch.TaskLog, t watch.Task) []string {
+	if !p.Stack {
+		return nil
+	}
+	var bases []string
+	for _, pt := range p.Tasks {
+		if pt.ID != t.ID {
+			continue
+		}
+		for _, id := range pt.After {
+			if dep, ok := tasks.Find(fmt.Sprintf("TASK-%d", id)); ok && dep.State == "Review" {
+				bases = append(bases, FixBranch(dep.Ref()))
+			}
+		}
+	}
+	return bases
 }
 
 func (d *Daemon) watchSpecFor(workspace string) (WatchSpec, bool) {

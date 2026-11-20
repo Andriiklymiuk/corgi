@@ -39,6 +39,8 @@ improve-skill|the stories skill should have caught that, fix the skill
 summary|what's left, which PRs are still open
 budget|how much budget do I have left
 resume|where was I
+split|split this HLD into tickets, the last ones were one per repo
+split|break docs/specs/checkout.md down into tickets we can build
 tracker|sort the new issues in Linear and tell me what's blocked on the sprint
 complexity|this function is a jungle, reduce the complexity
 prep-pr|prep my PR

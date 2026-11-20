@@ -37,6 +37,7 @@ type sharedCard struct {
 	Due        string           `json:"due,omitempty"`
 	Overdue    bool             `json:"overdue,omitempty"`
 	WaitsFor   []string         `json:"waitsFor,omitempty"`
+	Touches    []string         `json:"touches,omitempty"`
 	Links      []watch.TaskLink `json:"links,omitempty"`
 	Idea       string           `json:"idea,omitempty"`
 	Feature    string           `json:"feature,omitempty"`
@@ -60,7 +61,7 @@ func webLink(link string) string {
 
 func sharedCardOf(c KanbanCard) sharedCard {
 	out := sharedCard{Ref: c.Ref, Title: c.Title, URL: webLink(c.URL), Workspace: c.Workspace, Column: c.Column, Why: c.Why,
-		Owner: c.Owner, Priority: c.Priority, Due: c.Due, Overdue: c.Overdue, WaitsFor: c.WaitsFor, UpdatedAt: c.UpdatedAt,
+		Owner: c.Owner, Priority: c.Priority, Due: c.Due, Overdue: c.Overdue, WaitsFor: c.WaitsFor, Touches: c.Touches, UpdatedAt: c.UpdatedAt,
 		Unreviewed: c.Unreviewed, Triage: c.Triage, Cycle: c.Cycle, Task: c.Kind == string(watch.KindTask), Trail: c.Trail}
 	if out.URL != "" {
 		out.Source = watch.LinkSource(out.URL)
@@ -126,8 +127,7 @@ func boardShareHandler() http.HandlerFunc {
 		}
 		switch path {
 		case boardSharePath:
-			w.Header().Set(headerContentType, htmlContentType)
-			w.Header().Set(headerContentSecurityPolicy, boardPageCSP)
+			setSharedPageHeaders(w, boardPagePolicy())
 			_, _ = fmt.Fprint(w, boardPageHTML)
 		case boardSharePath + "/doc":
 			boardShareDoc(w, r)

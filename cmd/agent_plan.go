@@ -23,17 +23,20 @@ const planTimeout = 4 * time.Minute
 
 const planModel = "sonnet"
 
-const planSoul = `You are a staff engineer breaking one goal into tasks for a team of coding agents. Each task is worked by one Claude Code session, alone, in its own git worktree of the repository, unattended, ending in a draft pull request. Tasks must be independent enough to run side by side unless you say one waits for another. Write between 2 and the given maximum tasks: each small enough for one session in one sitting, each with a title (one line, imperative, under 80 characters) and a body that says exactly what to change, where, and how the session knows it is done (the tests or checks to run). Say what NOT to touch when two tasks are near each other. Put shared groundwork first and let the others wait for it. Answer with JSON only, no prose and no code fence: {"summary": "one or two sentences of the approach", "tasks": [{"title": "...", "body": "...", "after": [1]}]} where "after" lists the 1-based numbers of the tasks this one waits for (omit or empty when none).`
+const planSoul = `You are a staff engineer breaking one goal into tasks for a team of coding agents. Each task is worked by one Claude Code session, alone, in its own git worktree of the repository, unattended, ending in a draft pull request. Tasks must be independent enough to run side by side unless you say one waits for another. Write between 2 and the given maximum tasks: each small enough for one session in one sitting, each with a title (one line, imperative, under 80 characters) and a body that says exactly what to change, where, and how the session knows it is done (the tests or checks to run). Say what NOT to touch when two tasks are near each other.` + sliceRule + ` Answer with JSON only, no prose and no code fence: {"summary": "one or two sentences of the approach", "tasks": [` + ticketShape + `]} where "after" lists the 1-based numbers of the tasks this one waits for (omit or empty when none).`
 
 type plannerTask struct {
-	Title string `json:"title"`
-	Body  string `json:"body"`
-	After []int  `json:"after,omitempty"`
+	Title   string   `json:"title"`
+	Body    string   `json:"body"`
+	After   []int    `json:"after,omitempty"`
+	Touches []string `json:"touches,omitempty"`
+	Checks  []string `json:"checks,omitempty"`
 }
 
 type plannerAnswer struct {
 	Summary string        `json:"summary"`
 	Tasks   []plannerTask `json:"tasks"`
+	Recut   bool          `json:"-"`
 }
 
 func repoPicture(root string) string {
@@ -45,6 +48,7 @@ func repoPicture(root string) string {
 	if line := trackedFilesLine(root); line != "" {
 		b.WriteString(line)
 	}
+	b.WriteString(stackPicture(root))
 	for _, name := range []string{claudeMemoryFile, "README.md"} {
 		b.WriteString(fileHead(root, name))
 	}
@@ -144,6 +148,7 @@ func parsePlannerAnswer(text string, limit int) (plannerAnswer, error) {
 			t.Title = t.Title[:200]
 		}
 		t.After = validAfter(t.After, i+1, len(ans.Tasks))
+		t.Touches, t.Checks = cleanTouches(t.Touches), cleanChecks(t.Checks)
 		ans.Tasks[i] = t
 	}
 	return ans, nil
@@ -231,6 +236,10 @@ remove.
   corgi agent plan "add rate limits to the public API"
   corgi agent plan "…" --workspace api --limit 4
   corgi agent plan "…" --run --slots 2            start at once, two tasks side by side
+  corgi agent plan "…" --stack                    a task builds on the branch of the one it waits for
+
+A task is one feature, end to end: its migration, API, screen and tests, in
+every repository it touches, on one branch. The planner never cuts by layer.
 
 Running (corgi agent plan run P-1): the daemon starts each task when its turn
 comes - the same unattended run a ticket gets, in a worktree of its own, the
@@ -256,6 +265,7 @@ daemon to run anything.`,
 		slots, _ := cmd.Flags().GetInt("slots")
 		run, _ := cmd.Flags().GetBool("run")
 		retries, _ := cmd.Flags().GetInt("retries")
+		stack, _ := cmd.Flags().GetBool("stack")
 		if ws == "" {
 			if cwd, err := os.Getwd(); err == nil {
 				_, ws = workspaceRootFor(cwd)
@@ -308,9 +318,12 @@ daemon to run anything.`,
 		var made []watch.Task
 		var planTasks []watch.PlanTask
 		for _, pt := range ans.Tasks {
-			t, err := open.Add(pt.Title, pt.Body, ws, "plan", now)
+			t, err := open.Add(pt.Title, sliceBody(pt.Body, pt.Touches, pt.Checks), ws, "plan", now)
 			if err != nil {
 				exitWithError("agent_plan", err, 1)
+			}
+			if len(pt.Touches) > 0 {
+				t, _ = open.SetTouches(t.Key(), pt.Touches, now)
 			}
 			made = append(made, t)
 		}
@@ -322,7 +335,7 @@ daemon to run anything.`,
 			planTasks = append(planTasks, watch.PlanTask{ID: made[i].ID, After: after})
 		}
 		plans := watch.LoadPlans(dir)
-		p, err := plans.Add(watch.Plan{Goal: goal, Summary: ans.Summary, Workspace: ws, Model: model, By: "cli", Tasks: planTasks, Slots: slots}, now)
+		p, err := plans.Add(watch.Plan{Goal: goal, Summary: ans.Summary, Workspace: ws, Model: model, By: "cli", Tasks: planTasks, Slots: slots, Stack: stack}, now)
 		if err != nil {
 			exitWithError("agent_plan", err, 1)
 		}
@@ -569,6 +582,7 @@ func init() {
 	agentPlanCmd.Flags().Int("slots", 1, "how many tasks run at once; more than one needs the workspace watched with --isolate")
 	agentPlanCmd.Flags().Bool("run", false, "start working through the tasks at once")
 	agentPlanCmd.Flags().Int("retries", 0, "start a failed task again this many times, at most 3")
+	agentPlanCmd.Flags().Bool("stack", false, "a task that waits for one still in review starts from that one's branch and opens its pull request against it")
 	agentPlanRunCmd.Flags().Int("slots", 0, "how many tasks run at once (keeps the plan's when 0)")
 	agentPlanRunCmd.Flags().Int("retries", 0, "start a failed task again this many times, at most 3")
 	agentPlanGraphCmd.Flags().Bool("dot", false, "print Graphviz DOT")

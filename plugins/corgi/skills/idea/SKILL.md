@@ -126,9 +126,13 @@ it, and the mockup is drawn again with it.
   `--type <type>`; `corgi idea templates` lists them.
 
 - `corgi idea tickets <slug>` shows the split with where each stands. The person
-  edits it by commenting; you keep it true.
+  edits it by commenting; you keep it true. A ticket is one whole feature across the
+  repositories it touches, never one per layer: the `split` skill has the rule, and
+  `--recut` cuts an old split again.
 - `corgi idea build <slug> --workspace <id>` puts the split on the board as tasks
-  under a plan and starts the daemon on the first (worktrees; `--slots N`). Needs the
+  under a plan and starts the daemon on the first (worktrees; `--slots N`). A layered
+  split is cut again by feature first, and a ticket that waits for one still in review
+  starts from that one's branch (`--no-stack` turns that off). Needs the
   workspace watched with `--isolate`; the JSON's `why` says when it is not.
 - `corgi idea send <slug> --to linear|jira [--project KEY]` makes an epic (a parent
   issue) with one ticket under it per line; `--to confluence --space KEY` publishes the

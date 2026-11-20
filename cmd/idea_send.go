@@ -227,7 +227,7 @@ func (s ideaSend) toTracker(ctx context.Context, project string) ([]idea.Link, e
 
 func (s ideaSend) ticketBody(refs []idea.Ticket, i int) string {
 	t := refs[i]
-	tb := t.Body
+	tb := sliceBody(t.Body, t.Touches, t.Checks)
 	if s.link != "" {
 		tb += "\n\nFrom the page: " + s.link
 	}

@@ -97,10 +97,11 @@ Feature/epic → **buildable, ordered tickets** (what `stories` wants):
    `docs/`, treat it as the epic). Large / ambiguous / free-text → settle the boundary
    first with `superpowers:brainstorming` (if installed, else inline Q&A) before
    cutting tickets.
-2. **One ticket per unit of work per service.** Cross-service → a **producer** ticket
-   + **consumer**(s), blocks-links encoding order.
-3. Each: title, intent, service(s), acceptance criteria, T-shirt size (never
-   false-precise). Multi-service → a one-line contract note.
+2. **One ticket per feature, never per layer or per service** (the `split` skill has
+   the rule and the checks). A feature that reaches the backend and the frontend is one
+   ticket across both; blocks-links encode order between features.
+3. Each: title, intent, the services it touches, checks a tester can run, T-shirt size
+   (never false-precise).
 4. Preview set + order → gate → create (parented, linked) → offer "build these now?"
    → hand **keys** to `stories` (don't let it re-create them).
 

@@ -45,7 +45,7 @@ func linkCardsToIdeas(dir string, cards []KanbanCard) {
 		if t, ok := tasks.Find(cards[i].Ref); ok {
 			cards[i].Links, cards[i].Owner, cards[i].Priority, cards[i].Due = t.LinkRows(), t.Owner, t.Priority, t.Due
 			cards[i].Overdue, cards[i].WaitsFor = t.Overdue(time.Now()), tasks.OpenBlockers(t)
-			cards[i].Triage, cards[i].Cycle = t.Triage && !t.Asleep(time.Now()), t.Cycle
+			cards[i].Triage, cards[i].Cycle, cards[i].Touches = t.Triage && !t.Asleep(time.Now()), t.Cycle, t.Touches
 			if cards[i].Triage && cards[i].Column != ColDone {
 				cards[i].Column, cards[i].Why = ColInbox, "waits for triage"
 			}

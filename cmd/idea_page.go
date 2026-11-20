@@ -37,15 +37,14 @@ const ideaPageHTML = `<!doctype html>
   .sub{color:var(--dim);font-size:.78rem;margin-top:.1rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .tags{display:flex;gap:.3rem;flex-wrap:wrap}
   .tag{font-size:.68rem;color:var(--dim);border:1px solid var(--line);border-radius:1rem;padding:.1rem .45rem}
-  .pill{font-size:.66rem;letter-spacing:.04em;text-transform:uppercase;border-radius:.4rem;padding:.15rem .4rem;border:1px solid var(--line);color:var(--dim);white-space:nowrap}
-  .pill.open{color:var(--amber);border-color:#4a3a12;background:#1d1708}
-  .pill.answered{color:var(--accent);border-color:var(--accent-line);background:var(--accent-soft)}
-  .pill.fixed{color:var(--green);border-color:#1f4a2a;background:#0d1f12}
+  .pill{font-size:.72rem;border-radius:.4rem;padding:.1rem .4rem;border:1px solid var(--line);color:var(--dim);white-space:nowrap}
+  .pill.open{color:var(--amber)}
+  .pill.answered{color:var(--accent)}
+  .pill.fixed{color:var(--green)}
   .pill.resolved{color:var(--dim2)}
-  .pill.proposal{color:var(--purple);border-color:#3b2a5c;background:#17102a}
-  .pill.building,.pill.approved,.pill.Done,.pill.Review{color:var(--green);border-color:#1f4a2a;background:#0d1f12}
-  .pill.Doing{color:var(--amber);border-color:#4a3a12;background:#1d1708}
-  .pill.type{color:var(--accent);border-color:var(--accent-line)}
+  .pill.proposal{color:var(--purple)}
+  .pill.building,.pill.approved,.pill.Done,.pill.Review{color:var(--green)}
+  .pill.Doing{color:var(--amber)}
   .btn{border:1px solid var(--line);background:var(--card2);color:var(--text);border-radius:.45rem;padding:.4rem .7rem;font-size:.8rem;font-weight:500}
   .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
   .btn.small{padding:.25rem .5rem;font-size:.72rem}
@@ -88,28 +87,35 @@ const ideaPageHTML = `<!doctype html>
   .pop .kbd{font-size:.68rem;color:var(--dim2)}
   @media (pointer:coarse){.pop{position:fixed;left:0!important;right:0;top:auto!important;bottom:0;width:auto;border-radius:1rem 1rem 0 0;border-bottom:0;padding:.8rem max(1rem,env(safe-area-inset-left)) calc(.8rem + env(safe-area-inset-bottom))}}
   .popping .fab{display:none}
-  .card.new{box-shadow:inset 3px 0 var(--accent)}
+  .card.new{border-color:var(--accent-line)}
   .card .del{margin-left:auto;border:0;background:none;color:var(--dim2);font-size:.72rem;padding:0 .2rem}
   .card .del:hover{color:var(--red)}
   .card .when{cursor:pointer}
   mark.pending{background:#1c2a4a;color:inherit;border-bottom:2px solid var(--accent);border-radius:.15rem}
-  .att{cursor:pointer;color:var(--dim);font-size:.95rem;padding:0 .15rem;user-select:none}
+  .att{cursor:pointer;color:var(--dim);font-size:.76rem;padding:0 .15rem;user-select:none}
   .chips{display:flex;flex-wrap:wrap;gap:.3rem}
   .chips:not(:empty){margin-top:.35rem}
   .guest{font-size:.6rem;letter-spacing:.03em;color:var(--dim2);border:1px solid var(--line);border-radius:.3rem;padding:0 .3rem}
   .ro{font-size:.78rem;color:var(--dim);border:1px dashed var(--line);border-radius:.5rem;padding:.5rem .7rem;margin-bottom:.6rem}
-  .endcap{margin-top:2.5rem;padding:1rem;border:1px solid var(--line);border-radius:.7rem;background:var(--card)}
+  .endcap{margin-top:2.5rem;padding-top:1.2rem;border-top:1px solid var(--line)}
   .endcap h2{margin:0 0 .3rem;border:0;padding:0;font-size:1rem}
   .endcap p{margin:.2rem 0 .7rem;color:var(--dim);font-size:.84rem}
-  details.tickets{margin:.4rem 0 .8rem;border:1px solid var(--line);border-radius:.6rem;background:var(--card2)}
-  details.tickets>summary{cursor:pointer;padding:.55rem .8rem;font-size:.86rem;font-weight:600;list-style:none;display:flex;align-items:center;gap:.5rem}
+  details.tickets{margin:.4rem 0 .8rem}
+  details.tickets>summary{cursor:pointer;padding:.4rem 0;font-size:.86rem;font-weight:600;list-style:none;display:flex;align-items:center;gap:.5rem}
   details.tickets>summary::-webkit-details-marker{display:none}
   details.tickets>summary::before{content:'▸';color:var(--dim);font-size:.8rem;transition:transform .15s}
   details.tickets[open]>summary::before{transform:rotate(90deg)}
   details.tickets>summary .n{font-size:.7rem;color:var(--dim);font-weight:400}
-  .tk{border-top:1px solid var(--hair);padding:.45rem .8rem;font-size:.84rem}
+  .tk{border-top:1px solid var(--hair);padding:.55rem 0;font-size:.86rem}
+  .tk .btn{border:0;background:none;color:var(--dim);padding:.1rem .2rem}
+  .tk .touch{font-size:.74rem;color:var(--dim);white-space:nowrap}
+  .tk .checks{margin:.4rem 0 0 1.9rem;padding:0 0 0 1rem;color:var(--dim);font-size:.8rem;display:none}
+  .tk.open .checks{display:block}
+  .tk .checks li{margin:.1rem 0}
+  .splitwarn{margin:.2rem 0 .7rem;font-size:.82rem;color:var(--dim)}
+  .splitwarn b{color:var(--amber);font-weight:600}
   .tk .row{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}
-  .tk .no{font-family:ui-monospace,Menlo,monospace;font-size:.72rem;color:var(--dim2);width:1.4rem}
+  .tk .no{font-size:.78rem;color:var(--dim2);width:1.4rem;font-variant-numeric:tabular-nums}
   .tk .ref{font-family:ui-monospace,Menlo,monospace;font-size:.72rem;color:var(--dim)}
   .tk .ref a{color:var(--accent);text-decoration:none}
   .tk .after{font-size:.7rem;color:var(--dim2)}
@@ -121,7 +127,7 @@ const ideaPageHTML = `<!doctype html>
   aside{min-width:0}
   @media (min-width:60.01rem){aside{position:sticky;top:4.2rem;max-height:calc(100vh - 5rem);overflow:auto;padding-right:.2rem}}
   details.toc{margin:0 0 .6rem;font-size:.78rem}
-  details.toc>summary{cursor:pointer;color:var(--dim);font-size:.7rem;letter-spacing:.05em;text-transform:uppercase;list-style:none}
+  details.toc>summary{cursor:pointer;color:var(--dim);font-size:.74rem;list-style:none}
   details.toc>summary::-webkit-details-marker{display:none}
   details.toc ol{list-style:none;margin:.3rem 0 0;padding:0}
   details.toc li{display:flex;gap:.4rem;align-items:center;padding:.15rem 0;cursor:pointer;color:var(--dim)}
@@ -183,7 +189,7 @@ const ideaPageHTML = `<!doctype html>
 <div class="progress"><i id="prog"></i></div>
 <header>
   <div class="head">
-    <a class="logo" id="home" href="/idea/" title="all pages">💡</a>
+    <a class="logo" id="home" href="/idea/" title="all pages" aria-label="all pages">&larr;</a>
     <div class="who"><h1 id="name">idea</h1><div class="sub" id="summary">loading…</div></div>
     <span class="pill type" id="type" hidden></span>
     <div class="tags" id="tags"></div>
@@ -214,8 +220,9 @@ const ideaPageHTML = `<!doctype html>
     </div>
     <div class="endcap" id="endcap">
       <h2>Tickets and the build</h2>
-      <p id="buildWhy">The split below is the agent's proposal of how the page becomes work; it keeps it in step with the page. When it reads right, hand it over: the tickets go on the board, a plan works through them, a worktree and a pull request per ticket.</p>
-      <details class="tickets" id="tickets"><summary>Tickets <span class="n" id="tkn"></span></summary><div id="tklist"></div></details>
+      <p id="buildWhy"></p>
+      <p class="splitwarn" id="splitwarn" hidden></p>
+      <details class="tickets" id="tickets" open><summary>Tickets <span class="n" id="tkn"></span></summary><div id="tklist"></div></details>
       <div class="sent" id="sentlist"></div>
       <div class="acts" id="buildacts"><button class="btn primary" id="build">Build it</button><span id="sendbtns"></span><button class="btn" id="general">Comment on the whole page</button></div>
       <ul class="tasks" id="tasks" hidden></ul>
@@ -402,7 +409,7 @@ const ideaPageHTML = `<!doctype html>
     if (!you()) { nameIn = el('input', 'name'); nameIn.type = 'text'; nameIn.placeholder = 'Your name, shown on the comment'; nameIn.autocomplete = 'name'; pop.appendChild(nameIn); }
     const chips = el('div', 'chips'); pop.appendChild(chips);
     const row = el('div', 'row');
-    const att = el('label', 'att', '📎'); att.title = 'attach a picture or a file (or paste one)'; const fi = el('input'); fi.type = 'file'; fi.multiple = true; fi.hidden = true; att.appendChild(fi); row.appendChild(att);
+    const att = el('label', 'att', 'Attach'); att.title = 'attach a picture or a file (or paste one)'; const fi = el('input'); fi.type = 'file'; fi.multiple = true; fi.hidden = true; att.appendChild(fi); row.appendChild(att);
     row.appendChild(el('span', 'kbd', coarse ? '' : '⌘↵ sends · Esc closes'));
     row.appendChild(el('span', 'sp'));
     const cancel = el('button', 'btn small ghost', 'cancel'); cancel.onclick = () => closePop(false); row.appendChild(cancel);
@@ -488,7 +495,7 @@ const ideaPageHTML = `<!doctype html>
   const act = async (path, body) => { try { await api(path, body); await load(); } catch (e) { toast(e.message); } };
   function card(c) {
     const d = el('div', 'card' + (c.id === focus ? ' on' : '')); d.id = 'c' + c.id;
-    const top = el('div', 'top'); top.appendChild(el('b', '', c.by === 'agent' ? '🐕 agent' : c.by)); if (c.guest) { const g = el('span', 'guest', 'via link'); g.title = 'written by someone with the link: the name is what they typed'; top.appendChild(g); }
+    const top = el('div', 'top'); top.appendChild(el('b', '', c.by === 'agent' ? 'agent' : c.by)); if (c.guest) { const g = el('span', 'guest', 'via link'); g.title = 'written by someone with the link: the name is what they typed'; top.appendChild(g); }
     const when = el('span', 'when', ago(c.at)); when.title = 'copy a link to this comment'; when.onclick = async () => { const u = location.href.split('#')[0] + '#c' + c.id; try { await navigator.clipboard.writeText(u); toast('link to this comment copied'); } catch { prompt('the link', u); } }; top.appendChild(when);
     if (c.kind === 'proposal') top.appendChild(el('span', 'pill proposal', 'proposal'));
     top.appendChild(el('span', 'pill ' + c.status, c.status));
@@ -499,7 +506,7 @@ const ideaPageHTML = `<!doctype html>
     d.appendChild(linked('t', c.text));
     d.appendChild(filesRow(c.files, c.links));
     for (const r of c.replies || []) {
-      const rd = el('div', 'reply' + (r.by === 'agent' ? ' agent' : '')); const rt = el('div', 'top'); rt.appendChild(el('b', '', r.by === 'agent' ? '🐕 agent' : r.by)); if (r.guest) rt.appendChild(el('span', 'guest', 'via link')); rt.appendChild(el('span', '', ago(r.at)));
+      const rd = el('div', 'reply' + (r.by === 'agent' ? ' agent' : '')); const rt = el('div', 'top'); rt.appendChild(el('b', '', r.by === 'agent' ? 'agent' : r.by)); if (r.guest) rt.appendChild(el('span', 'guest', 'via link')); rt.appendChild(el('span', '', ago(r.at)));
       if (r.changed) rt.appendChild(el('span', 'pill fixed', 'changed the page')); rd.appendChild(rt); rd.appendChild(linked('t', r.text)); rd.appendChild(filesRow(r.files, r.links)); d.appendChild(rd);
     }
     if (readOnly()) return d;
@@ -514,11 +521,11 @@ const ideaPageHTML = `<!doctype html>
     }
     d.appendChild(acts);
     // The reply box is always there: type, Enter, done. Shift+Enter for a new line.
-    // A reply carries words, a link (pasted in the words) and pictures: 📎, or paste one in.
+    // A reply carries words, a link (pasted in the words) and pictures: attach, or paste one in.
     const quick = el('div', 'quick'); const ta = el('textarea'); ta.rows = 1; ta.placeholder = c.status === 'resolved' ? 'say more to reopen' : 'reply… (paste a picture or a link)';
     let files = []; const chips = el('div', 'chips');
     const addFiles = async list => { for (const f of list) { try { files.push(await upload(f)); } catch (e) { toast(e.message); } } chips.innerHTML = ''; files.forEach(f => chips.appendChild(el('span', 'chip', f.name))); };
-    const att = el('label', 'att', '📎'); att.title = 'attach a picture or a file'; const fi = el('input'); fi.type = 'file'; fi.multiple = true; fi.hidden = true; att.appendChild(fi); fi.onchange = () => { addFiles([...fi.files]); fi.value = ''; };
+    const att = el('label', 'att', 'Attach'); att.title = 'attach a picture or a file'; const fi = el('input'); fi.type = 'file'; fi.multiple = true; fi.hidden = true; att.appendChild(fi); fi.onchange = () => { addFiles([...fi.files]); fi.value = ''; };
     ta.addEventListener('paste', ev => { const fs = [...((ev.clipboardData || {}).files || [])]; if (fs.length) { ev.preventDefault(); addFiles(fs); } });
     const send = el('button', 'btn small primary', 'send'); send.onclick = () => { const t = ta.value.trim(); if (!t && !files.length) return; const f = files; ta.value = ''; files = []; chips.innerHTML = ''; act('/reply', { id: c.id, text: t, by: me(), files: f }); };
     ta.addEventListener('keydown', ev => { if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); send.click(); } });
@@ -529,7 +536,7 @@ const ideaPageHTML = `<!doctype html>
   function filesRow(files, links) {
     const row = el('div', 'files');
     for (const f of files || []) { const href = base + '/file/' + encodeURIComponent(f.path.split('/').pop()) + (key ? '?k=' + encodeURIComponent(key) : ''); if ((f.type || '').startsWith('image/') && f.type !== 'image/svg+xml') { const a = el('a'); a.href = href; a.target = '_blank'; const i = el('img'); i.src = href; i.alt = f.name; a.appendChild(i); row.appendChild(a); } else { const a = el('a', '', '📎 ' + f.name); a.href = href; row.appendChild(a); } }
-    for (const l of links || []) { const a = el('a', '', '🔗 ' + l.replace(/^https?:\/\//, '').slice(0, 50)); a.href = l; a.target = '_blank'; a.rel = 'noopener'; row.appendChild(a); }
+    for (const l of links || []) { const a = el('a', '', l.replace(/^https?:\/\//, '').slice(0, 50)); a.href = l; a.target = '_blank'; a.rel = 'noopener'; row.appendChild(a); }
     return row;
   }
   // What came in since you last looked: a bar on the card, until you have been here a few seconds.
@@ -577,15 +584,20 @@ const ideaPageHTML = `<!doctype html>
       const title = el('span', 't', x.title); title.onclick = () => d.classList.toggle('open'); row.appendChild(title);
       if (x.ref) { const ref = el('span', 'ref'); if (x.url) { const a = el('a', '', x.ref); a.href = x.url; a.target = '_blank'; a.rel = 'noopener'; ref.appendChild(a); } else ref.textContent = x.ref; row.appendChild(ref); }
       if (x.state) row.appendChild(el('span', 'pill ' + x.state, x.state));
+      if ((x.touches || []).length) row.appendChild(el('span', 'touch', x.touches.join(' + ')));
       if ((x.after || []).length) row.appendChild(el('span', 'after', 'after ' + x.after.join(', ')));
       const cb = el('button', 'btn small ghost', '+ comment'); cb.title = 'comment on this ticket'; cb.onclick = ev => { ev.stopPropagation(); openCompose({ quote: x.title, prefix: '', suffix: '', heading: 'Tickets' }); }; row.appendChild(cb);
-      d.appendChild(row); if (x.body) d.appendChild(el('div', 'body', x.body)); tk.appendChild(d);
+      d.appendChild(row); if (x.body) d.appendChild(el('div', 'body', x.body));
+      if ((x.checks || []).length) { const ul = el('ul', 'checks'); ul.setAttribute('aria-label', 'done when'); x.checks.forEach(c => ul.appendChild(el('li', '', c))); d.appendChild(ul); }
+      tk.appendChild(d);
     }
     const sent = $('#sentlist'); sent.innerHTML = '';
-    for (const l of doc.sent || []) { const a = el('a', '', (l.kind === 'page' ? '📄 ' : '🎯 ') + l.ref + (l.title ? ' · ' + l.title : '')); a.href = l.url; a.target = '_blank'; a.rel = 'noopener'; sent.appendChild(a); }
+    for (const l of doc.sent || []) { const a = el('a', '', l.ref + (l.title ? ' · ' + l.title : '')); a.href = l.url; a.target = '_blank'; a.rel = 'noopener'; sent.appendChild(a); }
     const p = doc.plan;
     const canBuild = !!token; $('#build').disabled = !canBuild; $('#buildTop').hidden = !canBuild;
-    let why = 'The split below is the agent\'s proposal of how the page becomes work; it keeps it in step with the page. When it reads right, hand it over: the tickets go on the board, a plan works through them, a worktree and a pull request per ticket.';
+    let why = 'Each ticket is one feature, end to end, across the repositories it touches. Tap one to read it and how it is checked. When the split reads right, hand it over: a plan works through the tickets, one branch per ticket.';
+    const sw = $('#splitwarn'); sw.textContent = ''; sw.hidden = !doc.splitWarning || tickets.some(x => x.ref);
+    if (!sw.hidden) { sw.appendChild(el('b', '', 'Cut by layer. ')); sw.appendChild(document.createTextNode(doc.splitWarning.charAt(0).toUpperCase() + doc.splitWarning.slice(1) + '. Build cuts it again by feature, or comment on a ticket to change it.')); }
     if (p) why = p.ref + ' ' + p.state + ' · ' + p.done + ' done · ' + p.doing + ' doing · ' + p.review + ' in review · ' + p.todo + ' to do';
     else if (!canBuild) why += ' Building and sending need the dashboard: open this page from corgi agent dashboard, or run corgi idea build ' + slug + '.';
     // Someone the link was sent to only reads and comments: no build talk for them.
@@ -705,7 +717,7 @@ const ideaIndexHTML = `<!doctype html>
   .row b{font-weight:600}
   .row .s{color:var(--dim);font-size:.8rem;margin-top:.15rem}
   .row .m{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.35rem;font-size:.7rem;color:var(--dim)}
-  .pill{letter-spacing:.04em;text-transform:uppercase;border:1px solid var(--line);border-radius:.4rem;padding:.1rem .4rem}
+  .pill{border:1px solid var(--line);border-radius:.4rem;padding:.1rem .4rem}
   .pill.type{color:var(--accent)}
   .n{color:var(--amber)}
   .empty,.err{color:var(--dim2);text-align:center;padding:2rem 0}
@@ -713,7 +725,7 @@ const ideaIndexHTML = `<!doctype html>
   .copy{float:right;border:1px solid var(--line);background:var(--card2);color:var(--dim);border-radius:.4rem;padding:.15rem .45rem;font:inherit;font-size:.7rem;cursor:pointer}
 </style>
 <main>
-  <h1>💡 Pages</h1>
+  <h1>Pages</h1>
   <p class="sub">Ideas, specs, designs and proposals the agent keeps. <code>corgi idea new "…"</code> adds one.</p>
   <div id="list" class="empty">loading…</div>
 </main>

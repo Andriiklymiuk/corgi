@@ -119,20 +119,21 @@ func ideaDocument(dir string, id *idea.Idea, withHTML, trusted bool) map[string]
 		meta.Key, meta.Source = "", ""
 	}
 	out := map[string]any{
-		"idea":      meta,
-		"markdown":  id.Doc,
-		"comments":  id.Comments.Comments,
-		"tasks":     tasks,
-		"tickets":   liveTickets(dir, id.Meta),
-		"sent":      id.Meta.Sent,
-		"send":      ideaSendOptions(dir, id.Meta),
-		"plan":      plan,
-		"counts":    id.Counts(),
-		"open":      id.Open(),
-		"forAgent":  len(id.ForAgent()),
-		"approvers": id.Meta.Approvers(),
-		"needed":    id.Meta.NeededApprovals(),
-		"approved":  id.Meta.IsApproved(),
+		"idea":         meta,
+		"markdown":     id.Doc,
+		"comments":     id.Comments.Comments,
+		"tasks":        tasks,
+		"tickets":      liveTickets(dir, id.Meta),
+		"splitWarning": splitWarning(id.Meta.Tickets, ideaWorkspaceRoot(id.Meta.Workspace)),
+		"sent":         id.Meta.Sent,
+		"send":         ideaSendOptions(dir, id.Meta),
+		"plan":         plan,
+		"counts":       id.Counts(),
+		"open":         id.Open(),
+		"forAgent":     len(id.ForAgent()),
+		"approvers":    id.Meta.Approvers(),
+		"needed":       id.Meta.NeededApprovals(),
+		"approved":     id.Meta.IsApproved(),
 	}
 	if trusted {
 		out["file"] = filepath.Join(id.Dir, idea.DocName)
@@ -187,8 +188,7 @@ func ideaOpenHandler(token, deviceStore string) http.HandlerFunc {
 			ideaIndex(w, r, trusted)
 		case what == "":
 			// The page is a shell; it asks for /doc with the key, and is told there when the key is wrong.
-			w.Header().Set(headerContentType, htmlContentType)
-			w.Header().Set(headerContentSecurityPolicy, ideaPageCSP)
+			setSharedPageHeaders(w, ideaPagePolicy())
 			_, _ = fmt.Fprint(w, ideaShellFor(r, slug, trusted))
 		default:
 			ideaPart(w, r, ideaPartRequest{slug: slug, what: what, name: name, trusted: trusted})
@@ -200,7 +200,7 @@ func ideaOpenHandler(token, deviceStore string) http.HandlerFunc {
 // itself only for the dashboard's own (a share key opens one page, not all).
 func ideaIndex(w http.ResponseWriter, r *http.Request, trusted bool) {
 	if !strings.Contains(r.Header.Get("Accept"), "json") {
-		w.Header().Set(headerContentType, htmlContentType)
+		setSharedPageHeaders(w, ideaPagePolicy())
 		_, _ = fmt.Fprint(w, ideaIndexHTML)
 		return
 	}

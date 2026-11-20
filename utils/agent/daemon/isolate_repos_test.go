@@ -84,7 +84,7 @@ func TestStuckWorktreeSetupGivesUpInsteadOfWaitingForever(t *testing.T) {
 		return nil, nil
 	}
 	start := time.Now()
-	_, err := d.isolateWithin(t.TempDir(), "corgi/x", nil, 50*time.Millisecond)
+	_, _, err := d.isolateWithin(t.TempDir(), "corgi/x", nil, nil, 50*time.Millisecond)
 	if err == nil || !strings.Contains(err.Error(), "gave up") {
 		t.Fatalf("want a give-up error, got %v", err)
 	}

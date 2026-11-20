@@ -73,12 +73,14 @@ func registerIdeaMCPTools(s *server.MCPServer) {
 		mcp.WithDescription("Replace the page's markdown (the whole page), or its split into tickets, or both. Use it after reading the page, when a comment asks for a change; then reply to the comment with corgi_idea_comment (by agent, changed true)."),
 		slugOpt,
 		mcp.WithString("markdown", mcp.Description("The whole page")),
-		mcp.WithArray("tickets", mcp.Description("The split: [{title, body, after:[1-based numbers]}]"), mcp.Items(map[string]any{
+		mcp.WithArray("tickets", mcp.Description("The split: [{title, body, after:[1-based numbers], touches:[services or repositories], checks:[how a tester sees it is done]}]. Cut by feature, never by layer: one ticket is one thing a person gets, with its migration, API, screen and tests in every repository it reaches; never one ticket for the migration, one for the backend and one for the frontend."), mcp.Items(map[string]any{
 			"type": "object",
 			"properties": map[string]any{
-				"title": map[string]any{"type": "string"},
-				"body":  map[string]any{"type": "string"},
-				"after": map[string]any{"type": "array", "items": map[string]any{"type": "integer"}, "description": "1-based numbers of the tickets this one waits for"},
+				"title":   map[string]any{"type": "string"},
+				"body":    map[string]any{"type": "string"},
+				"after":   map[string]any{"type": "array", "items": map[string]any{"type": "integer"}, "description": "1-based numbers of the tickets this one waits for"},
+				"touches": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "The services or repositories this ticket changes"},
+				"checks":  map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Two to five things a tester can do to see it is done"},
 			},
 			"required": []string{"title"},
 		})),
@@ -292,7 +294,7 @@ func toolTicket(item any) (plannerTask, bool) {
 	if strings.TrimSpace(title) == "" {
 		return plannerTask{}, false
 	}
-	t := plannerTask{Title: title, Body: body}
+	t := plannerTask{Title: title, Body: body, Touches: toolStrings(m["touches"]), Checks: toolStrings(m["checks"])}
 	after, _ := m["after"].([]any)
 	for _, n := range after {
 		if f, ok := n.(float64); ok {
@@ -300,6 +302,17 @@ func toolTicket(item any) (plannerTask, bool) {
 		}
 	}
 	return t, true
+}
+
+func toolStrings(raw any) []string {
+	items, _ := raw.([]any)
+	var out []string
+	for _, item := range items {
+		if s, ok := item.(string); ok {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 func toolTickets(r mcp.CallToolRequest) []plannerTask {
@@ -332,13 +345,18 @@ func ideaToolEdit(r mcp.CallToolRequest) (any, error) {
 		}
 		if len(split) > 0 {
 			id.Meta.Tickets = keepRefs(id.Meta.Tickets, ticketsFrom(split))
+			id.Meta.SplitBy = splitMark(id.Meta.Tickets, ideaWorkspaceRoot(id.Meta.Workspace))
 		}
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
-	return map[string]any{"idea": id.Meta, "tickets": id.Meta.Tickets}, nil
+	out := map[string]any{"idea": id.Meta, "tickets": id.Meta.Tickets}
+	if why := splitWarning(id.Meta.Tickets, ideaWorkspaceRoot(id.Meta.Workspace)); why != "" {
+		out["splitWarning"] = "cut by layer: " + why + ". Merge each feature's layers into one ticket and send the split again."
+	}
+	return out, nil
 }
 
 func ideaToolSet(r mcp.CallToolRequest) (any, error) {

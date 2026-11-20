@@ -88,13 +88,15 @@ var (
 // place in the list (1-based); After names the ones it waits for. Once on
 // the board or in the tracker, Ref, URL and State say where it stands.
 type Ticket struct {
-	ID    int    `json:"id"`
-	Title string `json:"title"`
-	Body  string `json:"body,omitempty"`
-	After []int  `json:"after,omitempty"`
-	Ref   string `json:"ref,omitempty"`
-	URL   string `json:"url,omitempty"`
-	State string `json:"state,omitempty"`
+	ID      int      `json:"id"`
+	Title   string   `json:"title"`
+	Body    string   `json:"body,omitempty"`
+	After   []int    `json:"after,omitempty"`
+	Touches []string `json:"touches,omitempty"`
+	Checks  []string `json:"checks,omitempty"`
+	Ref     string   `json:"ref,omitempty"`
+	URL     string   `json:"url,omitempty"`
+	State   string   `json:"state,omitempty"`
 	// Task is the board task (TASK-n) this ticket became, kept when Ref
 	// moves to the tracker's key, so the board's state still reaches it.
 	Task string `json:"task,omitempty"`
@@ -172,6 +174,7 @@ type Meta struct {
 	// Tickets is the proposed split of the page into work, kept in step by
 	// the agent; Sent is where the page went (an epic, a Confluence page).
 	Tickets   []Ticket  `json:"tickets,omitempty"`
+	SplitBy   string    `json:"splitBy,omitempty"`
 	Sent      []Link    `json:"sent,omitempty"`
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`

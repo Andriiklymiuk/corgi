@@ -359,3 +359,47 @@ func validateBranchName(branch string) error {
 	}
 	return nil
 }
+
+type StackedRepo struct {
+	Repo string   `json:"repo"`
+	Base string   `json:"base"`
+	Also []string `json:"also,omitempty"`
+}
+
+func localBranchExists(repo, branch string) bool {
+	_, err := gitOut(repo, gitRevParse, "--verify", "--quiet", "refs/heads/"+branch)
+	return err == nil
+}
+
+func StackBranchOnBasesInRepo(repo, branch string, bases []string) (StackedRepo, bool) {
+	if validateBranchName(branch) != nil || !isGitRepo(repo) || localBranchExists(repo, branch) {
+		return StackedRepo{}, false
+	}
+	var present []string
+	for _, base := range bases {
+		if validateBranchName(base) == nil && localBranchExists(repo, base) {
+			present = append(present, base)
+		}
+	}
+	if len(present) == 0 {
+		return StackedRepo{}, false
+	}
+	if err := gitRun(repo, "branch", "--no-track", branch, present[0]); err != nil {
+		return StackedRepo{}, false
+	}
+	return StackedRepo{Repo: repo, Base: present[0], Also: present[1:]}, true
+}
+
+func StackBranchOnBases(corgi *CorgiCompose, branch string, bases []string) []StackedRepo {
+	if corgi == nil || len(bases) == 0 {
+		return nil
+	}
+	order, _, _ := groupServicesByRepo(corgi, branch, nil)
+	var stacked []StackedRepo
+	for _, root := range order {
+		if s, ok := StackBranchOnBasesInRepo(root, branch, bases); ok {
+			stacked = append(stacked, s)
+		}
+	}
+	return stacked
+}

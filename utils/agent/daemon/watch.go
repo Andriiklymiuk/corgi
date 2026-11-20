@@ -1729,7 +1729,7 @@ func (d *Daemon) isolateFix(spec WatchSpec, e watch.Event, fix *harness.Print, l
 		fmt.Fprintf(logFile, "=== making worktrees on %s in every repository\n", branch)
 	}
 	began := time.Now()
-	trees, err := d.isolateWithin(spec.Dir, branch, projects, isolateTimeout)
+	trees, stacked, err := d.isolateWithin(spec.Dir, branch, projects, e.Bases, isolateTimeout)
 	if err == nil {
 		fmt.Fprintf(logFile, "=== worktrees ready in %s\n", time.Since(began).Round(time.Second))
 	}
@@ -1744,7 +1744,7 @@ func (d *Daemon) isolateFix(spec WatchSpec, e watch.Event, fix *harness.Print, l
 	if onOwnPullRequest(e) {
 		fix.Prompt += PullIsolationNote(trees)
 	} else {
-		fix.Prompt += IsolationNote(branch, trees)
+		fix.Prompt += IsolationNote(branch, trees) + StackNote(stacked)
 	}
 	fmt.Fprintf(logFile, "=== worktrees on %s: %s\n", branch, strings.Join(trees, ", "))
 	if d.RunStack == nil {
@@ -1783,17 +1783,21 @@ func pullProjects(e watch.Event) []string {
 }
 
 type isolateResult struct {
-	trees []string
-	err   error
+	trees   []string
+	stacked []utils.StackedRepo
+	err     error
 }
 
-func (d *Daemon) isolateWithin(dir, branch string, projects []string, limit time.Duration) ([]string, error) {
+func (d *Daemon) isolateWithin(dir, branch string, projects, bases []string, limit time.Duration) ([]string, []utils.StackedRepo, error) {
 	done := make(chan isolateResult, 1)
 	go func() {
 		var r isolateResult
-		if len(projects) > 0 && d.IsolateRepos != nil {
+		switch {
+		case len(projects) > 0 && d.IsolateRepos != nil:
 			r.trees, r.err = d.IsolateRepos(dir, branch, projects)
-		} else {
+		case len(bases) > 0 && d.IsolateStacked != nil:
+			r.trees, r.stacked, r.err = d.IsolateStacked(dir, branch, bases)
+		default:
 			r.trees, r.err = d.Isolate(dir, branch)
 		}
 		done <- r
@@ -1802,10 +1806,26 @@ func (d *Daemon) isolateWithin(dir, branch string, projects []string, limit time
 	defer timer.Stop()
 	select {
 	case r := <-done:
-		return r.trees, r.err
+		return r.trees, r.stacked, r.err
 	case <-timer.C:
-		return nil, fmt.Errorf("making the worktrees took over %s, so this run gave up instead of waiting silently", limit)
+		return nil, nil, fmt.Errorf("making the worktrees took over %s, so this run gave up instead of waiting silently", limit)
 	}
+}
+
+func StackNote(stacked []utils.StackedRepo) string {
+	if len(stacked) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("\n\nThis work builds on work that is still in review, so these repositories start from that branch instead of the default one:")
+	for _, s := range stacked {
+		fmt.Fprintf(&b, "\n- %s starts from `%s`", filepath.Base(s.Repo), s.Base)
+		if len(s.Also) > 0 {
+			fmt.Fprintf(&b, "; merge `%s` into your branch before you start", strings.Join(s.Also, "`, `"))
+		}
+	}
+	b.WriteString("\nIn each of them open your pull request against that branch, not the default one, so the diff shows only your work, and say in its description which pull request it stacks on. In every other repository the pull request goes to the default branch as usual.")
+	return b.String()
 }
 
 func (d *Daemon) fixFailed(ctx context.Context, run fixRun, runErr error, logFile *os.File) {

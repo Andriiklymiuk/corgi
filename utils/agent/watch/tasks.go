@@ -27,8 +27,9 @@ type Task struct {
 	By        string `json:"by,omitempty"`
 	// Idea is the idea page (its slug) this task was cut from; Tags are the
 	// page's tags, so the board can group what belongs together.
-	Idea string   `json:"idea,omitempty"`
-	Tags []string `json:"tags,omitempty"`
+	Idea    string   `json:"idea,omitempty"`
+	Tags    []string `json:"tags,omitempty"`
+	Touches []string `json:"touches,omitempty"`
 	// From names what the task was made from outside a tracker (a mail, a chat
 	// message, a wiki page), so the same one is never added twice.
 	From      string    `json:"from,omitempty"`
@@ -170,6 +171,10 @@ func (l *TaskLog) Tag(arg, idea string, tags []string, now time.Time) (Task, err
 		}
 	}
 	return Task{}, fmt.Errorf("no task %s", arg)
+}
+
+func (l *TaskLog) SetTouches(arg string, touches []string, now time.Time) (Task, error) {
+	return l.update(arg, func(t *Task) { t.Touches, t.UpdatedAt = touches, now })
 }
 
 // ByIdea is every task cut from that idea page, oldest first.

@@ -36,6 +36,7 @@ type Plan struct {
 	Slots     int        `json:"slots"`
 	// Retries is how many more times a task whose run failed is started again.
 	Retries   int       `json:"retries,omitempty"`
+	Stack     bool      `json:"stack,omitempty"`
 	State     string    `json:"state"`
 	By        string    `json:"by,omitempty"`
 	CreatedAt time.Time `json:"createdAt"`
@@ -105,7 +106,7 @@ func (l *PlanLog) Add(draft Plan, now time.Time) (Plan, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	p := Plan{ID: l.Next, Goal: goal, Summary: strings.TrimSpace(draft.Summary), Workspace: draft.Workspace, Model: draft.Model, Tasks: draft.Tasks,
-		Slots: slots, State: PlanPlanned, By: draft.By, CreatedAt: now, UpdatedAt: now}
+		Slots: slots, Stack: draft.Stack, State: PlanPlanned, By: draft.By, CreatedAt: now, UpdatedAt: now}
 	l.Next++
 	l.Plans = append(l.Plans, p)
 	return p, l.save()

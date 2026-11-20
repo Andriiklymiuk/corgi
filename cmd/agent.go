@@ -213,6 +213,7 @@ func wireTrackers(d *daemon.Daemon, dir string) {
 	}
 	d.Isolate = isolateFixWorktrees
 	d.IsolateRepos = isolateFixWorktreesIn
+	d.IsolateStacked = isolateFixWorktreesStacked
 	d.RunStack = runStackNote
 	d.ReleaseStack = releaseRunStack
 	d.Reconcile = reconcileBoard(dir)

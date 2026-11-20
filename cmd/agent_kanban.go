@@ -61,6 +61,7 @@ type KanbanCard struct {
 	Due         string            `json:"due,omitempty"`
 	Overdue     bool              `json:"overdue,omitempty"`
 	WaitsFor    []string          `json:"waitsFor,omitempty"`
+	Touches     []string          `json:"touches,omitempty"`
 	Triage      bool              `json:"triage,omitempty"`
 	Cycle       string            `json:"cycle,omitempty"`
 	Unreviewed  string            `json:"unreviewed,omitempty"`

@@ -24,6 +24,29 @@ func isolateFixWorktrees(dir, branch string) ([]string, error) {
 	return isolateFixWorktreesIn(dir, branch, nil)
 }
 
+func isolateFixWorktreesStacked(dir, branch string, bases []string) ([]string, []utils.StackedRepo, error) {
+	stacked := stackFixBranch(dir, branch, bases)
+	trees, err := isolateFixWorktreesIn(dir, branch, nil)
+	return trees, stacked, err
+}
+
+func stackFixBranch(dir, branch string, bases []string) []utils.StackedRepo {
+	isolateMu.Lock()
+	defer isolateMu.Unlock()
+	composePath := composeIn(dir)
+	if composePath == "" {
+		if s, ok := utils.StackBranchOnBasesInRepo(dir, branch, bases); ok {
+			return []utils.StackedRepo{s}
+		}
+		return nil
+	}
+	corgi, _, err := loadComposeForAgent(composePath)
+	if err != nil {
+		return nil
+	}
+	return utils.StackBranchOnBases(corgi, branch, bases)
+}
+
 func isolateFixWorktreesIn(dir, branch string, projects []string) ([]string, error) {
 	isolateMu.Lock()
 	defer isolateMu.Unlock()

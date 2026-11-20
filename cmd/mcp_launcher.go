@@ -2468,6 +2468,7 @@ const launcherPageHTML = `<!doctype html>
         if (c.now) { const m = document.createElement('p'); m.className = 'kmeta know'; m.textContent = 'now: ' + c.now.doing + (c.now.model ? ' · ' + c.now.model : '') + (c.now.agent && c.now.agent !== 'claude' ? ' · ' + c.now.agent : ''); card.appendChild(m); }
         if (c.session) { const m = document.createElement('p'); m.className = 'kmeta'; m.textContent = sessionLine(c.session); card.appendChild(m); }
         if (c.feature) { const m = document.createElement('p'); m.className = 'kmeta'; m.textContent = 'part of ' + c.feature.ref + (c.feature.title ? ' ' + c.feature.title : '') + (c.after && c.after.length ? ' · after ' + c.after.join(', ') : ''); card.appendChild(m); }
+        if (c.touches && c.touches.length) { const m = document.createElement('p'); m.className = 'kmeta'; m.textContent = 'touches ' + c.touches.join(' + '); card.appendChild(m); }
         if (c.branch) { const m = document.createElement('p'); m.className = 'kmeta'; m.textContent = c.branch; card.appendChild(m); }
         if (c.handoff && c.handoff.next) { const m = document.createElement('p'); m.className = 'kmeta'; m.textContent = 'next: ' + c.handoff.next; card.appendChild(m); }
         if (c.cost) {

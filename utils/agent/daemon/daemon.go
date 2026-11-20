@@ -120,6 +120,7 @@ type Daemon struct {
 	PullDiff         func(ctx context.Context, dir, link string) (string, error)
 	JudgeSays        func(ctx context.Context, spec WatchSpec, prompt string) (string, error)
 	IsolateRepos     func(dir, branch string, projects []string) ([]string, error)
+	IsolateStacked   func(dir, branch string, bases []string) ([]string, []utils.StackedRepo, error)
 	RunStack         func(dir, branch, mode string) string
 	ReleaseStack     func(dir, branch string)
 	Reconcile        func(now time.Time) []string

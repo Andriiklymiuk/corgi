@@ -68,7 +68,8 @@ type Event struct {
 	// A deferred run that must not start before this moment.
 	NotBefore time.Time `json:"notBefore,omitempty"`
 	// Tickets that ride in the same run as this one, the run's leader.
-	Riders []Event `json:"riders,omitempty"`
+	Riders []Event  `json:"riders,omitempty"`
+	Bases  []string `json:"bases,omitempty"`
 }
 
 // Refs of the leader and every rider, in order.
