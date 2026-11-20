@@ -379,3 +379,11 @@ Treat a lost phone as a compromised machine and revoke it. There is deliberately
 no "last seen" tracking: recording it would mean rewriting the device store on
 every request, and a concurrent revoke could then be undone by a write that
 loaded before it - resurrecting the device you just revoked.
+
+## Tasks on the board
+
+`corgi_task_list` reads the board's own tasks in the order they start. `corgi_task_claim` says an agent is
+taking one, so no other agent or person starts it, and `corgi_task_release` gives it back.
+`corgi_task_add` puts a task in triage, where it waits for the person's yes. `corgi_task_update` sets the
+priority, the due date, what it waits for and its links; `corgi_task_note` leaves the agent's note.
+None of them moves a task between columns or out of triage.

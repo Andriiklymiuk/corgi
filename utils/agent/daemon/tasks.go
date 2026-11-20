@@ -39,6 +39,9 @@ func (d *Daemon) advanceTasks(ctx context.Context) {
 			}
 			continue
 		}
+		if t.Asleep(now) {
+			continue
+		}
 		if t.HeldByAnother(peers.Me()) {
 			if t.WantsRun() {
 				d.sayTaskWaits(t, "claimed by "+t.Owner)

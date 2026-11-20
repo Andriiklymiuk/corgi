@@ -68,6 +68,7 @@ Getting started:
 * [corgi agent container](corgi_agent_container)	 - Run the agent daemon in a Docker container, here or on a server over ssh
 * [corgi agent continue](corgi_agent_continue)	 - Let the daemon continue a limited session when its limit is over
 * [corgi agent cost](corgi_agent_cost)	 - What the agents cost: tokens by repo, by day, or by bot
+* [corgi agent cycle](corgi_agent_cycle)	 - A box of days for a set of tasks: what is in, what is done, what slipped
 * [corgi agent dashboard](corgi_agent_dashboard)	 - Open the dashboard in this machine's browser
 * [corgi agent digest](corgi_agent_digest)	 - Today's one-message summary, as the daily digest would send it
 * [corgi agent dismiss](corgi_agent_dismiss)	 - Take a finished session off the board until its next event

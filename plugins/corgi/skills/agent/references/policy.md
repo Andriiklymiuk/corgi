@@ -61,10 +61,19 @@ holds. `corgi agent task set TASK-3 --priority high --due 2026-12-01
 --blocked-by TASK-2` orders the queue: highest priority first, and a task that
 waits for another stays in Blocked until that one is finished.
 
+**Triage, cycles, views**: a task added with `--triage` (and every task an agent or a guest adds) waits
+in `corgi agent task triage` until `task accept TASK-7`; `task snooze TASK-7 --for 3d` puts it to sleep.
+`corgi agent cycle start --days 7`, `cycle add TASK-3 TASK-4`, `cycle` (where it stands) and `cycle close`
+(done and slipped) box a week of work. `corgi agent kanban --view needs-me|unreviewed|red|stale|overdue|
+blocked|triage|mine|cycle` filters the board; `kanban views save <name> --owner anna --priority urgent`
+keeps a filter. Over MCP an agent claims before it starts: `corgi_task_claim`, then `corgi_task_release`
+when it stops without finishing.
+
 **Show the board to a teammate**: `corgi agent kanban share --workspace api
 --for 7d --label "for Anna"` prints a read-only link once. It shows titles,
 columns, owners and links, never a description or a comment. `--list` shows the
-open links, `--off <id>` closes one.
+open links, `--off <id>` closes one. `--write` lets the guest add a task (into triage), comment and take
+a task; a guest's words never start a run.
 
 `corgi agent kanban [--workspace X] [--json]` is one card per ticket in a
 column corgi works out - Inbox, Ready (deferred, or a handoff waiting),

@@ -26,6 +26,7 @@ type BoardShare struct {
 	KeyHash   string    `json:"keyHash"`
 	Workspace string    `json:"workspace,omitempty"`
 	Label     string    `json:"label,omitempty"`
+	Write     bool      `json:"write,omitempty"`
 	CreatedAt time.Time `json:"createdAt"`
 	Expires   time.Time `json:"expires,omitzero"`
 }
@@ -64,7 +65,7 @@ func boardKeyHash(key string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func (l *BoardShares) Add(workspace, label string, lasts time.Duration, now time.Time) (BoardShare, string, error) {
+func (l *BoardShares) Add(workspace, label string, lasts time.Duration, write bool, now time.Time) (BoardShare, string, error) {
 	label = strings.TrimSpace(label)
 	if len(label) > maxBoardShareLabel {
 		return BoardShare{}, "", fmt.Errorf("a label is under %d characters", maxBoardShareLabel)
@@ -80,7 +81,7 @@ func (l *BoardShares) Add(workspace, label string, lasts time.Duration, now time
 	if len(l.Shares) >= maxBoardShares {
 		return BoardShare{}, "", fmt.Errorf("%d board links are open already - close one first", maxBoardShares)
 	}
-	share := BoardShare{ID: key[:8], KeyHash: boardKeyHash(key[8:]), Workspace: strings.TrimSpace(workspace), Label: label, CreatedAt: now}
+	share := BoardShare{ID: key[:8], KeyHash: boardKeyHash(key[8:]), Workspace: strings.TrimSpace(workspace), Label: label, Write: write, CreatedAt: now}
 	if lasts > 0 {
 		share.Expires = now.Add(lasts)
 	}

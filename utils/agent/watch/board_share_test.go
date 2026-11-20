@@ -11,7 +11,7 @@ import (
 func TestBoardShareOpensOnlyWithItsKeyAndUntilItExpires(t *testing.T) {
 	dir := t.TempDir()
 	now := time.Now()
-	share, key, err := LoadBoardShares(dir).Add("api", "for Anna", time.Hour, now)
+	share, key, err := LoadBoardShares(dir).Add("api", "for Anna", time.Hour, false, now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -31,7 +31,7 @@ func TestBoardShareOpensOnlyWithItsKeyAndUntilItExpires(t *testing.T) {
 
 func TestBoardShareKeyIsNotKeptOnDisk(t *testing.T) {
 	dir := t.TempDir()
-	_, key, err := LoadBoardShares(dir).Add("", "", 0, time.Now())
+	_, key, err := LoadBoardShares(dir).Add("", "", 0, false, time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,8 +51,8 @@ func TestBoardShareCloses(t *testing.T) {
 	dir := t.TempDir()
 	now := time.Now()
 	log := LoadBoardShares(dir)
-	first, firstKey, _ := log.Add("api", "", 0, now)
-	_, secondKey, _ := log.Add("web", "", 0, now)
+	first, firstKey, _ := log.Add("api", "", 0, false, now)
+	_, secondKey, _ := log.Add("web", "", 0, false, now)
 	if n, err := log.Close(first.ID); err != nil || n != 1 {
 		t.Fatalf("close = %d %v", n, err)
 	}
@@ -74,11 +74,11 @@ func TestBoardSharesAreCapped(t *testing.T) {
 	log := LoadBoardShares(t.TempDir())
 	now := time.Now()
 	for i := 0; i < maxBoardShares; i++ {
-		if _, _, err := log.Add("", "", 0, now); err != nil {
+		if _, _, err := log.Add("", "", 0, false, now); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if _, _, err := log.Add("", "", 0, now); err == nil {
+	if _, _, err := log.Add("", "", 0, false, now); err == nil {
 		t.Fatal("one link too many was made")
 	}
 }

@@ -31,38 +31,42 @@ const (
 var kanbanColumns = []string{ColInbox, ColReady, ColRunning, ColBlocked, ColReview, ColDone}
 
 type KanbanCard struct {
-	Ref       string            `json:"ref"`
-	Key       string            `json:"key,omitempty"`
-	Title     string            `json:"title,omitempty"`
-	URL       string            `json:"url,omitempty"`
-	Workspace string            `json:"workspace,omitempty"`
-	Kind      string            `json:"kind,omitempty"`
-	Column    string            `json:"column"`
-	Why       string            `json:"why"`
-	State     string            `json:"state,omitempty"`
-	Branch    string            `json:"branch,omitempty"`
-	Blocked   string            `json:"blocked,omitempty"`
-	BlockedBy string            `json:"blockedBy,omitempty"`
-	Session   *CardSess         `json:"session,omitempty"`
-	Fix       *CardFix          `json:"fix,omitempty"`
-	Handoff   *CardHand         `json:"handoff,omitempty"`
-	Picked    *CardPick         `json:"picked,omitempty"`
-	Columns   []string          `json:"columns,omitempty"`
-	Body      string            `json:"body,omitempty"`
-	Cost      *CardCost         `json:"cost,omitempty"`
-	Pull      *watch.PullStatus `json:"pull,omitempty"`
-	Now       *CardNow          `json:"now,omitempty"`
-	Feature   *CardFeature      `json:"feature,omitempty"`
-	Idea      *CardIdea         `json:"idea,omitempty"`
-	After     []string          `json:"after,omitempty"`
-	Links     []watch.TaskLink  `json:"links,omitempty"`
-	Owner     string            `json:"owner,omitempty"`
-	Priority  string            `json:"priority,omitempty"`
-	Due       string            `json:"due,omitempty"`
-	Overdue   bool              `json:"overdue,omitempty"`
-	WaitsFor  []string          `json:"waitsFor,omitempty"`
-	UpdatedAt time.Time         `json:"updatedAt"`
-	Standing  sessions.Standing `json:"standing"`
+	Ref         string            `json:"ref"`
+	Key         string            `json:"key,omitempty"`
+	Title       string            `json:"title,omitempty"`
+	URL         string            `json:"url,omitempty"`
+	Workspace   string            `json:"workspace,omitempty"`
+	Kind        string            `json:"kind,omitempty"`
+	Column      string            `json:"column"`
+	Why         string            `json:"why"`
+	State       string            `json:"state,omitempty"`
+	Branch      string            `json:"branch,omitempty"`
+	Blocked     string            `json:"blocked,omitempty"`
+	BlockedBy   string            `json:"blockedBy,omitempty"`
+	Session     *CardSess         `json:"session,omitempty"`
+	Fix         *CardFix          `json:"fix,omitempty"`
+	Handoff     *CardHand         `json:"handoff,omitempty"`
+	Picked      *CardPick         `json:"picked,omitempty"`
+	Columns     []string          `json:"columns,omitempty"`
+	Body        string            `json:"body,omitempty"`
+	Cost        *CardCost         `json:"cost,omitempty"`
+	Pull        *watch.PullStatus `json:"pull,omitempty"`
+	Now         *CardNow          `json:"now,omitempty"`
+	Feature     *CardFeature      `json:"feature,omitempty"`
+	Idea        *CardIdea         `json:"idea,omitempty"`
+	After       []string          `json:"after,omitempty"`
+	Links       []watch.TaskLink  `json:"links,omitempty"`
+	Owner       string            `json:"owner,omitempty"`
+	Priority    string            `json:"priority,omitempty"`
+	Due         string            `json:"due,omitempty"`
+	Overdue     bool              `json:"overdue,omitempty"`
+	WaitsFor    []string          `json:"waitsFor,omitempty"`
+	Triage      bool              `json:"triage,omitempty"`
+	Cycle       string            `json:"cycle,omitempty"`
+	Unreviewed  string            `json:"unreviewed,omitempty"`
+	inOpenCycle bool
+	UpdatedAt   time.Time         `json:"updatedAt"`
+	Standing    sessions.Standing `json:"standing"`
 }
 
 type CardCost struct {
@@ -721,6 +725,7 @@ func gatherKanban(dir, onlyWorkspace string, now time.Time) []KanbanCard {
 	}
 	cards := buildKanban(in)
 	linkCardsToIdeas(dir, cards)
+	markUnreviewed(cards, now)
 	if onlyWorkspace == "" {
 		return cards
 	}
@@ -749,7 +754,11 @@ moving a ticket moves it on the tracker (corgi agent watch move).
 	Run: func(cmd *cobra.Command, _ []string) {
 		dir := mustAgentDir()
 		ws, _ := cmd.Flags().GetString("workspace")
-		cards := gatherKanban(dir, ws, time.Now())
+		filter, err := resolveFilter(dir, filterFromFlags(cmd))
+		if err != nil {
+			exitWithError("agent_kanban", err, 2)
+		}
+		cards := filter.apply(dir, gatherKanban(dir, ws, time.Now()), time.Now())
 		features := kanbanFeatures(cards)
 		if utils.JSONOutput {
 			utils.PrintJSON(map[string]any{"columns": kanbanColumns, "cards": cards, "features": features})
@@ -795,6 +804,9 @@ moving a ticket moves it on the tracker (corgi agent watch move).
 				}
 				if c.Idea != nil {
 					line += " · idea " + c.Idea.Slug
+				}
+				if c.Unreviewed != "" {
+					line += " · " + c.Unreviewed
 				}
 				fmt.Println(line)
 			}

@@ -92,6 +92,9 @@ var agentTaskAddCmd = &cobra.Command{
 			fmt.Printf("%s already holds it (%s): %s\n", t.Ref(), t.State, t.Title)
 			return
 		}
+		if triage, _ := cmd.Flags().GetBool("triage"); triage && !run {
+			t, _ = watch.LoadTasks(dir).ToTriage(t.Ref(), time.Now())
+		}
 		if run {
 			t, _ = watch.LoadTasks(dir).AskRun(t.Ref(), time.Now())
 			nudgePlans(dir)
@@ -468,6 +471,12 @@ func taskPlanWords(tasks *watch.TaskLog, t watch.Task) string {
 	if t.Owner != "" {
 		words = append(words, "@"+t.Owner)
 	}
+	if t.Triage {
+		words = append(words, "triage")
+	}
+	if t.Cycle != "" {
+		words = append(words, t.Cycle)
+	}
 	if open := tasks.OpenBlockers(t); len(open) > 0 {
 		words = append(words, "waits for "+strings.Join(open, ", "))
 	}
@@ -482,6 +491,7 @@ func init() {
 	agentTaskSendCmd.Flags().String("to", "", "the peer to move it to (corgi agent peers lists them)")
 	agentTaskSendCmd.Flags().Bool("run", false, "start it there, unattended, even if it was not waiting for a run")
 	_ = agentTaskSendCmd.MarkFlagRequired("to")
+	agentTaskAddCmd.Flags().Bool("triage", false, "let it wait for your yes first (corgi agent task triage); nothing starts on it until accepted")
 	agentTaskAddCmd.Flags().Bool("run", false, "start it now, unattended, where the workspace runs fixes (corgi agent level 3)")
 	agentTaskAddCmd.Flags().String("on", "", "put it on this peer's board: another laptop or a server (corgi agent peers)")
 	agentTaskAddCmd.Flags().String("body", "", "the description: what to do and how you will know it is done (- reads stdin)")

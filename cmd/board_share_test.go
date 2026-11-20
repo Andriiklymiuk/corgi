@@ -29,7 +29,7 @@ func sharedBoardFixture(t *testing.T) (dir, key string) {
 	}
 	_, _ = tasks.Claim(task.Ref(), "anna", false, now)
 	_, _ = tasks.SetPriority(task.Ref(), "high", now)
-	_, key, err = watch.LoadBoardShares(dir).Add("", "for Anna", time.Hour, now)
+	_, key, err = watch.LoadBoardShares(dir).Add("", "for Anna", time.Hour, false, now)
 	if err != nil {
 		t.Fatal(err)
 	}

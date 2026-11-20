@@ -11,10 +11,15 @@ They see the cards: title, column, owner, priority, due date and the links to
 Jira, Linear, GitHub and GitLab. They never see a description, a comment, a
 session, a cost or a file path, and they cannot change anything.
 
+With --write a guest may also add a task (it waits in triage until you accept
+it), comment on a task and claim one. What a guest writes never starts an
+agent, and an agent reads it as a note, not as an instruction.
+
 The key is in the part of the link after #, so it never reaches a server log.
 corgi keeps only a hash of it: the link is shown once, here.
 
   corgi agent kanban share --workspace api --for 7d --label "for Anna"
+  corgi agent kanban share --workspace api --write --label "the team"
   corgi agent kanban share --list
   corgi agent kanban share --off `<id>`      (or --off all)
 
@@ -31,6 +36,7 @@ corgi agent kanban share [flags]
       --list               the open links (not their keys)
       --off string         close a link by its id, or all
       --workspace string   share only this workspace's cards (default: every workspace)
+      --write              let the guest add a task (it waits in triage), comment and claim a task; a guest never starts an agent
 ```
 
 ### Options inherited from parent commands
