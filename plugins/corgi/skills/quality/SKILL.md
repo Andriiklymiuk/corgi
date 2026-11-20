@@ -45,16 +45,16 @@ finding as a scenario: who does what, in which order, what breaks. "Possible rac
 9. **Dead weight.** Unused code and dependencies, a third copy of the same logic, config nobody reads. Delete rather than refactor where you can.
 10. **Docs that lie.** A README command that no longer runs, a comment that contradicts the code. Run the commands.
 
-Candidates, adapt to the stack. Read each hit: some are fine.
+Candidates, adapt to the stack. Search the source for each pattern (a regular expression) and read each
+hit: some are fine.
 
-```bash
-grep -rnE 'catch *(\([^)]*\))? *\{ *\}|except: *pass|_ = err\b|\.catch\(\(\) *=> *(undefined|null|\{\})\)' src
-grep -rnE 'TODO|FIXME|HACK|\.skip\(|\bxit\(|t\.Skip\(' src
-grep -rnE 'sleep\(|setTimeout\(.*[0-9]{3,}|time\.Sleep' src --include='*test*'
-grep -rnE '(password|secret|token|api_?key) *[:=] *["'"'"'][^"'"'"']{8,}' src
-```
+- Swallowed errors: an empty `catch` block, `except: pass`, `_ = err`, a `.catch` that returns nothing.
+- Work left behind: `TODO|FIXME|HACK`, and skipped tests: `\.skip\(|\bxit\(|t\.Skip\(`.
+- Fixed waits in test files only: `sleep\(|time\.Sleep`, and a `setTimeout` with three or more digits.
+- A secret written in code: `(password|secret|token|api_?key)`, then `:` or `=`, then a quoted value of
+  eight or more characters.
 
-Then the stack's own tools, when the repo has them: `go vet`, `staticcheck`, `npm audit`, `bun outdated`, `knip`, `ruff`, `swiftlint`.
+Then the stack's own tools, when the repo has them: `go vet`, `staticcheck`, `knip`, `ruff`, `swiftlint`, and the dependency audit and outdated reports the [`deps`](../deps/SKILL.md) skill lists.
 
 ## 3. Rank, then fix one at a time
 
