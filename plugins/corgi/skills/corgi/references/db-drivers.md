@@ -107,7 +107,7 @@ required:
   supabase:
     why: [Local auth + storage stack]
     checkCmd: supabase --version
-    install: [brew install supabase/tap/supabase]
+    install: ["<the install command from https://supabase.com/docs/guides/local-development/cli/getting-started>"]
 ```
 
 Full docs: [docs/drivers/supabase.md](https://github.com/Andriiklymiuk/corgi/blob/main/docs/drivers/supabase.md)

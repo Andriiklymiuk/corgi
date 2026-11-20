@@ -8,7 +8,7 @@ review pull requests, and keep the work moving while you are away from the desk.
 
 ## Requirements
 
-- The `corgi` CLI on `PATH` (`brew install andriiklymiuk/homebrew-tools/corgi`, or a
+- The `corgi` CLI on `PATH` ([install it](https://github.com/Andriiklymiuk/corgi/blob/main/docs/install.md): Homebrew, or a
   release binary from GitHub). Most skills run it.
 - `git`, and `gh` (GitHub) or `glab` (GitLab) for the skills that read or open pull
   requests.

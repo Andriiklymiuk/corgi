@@ -79,7 +79,7 @@ Localstack boots its individual AWS services asynchronously. Wait ~5-10s and re-
 ### supabase ❌ or hangs on `up`
 
 - **First run takes minutes** - supabase pulls 10+ container images. Watch terminal for `[+] Pulling N/M`. Don't kill it.
-- **`InvalidRequestException`** from `supabase status -o env` - cli too old. `brew upgrade supabase`.
+- **`InvalidRequestException`** from `supabase status -o env` - cli too old. Upgrade the Supabase CLI the way it was installed.
 - **Port 54321/54322/etc. taken** - old supabase project still running. `supabase stop --no-backup` from any project dir kills it globally.
 - **Auth users not seeded** - bootstrap.sh logs `auth users:` timing. Missing? `SERVICE_ROLE_KEY` empty in `supabase status`. Try `supabase status` standalone to confirm stack is healthy.
 - **Bucket creation 409** - already exists, idempotent skip. Not an error.
@@ -97,11 +97,11 @@ Seeding is only attempted when `--seed` / `-s` is passed to `corgi run`.
 
 ### `<provider> not found on PATH. Install: …`
 
-The tunnel binary is missing. Run the install command corgi prints (e.g. `brew install cloudflared`).
+The tunnel binary is missing. Run the install command corgi prints.
 
 ### `<provider> authentication required: …`
 
-Provider needs login. corgi prints the exact command to run (e.g. `ngrok config add-authtoken <TOKEN>`). Run it once, then retry `corgi tunnel`. cloudflared (Quick Tunnels mode) and localtunnel never need auth.
+Provider needs login. corgi prints the exact command to run. Run it once, then retry `corgi tunnel`. cloudflared (Quick Tunnels mode) and localtunnel never need auth.
 
 ### Tunnel comes up but webhook calls fail
 

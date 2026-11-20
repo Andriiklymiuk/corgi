@@ -59,11 +59,11 @@ default and `.corgi/memory/` exists, record it as a `decision` fact (confirm fir
 
    | Language | Measure | Install |
    |----------|---------|---------|
-   | Go | `gocyclo -over 0 <files>` · `gocognit -over 0 <files>` | `go install github.com/fzipp/gocyclo/cmd/gocyclo@latest` · `.../uudashr/gocognit/cmd/gocognit@latest` |
+   | Go | `gocyclo -over 0 <files>` · `gocognit -over 0 <files>` | [gocyclo](https://github.com/fzipp/gocyclo#installation) · [gocognit](https://github.com/uudashr/gocognit#installation) |
    | JS / TS | `npx eslint --no-eslintrc --parser-options=ecmaVersion:latest --rule 'complexity: [error, 0]' <files>` (each report line carries the count) | already in most repos |
-   | Python | `radon cc -s -a <files>` · `xenon --max-absolute B <files>` | `pipx install radon xenon` |
+   | Python | `radon cc -s -a <files>` · `xenon --max-absolute B <files>` | [radon](https://radon.readthedocs.io/en/latest/intro.html#installation) · [xenon](https://xenon.readthedocs.io/) |
    | Ruby | `rubocop --only Metrics/CyclomaticComplexity,Metrics/PerceivedComplexity <files>` | in the repo's bundle |
-   | Anything else (Swift, Kotlin, Rust, PHP, C) | `lizard -C 0 <files>` (`-w` warns over the threshold) | `pipx install lizard` |
+   | Anything else (Swift, Kotlin, Rust, PHP, C) | `lizard -C 0 <files>` (`-w` warns over the threshold) | [lizard](https://github.com/terryyin/lizard#installation) |
 
    No tool and no install → count by hand, per function, and say the count is manual.
 4. Rank touched functions by CC descending. Report the ranking with numbers before

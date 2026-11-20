@@ -29,6 +29,8 @@ jobs:
   stack-e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ secrets.REPO_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -50,9 +52,10 @@ jobs:
           plan-cache: false
 
       # Every service repo is private: let git use the token for all of them.
+      # git asks gh for the token on every clone and fetch (GH_TOKEN, set on the job).
+      # https://cli.github.com/manual/gh_auth_setup-git
       - name: Authenticate git
-        run: |
-          git config --global url."https://x-access-token:${{ secrets.REPO_TOKEN }}@github.com/".insteadOf "https://github.com/"
+        run: gh auth setup-git
 
       - name: Clone service repos
         run: corgi init --depth 1

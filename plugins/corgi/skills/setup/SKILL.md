@@ -28,11 +28,13 @@ print them at the end as a checklist, with the exact command or click.
 ### 1. The CLI
 
 ```bash
-command -v corgi || brew install andriiklymiuk/homebrew-tools/corgi
-brew trust andriiklymiuk/tools 2>/dev/null || true   # Homebrew 5 asks once; harmless otherwise
-corgi update                                          # or corgi upd
-corgi doctor                                          # required tools, Docker, ports
+command -v corgi    # missing? read the install page below and run what it says, then go on
+corgi update        # or corgi upd
+corgi doctor        # required tools, Docker, ports
 ```
+
+When `corgi` is not on `PATH`, open https://github.com/Andriiklymiuk/corgi/blob/main/docs/install.md and run its install
+step for this machine yourself (macOS, Linux or a release binary); do not hand it to the user.
 
 `corgi doctor --fix --yes` starts Docker and frees ports without asking;
 installing a missing tool asks unless `--yes`.
@@ -77,8 +79,8 @@ phone). Pick one, once:
 | choice | commands | manual part |
 |---|---|---|
 | same Wi-Fi, no tunnel | `corgi agent up --http 0.0.0.0:8765 --at-login` | none; phone opens `http://<lan-ip>:8765/app` |
-| Cloudflare named tunnel | `brew install cloudflared` · `cloudflared tunnel login` · `corgi agent tunnel setup corgi.yourdomain.com` | a domain on Cloudflare; the login opens a browser |
-| ngrok static domain | `brew install ngrok` · `ngrok config add-authtoken <token>` · `corgi agent tunnel setup <name>.ngrok-free.dev --provider ngrok` | free account, copy the dev domain from dashboard.ngrok.com/domains |
+| Cloudflare named tunnel | install `cloudflared` ([its docs](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/)) · `cloudflared tunnel login` · `corgi agent tunnel setup corgi.yourdomain.com` | a domain on Cloudflare; the login opens a browser |
+| ngrok static domain | install `ngrok` and add your authtoken ([its docs](https://ngrok.com/docs/getting-started/)) · `corgi agent tunnel setup <name>.ngrok-free.dev --provider ngrok` | free account, copy the dev domain from dashboard.ngrok.com/domains |
 
 After `tunnel setup`, `corgi agent restart` keeps the same URL.
 
