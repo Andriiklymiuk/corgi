@@ -12,8 +12,8 @@ does right now. Three clients show it:
 | [Corgi Agent Deck](https://github.com/Andriiklymiuk/corgi-agent-deck), Stream Deck | one key per session, Talk, Prompt and Budget keys |
 | [corgi-band](../plugins/corgi-band) mod, inside Claude Code | a band above the prompt with the sessions waiting on you and what this turn posted; `/corgi` opens the board in a pane |
 
-<p align="center"><img src="media/bar-showcase.gif" width="760" alt="Corgi Agents for Mac: home, dictation, a workspace, the board, the inbox, the accounts"></p>
-<p align="center"><sub>The Mac menu bar app: home, dictation, a workspace, the board, the inbox, the accounts.</sub></p>
+<p align="center"><img src="media/bar-showcase.gif" width="760" alt="Corgi Agents for Mac: home, dictation, a workspace, the board, the inbox, the idea pages, the accounts"></p>
+<p align="center"><sub>The Mac menu bar app: home, dictation, a workspace, the board, the inbox, the idea pages, the accounts.</sub></p>
 <p align="center"><img src="https://raw.githubusercontent.com/Andriiklymiuk/corgi_vscode_extension/main/media/sessions.png" width="380" alt="The Agent sessions view in VS Code"></p>
 
 <p align="center"><img src="https://raw.githubusercontent.com/Andriiklymiuk/corgi-agent-deck/main/media/deck-mk2.png" width="760" alt="Corgi Agent Deck on a Stream Deck"></p>

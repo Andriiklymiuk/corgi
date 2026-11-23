@@ -40,8 +40,8 @@ $ corgi agent up
 
 One scan pairs the phone. It gets its own token, revocable without touching your other devices. Each workspace remembers where it should open - personal projects in the Claude app, a work repo on a different Claude account in Chrome signed into that account. Save the launcher to your home screen and it is one tap after that.
 
-<p align="center"><img src="media/dashboard.gif" width="900" alt="The phone launcher: every Claude session on the machine, accounts and their windows, a card per repo with Open and Start, the sessions panel, doctor checks"></p>
-<p align="center"><sub>The launcher: every session on the machine, a card per repo, started from anywhere.</sub></p>
+<p align="center"><img src="media/dashboard.gif" width="900" alt="The launcher in a browser and on a phone: the board with its five columns and a task's text opened in place, a ticket moved from its inbox row, every Claude session with Allow and Deny, the repos with Open and Start"></p>
+<p align="center"><sub>The launcher in a browser and on a phone: the board, the inbox, every agent and repo. Light or dark, as the device is set.</sub></p>
 
 ## Adding your other repos
 

@@ -4,6 +4,7 @@
 // not drift from the CLI. scripts/capture-showcase.sh turns the frames into
 // docs/media/*.png and *.gif.
 import { mkdirSync, writeFileSync, rmSync, readFileSync } from "node:fs";
+import { launcherFrame, openText, pressButton, say } from "./launcher-frames.mjs";
 
 // Colours: the ANSI palette of utils/art, on a dark terminal.
 const c = { g: "#3fb950", r: "#ff7b72", y: "#e3b341", b: "#79c0ff", c: "#56d4dd", d: "#8b949e", w: "#e6edf3", m: "#d2a8ff" };
@@ -32,7 +33,7 @@ const captions = {
 	ci: "The whole stack on the PR branches and one e2e run, in CI",
 	stories: "An agent takes the ticket across three repos and opens three draft PRs",
 	phone: "A QR pairs the phone; from then on every session, ticket and permission is in your pocket",
-	dashboard: "The launcher: every session on the machine, a card per repo, started from anywhere",
+	dashboard: "The dashboard, in a browser and on a phone: the board, the inbox, every agent and repo",
 	telegram: "The same board and the same answers from a Telegram chat",
 	tunnel: "A public URL for any service, from one flag",
 	logs: "The logs of every service in one stream",
@@ -81,25 +82,6 @@ const css = `
   .cam .frame{position:absolute;left:40px;right:40px;top:170px;bottom:250px;border:2px solid rgba(255,225,0,.9);border-radius:12px}
   .cam .pill{position:absolute;left:50%;bottom:150px;transform:translateX(-50%);background:#ffd60a;color:#111;font-size:13px;font-weight:600;padding:8px 14px;border-radius:20px;white-space:nowrap;box-shadow:0 6px 20px rgba(0,0,0,.4)}
   .cam .shutter{position:absolute;left:50%;bottom:40px;transform:translateX(-50%);width:66px;height:66px;border-radius:50%;background:#fff;box-shadow:0 0 0 4px #111,0 0 0 6px #fff}
-  /* the launcher page, its own palette (cmd/mcp_launcher.go) */
-  .app{background:#0a0b0e;color:#eceef2;position:absolute;inset:0;padding:54px 16px 0;font-size:13px}
-  .brand{display:flex;align-items:center;gap:10px;margin-bottom:8px}
-  .logo{width:36px;height:36px;border-radius:12px;background:linear-gradient(135deg,#1e2634,#131824);border:1px solid #22242b;display:flex;align-items:center;justify-content:center;font-size:19px}
-  .brand h1{font-size:17px;margin:0}.brand small{display:block;color:#8f94a3;font-size:11px}
-  .ws{background:#141519;border:1px solid #22242b;border-radius:11px;padding:11px 11px 8px;margin:8px 0}
-  .head{display:flex;align-items:center;gap:9px}
-  .dot{width:8px;height:8px;border-radius:50%;background:#3a4152;flex:none}.dot.live{background:#6ee787}.dot.starting{background:#6ee787;opacity:.45}.dot.attention{background:#ffa657}
-  .name{font-weight:600;font-size:14px;flex:1}
-  .path{color:#63677a;font-size:10px;font-family:ui-monospace,Menlo,monospace;margin:2px 0 0 17px}
-  .meta{font-size:11px;color:#63677a;margin:4px 0 0 17px}.meta .live{color:#6ee787}.meta .warn{color:#ff7b72}.meta .why{color:#8f94a3}
-  .meta span+span::before{content:"·";margin:0 5px;color:#63677a}
-  .actions{display:flex;gap:5px;margin-top:9px;align-items:center;flex-wrap:wrap}
-  .go{background:#6ee787;color:#05110a;font-weight:700;font-size:12px;padding:6px 14px;border-radius:8px}
-  .go.tap{box-shadow:0 0 0 4px rgba(110,231,135,.35)}
-  .chip{border:1px solid #22242b;color:#8f94a3;font-size:10.5px;padding:5px 8px;border-radius:8px}
-  .top{display:flex;justify-content:space-between;margin-top:8px;padding-top:7px;border-top:1px solid #1a1c22;font-size:12px}
-  .top .when{color:#63677a;font-size:10.5px}
-  .sum{color:#8f94a3;font-size:11px;margin:0 0 6px 2px}.sum.hot{color:#ff7b72;font-weight:600}
 `;
 
 const term = (title, lines, { rows = lines.length, cursor = false, extra = "" } = {}) => {
@@ -545,149 +527,38 @@ const scene = (name, frames) => {
 }
 
 
-// ---- the launcher on the phone: three tabs, and a ticket moved from its row ----
+// ---- the dashboard: the real page (cmd/mcp_launcher.go), in a browser and on a phone ----
 {
-	const qr = readFileSync("scripts/showcase-qr.txt", "utf8").trimEnd().split("\n");
-	const up = [
-		"{g}${/} {B}corgi agent up{/}",
-		"",
-		"  ✓ workspace acme-api (registered)",
-		"  ✓ agent daemon running (pid 41902)",
-		"  ✓ starts at login (launchd) - survives a reboot",
-		"  ✓ public endpoint: https://blue-fox-42.trycloudflare.com/mcp",
-		"",
-		"  📱 scan to pair (single use, 10 minutes):",
-		"",
-		"{Q}" + qr.map((l) => `   ${l}`).join("\n"),
-		"",
-		"    or open: https://blue-fox-42.trycloudflare.com/pair#A7K2M9",
-		"",
-		"  the phone opens on the inbox - what the watch has seen:",
-		"    https://blue-fox-42.trycloudflare.com/app",
-	];
-
-	// Every string below is one the page prints: cmd/mcp_launcher.go.
-	const tabs = (on, n = { inbox: 3, kanban: 0, sessions: 3, stacks: 2, laptop: 0, settings: 0 }) => `<div class="tabs">` +
-		[["inbox", "Inbox"], ["kanban", "Board"], ["sessions", "Sessions"], ["stacks", "Stacks"], ["laptop", "Laptop"], ["settings", "Settings"]]
-			.map(([k, label]) => `<span class="tab${on === k ? " sel" : ""}${on === "→" + k ? " tap" : ""}">${label}${n[k] ? `<i>${n[k]}</i>` : ""}</span>`)
-			.join("") + `</div>`;
-
-	const ev = ({ ref, kind, title, acts, box, aim }) => `<div class="ev">
-		<div class="ehead">${box ? `<i class="box"></i>` : ""}<span class="eref">${ref}</span><span class="ekind">${kind}</span></div>
-		<div class="etitle">${title}</div>
-		<div class="erow">${acts.map((a) => a === "Work on it"
-			? `<span class="eb pri">${a}</span>`
-			: `<span class="eb${aim && a === "Move…" ? " tapme" : ""}">${a}</span>`).join("")}</div></div>`;
-
-	const inbox = (state, aim) => `
-		<p class="sum">From the tracker and your pull requests</p>
-		<div class="grp">acme-api</div>
-		${ev({ ref: "ABC-123", kind: "NEW ISSUE", box: 1, aim, acts: ["Open issue", "Work on it", "Move…", "Ignore"],
-			title: state === "moved" ? "Login redirect loops after SSO <span class=\"col\">In Progress</span>" : "Login redirect loops after SSO" })}
-		${ev({ ref: "ABC-128", kind: "NEW ISSUE", box: 1, acts: ["Open issue", "Work on it", "Move…", "Ignore"],
-			title: "Cache the workspace registry between polls" })}
-		${ev({ ref: "acme/web!41", kind: "PR REVIEW", acts: ["Open PR", "Work on it", "Ignore"],
-			title: "Draft: retry the upload on a 502" })}
-		<div class="grp">worked on for you</div>
-		<div class="ev done"><div class="ehead"><span class="eref">acme/web!38</span><span class="pill">1 PR</span></div>
-			<div class="etitle">opened merge_requests/44 · 6m</div></div>`;
-
-	const sheet = (picked) => `<div class="scrim"><div class="sheet"><div class="grab"></div>
-		<div class="sh3">Move ABC-123 to</div>
-		${["Backlog", "Ready", "In Progress", "In Review", "Staging", "Done", "Assign to me"]
-			.map((n) => `<div class="opt${picked === n ? " tap" : ""}">${n}</div>`).join("")}</div></div>`;
-
-	const sess = (dot, label, detail, badge) => `<div class="sess"><span class="sdot ${dot}"></span><span class="slabel">${label}</span><span class="sdetail">${detail}</span>${badge ? `<span class="sbadge">${badge}</span>` : ""}</div>`;
-	const sessions = `<p class="sum hot">Claude sessions on this machine · 1 waiting on you · 2 working</p>
-		${sess("needs", "acme-api", "permission: Bash go test · ctx 72%", "work")}
-		${sess("working", "ABC-123 login redirect", "Edit registry.go · ctx 43%")}
-		${sess("working", "web", "Bash npm test · ctx 58%")}
-		<div class="acct"><span><b>default</b><i class="bar"><i style="width:55%"></i></i>55% · resets 5:10pm</span><span><b>work</b><i class="bar hot"><i style="width:100%"></i></i>100% · resets 1:10pm</span></div>`;
-
-	const card = ({ name, path, branch, dot, meta, usage, btn }) => `<div class="ws">
-		<div class="head"><span class="dot ${dot}"></span><span class="name">${name}</span></div>
-		<div class="path">${path} <span style="color:#8a8f98">${branch}</span></div>
-		<div class="meta">${meta}</div>${usage ? `<div class="usage">${usage}</div>` : ""}
-		<div class="actions"><span class="go">${btn}</span><span class="chip">sessions ⌄</span><span class="chip">open in <b>app</b> ▾</span><span class="chip">Stop</span></div></div>`;
-	const stacks = `
-		${card({ name: "acme-api", path: "…/dev/acme-api", branch: "· main", dot: "live", meta: '<span class="live">2 live</span><span>up 2h</span><span>default account</span>', usage: "1.2M today · 8.4M this week", btn: "Open" })}
-		${card({ name: "web", path: "…/dev/web", branch: "· feat/search*", dot: "ready", meta: '<span class="live">online · no session</span><span>up 2h</span><span>work account</span>', btn: "Start" })}`;
-
-	const app = (tab, extra = "") => `<div class="app">
-		<div class="brand"><div class="logo">🐕</div><div><h1>corgi</h1><small>andrii-mbp · corgi 2.30.0 · daemon up</small></div><span class="chip" style="margin-left:auto">↻</span></div>
-		${tabs(tab.replace("→", ""))}
-		<div class="pane">${tab.endsWith("inbox") ? inbox(extra === "moved" ? "moved" : "", extra === "aim") : tab.endsWith("sessions") ? sessions : stacks}</div>
-		</div>`;
-
-	const withTap = (tab, extra) => app(tab, extra);
-	const phone = (screen, over = "") => `<div class="phone"><div class="notch"></div>${statusBar}<div class="screen">${screen}${over}</div><div class="home"></div></div>`;
-
-	const extraCss = `<style>
-	  .app{background:#08090a}
-	  .brand small{color:#8a8f98}
-	  .tabs{display:flex;gap:2px;padding:6px 0 8px;border-bottom:1px solid #212327;margin-bottom:8px}
-	  .tab{font-size:11.5px;color:#8a8f98;padding:4px 8px;border-radius:6px;display:flex;align-items:center;gap:5px}
-	  .tab.sel{color:#eceef1;background:#16181b}
-	  .tab.tap{box-shadow:0 0 0 3px rgba(94,106,210,.45)}
-	  .tab i{font-style:normal;font-size:9px;color:#5c6169;background:#1e2024;border-radius:9px;padding:1px 5px}
-	  .tab.sel i{color:#eceef1}
-	  .sum{color:#8a8f98;font-size:10.5px;margin:0 0 6px 2px}.sum.hot{color:#f85149;font-weight:600}
-	  .grp{color:#5c6169;font-size:9px;text-transform:uppercase;letter-spacing:.06em;margin:9px 0 4px 2px}
-	  .ev{background:#101113;border:1px solid #212327;border-radius:9px;padding:8px 9px;margin:5px 0}
-	  .ehead{display:flex;align-items:center;gap:6px}
-	  .box{width:11px;height:11px;border:1.5px solid #3a3f47;border-radius:3px;display:inline-block;flex:none}
-	  .eref{font-weight:600;font-size:11.5px}
-	  .ekind{font-size:8.5px;text-transform:uppercase;letter-spacing:.05em;color:#5c6169}
-	  .etitle{font-size:10.5px;color:#8a8f98;margin:3px 0 6px;line-height:1.35}
-	  .col{color:#5e6ad2;font-weight:600}
-	  .erow{display:flex;flex-wrap:wrap;gap:4px}
-	  .eb{font-size:9.5px;font-weight:500;color:#8a8f98;border:1px solid #212327;border-radius:6px;padding:4px 8px}
-	  .eb.pri{background:#5e6ad2;border-color:#5e6ad2;color:#fff}
-	  .eb.tapme{box-shadow:0 0 0 3px rgba(94,106,210,.4)}
-	  .ev.done .etitle{margin-bottom:0}
-	  .pill{font-size:8.5px;color:#3fb950;border:1px solid #1c3a24;background:#0f1f14;border-radius:10px;padding:1px 6px}
-	  .scrim{position:absolute;inset:0;background:rgba(0,0,0,.62);display:flex;align-items:flex-end}
-	  .sheet{width:100%;background:#101113;border-top:1px solid #212327;border-radius:14px 14px 0 0;padding:6px 0 12px}
-	  .grab{width:34px;height:4px;border-radius:3px;background:#2a2d33;margin:5px auto 8px}
-	  .sh3{font-size:9px;letter-spacing:.07em;text-transform:uppercase;color:#5c6169;margin:4px 14px 4px;font-weight:600}
-	  .opt{padding:9px 14px;font-size:11.5px;border-bottom:1px solid #1a1c1f}
-	  .opt:last-child{border-bottom:0}
-	  .opt.tap{background:#16181b;color:#5e6ad2;font-weight:600}
-	  .sess{display:flex;align-items:center;gap:7px;background:#101113;border:1px solid #212327;border-radius:8px;padding:6px 8px;margin:4px 0;font-size:11px}
-	  .sdot{width:7px;height:7px;border-radius:50%;background:#3fb950;flex:none;display:inline-block}
-	  .sdot.needs{background:#f85149}.sdot.working{background:#d29922}
-	  .slabel{font-weight:600;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-	  .sdetail{color:#8a8f98;font-size:9.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:46%}
-	  .sbadge{font-size:8px;font-weight:700;color:#8a8f98;border:1px solid #212327;border-radius:4px;padding:1px 4px;text-transform:uppercase}
-	  .acct{display:flex;gap:10px;font-size:9.5px;color:#8a8f98;margin:6px 0 0 2px}.acct b{color:#eceef1}
-	  .acct .bar{display:inline-block;width:38px;height:5px;border-radius:3px;background:#1e2024;vertical-align:middle;margin:0 4px;overflow:hidden}
-	  .acct .bar i{display:block;height:100%;background:#3fb950}.acct .bar.hot i{background:#f85149}
-	  .ws{background:#101113;border:1px solid #212327}
-	  .usage{font-size:9.5px;color:#5c6169;margin:3px 0 0 17px}
-	  .go{background:#5e6ad2;color:#fff;font-weight:600}
-	  .toast{position:absolute;left:14px;right:14px;bottom:18px;background:#16181b;border:1px solid #212327;border-radius:9px;padding:8px 11px;font-size:10.5px;color:#eceef1;z-index:5}
-	</style>`;
-
-	// The story: the inbox, a ticket moved from its row, then the other two tabs.
+	const sheet = { tab: "inbox", press: pressButton("inbox", "Move…") };
+	const moved = { tab: "inbox", moved: true, press: say("ABC-123 → In Progress") };
 	const shots = [
-		["inbox", "", ""],
-		["inbox", "", "aim"],                               // the finger is on Move…
-		["inbox", sheet(""), ""],
-		["inbox", sheet("In Progress"), ""],
-		["inbox", "", "moved"],
-		["→sessions", "", ""],
-		["sessions", "", ""],
-		["→stacks", "", ""],
-		["stacks", "", ""],
-		["inbox", "", "moved"],
+		[{ tab: "kanban" }, { tab: "inbox" }],
+		[{ tab: "kanban", press: openText("kanban") }, { tab: "inbox" }],
+		[{ tab: "kanban", press: openText("kanban") }, sheet],
+		[{ tab: "kanban", moved: true }, moved],
+		[{ tab: "sessions", moved: true }, { tab: "kanban", moved: true }],
+		[{ tab: "stacks", moved: true }, { tab: "sessions", moved: true }],
+		[{ tab: "inbox", moved: true }, { tab: "stacks", moved: true }],
+		[{ tab: "kanban", moved: true }, { tab: "inbox", moved: true }],
 	];
-	const frames = shots.map(([tab, over, extra], i) => {
-		let screen = withTap(tab, extra);
-		if (i === 1) screen = screen.replace('class="eb tapme"', 'class="eb tapme"'); // the ring is already on Move…
-		const toast = extra === "moved" && !over ? `<div class="toast">ABC-123 → In Progress</div>` : "";
-		return page(extraCss + term("corgi agent up", up, { rows: up.length, extra: phone(screen, over + toast) }), 1290);
-	});
-	scene("dashboard", frames);
+	const app = (name, frame) => {
+		writeFileSync(`${out}/${name}.html`, launcherFrame(frame));
+		return `<iframe src="${name}.html" scrolling="no"></iframe>`;
+	};
+	const look = `<style>
+	  iframe{border:0;display:block;transform-origin:0 0}
+	  .win{width:880px;border-radius:10px;overflow:hidden;background:#15161a;box-shadow:0 30px 70px rgba(0,0,0,.5);flex:none}
+	  .win .bar{height:38px;display:flex;align-items:center;padding:0 14px;background:#21262d;border-bottom:1px solid #30363d}
+	  .win .view{width:880px;height:612px;overflow:hidden}
+	  .win iframe{width:1120px;height:779px;transform:scale(.7857)}
+	  .phone iframe{width:390px;height:858px;transform:scale(.7487)}
+	</style>`;
+	const underTheNotch = "header{padding-top:58px!important}";
+	scene("dashboard", shots.map(([desk, phone], i) => page(
+		look +
+		`<div class="win"><div class="bar"><i></i><i></i><i></i><span>corgi agent dashboard</span></div><div class="view">${app(`desk-${i}`, desk)}</div></div>` +
+		`<div class="phone"><div class="notch"></div>${statusBar}<div class="screen">${app(`hand-${i}`, { ...phone, css: underTheNotch })}</div><div class="home"></div></div>`,
+		1290)));
 }
 
 // ---- Telegram: the same board and answers from a chat -------------------------------

@@ -141,7 +141,7 @@ for the apps.
 
 Not everything comes from a
 tracker. `corgi agent task add "Meta SDK on iOS" --workspace app --body "…"` -
-or **+ Task for later** on the phone and the page - puts a ticket you wrote
+or **Add a task** on the page, **Task for later** on the phone - puts a ticket you wrote
 in the inbox and the Inbox column, with a description and the workspace it is
 for. **Work on it** opens a session in that checkout with the description as
 its prompt; the task moves to Doing at once and the card says *picked from

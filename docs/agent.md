@@ -111,25 +111,36 @@ the phone paired across restarts; the quick tunnel does not.
 
 ### What the launcher looks like
 
-One card per repo: a dot, the repo, the checkout under it, what it is doing,
-what it has cost, and the running session on its own row - tap that row and
-the conversation opens. Above the cards, when the machine has editor windows
-open: the session board with a **New chat** box (prompt, window, model,
-account) and every live session with Allow / Deny / Send under it (see
-"Typing into a session from elsewhere"). The green button on the right is **Open** when a
+The same page on a phone and in a browser (`corgi agent dashboard` opens it
+here), light or dark as the device is set. Seven tabs:
+
+| tab | what is in it |
+|---|---|
+| **Ideas** | the idea pages, with Share |
+| **Agents** | a **New chat** box (prompt, window, model, account) when the machine has editor windows open, each account's five-hour window, and every live session with Allow / Deny / Send under it (see "Typing into a session from elsewhere") |
+| **Board** | a card per ticket: Inbox, Ready, Running, Blocked, Review side by side on a wide screen and stacked on a phone; Done is below them, shown on request. **Show all** opens a long description in place, **Comment** writes to the agent on a task, **Add a task**, **History** |
+| **Repos** | a row per repo, below |
+| **Inbox** | what waits for you, by workspace, and what corgi did. Tick rows to move, ignore or ship them together; a routine's row has **Read the report** |
+| **Laptop** | commands to run on the machine, to copy |
+| **Settings** | the connector, this browser, paired devices, doctor |
+
+A row per repo: a dot, the repo, the checkout under it, what it is doing,
+what it has cost, and the running session on its own line - tap that line and
+the conversation opens. The button on the right is **Open** when a
 session is up and **Start** when it is not. Under it sit the controls that
-change something: `sessions` (the full list, the timeline, and everything the
-daemon knows about that workspace), `open in` (app / browser / chrome),
-`options` (account and starting name), `Stop`, `hide`.
+change something: **Sessions** (the full list, the timeline, and everything the
+daemon knows about that workspace), **Open in** (app / browser / chrome),
+**Options** (account and starting name), **Stop**, **Hide**.
 
 The dot is the state, and the line under the path spells it out:
 
 | dot | state |
 |---|---|
 | green | a session is running (`N live`) |
-| green, pulsing | `starting` - supervised, nothing registered yet |
+| green ring | `online · no session` - reachable, nothing opened yet |
+| indigo | `starting` - supervised, nothing registered yet |
 | amber | `needs you` - a permission prompt or a question is blocking it |
-| red | `will not start` - the daemon refused, and the reason is on the card |
+| red | `will not start` - the daemon refused, and the reason is on the row |
 | red | `disabled after repeated failures` - the daemon stopped retrying |
 | grey | nothing running here |
 
@@ -140,15 +151,17 @@ allow or deny the edit*). Next to the path is the branch, with a `*` when the
 checkout has uncommitted work, which is the fastest way to tell two clones of
 the same repo apart.
 
-The `sessions` panel ends with **this workspace**: checkout, account,
+The **Sessions** panel ends with **This repo**: checkout, account,
 how long it has been supervised and what started it, restarts and the last
 exit cause, whether the machine is being held awake for it, and its pid. The
 same facts `corgi agent status` prints on the laptop.
 
 The list refreshes itself every 15 seconds while the page is on screen, so a
 name, a state or a session that changed on the machine shows up without a
-reload. It holds still while a `sessions` or `options` panel is open, so a
-refresh never collapses the panel under your thumb.
+reload. It holds still while a **Sessions** or **Options** panel is open, while
+a comment is half typed and while rows are ticked, so a refresh never takes
+what you were doing with it. With the laptop asleep or offline it says so and
+offers **Try again**.
 
 ### A launcher URL that never changes
 
@@ -240,8 +253,8 @@ is which. **Stop** on a session that belongs to an autostart workspace ends the
 session and puts the device back - the machine stays reachable.
 
 `corgi agent status` shows the resting state as `online` with *device only · no
-session opened at start*; the launcher card says *online · no session* with a solid
-green dot, and its button is **Start**. A restart of the daemon now leaves nothing
+session opened at start*; the launcher row says *online · no session* with a green
+ring, and its button is **Start**. A restart of the daemon now leaves nothing
 behind on claude.ai.
 
 Want the old behaviour for one workspace - a session already waiting in the list the
@@ -524,7 +537,7 @@ which no local probe can know:
 corgi agent session start acme --name "fix login redirect"
 ```
 
-The launcher asks for it too - the `options` chip on a stopped card - and
+The launcher asks for it too - **Options** on a stopped repo - and
 `corgi_session_start` takes a `name`.
 
 ### The timeline
@@ -559,12 +572,12 @@ $ corgi agent status
                        tokens 147.3M today · 1.0B this week
 ```
 
-The launcher shows the same two numbers on each card. Cache reads are included,
+The launcher shows the same two numbers on each repo. Cache reads are included,
 which is why the totals are large - that is the real traffic against the window.
 
 ### Hiding a workspace on the phone
 
-Each card has a **hide** chip. Hidden cards collapse into one `N hidden - show`
+Each repo has **Hide**. Hidden ones collapse into one **Show N hidden**
 button. It is stored in that browser only and changes nothing on the machine -
 it exists for the moment someone else is looking at your screen. To actually
 stop supervising a workspace, `corgi agent workspaces pause <id>` (sets
