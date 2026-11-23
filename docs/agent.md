@@ -1719,6 +1719,16 @@ Routes for the apps: `GET /launch/reviews` (`?fresh=1` asks the forge again),
 Your own pull request cannot be approved from here, someone else's cannot be
 merged, and nothing is posted under your name without the tap.
 
+### When something else replaced the corgi binary
+
+`corgi upd` refreshes the daemon by itself. When the binary was replaced
+another way (the Mac app's download build puts a newer corgi in place of the
+one it installed at `~/.local/bin/corgi`, a package manager, a copy by hand),
+`corgi agent upgraded` does the same: it rewrites the copy the login service
+starts and restarts a daemon that still runs the old version. The Mac app
+calls it after it updates its own copy; a corgi from Homebrew is never touched
+by the app, and `corgi upd` stays the way to update that one.
+
 ## Wake lock
 
 A machine that sleeps mid-session kills the session, the stack, and any tunnel.

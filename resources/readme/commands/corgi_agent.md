@@ -140,6 +140,7 @@ Getting started:
 * [corgi agent undo](corgi_agent_undo)	 - Drop what a session left uncommitted in its own worktree; --worktree drops the worktree and its branch too
 * [corgi agent uninstall](corgi_agent_uninstall)	 - Stop starting agent mode at login
 * [corgi agent up](corgi_agent_up)	 - One command from a stack directory to phone-startable: register, daemon, tunnel, pairing
+* [corgi agent upgraded](corgi_agent_upgraded)	 - After something other than corgi upd replaced the corgi binary: refresh the daemon's own copy and restart a daemon that still runs the old version
 * [corgi agent usage](corgi_agent_usage)	 - Every account's limits, where they are heading, and today's numbers
 * [corgi agent wake](corgi_agent_wake)	 - Wake a sleeping peer Mac on this network (Wake-on-LAN)
 * [corgi agent watch](corgi_agent_watch)	 - Watch the tracker and your pull requests: new issues, new comments, reviews - notify, or fix
