@@ -7,6 +7,9 @@ release:
 tag:
 	git describe --tags --abbrev=0
 
+macInstaller:
+	scripts/mac-installer/build.sh
+
 generateDocs:
 	go run . docs --generate
 	@if [ -d corgi-docs/docs ]; then \

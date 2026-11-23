@@ -43,6 +43,14 @@ Homebrew 5 asks you to `brew trust andriiklymiuk/tools` once. No Homebrew? One l
 curl -fsSL https://raw.githubusercontent.com/Andriiklymiuk/corgi/main/install.sh | sh
 ```
 
+On a Mac, with no terminal:
+[Install-corgi.dmg](https://raw.githubusercontent.com/Andriiklymiuk/corgi/main/resources/mac/Install-corgi.dmg).
+Open it and double-click **Install corgi**. It runs the line above, starts
+`corgi agent` now and at login, turns on the hooks that feed the board, and
+pairs the Corgi app from the App Store with it. A corgi that is already on the
+Mac is used as it is. The Corgi app's **Install corgi** button opens the same
+file. Its source is [scripts/mac-installer](scripts/mac-installer).
+
 Windows, Scoop, mise, pkgx, shell completion: [full install guide](docs/install.md).
 
 In Claude Code with the plugin, **`/corgi:setup`** installs the rest: VS Code extension, menu bar app, the daemon at login with a tunnel and the pairing QR, notifications, session tracking. It lists the few clicks only you can do.
