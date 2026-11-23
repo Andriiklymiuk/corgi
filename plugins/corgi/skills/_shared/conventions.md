@@ -222,7 +222,9 @@ cannot do itself - is written down where it will be found, not only said in chat
 A person who has to ask twice what to run, or learns of a manual step at merge time,
 was not told. Written so it can be done without a question:
 
-- **Only what only they can do.** Merging, reviewing and waiting are not steps.
+- **Only what only they can do.** Merging, reviewing and waiting are not steps. Neither is a question the
+  ticket, the code or a read-only staging query answers: look there before you hand over a query, above
+  all one on production.
 - **Where, then what.** A direct link to the exact page, then the name of the field or key, then
   the value or the command.
 - **A secret is a command, not a line number:** the key's name, then a one-liner that puts the
@@ -235,11 +237,19 @@ was not told. Written so it can be done without a question:
   red test, without saying so in the same line and why. A worktree with no installed
   dependencies runs the hook's own command through a checkout that has them, or installs
   them once; bypassing the hook because the tree is bare is a bypass.
+- A lint rule your change trips is fixed in the code. A new entry in an ignore or todo list, or a
+  disable comment, is a bypass: say it and why, and expect "fix it" as the answer.
 - A flaky test is re-run before the commit, not explained after it.
 - Rewriting a branch other people have fetched (a rebase, a `--force-with-lease`) is
   said first in one line with the tree diff it produces (`0 files` when it is a pure
   rebase), and the reply notes that the forge will show stale "recently pushed" banners
   for a while.
+
+## The command they named is the command
+
+When a build, release or deploy command the person named fails, say why it failed and which one you
+would try next, and stop there. Another target signs, uploads or spends differently; swapping it in is
+their call. Retrying the same command after fixing the cause is fine.
 
 ## Ask once, grouped, for what needs a person's hand
 

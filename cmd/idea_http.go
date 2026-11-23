@@ -150,10 +150,12 @@ func ideaDocument(dir string, id *idea.Idea, withHTML, trusted bool) map[string]
 // renderIdeaHTML is the page as HTML: raw HTML in the markdown is dropped,
 // and no smart quotes, so the words on the screen are the words in the
 // file and a highlight can be found again.
-func renderIdeaHTML(md string) string {
+func renderIdeaHTML(md string) string { return renderMarkdown(md, 0) }
+
+func renderMarkdown(md string, more blackfriday.Extensions) string {
 	r := mediaRenderer{blackfriday.NewHTMLRenderer(blackfriday.HTMLRendererParameters{Flags: blackfriday.UseXHTML | blackfriday.SkipHTML | blackfriday.Safelink})}
 	return string(blackfriday.Run([]byte(htmlMediaToMarkdown(md)), blackfriday.WithRenderer(r),
-		blackfriday.WithExtensions(blackfriday.CommonExtensions&^blackfriday.Autolink|blackfriday.AutoHeadingIDs)))
+		blackfriday.WithExtensions(blackfriday.CommonExtensions&^blackfriday.Autolink|blackfriday.AutoHeadingIDs|more)))
 }
 
 // ideaTrusted says the request carries the dashboard's own token or a

@@ -182,9 +182,10 @@ func (d *Daemon) routineReport(spec WatchSpec, e watch.Event, out string, failed
 		return
 	}
 	headline := routineHeadline(out)
+	opens := d.runLink(e.Key)
 	if failed != nil {
 		headline = "failed: " + failed.Error()
-		if logPath != "" {
+		if logPath != "" && opens == "" {
 			headline += " - log: " + logPath
 		}
 	}
@@ -204,11 +205,21 @@ func (d *Daemon) routineReport(spec WatchSpec, e watch.Event, out string, failed
 	if len(links) > 0 {
 		body = watch.PullLines(body, links)
 	}
-	link := report.URL
-	if link == "" {
-		link = fileLink(logPath)
+	body += d.filedLines(spec, e, out)
+	go d.ring(attention{title: notifyTitlePrefix + spec.Workspace, body: body, workspace: spec.Workspace, link: firstNonEmpty(report.URL, opens), run: e.Key})
+}
+
+const maxFiledLines = 5
+
+func (d *Daemon) filedLines(spec WatchSpec, e watch.Event, out string) string {
+	var b strings.Builder
+	for i, t := range watch.TasksFiledBy(watch.LoadTasks(d.Dir).Tasks, spec.Workspace, e.At, out) {
+		if i == maxFiledLines {
+			break
+		}
+		b.WriteString("\n" + t.Ref() + " " + clipText(watch.TaskHeadline(t), 100))
 	}
-	go d.ring(attention{title: notifyTitlePrefix + spec.Workspace, body: body, workspace: spec.Workspace, link: link, run: e.Key})
+	return b.String()
 }
 
 var headlineLabel = regexp.MustCompile(`(?i)^(headline|digest[^:]{0,40}):\s*`)

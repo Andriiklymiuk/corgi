@@ -37,7 +37,7 @@ func TestSelfCheckWithNothingWrongSaysSo(t *testing.T) {
 	if one.Headline() != "3 unattended runs in 7 days: 1 thing worth a look" {
 		t.Fatalf("%q", one.Headline())
 	}
-	if got := sortedGaps(map[Gap]int{GapNoTool: 1, GapNoDatabase: 3, GapNoDevice: 1}); got[0] != GapNoDatabase || got[1] != GapNoDevice {
+	if got := sortedGaps(map[Gap][]string{GapNoTool: {"a"}, GapNoDatabase: {"a", "b", "c"}, GapNoDevice: {"a"}}); got[0] != GapNoDatabase || got[1] != GapNoDevice {
 		t.Fatalf("most first, then by name: %v", got)
 	}
 	if runsWord(1) != "run" || itemsWord(2) != "items" {

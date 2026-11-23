@@ -229,7 +229,7 @@ func registerAgentMCPTools(s *server.MCPServer) {
 				"stack and no tunnel, so it works on a bad connection. This is usually the best way to show someone "+
 				"what changed. Large patches are truncated rather than dropped."),
 		composeOpt,
-		mcp.WithString("base", mcp.Description("Base branch to compare against (default: main)")),
+		mcp.WithString("base", mcp.Description("Base branch to compare against (default: each repository's own default branch)")),
 		mcp.WithString("branch", mcp.Description("Diff the existing worktrees of this branch instead of the main checkouts. Does not create anything - run corgi_worktrees_materialize first.")),
 		mcp.WithBoolean("includePatch", mcp.Description("Include the unified diff per file (default true)")),
 		mcp.WithBoolean("surface", mcp.Description("Only the changed surface: exported symbols, routes, contracts, migrations and config that changed, per repository, with removals and signature changes marked breaking. Read this before the diff. Returns {repos, markdown}.")),

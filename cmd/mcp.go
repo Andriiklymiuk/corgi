@@ -462,6 +462,7 @@ func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 	ideaAutoAnswerHere = true
 	mux.Handle(boardSharePath, boardShareHandler())
 	mux.Handle(boardSharePath+"/", boardShareHandler())
+	mux.HandleFunc(runPagePath, runPageHandler)
 
 	if token != "" || deviceStore != "" {
 		launchTimingsDir = agentDirOrEmpty()

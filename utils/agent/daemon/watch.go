@@ -325,8 +325,9 @@ func (d *Daemon) startWatches(ctx context.Context) {
 				d.advanceWork(ctx)
 				go d.refreshInboxStates(ctx, spec)
 			},
-			Asleep:  func(now time.Time) bool { return dayOff(spec, now) },
-			Metered: onMeteredLink}
+			Asleep:    func(now time.Time) bool { return dayOff(spec, now) },
+			Elsewhere: func(e watch.Event) bool { return d.ownedElsewhere(spec, e) },
+			Metered:   onMeteredLink}
 		d.watchers[spec.Workspace] = w
 		d.fixBusy[spec.Workspace] = make(chan struct{}, slotsOf(spec))
 		if len(live) > 0 && spec.Interval > 0 {
@@ -421,6 +422,23 @@ func (s WatchSpec) mayTake(e watch.Event) bool {
 		return len(s.Repos) == 0
 	}
 	return true
+}
+
+func (d *Daemon) ownedElsewhere(spec WatchSpec, e watch.Event) bool {
+	switch e.Kind {
+	case watch.KindPRComment, watch.KindPRReview, watch.KindReviewRequested, watch.KindCIFailed:
+	default:
+		return false
+	}
+	if spec.owns(e) {
+		return false
+	}
+	for _, other := range d.Watches {
+		if other.Workspace != spec.Workspace && other.owns(e) && other.watchesSource(e.Source) && other.Rules.Match(e) {
+			return true
+		}
+	}
+	return false
 }
 
 func (d *Daemon) WatchIdentity(source string) string {
@@ -1448,10 +1466,10 @@ func routineScope(spec WatchSpec, e watch.Event) string {
 	}
 	account := claudeAccountDir(spec)
 	projects := filepath.Join(account, "projects")
-	return "\n\nThis workspace is " + spec.Dir + " and its agents run on the Claude account in " + account + ". " +
+	return "\n\nThis workspace is " + spec.Dir + " (`" + spec.Workspace + "`) and its agents run on the Claude account in " + account + ". " +
 		"Read only this workspace's own sessions and runs, never another account's or another workspace's: its sessions are in " + projects +
-		", in the folders named after " + spec.Dir + " (the retro reads them with `python3 <improve-skill base directory>/references/mine_sessions.py --root " + projects +
-		" --project " + spec.Dir + " --last 30`), and its runs with `--workspace .`."
+		", in the folders named after " + spec.Dir + " (the retro reads them with `corgi agent helper mine-sessions --root " + projects +
+		" --project " + spec.Dir + " --days 7`), and its runs with `--workspace .`."
 }
 
 func unattendedSuffix(spec WatchSpec, e watch.Event) string {
@@ -1740,6 +1758,11 @@ func (d *Daemon) isolateFix(spec WatchSpec, e watch.Event, fix *harness.Print, l
 			fmt.Sprintf("fix for %s did not start: could not create worktrees: %v", e.Ref, err), spec.Workspace, e.URL)
 		return noop, false
 	}
+	if len(trees) == 0 {
+		fmt.Fprintf(logFile, "=== no worktree: %s is not a repository of this workspace\n", strings.Join(projects, ", "))
+		fix.Prompt += PullElsewhereNote(projects)
+		return noop, true
+	}
 	d.watchState.Fixes.SetBranch(e.Key, branch)
 	if onOwnPullRequest(e) {
 		fix.Prompt += PullIsolationNote(trees)
@@ -1861,7 +1884,7 @@ func (d *Daemon) fixFailed(ctx context.Context, run fixRun, runErr error, logFil
 		d.routineReport(spec, e, run.out, errors.New(why), run.logPath)
 		return
 	}
-	body := fmt.Sprintf("fix for %s failed: %v - log: %s", e.Ref, why, run.logPath)
+	body := fmt.Sprintf("fix for %s failed: %v - log: %s", e.Ref, why, firstNonEmpty(d.runLink(e.Key), run.logPath))
 	if retry {
 		body += fmt.Sprintf(" - one retry in %s", retryCrashAfter)
 	}
@@ -1890,12 +1913,17 @@ func (d *Daemon) fixDone(ctx context.Context, run fixRun) {
 		d.watchState.Fixes.Finish(r.Key, nil, "in one run with "+e.Ref, "", time.Now())
 	}
 	body, note := fixDoneBody(e, links, out)
+	if e.Kind == watch.KindRoutine {
+		note = clipText(routineHeadline(out), 160)
+	}
 	d.watchState.Fixes.Finish(e.Key, links, note, "", time.Now())
 	body += d.judgeRun(ctx, run, links)
 	d.replyOnTask(e, strings.TrimSpace(strings.Join(append(append([]string{}, links...), note), " ")))
 	d.watchState.Fixes.SetOutcome(e.Key, watch.OutcomeOf(e.Kind, out))
-	d.watchState.Fixes.SetLeft(e.Key, watch.LeftFor(out))
-	d.watchState.Fixes.SetGaps(e.Key, watch.GapsIn(out))
+	if !watch.ReadOnlyRoutine(e) {
+		d.watchState.Fixes.SetLeft(e.Key, watch.LeftFor(out))
+		d.watchState.Fixes.SetGaps(e.Key, watch.GapsIn(out))
+	}
 	d.watchState.Fixes.SetHandover(e.Key, runHandover(spec.Dir, e.Ref, run.started, out), time.Now())
 	d.mirrorHandoff(spec, e.Ref, run.started)
 	d.blockIfRunSaidSo(spec, e, run.started)
@@ -2343,6 +2371,12 @@ func PullIsolationNote(trees []string) string {
 		anotherRepoHint("<pr-branch>") + "\n- " + strings.Join(trees, "\n- ")
 }
 
+func PullElsewhereNote(projects []string) string {
+	return "\n\nThe pull request is in " + strings.Join(projects, ", ") + ", which is not a repository of this workspace, so there is no worktree for it. " +
+		"Clone it into a new folder in your scratchpad or temp folder, check out the pull request's own branch there, commit and push there, and remove the clone when you are done. " +
+		"Change nothing in this workspace's folder or in any other checkout on this machine."
+}
+
 func anotherRepoHint(branch string) string {
 	return "Need a repository that is not listed? `corgi worktree add <service> --branch " + branch + "` from the workspace folder makes one and prints its path:"
 }
@@ -2411,11 +2445,15 @@ func (d *Daemon) blockIfRunSaidSo(spec WatchSpec, e watch.Event, started time.Ti
 }
 
 func RunLog(agentDir, key string, n int) string {
+	return watch.TailLines(WholeRunLog(agentDir, key), n)
+}
+
+func WholeRunLog(agentDir, key string) string {
 	data, err := os.ReadFile(filepath.Join(agentDir, "watch", "runs", safeName(key)+".log"))
 	if err != nil {
 		return ""
 	}
-	return watch.TailLines(string(data), n)
+	return string(data)
 }
 
 type runReceipt struct {

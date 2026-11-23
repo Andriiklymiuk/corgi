@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -110,6 +109,7 @@ type Daemon struct {
 	NotifyHere       func(title, body string)
 	NotifyAway       func(title, body, link string) func()
 	LinkFor          func(workspaceID string) string
+	RunLink          func(key string) string
 	Pickup           func(workspace string, e watch.Event)
 	ClaimTicket      func(workspace string, e watch.Event) (ok bool, holder string, err error)
 	Delivered        func(workspace string, e watch.Event, prs []string)
@@ -807,11 +807,11 @@ func (d *Daemon) ringHere(a attention, link string) {
 	}
 }
 
-func fileLink(path string) string {
-	if path == "" {
+func (d *Daemon) runLink(key string) string {
+	if d.RunLink == nil || key == "" {
 		return ""
 	}
-	return (&url.URL{Scheme: "file", Path: path}).String()
+	return d.RunLink(key)
 }
 
 func (d *Daemon) attentionHeld(workspaceID, key, body, sessionID string) string {

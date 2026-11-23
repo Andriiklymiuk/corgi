@@ -384,3 +384,31 @@ func TestDiffBudgetsTheWholeResponse(t *testing.T) {
 		}
 	}
 }
+
+func TestDiffWithNoBaseUsesEachReposOwnDefaultBranch(t *testing.T) {
+	repo := newRepo(t, filepath.Join(t.TempDir(), "web"))
+	gitIn(t, repo, "branch", "main-old")
+	gitIn(t, repo, "branch", "-m", "trunk")
+	gitIn(t, repo, "branch", "main", "main-old")
+	if err := os.WriteFile(filepath.Join(repo, "shipped.ts"), []byte("export const a = 1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, repo, "add", ".")
+	gitIn(t, repo, "commit", "-qm", "on trunk since")
+	gitIn(t, repo, "update-ref", "refs/remotes/origin/trunk", "HEAD")
+	gitIn(t, repo, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/trunk")
+	gitIn(t, repo, "checkout", "-qb", "feature")
+	if err := os.WriteFile(filepath.Join(repo, "mine.ts"), []byte("export const b = 2\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, repo, "add", ".")
+	gitIn(t, repo, "commit", "-qm", "mine")
+
+	got := DiffStack(map[string]string{"web": repo}, "", true)
+	if len(got.Repos) != 1 || len(got.Repos[0].Files) != 1 || got.Repos[0].Files[0].Path != "mine.ts" {
+		t.Fatalf("a stale main is not the base of a repo whose default is trunk: %+v", got.Repos)
+	}
+	if named := DiffStack(map[string]string{"web": repo}, "main", true); len(named.Repos[0].Files) != 2 {
+		t.Fatalf("a base that was asked for is kept: %+v", named.Repos)
+	}
+}

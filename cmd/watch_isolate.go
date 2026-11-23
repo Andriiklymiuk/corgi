@@ -50,28 +50,28 @@ func stackFixBranch(dir, branch string, bases []string) []utils.StackedRepo {
 func isolateFixWorktreesIn(dir, branch string, projects []string) ([]string, error) {
 	isolateMu.Lock()
 	defer isolateMu.Unlock()
-	composePath := ""
-	for _, name := range []string{utils.CorgiComposeDefaultName, "corgi-compose.yaml"} {
-		if _, err := os.Stat(filepath.Join(dir, name)); err == nil {
-			composePath = filepath.Join(dir, name)
-			break
-		}
-	}
+	composePath := composeIn(dir)
 	if composePath == "" {
 		if !dirIsWorkspace(dir) {
 			return nil, fmt.Errorf("no corgi-compose.yml and no git repository in %s", dir)
 		}
-		wt, err := utils.MaterializeBranchInRepo(dir, branch)
-		if err != nil {
-			return nil, err
+		if here, known := utils.RepoIsOneOf(dir, projects); known && !here && len(projects) > 0 {
+			return nil, nil
 		}
-		return []string{wt}, nil
+		return workspaceWorktree(dir, branch)
 	}
 	corgi, _, err := loadComposeForAgent(composePath)
 	if err != nil {
 		return nil, err
 	}
-	set, err := utils.MaterializeBranchAcrossRepos(corgi, dir, branch, utils.ServicesInRepos(corgi, projects))
+	services := utils.ServicesInRepos(corgi, projects)
+	if len(projects) > 0 && len(services) == 0 {
+		if here, _ := utils.RepoIsOneOf(dir, projects); here {
+			return workspaceWorktree(dir, branch)
+		}
+		return nil, nil
+	}
+	set, err := utils.MaterializeBranchAcrossRepos(corgi, dir, branch, services)
 	if err != nil {
 		return nil, err
 	}
@@ -91,6 +91,14 @@ func isolateFixWorktreesIn(dir, branch string, projects []string) ([]string, err
 		return nil, fmt.Errorf("no repository in %s could take a worktree", dir)
 	}
 	return dirs, nil
+}
+
+func workspaceWorktree(dir, branch string) ([]string, error) {
+	wt, err := utils.MaterializeBranchInRepo(dir, branch)
+	if err != nil {
+		return nil, err
+	}
+	return []string{wt}, nil
 }
 
 func composeIn(dir string) string {

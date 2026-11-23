@@ -55,21 +55,39 @@ and run `corgi docs commands <the skill>` after any edit that names a corgi comm
 ## Retro mode (sessions named)
 1. **Read the primary source, not your memory of it.** Default to this session. For more, run
    `corgi agent helper mine-sessions --last 30` (the program ships inside corgi; if corgi does not know `helper`, run `corgi upd` first; it reads every
-   `~/.claude*/projects`; for one workspace add `--root <its account>/projects --project <its folder>`,
-   as a routine's prompt names them; never search the home folder for the script or the transcripts): tool errors, the same
-   failing call sent twice, skill use, where the person stepped in. Open the transcript behind any
-   line you will act on. Its output holds real project data and stays out of the skill. In a corgi
-   workspace, the unattended runs count too: `corgi agent scorecard`, `corgi agent selfcheck`,
+   `~/.claude*/projects`, only sessions a person typed in; for one workspace add `--root <its account>/projects --project <its folder>`,
+   for one week `--days 7`, as a routine's prompt names them; never search the home folder for the script or the transcripts): tool errors, the same
+   failing call sent twice, skill use, and each place a person may have stepped in, with what the agent
+   did before and answered after. Its output holds real project data and stays out of the skill. In a corgi
+   workspace, the unattended runs count too: `corgi agent selfcheck --workspace .`,
    `corgi agent history --workspace . --json`, and a run's own log with `corgi agent history log <ref>`.
    The friction agents wrote down as it happened is in `corgi feedback list --json`: each note is
    evidence already, with the corgi version it was written against.
 2. **Weigh what the person said over what the tools said.** A correction costs more than an error, and an
-   error the agent recovered from in one step may cost nothing. Count, and quote the count.
-3. **Group by cause, not by symptom,** and pick the layer above for each.
-4. **Rank by what it costs across sessions,** severity first. Show the table: cause, count, layer, fix.
-5. **Apply** what the person asked for, under the guardrails below. A retro may touch several skills; each
+   error the agent recovered from in one step may cost nothing. Count, and name what is behind the count.
+3. **Group by cause, not by symptom,** and pick the layer above for each. Four quotes that share a word
+   ("why did you…") are four causes until the exchanges say otherwise.
+4. **Try to kill each cause** (below). Expect to drop most; none left is a good retro.
+5. **Rank by what it costs across sessions,** severity first. Show the table: cause, count, layer, fix,
+   and under it what you dropped and why.
+6. **Apply** what the person asked for, under the guardrails below. A retro may touch several skills; each
    edit still has its evidence. Say what you did not read, and that a rule is not proven until a later
    session behaves differently.
+
+### Before a cause counts
+Each of these has let a wrong fix through. One that fails drops the cause or changes it.
+- **The exchange.** `corgi agent helper mine-sessions --show <session>:<line>`. A question whose answer was
+  "yes, done" is no correction. A person may be quoting the agent back, and agreeing or not turns on one
+  word. Write in one line what they meant.
+- **The facts then.** Check the log, the forge, the store or git at that moment: the sentence that
+  complains can be wrong about what happened.
+- **The numbers.** Name the runs behind each count. Reports that only talk about a problem, other
+  workspaces and headless runs do not count.
+- **The replay.** Put the change in place and walk that moment again. It goes the same way → wrong change.
+- **What it breaks.** Read the commands, scripts and workflows that use what the change refuses.
+- **What is there.** The guard, the skills, the settings, the memory, the commits since.
+- **Whether it comes back.** Once, noticed at once, undone for free → drop. One time is enough when the
+  result left the machine wrong, or the person said never again.
 
 ## Summary mode (no path)
 Edit nothing. Return:
@@ -158,6 +176,7 @@ a skill you can already describe from lived evidence.
 - Writing "always remember to X" for something a linter or a hook could refuse → build the check.
 - Adding to a file every session loads → a pointer, or somewhere else.
 - Rule already there → sharpen, don't duplicate.
+- A cause built on a quote whose answer you have not read → `--show` it first.
 - Asserting a one-stack / one-version / one-device quirk as a universal rule → conditionalize
   it ("if X on yours…") and state only the transferable fix; verify-per-app, don't assume.
 - Edit when no path given → wrong mode, switch to summary.

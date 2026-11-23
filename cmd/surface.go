@@ -37,7 +37,7 @@ review it before the diff.
 }
 
 func init() {
-	surfaceCmd.Flags().String("base", "", "base branch (default: main)")
+	surfaceCmd.Flags().String("base", "", "base branch (default: each repository's own default branch)")
 	surfaceCmd.Flags().String("branch", "", "diff the existing worktrees of this branch instead of the checkouts")
 	rootCmd.AddCommand(surfaceCmd)
 }

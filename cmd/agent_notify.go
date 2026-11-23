@@ -94,13 +94,29 @@ func focusCommand(sessionID string) []string {
 }
 
 func preferLocalLink(link string) string {
-	if link == "" || link != launcherURL() {
+	public := strings.TrimSuffix(launcherURL(), "/app")
+	if link == "" || public == "" {
+		return link
+	}
+	path, ours := strings.CutPrefix(link, public)
+	if !ours || (path != "/app" && !strings.HasPrefix(path, runPagePath)) {
 		return link
 	}
 	if local := localLauncherURL(); local != "" {
-		return local
+		return strings.TrimSuffix(local, "/app") + path
 	}
 	return link
+}
+
+func awayLink(link string) string {
+	u, err := url.Parse(strings.TrimSpace(link))
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return ""
+	}
+	if ip := net.ParseIP(u.Hostname()); strings.EqualFold(u.Hostname(), "localhost") || (ip != nil && ip.IsLoopback()) {
+		return ""
+	}
+	return u.String()
 }
 
 func webhookNotifier(rawURL string, client *http.Client) func(title, body string) {
@@ -227,7 +243,7 @@ func webhookShapeFor(host string) string {
 }
 
 func buildNotifyRequest(shape, target, title, body, link string) (*http.Request, error) {
-	if link != "" && strings.Contains(body, link) {
+	if link = awayLink(link); link != "" && strings.Contains(body, link) {
 		link = ""
 	}
 	if shape == webhookNtfy {

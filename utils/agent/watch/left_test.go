@@ -130,3 +130,19 @@ func TestAReviewRunGetsAnOutcomeFromWhatItPosted(t *testing.T) {
 		t.Fatalf("an old review run gets its outcome from the log: %+v", rec.Said)
 	}
 }
+
+func TestAHeadingAboutNextWeekIsNotAListForAPerson(t *testing.T) {
+	for out, want := range map[string]int{
+		"**Next week**\n- TASK-7: no such message.\n": 0,
+		"## Next week\n- Watch the count.\n":          0,
+		"**Next**\n- Press Work on TASK-7.\n":         1,
+		"## Next\n\n- Press Work on TASK-7.\n":        1,
+		"**Next:** one thing\n- Press Work.\n":        1,
+		"## Next steps\n- Press Work.\n":              1,
+		"## Left for your team\n- Press Work.\n":      0,
+	} {
+		if got := LeftFor(out); len(got) != want {
+			t.Errorf("%q: %v", out, got)
+		}
+	}
+}

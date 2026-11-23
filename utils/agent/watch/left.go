@@ -38,7 +38,7 @@ const (
 )
 
 var (
-	leftHeadings = regexp.MustCompile(`(?im)^\s*(?:#{1,4}\s*|\*\*)(?:left for you|what you do next|you do next|what you need to do|what is left for you|what you need to do next|next)\b[^\n]*$`)
+	leftHeadings = regexp.MustCompile(`(?im)^\s*(?:#{1,4}\s*|\*\*)(?:(?:left for you|what you do next|you do next|what you need to do|what is left for you|what you need to do next|next steps?)\b|next(?:\*\*|:|[ \t]*$))[^\n]*$`)
 	anyHeading   = regexp.MustCompile(`^\s*(?:#{1,4}\s|\*\*[^*]+\*\*\s*$)`)
 	bulletLine   = regexp.MustCompile(`^\s*(?:[-*•]|\d+[.)])\s+(.*\S)`)
 	nothingLeft  = regexp.MustCompile(`(?i)^(?:nothing|none|no action|you do nothing|i |i'm |i've |i'll |ci (?:is|was) not watched|corgi (?:will|watches)|merge (?:it |this |them )?when(?:ever)? you)`)
@@ -410,7 +410,7 @@ func backfillSaid(r *FixRecord, logOf func(key string) string) bool {
 }
 
 func backfillLeft(r *FixRecord, logOf func(key string) string, pulls map[string]PullStatus, now time.Time) bool {
-	if len(r.Left) > 0 || len(r.Gaps) > 0 || now.Sub(r.FinishedAt) > leftKeepOpen {
+	if len(r.Left) > 0 || len(r.Gaps) > 0 || r.reportOnly() || now.Sub(r.FinishedAt) > leftKeepOpen {
 		return false
 	}
 	run := LastRunOf(logOf(r.Key))

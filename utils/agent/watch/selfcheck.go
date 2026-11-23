@@ -23,10 +23,10 @@ var gapFix = map[Gap]string{
 
 type selfCheckTally struct {
 	runs       int
-	gaps       map[Gap]int
+	gaps       map[Gap][]string
 	env        map[string]int
-	failed     int
-	nothing    int
+	failed     []string
+	nothing    []string
 	nothingUSD float64
 }
 
@@ -39,14 +39,16 @@ func (t *selfCheckTally) add(r FixRecord) {
 		return
 	}
 	t.runs++
-	for _, g := range r.Gaps {
-		t.gaps[g]++
+	if !r.reportOnly() {
+		for _, g := range r.Gaps {
+			t.gaps[g] = append(t.gaps[g], runName(r))
+		}
 	}
 	if r.Error != "" && !r.Forgiven {
-		t.failed++
+		t.failed = append(t.failed, runName(r))
 	}
 	if r.Said == "nothing" && Kind(r.Kind) != KindRoutine && Kind(r.Kind) != KindReviewRequested {
-		t.nothing++
+		t.nothing = append(t.nothing, runName(r))
 		t.nothingUSD += r.CostUSD
 	}
 }
@@ -63,9 +65,22 @@ func (t selfCheckTally) envLine() string {
 	return "runs that never started because of the machine: " + strings.Join(parts, ", ") + " - they were tried again on their own"
 }
 
+func RecordsOf(records []FixRecord, workspace string) []FixRecord {
+	if workspace == "" {
+		return records
+	}
+	var own []FixRecord
+	for _, r := range records {
+		if r.Workspace == workspace {
+			own = append(own, r)
+		}
+	}
+	return own
+}
+
 func SelfCheckOf(records []FixRecord, ticked map[string]LeftTick, now time.Time, days int) SelfCheck {
 	since := now.AddDate(0, 0, -days)
-	t := selfCheckTally{gaps: map[Gap]int{}, env: map[string]int{}}
+	t := selfCheckTally{gaps: map[Gap][]string{}, env: map[string]int{}}
 	for _, r := range records {
 		if !r.StartedAt.Before(since) {
 			t.add(r)
@@ -73,16 +88,16 @@ func SelfCheckOf(records []FixRecord, ticked map[string]LeftTick, now time.Time,
 	}
 	out := SelfCheck{Days: days, Runs: t.runs}
 	for _, g := range sortedGaps(t.gaps) {
-		out.Lines = append(out.Lines, fmt.Sprintf("%d %s skipped a check: %s - %s", t.gaps[g], runsWord(t.gaps[g]), g, gapFix[g]))
+		out.Lines = append(out.Lines, fmt.Sprintf("%d %s skipped a check: %s (%s) - %s", len(t.gaps[g]), runsWord(len(t.gaps[g])), g, someRuns(t.gaps[g]), gapFix[g]))
 	}
 	if line := t.envLine(); line != "" {
 		out.Lines = append(out.Lines, line)
 	}
-	if t.failed > 0 {
-		out.Lines = append(out.Lines, fmt.Sprintf("%d %s failed on the work itself - corgi agent scorecard --days %d", t.failed, runsWord(t.failed), days))
+	if n := len(t.failed); n > 0 {
+		out.Lines = append(out.Lines, fmt.Sprintf("%d %s failed on the work itself (%s) - corgi agent scorecard --days %d", n, runsWord(n), someRuns(t.failed), days))
 	}
-	if t.nothing > 0 {
-		out.Lines = append(out.Lines, fmt.Sprintf("$%.2f on %d %s that found nothing to do - corgi agent scorecard names the kind worth turning off", t.nothingUSD, t.nothing, runsWord(t.nothing)))
+	if n := len(t.nothing); n > 0 {
+		out.Lines = append(out.Lines, fmt.Sprintf("$%.2f on %d %s that found nothing to do (%s) - corgi agent scorecard names the kind worth turning off", t.nothingUSD, n, runsWord(n), someRuns(t.nothing)))
 	}
 	if open := OpenLeft(LeftRows(records, ticked, now, now)); len(open) > 0 {
 		oldest := open[len(open)-1].At
@@ -98,14 +113,31 @@ func (c SelfCheck) Headline() string {
 	return fmt.Sprintf("%d unattended runs in %d days: %d %s worth a look", c.Runs, c.Days, len(c.Lines), map[bool]string{true: "thing", false: "things"}[len(c.Lines) == 1])
 }
 
-func sortedGaps(m map[Gap]int) []Gap {
+const namedRuns = 4
+
+func runName(r FixRecord) string {
+	name := r.Ref
+	if name == "" {
+		name = r.Key
+	}
+	return strings.TrimSpace(r.Workspace + " " + name)
+}
+
+func someRuns(names []string) string {
+	if len(names) <= namedRuns {
+		return strings.Join(names, ", ")
+	}
+	return fmt.Sprintf("%s and %d more", strings.Join(names[:namedRuns], ", "), len(names)-namedRuns)
+}
+
+func sortedGaps(m map[Gap][]string) []Gap {
 	out := make([]Gap, 0, len(m))
 	for g := range m {
 		out = append(out, g)
 	}
 	sort.Slice(out, func(i, j int) bool {
-		if m[out[i]] != m[out[j]] {
-			return m[out[i]] > m[out[j]]
+		if len(m[out[i]]) != len(m[out[j]]) {
+			return len(m[out[i]]) > len(m[out[j]])
 		}
 		return out[i] < out[j]
 	})

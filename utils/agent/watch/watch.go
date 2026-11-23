@@ -610,7 +610,8 @@ type Watch struct {
 	Round     func(now time.Time)
 	Asleep    func(now time.Time) bool
 	// Metered says the link costs (a phone's hotspot): polls go three times slower.
-	Metered func() bool
+	Metered   func() bool
+	Elsewhere func(e Event) bool
 
 	unreachable map[string]bool
 }
@@ -689,7 +690,7 @@ func (w *Watch) Handle(ctx context.Context, e Event) bool {
 	if e.Workspace == "" {
 		e.Workspace = w.Workspace
 	}
-	if !w.Rules.Match(e) || !w.State.MarkSeen(e.Key) {
+	if !w.Rules.Match(e) || (w.Elsewhere != nil && w.Elsewhere(e)) || !w.State.MarkSeen(e.Key) {
 		return false
 	}
 	if w.Sink != nil {

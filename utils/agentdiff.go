@@ -47,10 +47,10 @@ type StackDiff struct {
 }
 
 func DiffStack(dirs map[string]string, base string, includePatch bool) *StackDiff {
-	if strings.TrimSpace(base) == "" {
-		base = "main"
-	}
 	out := &StackDiff{Base: base}
+	if strings.TrimSpace(base) == "" {
+		out.Base = "each repository's default branch"
+	}
 
 	services := make([]string, 0, len(dirs))
 	for svc := range dirs {
@@ -110,6 +110,9 @@ func diffRepo(service, dir, base string, includePatch bool) RepoDiff {
 		rd.Branch = branch
 	}
 
+	if strings.TrimSpace(base) == "" {
+		base = diffBaseOf(dir)
+	}
 	ref := mergeBaseRef(dir, base)
 	if ref == "" {
 		rd.Error = fmt.Sprintf("no common history with %s", base)
@@ -243,6 +246,13 @@ func isProbablyBinary(content []byte) bool {
 		}
 	}
 	return false
+}
+
+func diffBaseOf(dir string) string {
+	if branch := LocalDefaultBranchOf(dir); branch != "" {
+		return branch
+	}
+	return "main"
 }
 
 func mergeBaseRef(dir, base string) string {

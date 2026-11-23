@@ -4,6 +4,7 @@ import (
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/agent/push"
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"strings"
@@ -248,12 +249,26 @@ func TestARoutineReportOpensItsRunNotAnEmptyChat(t *testing.T) {
 		mu.Unlock()
 	}
 	d.LinkFor = func(string) string { return "https://claude.ai/code?environment=env_x" }
+	d.RunLink = func(key string) string { return "https://corgi.example/run/" + key }
 	spec := WatchSpec{Workspace: "corgi"}
-	e, _ := RoutineEvent("corgi", config.Routine{Name: "retro", Kind: "retro"}, time.Date(2026, 11, 16, 10, 4, 0, 0, time.UTC))
-	d.routineReport(spec, e, "Outcome: nothing\nretro: 20 runs, 3 tasks filed", nil, "/tmp/runs/routine_corgi_retro.log")
+	began := time.Date(2026, 11, 16, 10, 4, 0, 0, time.UTC)
+	e, _ := RoutineEvent("corgi", config.Routine{Name: "retro", Kind: "retro"}, began)
+	tasks := watch.LoadTasks(d.Dir)
+	_, _ = tasks.Add("Retro: an older one", "", "corgi", "cli", began.Add(-time.Hour))
+	_, _ = tasks.Add("Retro: a build nobody asked for", "", "corgi", "cli", began.Add(time.Minute))
+	_, _ = tasks.Add("Somebody else's", "", "web", "cli", began.Add(time.Minute))
+	_, _ = tasks.Add("Added by hand meanwhile", "", "corgi", "cli", began.Add(time.Minute))
+	d.routineReport(spec, e, "Outcome: nothing\nretro: 20 runs, 1 task filed\nTASK-2 is filed, TASK-1 and TASK-3 were there", nil, "/tmp/runs/routine_corgi_retro.log")
 	m := <-pushed
-	if m.Data["run"] != e.Key || m.Data["url"] != "file:///tmp/runs/routine_corgi_retro.log" {
+	if m.Data["run"] != e.Key || m.Data["url"] != "https://corgi.example/run/"+e.Key {
 		t.Fatalf("push data: %v", m.Data)
+	}
+	if m.Body != "retro: 20 runs, 1 task filed\nTASK-2 a build nobody asked for" {
+		t.Fatalf("the post names what was filed, and only that: %q", m.Body)
+	}
+	d.routineReport(spec, e, "", errors.New("exit 1"), "/tmp/runs/routine_corgi_retro.log")
+	if m := <-pushed; strings.Contains(m.Body, "/tmp/") || m.Data["url"] == "" {
+		t.Fatalf("a link to the run, not a path on the Mac: %q %v", m.Body, m.Data)
 	}
 	d.routineReport(spec, e, "1 PR opened", nil, "/tmp/x.log", "https://github.com/acme/api/pull/9")
 	if m := <-pushed; m.Data["url"] != "https://github.com/acme/api/pull/9" || m.Data["run"] != e.Key {
@@ -271,7 +286,7 @@ func TestARoutineReportOpensItsRunNotAnEmptyChat(t *testing.T) {
 func TestARoutineReadsOnlyItsOwnAccountAndFolder(t *testing.T) {
 	e := watch.Event{Kind: watch.KindRoutine, Ref: "routine/retro"}
 	got := routineScope(WatchSpec{Workspace: "onboarding", Dir: "/Users/me/work/IM/onboarding", ConfigDir: "/Users/me/.claude-skp"}, e)
-	for _, want := range []string{"/Users/me/work/IM/onboarding", "/Users/me/.claude-skp", "--root /Users/me/.claude-skp/projects --project /Users/me/work/IM/onboarding", "never another account's"} {
+	for _, want := range []string{"/Users/me/work/IM/onboarding", "/Users/me/.claude-skp", "corgi agent helper mine-sessions --root /Users/me/.claude-skp/projects --project /Users/me/work/IM/onboarding --days 7", "never another account's"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("missing %q in %q", want, got)
 		}

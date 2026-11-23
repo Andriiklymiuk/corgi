@@ -35,8 +35,8 @@ and what arrived is in the inbox and rings once on the next working day.
 A ticket assigned to you moves itself twice: to **In Progress** when a run
 takes it, and to **In Review** once that run has opened a pull request, with
 the link posted on the ticket. Each finished run also reaches wherever
-`notifyUrl` points - Telegram, Slack, ntfy - with the pull request as the link,
-and is kept in `corgi agent while-away` for the morning.
+`notifyUrl` points - Telegram, Slack, ntfy - with the pull request as the link
+(a routine: its report), and is kept in `corgi agent while-away` for the morning.
 
 - **review comments** and **red builds** are the safest to hand over: both are
   already scoped, and a build brings its own test for "done".

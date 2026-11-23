@@ -38,6 +38,20 @@ func RemoteProject(remoteURL string) string {
 	return strings.ToLower(strings.Trim(u, "/"))
 }
 
+func RepoIsOneOf(dir string, projects []string) (here, known bool) {
+	url, err := gitOut(dir, "remote", "get-url", "origin")
+	project := RemoteProject(url)
+	if err != nil || project == "" {
+		return false, false
+	}
+	for _, p := range projects {
+		if strings.EqualFold(strings.TrimSpace(p), project) {
+			return true, true
+		}
+	}
+	return false, true
+}
+
 func ServicesInRepos(corgi *CorgiCompose, projects []string) []string {
 	if corgi == nil || len(projects) == 0 {
 		return nil

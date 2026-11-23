@@ -343,6 +343,8 @@ func (j *Jira) commentEvents(ctx context.Context, issue jiraIssue, since time.Ti
 	return events, newest, nil
 }
 
+const jiraAnswerMax = 64 << 20
+
 func (j *Jira) get(ctx context.Context, path string, params url.Values, out any) error {
 	endpoint := strings.TrimRight(j.URL, "/") + path
 	if len(params) > 0 {
@@ -363,9 +365,12 @@ func (j *Jira) get(ctx context.Context, path string, params url.Values, out any)
 		return fmt.Errorf("jira %s: %w", path, err)
 	}
 	defer resp.Body.Close()
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, jiraAnswerMax+1))
 	if err != nil {
 		return fmt.Errorf("jira %s: %w", path, err)
+	}
+	if len(raw) > jiraAnswerMax {
+		return fmt.Errorf("jira %s: the answer is over %d MB", path, jiraAnswerMax>>20)
 	}
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("jira %s: HTTP %d: %s", path, resp.StatusCode, clip(string(raw), bodyMax))

@@ -270,6 +270,7 @@ func wireNotify(d *daemon.Daemon) {
 		}
 		return launcherURL()
 	}
+	d.RunLink = runLinkFor(d.Dir)
 	d.NotifyWithLink = func(title, body, link string) {
 		utils.NotifyWithLink(title, body, preferLocalLink(link))
 	}
