@@ -174,3 +174,24 @@ func TestAPacketsWorktreeStaysUnderTheWorkspace(t *testing.T) {
 		t.Fatal("no worktree means the workspace")
 	}
 }
+
+func TestARefKeepsTheCaseOfAForgeAndAnOldFileIsStillFound(t *testing.T) {
+	for in, want := range map[string]string{" abc-7 ": "ABC-7", "acme/core!9": "acme/core!9", "Acme/api#3": "Acme/api#3"} {
+		if got := CleanRef(in); got != want {
+			t.Errorf("%q: %q, want %q", in, got, want)
+		}
+	}
+	dir := t.TempDir()
+	if err := os.MkdirAll(Dir(dir), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(Path(dir, "ACME/CORE!9"), []byte(`{"ref":"ACME/CORE!9","state":"input-required"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if p, err := Read(dir, "acme/core!9"); err != nil || p.Ref != "ACME/CORE!9" {
+		t.Fatalf("a file written in capitals is read: %+v %v", p, err)
+	}
+	if _, err := Read(dir, "acme/none!1"); !os.IsNotExist(err) {
+		t.Fatalf("no handoff is no handoff: %v", err)
+	}
+}

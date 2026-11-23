@@ -1174,477 +1174,350 @@ func writeLaunchError(w http.ResponseWriter, status int, msg string) {
 const launcherPageHTML = `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="color-scheme" content="dark">
-<meta name="theme-color" content="#0b0d12">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" media="(prefers-color-scheme:light)" content="#fbfbfc">
+<meta name="theme-color" media="(prefers-color-scheme:dark)" content="#15161a">
 <title>corgi</title>
 <style>
-  /* One palette, read by everything below: dark like the trackers this page
-     sits next to, one accent, and lines you notice only when you look. */
-  :root{--bg:#08090a;--card:#101113;--card2:#16181b;--line:#212327;--hair:#1a1c1f;
-      --text:#eceef1;--fg:#eceef1;--dim:#8a8f98;--dim2:#5c6169;
-      --accent:#5e6ad2;--accent-soft:#171a2e;--accent-line:#33376b;
-      --green:#3fb950;--amber:#d29922;--red:#f85149;
-      --sp1:.25rem;--sp2:.5rem;--sp3:.75rem;--sp4:1rem;--r:.5rem}
+  :root{color-scheme:light dark;
+      --bg:#fbfbfc;--raise:#ffffff;--hover:#eeeff2;--line:#e1e2e7;
+      --text:#1a1c21;--dim:#5a5e68;--accent:#4450c8;--fill:#4f5bd5;--on-fill:#ffffff;
+      --ok:#1a7336;--warn:#8a4b00;--bad:#b3261e;
+      --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:24px;--s6:32px;
+      --page:92rem;--read:56rem;--edge:24px;--tap:0px}
+  @media (prefers-color-scheme:dark){:root{
+      --bg:#15161a;--raise:#1c1d22;--hover:#24262b;--line:#2c2e34;
+      --text:#e6e7ea;--dim:#9b9fa9;--accent:#a5aefb;--fill:#5e6ad2;--on-fill:#ffffff;
+      --ok:#62c584;--warn:#e0a652;--bad:#f28b82}}
+  @media (max-width:760px){:root{--edge:16px}}
+  @media (pointer:coarse){:root{--tap:10px}}
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-  /* Flex and grid beat the hidden attribute on specificity, and this page
-     toggles controls with .hidden. */
   [hidden]{display:none!important}
-  html{-webkit-text-size-adjust:100%}
-  /* Once for the page: a per-element list meant every row added since then
-     double-tap-zoomed instead of registering the second tap. */
-  html{touch-action:manipulation}
-  button,a,summary,label,input,select,textarea{touch-action:manipulation}
-  /* iOS zooms into any field under 16px and paints its own glossy picker;
-     a plain box with a chevron reads the same on every phone. */
-  select{-webkit-appearance:none;appearance:none;background-repeat:no-repeat;background-position:right .6rem center;
-      background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%238a8f98' stroke-width='1.5'/%3E%3C/svg%3E");
-      padding-right:1.8rem!important;text-overflow:ellipsis;cursor:pointer}
-  select:focus,input:focus,textarea:focus{outline:none;border-color:var(--accent-line)}
-  @media (pointer:coarse){select,textarea,input:not([type=checkbox]):not([type=radio]){font-size:16px!important}
-      select{min-height:2.4rem}}
-  body{font-family:-apple-system,system-ui,sans-serif;background:var(--bg);color:var(--text);margin:0;
-      padding-bottom:env(safe-area-inset-bottom);-webkit-font-smoothing:antialiased;
-      overscroll-behavior-y:none}
-  header{position:sticky;top:0;z-index:30;background:rgba(8,9,10,.88);backdrop-filter:blur(14px);
-      -webkit-backdrop-filter:blur(14px);border-bottom:1px solid var(--line);
-      padding-top:calc(.7rem + env(safe-area-inset-top));padding-bottom:0;
-      padding-left:max(1.2rem,env(safe-area-inset-left));padding-right:max(1.2rem,env(safe-area-inset-right))}
-  header>*{max-width:34rem;margin-left:auto;margin-right:auto}
-  .brand{display:flex;align-items:center;gap:.7rem}
-  .brand .who{min-width:0;flex:1}
-  .chip.refresh{flex:0 0 auto;width:2rem;height:2rem;padding:0;display:flex;align-items:center;
-      justify-content:center;font-size:.85rem;color:var(--dim)}
-  .chip.refresh:active{color:var(--text)}
-  .chip.refresh i{display:block;font-style:normal;line-height:1}
-  .chip.refresh.spin i{animation:spin .7s linear infinite}
+  html{-webkit-text-size-adjust:100%;touch-action:manipulation}
+  body{margin:0;background:var(--bg);color:var(--text);padding-bottom:env(safe-area-inset-bottom);
+      font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,sans-serif;
+      -webkit-font-smoothing:antialiased;overscroll-behavior-y:none}
+  h1,h2,h3,h4,p{margin:0}
+  a{color:inherit}
+  code{font:.92em ui-monospace,SFMono-Regular,Menlo,monospace}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+
+  button{font:inherit;font-size:13px;font-weight:500;color:var(--text);background:none;cursor:pointer;
+      border:1px solid var(--line);border-radius:6px;padding:calc(5px + var(--tap)/2) 12px;touch-action:manipulation}
+  button:hover{background:var(--hover)}
+  button:disabled{opacity:.5;cursor:default}
+  button.fill{background:var(--fill);border-color:var(--fill);color:var(--on-fill)}
+  button.fill:hover{filter:brightness(1.08)}
+  .text,.erow>*,.sact>*,.actions>button{border:0;border-radius:4px;background:none;padding:calc(2px + var(--tap)) 0;
+      font-size:13px;font-weight:500;color:var(--dim);text-decoration:none;cursor:pointer}
+  .text:hover,.erow>*:hover,.sact>*:hover,.actions>button:hover{background:none;color:var(--text);text-decoration:underline;text-underline-offset:3px}
+  .erow .primary,.sact .ok,.text.primary{color:var(--accent)}
+  .erow,.sact,.actions{display:flex;flex-wrap:wrap;column-gap:var(--s4);row-gap:0;align-items:baseline;margin-top:var(--s1)}
+  input,textarea,select{font:inherit;color:inherit;background-color:var(--raise);border:1px solid var(--line);
+      border-radius:6px;padding:7px 10px;touch-action:manipulation}
+  textarea{resize:vertical}
+  ::placeholder{color:var(--dim);opacity:1}
+  select{-webkit-appearance:none;appearance:none;cursor:pointer;text-overflow:ellipsis;padding-inline-end:26px;
+      background-repeat:no-repeat;background-position:right 10px center;
+      background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23838791' stroke-width='1.5'/%3E%3C/svg%3E")}
+  input[type=checkbox]{width:16px;height:16px;margin:0;padding:0;flex:0 0 auto;accent-color:var(--fill);cursor:pointer}
+  @media (pointer:coarse){select,textarea,input:not([type=checkbox]):not([type=radio]){font-size:16px}
+      input[type=checkbox]{width:22px;height:22px}}
+
+  header{position:sticky;top:0;z-index:30;background:var(--bg);border-bottom:1px solid var(--line);
+      padding:env(safe-area-inset-top) max(var(--edge),env(safe-area-inset-right)) 0 max(var(--edge),env(safe-area-inset-left))}
+  .bar{max-width:var(--page);min-height:49px;margin:0 auto;display:grid;align-items:center;column-gap:var(--s5);
+      grid-template-columns:auto minmax(0,1fr) auto auto;grid-template-areas:"name tabs host again"}
+  h1{grid-area:name;font-size:15px;font-weight:600}
+  #host{grid-area:host;color:var(--dim);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #host.down{color:var(--bad)}
+  #host .what{text-decoration:underline;text-decoration-color:var(--line);text-underline-offset:3px;cursor:pointer}
+  #refresh{grid-area:again;font-size:15px;line-height:1;padding:calc(6px + var(--tap)/2) 8px;border:0;color:var(--dim)}
+  #refresh i{display:block;font-style:normal}
+  #refresh.spin i{animation:spin .7s linear infinite}
   @keyframes spin{to{transform:rotate(360deg)}}
-  .logo{width:1.9rem;height:1.9rem;border-radius:.6rem;background:var(--card2);
-      border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:1rem;flex:0 0 auto}
-  h1{font-size:1rem;margin:0;letter-spacing:-.01em;font-weight:600}
-  header small{display:block;color:var(--dim);font-size:.78rem;font-weight:400;margin-top:.1rem}
-  header small .what{color:var(--dim);border-bottom:1px dotted var(--line-soft,#3a4152);cursor:pointer}
-  .hostnote{color:var(--dim);font-size:.74rem;line-height:1.5;margin:.45rem 0 0;max-width:30rem}
-  /* The last row has to clear Safari's floating toolbar, which sits over the
-     page rather than beside it, and the home indicator under that. */
-  main{max-width:34rem;margin:0 auto;padding-top:.7rem;
-      padding-bottom:calc(5rem + env(safe-area-inset-bottom));
-      padding-left:max(1.2rem,env(safe-area-inset-left));
-      padding-right:max(1.2rem,env(safe-area-inset-right))}
-
-  /* Tabs. The page answers three questions and they are not equally urgent:
-     what wants me, what is running, what could run. One at a time. */
-  .tabs{display:flex;gap:.15rem;padding:.5rem .6rem .45rem 0;overflow-x:auto;scrollbar-width:none;
-      -webkit-overflow-scrolling:touch;scroll-snap-type:x proximity}
-  .tabs button{scroll-snap-align:start}
+  .hostnote{max-width:var(--page);margin:0 auto;padding:0 0 var(--s3);color:var(--dim);font-size:13px}
+  .tabs{grid-area:tabs;display:flex;gap:var(--s5);overflow-x:auto;scrollbar-width:none}
   .tabs::-webkit-scrollbar{display:none}
-  .tabs button{flex:0 0 auto}
-  .tabs button{padding:.35rem .6rem;border-radius:.4rem;border:0;background:none;
-      color:var(--dim);font-size:.82rem;font-weight:500}
-  .tabs button[aria-selected=true]{color:var(--text);background:var(--card2)}
-  .tabs .n{margin-left:.35rem;font-size:.68rem;color:var(--dim2);background:#1e2024;
-      border-radius:1rem;padding:.05rem .35rem}
-  .tabs button[aria-selected=true] .n{color:var(--text)}
+  .tabs button{flex:0 0 auto;border:0;border-radius:0;padding:14px 0 13px;color:var(--dim);font-size:14px;font-weight:500;border-bottom:2px solid transparent}
+  .tabs button:hover{background:none;color:var(--text)}
+  .tabs button[aria-selected=true]{color:var(--text);border-bottom-color:var(--text)}
+  .tabs .n{margin-inline-start:6px;font-weight:400;color:var(--dim);font-variant-numeric:tabular-nums}
   .tabs .n:empty{display:none}
-  .ev.idea{display:block;text-decoration:none;color:inherit;border:1px solid var(--line);border-radius:.6rem;background:var(--card);padding:.65rem .75rem;margin:0 0 .45rem}
-  .ev.idea .itop{display:flex;align-items:center;gap:.6rem}
-  .ev.idea .itop b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .ishare{flex:0 0 auto;font:inherit;font-size:.74rem;font-weight:600;color:#fff;background:var(--accent);border:0;border-radius:.45rem;padding:.35rem .7rem;cursor:pointer}
+  @media (max-width:980px){.bar{grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:"name host again" "tabs tabs tabs"}
+      h1{padding-top:10px}#host{padding-top:12px;text-align:end}#refresh{margin-top:8px}.tabs button{padding:10px 0 9px}}
 
-  /* A sheet, because twelve tracker columns do not fit in a row of buttons
-     on a phone and a dropdown on iOS is worse than either. */
-  .scrim{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:60;display:flex;align-items:flex-end}
-  .sheet{width:100%;background:var(--card);border-top-left-radius:.9rem;border-top-right-radius:.9rem;
-      border-top:1px solid var(--line);max-height:76vh;overflow:auto;
-      padding:.5rem 0 calc(.6rem + env(safe-area-inset-bottom))}
-  .grab{width:2.2rem;height:.25rem;border-radius:.2rem;background:#2a2d33;margin:.35rem auto .6rem}
-  .sheet h3{font-size:.68rem;letter-spacing:.07em;text-transform:uppercase;color:var(--dim2);
-      margin:.4rem 1rem .4rem;font-weight:600}
-  .opt{display:block;width:100%;text-align:left;padding:.8rem 1rem;background:none;border:0;
-      border-bottom:1px solid var(--hair);color:var(--text);font:inherit;font-size:.88rem}
-  .opt:last-child{border-bottom:0}
-  .opt:disabled{color:var(--dim2)}
-  .opt.here{color:var(--accent);font-weight:600}
-  .gcount{margin-left:auto;font-size:.66rem;color:var(--accent);font-weight:600}
-  /* The batch bar: only there once something is selected. */
-  .batch{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem;margin:.2rem 0 .4rem;
-    padding:.45rem .55rem;background:var(--card2);border:1px solid var(--line);border-radius:.6rem}
-  .batch .bcount{font-size:.74rem;color:var(--dim);margin-right:.2rem}
-  .batch button{font:inherit;font-size:.76rem;font-weight:500;padding:.4rem .7rem;border-radius:.45rem;
-    border:1px solid var(--line);background:transparent;color:var(--dim);min-height:2rem}
-  .batch button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
-  .batch button:disabled{opacity:.5}
-  .linkme{margin-left:.45rem;font:inherit;font-size:.68rem;padding:.1rem .45rem;border-radius:.4rem;
-    border:1px solid var(--line);background:var(--card2);color:var(--dim)}
-  .linkme:disabled{opacity:.6}
-  /* The column the ticket sits in, on the row that offers to change it. */
-  .ev .estate{margin-left:auto;font-size:.64rem;letter-spacing:.04em;text-transform:uppercase;
-    color:var(--dim);border:1px solid var(--line);border-radius:.5rem;padding:.1rem .4rem;white-space:nowrap}
+  main{max-width:calc(var(--page) + 2*var(--edge));margin:0 auto;
+      padding:var(--s5) max(var(--edge),env(safe-area-inset-right)) calc(80px + env(safe-area-inset-bottom)) max(var(--edge),env(safe-area-inset-left))}
+  [data-pane]{max-width:var(--read)}
+  [data-pane=kanban]{max-width:none}
+  .msg{color:var(--dim)}
+  .err{color:var(--bad)}
+  .lead{color:var(--dim);margin-bottom:var(--s4)}
+  .empty{padding:var(--s5) 0}
+  .empty h2{font-size:15px;font-weight:600;margin-bottom:var(--s1)}
+  .empty p{color:var(--dim);max-width:60ch}
+  .empty p+p{margin-top:var(--s2)}
+  .empty button{margin-top:var(--s3)}
+  .barline{display:flex;flex-wrap:wrap;align-items:baseline;gap:var(--s2) var(--s4);margin-bottom:var(--s4)}
+  .barline .sum{flex:1 1 auto;min-width:12rem}
+  .sum{color:var(--dim)}
+  .sum b{font-weight:500;color:var(--text)}
+  .sum .now{color:var(--warn);font-weight:500}
+  .gh{display:flex;align-items:baseline;gap:var(--s2);margin:0 0 var(--s1);font-size:13px;font-weight:600}
+  #inbox>section+section{margin-top:var(--s6)}
+  .gh .n{font-weight:400;color:var(--dim)}
+  .row{padding:var(--s3) 0;border-top:1px solid var(--line)}
+  .rtop{display:flex;flex-wrap:wrap;align-items:baseline;gap:0 var(--s2);font-size:12px;color:var(--dim)}
+  .rtop input{align-self:center}
+  .ref{color:var(--dim);text-decoration:none}
+  a.ref:hover{color:var(--accent);text-decoration:underline;text-underline-offset:3px}
+  .title{font-weight:500;overflow-wrap:anywhere}
+  .facts{font-size:12px;color:var(--dim);margin-top:2px;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+  .facts.why{font-size:13px}
+  .words{margin-top:var(--s1);font-size:13px;color:var(--dim);white-space:pre-wrap;overflow-wrap:anywhere;max-width:72ch}
+  .words:not(.all){display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+  .words.all{color:var(--text)}
+  .say{display:block;width:100%;max-width:40rem;margin:var(--s2) 0 var(--s1)}
 
-  /* The session board: what every Claude on the machine is doing, the ones
-     waiting on a person first. Hidden until tracking reports anything. */
-  .board{margin:var(--sp2) 0 var(--sp3)}
-  .board .sum{color:var(--dim);font-size:.74rem;margin:0 0 .35rem .1rem}
-  .board .sum.hot{color:var(--red);font-weight:600}
-  .sess{display:flex;align-items:center;gap:.6rem;background:var(--card2);border:1px solid var(--hair);
-      border-radius:.6rem;padding:.5rem .7rem;margin:.3rem 0;font-size:.82rem}
-  .sess .sdot{margin:0}
-  .sess .sdot.needs{background:var(--red);animation:pulse 1s ease-in-out infinite}
-  .sess .sdot.working{background:var(--amber)}
-  .sess .sdot.done{background:var(--green);opacity:.6}
-  .sess .sdot.stale,.sess .sdot.gone,.sess .sdot.unknown{background:var(--dim2)}
-  .sess .sdot.limited{background:#5B8DEF}
-  .acct{display:flex;flex-wrap:wrap;gap:.35rem .8rem;font-size:.74rem;color:var(--dim);margin:0 0 .45rem .1rem}
-  .acct b{color:var(--fg);font-weight:600}
-  .acct .bar{display:inline-block;width:3.2rem;height:.4rem;border-radius:.2rem;background:var(--hair);vertical-align:middle;margin:0 .3rem;overflow:hidden}
-  .acct .bar i{display:block;height:100%;background:var(--green)}
-  .acct .bar.warm i{background:var(--amber)}
-  .acct .bar.hot i{background:var(--red)}
-  .acct .out{color:var(--red);font-weight:600}
-  .sess .slabel{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1}
-  .sess .sdetail{color:var(--dim);font-size:.72rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:45%}
-  .sess .sbadge{font-size:.6rem;font-weight:700;color:var(--dim);border:1px solid var(--line);border-radius:.3rem;
-      padding:.05rem .3rem;flex:0 0 auto;text-transform:uppercase;letter-spacing:.04em}
-  .newchat{background:var(--card2);border:1px solid var(--hair);border-radius:.6rem;padding:.55rem .7rem;margin:.3rem 0 .5rem}
-  .newchat textarea{width:100%;box-sizing:border-box;font:inherit;font-size:.82rem;padding:.45rem .55rem;border-radius:.45rem;
-      border:1px solid var(--line);background:var(--card);color:var(--fg);resize:vertical;min-height:2.6rem}
-  /* Four pickers do not fit across a phone; let them wrap and keep the
-     button on its own end so it never ends up half a word wide. */
-  .newchat .nrow{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.4rem;align-items:center}
-  .newchat .nrow select{flex:1 1 7rem;min-width:6.5rem;max-width:none}
-  .newchat .nrow button{margin-left:auto}
-  .newchat select{font:inherit;font-size:.74rem;flex:1;min-width:0;padding:.3rem .4rem;border-radius:.45rem;border:1px solid var(--line);
-      background-color:var(--card);color:var(--fg)}
-  .newchat button{font:inherit;font-size:.76rem;font-weight:500;padding:.34rem .8rem;border-radius:.45rem;border:1px solid var(--accent);
-      background:var(--accent);color:#fff;cursor:pointer;flex:0 0 auto}
-  .newchat button:disabled{opacity:.5}
-  .runlog{font:.68rem/1.35 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;overflow-wrap:anywhere;max-height:60vh;overflow:auto;background:var(--card2);border:1px solid var(--hair);border-radius:.5rem;padding:.5rem;margin:.4rem 0 0}
-  .kb{display:flex;gap:.6rem;overflow-x:auto;padding-bottom:.5rem;scroll-snap-type:x mandatory}
-  .kb .kcol{flex:0 0 78vw;max-width:340px;scroll-snap-align:start;background:var(--card);border:1px solid var(--hair);border-radius:.7rem;padding:.5rem}
-  .kb .kcol h3{margin:0 0 .4rem;font-size:.8rem;letter-spacing:.06em;text-transform:uppercase;opacity:.75;display:flex;justify-content:space-between}
-  .kb .kcol h3 span{opacity:.7}
-  .kb .kcard{background:var(--card2);border:1px solid var(--hair);border-radius:.55rem;padding:.45rem .55rem;margin:.3rem 0}
-  .kb .kcard .kref{font-weight:600;font-size:.85rem}
-  .kb .kcard .kws{font-size:.7rem;opacity:.6;margin-left:.4rem}
-  .kb .kcard .kwhy{font-size:.75rem;opacity:.85;margin:.15rem 0}
-  .kb .kcard .ktitle{font-size:.78rem;opacity:.7;margin:0 0 .3rem;overflow-wrap:anywhere}
-  .kb .kcard .kmeta{font-size:.7rem;opacity:.7;margin:.1rem 0}
-  .kb .kcard.blocked{border-color:#E4695B}
-  .kb .kcard.running{border-color:#5B8DEF}
-  .kb .empty{font-size:.75rem;opacity:.5;padding:.4rem .2rem}
-  .kfeat{display:grid;gap:.3rem;margin:0 0 .6rem}
-  .kfeat .kcard{background:var(--card);border:1px solid var(--hair);border-radius:.55rem;padding:.45rem .55rem}
-  .kfeat .kref{font-weight:600;font-size:.85rem}
-  .kfeat .kws{font-size:.75rem;opacity:.7;margin-left:.4rem}
-  .kfeat .kwhy{font-size:.75rem;opacity:.85;margin:.15rem 0}
-  .kfeat .kmeta{font-size:.7rem;opacity:.7;margin:.1rem 0}
-  .kfeat .kcard.running{border-color:#5B8DEF}
-  .kfeat .kcard.blocked{border-color:#E4695B}
-  .kb .kcard .know{color:#5B8DEF;opacity:1}
-  .hist h4{margin:.6rem 1rem .2rem;font-size:.72rem;opacity:.7;text-transform:uppercase;letter-spacing:.05em}
-  .hist .kmeta{font-size:.74rem;opacity:.8;margin:.15rem 1rem;display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}
-  .ev{background:var(--card2);border:1px solid var(--hair);border-radius:.6rem;padding:.5rem .65rem;margin:.3rem 0}
-  .ev .eref{font-weight:600;font-size:.82rem}
-  .ev .ekind{font-size:.66rem;text-transform:uppercase;letter-spacing:.04em;opacity:.6;margin-left:.35rem}
-  .ev .etitle{font-size:.78rem;opacity:.85;margin:.15rem 0 .4rem;overflow-wrap:anywhere}
-  .ev .emeta,.kcard .emeta{font-size:.72rem;color:#e0a52b;margin:0 0 .4rem}
-  .kbody{white-space:pre-wrap;opacity:.7;max-height:6.5rem;overflow:hidden}
-  .tin{display:block;width:calc(100% - 2rem);margin:.5rem 1rem;padding:.6rem .7rem;background-color:var(--bg);color:inherit;border:1px solid var(--line);border-radius:.5rem;font:inherit;font-size:.9rem}
-  .sheet .primary{margin:.5rem 1rem 1rem}
-  .sum button{margin-left:.4rem;font-size:.72rem;padding:.25rem .55rem}
-  .eblocked{margin:6px 0 0;font-size:13px;color:#E4695B}
-  .ev .erow{display:flex;gap:.4rem;align-items:center}
-  .ev a.eopen{font-size:.76rem;text-decoration:none;padding:.45rem .75rem;border-radius:.45rem;
-    border:1px solid var(--line);color:inherit;min-height:2rem;display:inline-flex;align-items:center}
-  .ev button{font:inherit;font-size:.76rem;font-weight:500;padding:.45rem .75rem;border-radius:.45rem;min-height:2rem;
-    border:1px solid var(--line);background:transparent;color:var(--dim)}
-  .ev button:disabled{opacity:.5}
-  /* One action leads; the rest are there when you want them. Four equally
-     loud buttons on a row is the same as none. */
-  .ev .erow button.primary{border-color:var(--accent);background:var(--accent);color:#fff;font-weight:500}
-  .ev .erow{flex-wrap:wrap}
-  .evgroup{margin:.5rem 0 .2rem;display:flex;align-items:center;gap:.5rem}
-  .evgroup .gname{font-size:.74rem;font-weight:600;text-transform:uppercase;letter-spacing:.04em;opacity:.65}
-  .evgroup button{font:inherit;font-size:.74rem;font-weight:600;padding:.26rem .6rem;border-radius:.45rem;
-    border:1px solid var(--accent);background:var(--accent);color:#fff;margin-left:auto}
-  .evgroup button[hidden]{display:none}
-  .ev input[type=checkbox]{width:1rem;height:1rem;accent-color:var(--accent);margin-right:.1rem}
-  .sess{flex-wrap:wrap}
-  .sess .ssum{flex-basis:100%;color:var(--dim);font-size:.72rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:.1rem}
-  .sess .sact{flex-basis:100%;display:flex;gap:.4rem;align-items:center;margin-top:.35rem}
-  .sess .sact button{font:inherit;font-size:.74rem;font-weight:600;padding:.28rem .7rem;border-radius:.45rem;border:1px solid var(--line);
-      background:var(--card);color:var(--fg);cursor:pointer}
-  .sess .sact button.ok{background:var(--accent);border-color:var(--accent);color:#fff}
-  .sess .sact button.bad{color:var(--red);border-color:var(--red)}
-  .sess .sact a{margin-left:auto;font-size:.74rem;color:var(--blue,#5B8DEF)}
-  .ws{background:var(--card);border:1px solid var(--line);border-radius:.75rem;
-      padding:var(--sp3) var(--sp3) var(--sp2);margin:var(--sp2) 0}
-  .head{display:flex;align-items:center;gap:.7rem}
-  .main{min-width:0;flex:1}
-  .ws .name{font-weight:600;display:flex;align-items:center;gap:.5rem;font-size:.94rem;white-space:nowrap;
-      overflow:hidden;text-overflow:ellipsis;letter-spacing:-.006em}
-  .ws .path{color:var(--dim2);font-size:.7rem;margin-top:.15rem;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
-      white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
-  .ws .path.full{white-space:normal;word-break:break-all}
-  .ws .wnote{color:var(--red);font-size:.72rem;margin-top:.5rem;line-height:1.45}
-  /* The dot carries the state: green live, amber blocking on you, red a start
-     that was refused, grey nothing running. */
-  .dot{width:.55rem;height:.55rem;border-radius:50%;background:#3a4152;flex:0 0 auto}
-  .dot.live{background:var(--green)}
-  .dot.ready{background:var(--green);opacity:.55}
-  .dot.starting{background:var(--green);animation:pulse 1s ease-in-out infinite}
-  .dot.attention{background:var(--amber)}
-  .dot.blocked{background:var(--red)}
-  @keyframes pulse{50%{opacity:.3}}
-  .meta{display:flex;align-items:baseline;gap:.4rem;flex-wrap:wrap;margin-top:.25rem;
-      font-size:.73rem;color:var(--dim2)}
-  .meta span + span::before{content:"\00b7";color:var(--dim2);margin-right:.4rem}
-  .meta .live{color:var(--green)}
-  .meta .warn{color:var(--red)}
-  .meta .why{color:var(--dim)}
-  .usage{font-size:.68rem;color:var(--dim2);margin-top:.15rem;
-      font-variant-numeric:tabular-nums;opacity:.85}
-  .actions{display:flex;align-items:center;gap:.4rem;margin-top:.65rem;flex-wrap:wrap}
-  .startbox{flex-basis:100%;display:none;gap:.4rem;margin-top:.5rem}
-  .startbox.on{display:flex}
-  .startbox select,.startbox input{flex:1 1 6rem;min-width:0;background-color:var(--card2);border:1px solid var(--line);
-      color:var(--text);border-radius:.5rem;padding:.4rem .55rem;font-size:.78rem;font-family:inherit}
-  .evrow{display:flex;justify-content:space-between;gap:.6rem;font-size:.72rem;color:var(--dim);padding:.2rem .1rem}
-  .evrow b{font-weight:600;color:#c9cfda}
-  .dev{display:flex;align-items:center;justify-content:space-between;gap:.6rem;font-size:.8rem;
-      padding:.4rem 0;border-bottom:1px solid var(--line)}
-  .dev:last-child{border-bottom:0}
-  .dev .sub{color:var(--dim2);font-size:.7rem}
-  .dev button{background:none;border:1px solid rgba(255,123,114,.45);color:var(--red);font-size:.7rem;
-      padding:.25rem .6rem;border-radius:.5rem}
-  .chk{display:flex;gap:.5rem;font-size:.78rem;padding:.35rem 0;border-bottom:1px solid var(--line);line-height:1.45}
-  .chk:last-child{border-bottom:0}
-  .chk .fix{color:var(--dim);display:block;font-size:.72rem;margin-top:.15rem}
-  .chk.bad .mark{color:var(--red)}
-  .chk .mark{color:var(--green);flex:0 0 auto}
-  .chip{background:none;border:1px solid var(--line);color:var(--dim);font-size:.72rem;font-weight:500;
-      padding:.32rem .6rem;border-radius:var(--r);cursor:pointer}
-  .chip b{color:var(--text);font-weight:600}
-  .chip.danger{border-color:transparent;color:var(--dim);margin-left:auto}
-  .chip.danger:active{color:var(--red)}
-  .top{display:flex;align-items:center;justify-content:space-between;gap:.6rem;
-      margin-top:var(--sp2);padding:var(--sp2) 0 0;border-top:1px solid var(--hair);
-      font-size:.78rem;color:var(--text);text-decoration:none;min-height:2rem}
-  .top span:first-child{display:flex;align-items:center;flex:1 1 auto;min-width:3rem;overflow:hidden}
+  .kb{display:grid;grid-auto-flow:column;gap:var(--s5);align-items:start;overflow-x:auto;padding-bottom:var(--s3)}
+  .kcol{min-width:0}
+  .kcol h2{font-size:13px;font-weight:600;padding-bottom:var(--s2);border-bottom:1px solid var(--line);display:flex;gap:var(--s2)}
+  .kcol h2 .n{font-weight:400;color:var(--dim);font-variant-numeric:tabular-nums}
+  .kcol .none{padding:var(--s3) 0;font-size:12px;color:var(--dim)}
+  .kcol .row:nth-of-type(1){border-top:0}
+  .kfeat{margin-bottom:var(--s5);max-width:var(--read)}
+  .kdone{margin-top:var(--s6)}
+  .kgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(15rem,1fr));column-gap:var(--s5)}
+  @media (max-width:959px){.kb{display:block;overflow:visible}.kcol{margin-bottom:var(--s6)}.kcol.zero{display:none}}
+
+  .acct{display:flex;flex-wrap:wrap;gap:var(--s1) var(--s5);margin-bottom:var(--s3);font-size:13px;color:var(--dim);font-variant-numeric:tabular-nums}
+  .acct b{color:var(--text);font-weight:500}
+  .acct .bar5{display:inline-block;width:56px;height:4px;border-radius:2px;background:var(--line);vertical-align:middle;margin:0 var(--s2);overflow:hidden}
+  .acct .bar5 i{display:block;height:100%;background:var(--dim)}
+  .acct .bar5.warm i{background:var(--warn)}
+  .acct .bar5.hot i,.acct .out{color:var(--bad)}
+  .acct .bar5.hot i{background:var(--bad)}
+  .newchat{border:1px solid var(--line);border-radius:8px;background:var(--raise);padding:var(--s3);margin-bottom:var(--s5)}
+  .newchat textarea{display:block;width:100%;border:0;padding:0;background:none;min-height:44px}
+  .newchat textarea:focus-visible{outline:0}
+  .newchat:focus-within{border-color:var(--accent)}
+  .nrow{display:flex;flex-wrap:wrap;gap:var(--s2);margin-top:var(--s2);align-items:center}
+  .nrow select{flex:0 1 auto;min-width:0;max-width:14rem;font-size:13px;padding-block:calc(5px + var(--tap)/2)}
+  .nrow button{margin-inline-start:auto}
+  .sess{display:grid;grid-template-columns:8px minmax(0,1fr) auto;column-gap:var(--s3);padding:var(--s3) 0;border-top:1px solid var(--line);align-items:baseline}
+  .sess>*:not(.sdot):not(.slabel):not(.sdetail){grid-column:2/-1}
+  .sdot,.dot{width:8px;height:8px;border-radius:50%;background:var(--line);flex:0 0 auto;align-self:center}
+  .sdot.needs,.dot.attention{background:var(--warn)}
+  .sdot.working,.dot.starting{background:var(--accent)}
+  .sdot.limited,.dot.blocked{background:var(--bad)}
+  .dot.live,.sdot.on{background:var(--ok)}
+  .dot.ready{background:none;border:1.5px solid var(--ok)}
+  .slabel{font-weight:500;overflow-wrap:anywhere}
+  .sbadge{font-weight:400;font-size:12px;color:var(--dim);margin-inline-start:var(--s2)}
+  .sdetail{font-size:12px;color:var(--dim);text-align:end;overflow-wrap:anywhere}
+  .ssum{font-size:12px;color:var(--dim);overflow-wrap:anywhere}
+
+  .ws{padding:var(--s4) 0;border-top:1px solid var(--line)}
+  .ws:first-child{border-top:0;padding-top:0}
+  .ws .head{display:flex;align-items:flex-start;gap:var(--s4)}
+  .ws .main{min-width:0;flex:1}
+  .ws .name{display:flex;align-items:center;gap:var(--s2);font-weight:500}
+  .ws .path{font-size:12px;color:var(--dim);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
+  .ws .path.full{white-space:normal;overflow-wrap:anywhere}
+  .ws .wnote{color:var(--bad);font-size:13px;margin-top:var(--s1)}
+  .meta,.usage{font-size:12px;color:var(--dim);margin-top:2px;font-variant-numeric:tabular-nums}
+  .meta span+span::before{content:"\00b7";margin:0 6px;color:var(--dim)}
+  .meta .live{color:var(--ok)}
+  .meta .warn{color:var(--bad)}
+  a.open{display:inline-block;text-decoration:none;font-size:13px;font-weight:500;color:var(--accent);border:1px solid var(--line);border-radius:6px;padding:calc(5px + var(--tap)/2) 12px}
+  a.open:hover{background:var(--hover)}
+  .top{display:flex;align-items:baseline;justify-content:space-between;gap:var(--s3);margin-top:var(--s2);font-size:13px;text-decoration:none}
+  .top>span:first-child,.s>span:first-child{display:flex;align-items:center;gap:var(--s2);min-width:0}
+  a.top:hover .tname,a.s:hover .tname{text-decoration:underline;text-underline-offset:3px}
   .tname{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .top .when{color:var(--dim2);font-size:.7rem;flex:0 0 auto;max-width:60%;
-      overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .intro{color:var(--dim);font-size:.8rem;line-height:1.5;margin:.2rem 0 .9rem}
-  .skel{background:var(--card);border:1px solid var(--line);border-radius:.75rem;height:5.2rem;
-      margin:var(--sp2) 0;
-      background-image:linear-gradient(100deg,transparent 20%,rgba(255,255,255,.045) 40%,transparent 60%);
-      background-size:220% 100%;animation:sweep 1.2s linear infinite}
-  @keyframes sweep{to{background-position:-220% 0}}
-  .sessions{margin-top:var(--sp2);border-top:1px solid var(--hair);padding-top:var(--sp2)}
-  .sessions .s{display:flex;align-items:center;justify-content:space-between;gap:.6rem;font-size:.76rem;
-      color:#c9cfda;padding:.45rem .1rem;min-height:2.1rem;text-decoration:none}
-  .sessions .s span:first-child{display:flex;align-items:center;flex:1 1 auto;min-width:3rem;
-      overflow:hidden;color:var(--text)}
-  .sdot{width:.375rem;height:.375rem;border-radius:50%;background:var(--green);margin-right:.5rem;flex:0 0 auto}
-  a.s.past span:first-child{color:var(--dim)}
-  a.s.past .when{color:#5b6274}
-  .sessions .grp{display:flex;align-items:center;gap:.5rem;margin:.6rem .1rem .1rem;color:var(--dim2);
-      font-size:.62rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase}
-  .sessions .grp i{flex:1;height:1px;background:var(--hair)}
-  .sessions .s .when{color:var(--dim2);font-size:.68rem;flex:0 0 auto;max-width:60%;
-      overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .sessions .none,.sessions .hint{color:var(--dim2);font-size:.7rem;line-height:1.45;padding:.2rem 0}
-  .kv{display:flex;gap:.6rem;font-size:.72rem;padding:.22rem .1rem;line-height:1.45}
-  .kv b{color:var(--dim2);font-weight:600;flex:0 0 5.4rem}
-  .kv span{color:#c9cfda;min-width:0}
-  .tag{font-size:.6rem;font-weight:700;color:var(--amber);border:1px solid rgba(255,166,87,.4);
-      border-radius:.35rem;padding:.05rem .3rem;margin-left:.45rem;vertical-align:1px;flex:0 0 auto;
-      white-space:nowrap}
-  button{border:0;border-radius:var(--r);padding:.48rem .9rem;font-size:.82rem;font-weight:600;cursor:pointer;
-      background:#1e2027;color:var(--text);transition:transform .05s;flex:0 0 auto}
-  button:active{transform:scale(.97)}
-  button:disabled{opacity:.5}
-  a.open,button.open{display:inline-block;background:var(--green);color:#08110a;text-decoration:none;border:0;
-      padding:.48rem .9rem;border-radius:var(--r);font-weight:600;font-size:.82rem;cursor:pointer;flex:0 0 auto}
-  .msg{color:var(--dim);font-size:.9rem;margin:1rem 0;line-height:1.5}
-  .empty{padding:1.6rem 0 .6rem}
-  .empty h2{font-size:1.05rem;margin:0 0 .3rem;letter-spacing:-.01em}
-  .empty p{color:var(--dim);font-size:.82rem;line-height:1.6;margin:0}
-  .err{color:var(--red)}
-  code{background:var(--card);border:1px solid var(--line);padding:.1rem .35rem;border-radius:.35rem;font-size:.85em}
-  .tips{margin:1.5rem 0 0;background:var(--card);border:1px solid var(--line);border-radius:.75rem;
-      padding:0 var(--sp3)}
-  .tips summary{display:flex;align-items:center;justify-content:space-between;gap:var(--sp2);
-      list-style:none;cursor:pointer;padding:var(--sp3) 0;
-      font-size:.64rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--dim2)}
-  .tips summary::-webkit-details-marker{display:none}
-  .tips-hint{text-transform:none;letter-spacing:0;font-weight:400;font-size:.72rem;color:var(--dim2)}
-  .tips[open] .tips-hint::after{content:" \2303"}
-  .tips:not([open]) .tips-hint::after{content:" \2304"}
-  .tips > .tip:first-of-type{border-top:1px solid var(--hair);padding-top:var(--sp3)}
-  .tips[open]{padding-bottom:var(--sp3)}
-  .tip{display:flex;flex-direction:column;align-items:stretch;gap:.15rem;width:100%;text-align:left;
-      background:none;border:0;border-top:1px solid var(--hair);border-radius:0;
-      padding:var(--sp3) 0 var(--sp2);margin:0;cursor:pointer;font-family:inherit}
+  .when{flex:0 0 auto;max-width:60%;font-size:12px;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .actions{margin-top:var(--s2)}
+  .actions .danger:hover{color:var(--bad)}
+  .actions b{font-weight:500;color:var(--text)}
+  .startbox{flex-basis:100%;display:none;flex-wrap:wrap;gap:var(--s2);margin-top:var(--s2)}
+  .startbox.on{display:flex}
+  .startbox select,.startbox input{flex:1 1 12rem;min-width:0}
+  .sessions{margin-top:var(--s3);padding-inline-start:var(--s4)}
+  .sessions .s,.evrow{display:flex;align-items:baseline;justify-content:space-between;gap:var(--s3);padding:calc(4px + var(--tap)/2) 0;font-size:13px;text-decoration:none}
+  .evrow{color:var(--dim);font-size:12px}
+  .evrow b{font-weight:400}
+  a.s.past .tname{color:var(--dim)}
+  .sessions .grp{margin:var(--s3) 0 2px;font-size:12px;font-weight:600}
+  .sessions .grp i{display:none}
+  .sessions .none,.sessions .hint{color:var(--dim);font-size:12px;padding:2px 0;max-width:72ch}
+  .kv{display:flex;gap:var(--s3);font-size:12px;padding:2px 0}
+  .kv b{color:var(--dim);font-weight:400;flex:0 0 6rem}
+  .tag{font-size:12px;color:var(--dim)}
+  .linkme{margin-inline-start:var(--s2);font-size:12px;padding:0 6px}
+  .revealer{margin-top:var(--s4)}
 
-  .tip-t{font-size:.84rem;font-weight:600;color:var(--text);letter-spacing:-.005em}
-  .tip-d{font-size:.75rem;color:var(--dim);line-height:1.5}
-  .tip-cmd{display:flex;align-items:center;justify-content:space-between;gap:var(--sp2);
-      margin-top:var(--sp2);background:var(--card2);border-radius:var(--r);padding:.42rem .5rem}
-  .tip-cmd code{min-width:0;overflow-x:auto;white-space:nowrap;font-size:.7rem;color:var(--text);
-      background:none;border:0;padding:0}
-  .tip-copy{font-size:.66rem;font-weight:600;color:var(--dim2);flex:0 0 auto;letter-spacing:.02em}
-  .tip.copied .tip-copy{color:var(--green)}
-  .tipnote{color:var(--dim2);font-size:.72rem;margin:var(--sp3) 0 0}
-  /* In a tab of their own these are the page, not a card folded into the
-     bottom of one. The rest of the app is cards; these were hairline rows
-     inside one big card, which is what read as a different app. */
-  [data-pane="laptop"] details.tips, [data-pane="settings"] details.settings{
-      margin:0;background:none;border:0;border-radius:0;padding:0}
-  [data-pane="laptop"] details.tips>summary, [data-pane="settings"] details.settings>summary{display:none}
-  [data-pane="laptop"] .tip{
-      background:var(--card2);border:1px solid var(--hair);border-radius:.6rem;
-      padding:.6rem .7rem;margin:.4rem 0;gap:.2rem}
-  [data-pane="laptop"] .tips > .tip:first-of-type{border-top:1px solid var(--hair);padding-top:.6rem}
-  [data-pane="laptop"] .tipnote{margin:.8rem .1rem 0;color:var(--dim2);font-size:.72rem}
-  /* Settings: each block is its own card, headed like a section elsewhere. */
-  [data-pane="settings"] details.settings h3{
-      margin:1.1rem .1rem .35rem;font-size:.64rem;letter-spacing:.08em;color:var(--dim2)}
-  [data-pane="settings"] details.settings h3:first-of-type{margin-top:.2rem}
-  [data-pane="settings"] details.settings p,
-  [data-pane="settings"] details.settings pre,
-  [data-pane="settings"] details.settings .chk,
-  [data-pane="settings"] details.settings .toggle,
-  [data-pane="settings"] #devices, [data-pane="settings"] #doctor{
-      background:var(--card2);border:1px solid var(--hair);border-radius:.6rem;
-      padding:.55rem .7rem;margin:.35rem 0}
-  [data-pane="settings"] details.settings .chk{border-bottom:0}
-  [data-pane="settings"] details.settings button{
-      background:var(--card2);border:1px solid var(--line);border-radius:.6rem;
-      color:var(--text);padding:.5rem .8rem;margin:.35rem 0;font-size:.8rem}
-  details.settings{margin:1.6rem 0 0;background:var(--card2);border:1px solid var(--line);
-      border-radius:1rem;padding:.4rem 1rem}
-  details.settings h3{font-size:.66rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
-      color:var(--dim2);margin:1.4rem 0 .4rem}
-  details.settings h3:first-of-type{margin-top:.6rem}
-  details.settings summary{color:var(--dim);font-size:.85rem;cursor:pointer;padding:.5rem 0;list-style:none}
-  details.settings summary::-webkit-details-marker{display:none}
-  details.settings p{color:var(--dim);font-size:.76rem;line-height:1.55}
-  label.toggle{display:flex;align-items:center;gap:.5rem;color:var(--dim);font-size:.78rem;
-      padding:.3rem 0 .7rem;cursor:pointer}
-  label.toggle input{accent-color:var(--green);width:1rem;height:1rem;margin:0}
-  pre{background:var(--bg);border:1px solid var(--line);border-radius:.6rem;padding:.7rem;
-      overflow-x:auto;font-size:.7rem;line-height:1.45;white-space:pre;color:#c9cfda}
-  .toast{position:fixed;left:50%;bottom:calc(1rem + env(safe-area-inset-bottom));
-      transform:translate(-50%,.6rem);z-index:60;max-width:calc(100% - 2rem);
-      background:var(--text);color:#0b0d12;font-size:.78rem;font-weight:600;padding:.5rem .8rem;
-      border-radius:var(--r);opacity:0;transition:opacity .16s,transform .16s;
-      box-shadow:0 .5rem 1.4rem rgba(0,0,0,.55)}
-  .toast.on{opacity:1;transform:translate(-50%,0)}
-  .toast.bad{background:var(--red);color:#1a0503}
-  @media (prefers-reduced-motion:reduce){.toast,.skel,.dot.starting,.chip.refresh.spin i{animation:none}}
-  .foot{text-align:center;margin-top:1.6rem;font-size:.85rem}
-  .foot a{color:var(--green);text-decoration:none}
+  a.idea{display:block;text-decoration:none}
+  .idea .itop{display:flex;align-items:baseline;gap:var(--s4)}
+  .idea .title{flex:1;min-width:0}
+  a.idea:hover .title{text-decoration:underline;text-underline-offset:3px}
+
+  .sec{padding:var(--s5) 0;border-top:1px solid var(--line)}
+  .sec:first-of-type{border-top:0;padding-top:0}
+  .sec h2{font-size:15px;font-weight:600;margin-bottom:var(--s1)}
+  .sec p{color:var(--dim);max-width:72ch;margin-bottom:var(--s2)}
+  .sec p b{font-weight:500;color:var(--text)}
+  pre{margin:var(--s2) 0;padding:var(--s3);border:1px solid var(--line);border-radius:6px;background:var(--raise);overflow-x:auto;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace}
+  .toggle{display:flex;align-items:center;gap:var(--s2);padding:var(--s2) 0;cursor:pointer}
+  .dev{display:flex;align-items:center;justify-content:space-between;gap:var(--s3);padding:var(--s2) 0;border-top:1px solid var(--line)}
+  .dev .sub{color:var(--dim);font-size:12px}
+  .chk{display:flex;gap:var(--s2);padding:var(--s2) 0;border-top:1px solid var(--line)}
+  .chk b{font-weight:500}
+  .chk .fix{display:block;color:var(--dim);font-size:13px}
+  .chk .mark{color:var(--ok)}
+  .chk.bad .mark{color:var(--bad)}
+  .tip{display:block;width:100%;text-align:start;border:0;border-top:1px solid var(--line);border-radius:0;padding:var(--s3) 0;font-weight:400}
+  .tip:hover{background:none}
+  .tip-t{display:block;font-size:14px;font-weight:500}
+  .tip-d{display:block;color:var(--dim);max-width:72ch}
+  .tip-d b{font-weight:500;color:var(--text)}
+  .tip-cmd{display:flex;align-items:baseline;gap:var(--s4);margin-top:var(--s1)}
+  .tip-cmd code{min-width:0;overflow-x:auto;white-space:nowrap}
+  .tip-copy{flex:0 0 auto;color:var(--accent);font-weight:500}
+  .tip.copied .tip-copy{color:var(--ok)}
+  .foot{margin-top:var(--s5);color:var(--dim)}
+
+  .is-run{color:var(--accent)}
+  .is-wait{color:var(--warn)}
+  .is-bad{color:var(--bad)}
+
+  .scrim{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:60;display:flex;align-items:flex-end;justify-content:center}
+  .sheet{width:100%;max-height:82vh;overflow:auto;background:var(--raise);border-top:1px solid var(--line);
+      border-radius:12px 12px 0 0;padding:var(--s4) var(--s4) calc(var(--s4) + env(safe-area-inset-bottom))}
+  .sheet.wide{--sheet:56rem}
+  .grab{width:36px;height:4px;border-radius:2px;background:var(--line);margin:0 auto var(--s3)}
+  @media (min-width:761px){.scrim{align-items:center;padding:var(--s5)}
+      .sheet{width:min(var(--sheet,32rem),100%);border:1px solid var(--line);border-radius:10px;padding:var(--s5)}.grab{display:none}}
+  .sheet h2{font-size:15px;font-weight:600;margin-bottom:var(--s3);overflow-wrap:anywhere}
+  .sheet h3{font-size:12px;font-weight:600;margin:var(--s4) 0 var(--s1)}
+  .sheet .tin{display:block;width:100%;margin-bottom:var(--s2)}
+  .sheet .end{display:flex;justify-content:flex-end;gap:var(--s2);margin-top:var(--s3)}
+  .opt{display:block;width:100%;text-align:start;border:0;border-top:1px solid var(--line);border-radius:0;padding:calc(9px + var(--tap)/2) var(--s2);font-size:14px;font-weight:400}
+  .opt.here{color:var(--dim)}
+  .hrow{display:grid;grid-template-columns:4.6rem minmax(0,1fr) auto;gap:var(--s3);padding:var(--s1) 0;font-size:13px;font-variant-numeric:tabular-nums}
+  .hrow .t,.hrow .facts{color:var(--dim);white-space:nowrap}
+  .runlog{margin:0;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;overflow-wrap:anywhere;border:0;padding:0;background:none}
+  .batch{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s2);padding:var(--s2) 0}
+  .batch .bcount{color:var(--dim);margin-inline-end:var(--s2);font-variant-numeric:tabular-nums}
+  .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:70;max-width:calc(100% - 32px);
+      background:var(--text);color:var(--bg);font-size:13px;font-weight:500;padding:10px 14px;border-radius:8px;opacity:0;transition:opacity .16s}
+  .toast.on{opacity:1}
+  .toast.bad::before{content:"\2715";margin-inline-end:8px}
+  @media (prefers-reduced-motion:reduce){.toast{transition:none}#refresh.spin i{animation:none}}
 </style>
 <header>
-  <div class="brand"><span class="logo">🐕</span>
-    <div class="who"><h1>corgi</h1><small id="host">your machine</small></div>
-    <button class="chip refresh" id="refresh" aria-label="Refresh" title="Refresh"><i>&#x21bb;</i></button>
+  <div class="bar">
+    <h1>corgi</h1>
+    <div class="tabs" id="tabs" role="tablist">
+      <button role="tab" data-tab="ideas" aria-selected="true">Ideas<span class="n" id="n-ideas"></span></button>
+      <button role="tab" data-tab="sessions" aria-selected="false">Agents<span class="n" id="n-sessions"></span></button>
+      <button role="tab" data-tab="kanban" aria-selected="false">Board<span class="n" id="n-kanban"></span></button>
+      <button role="tab" data-tab="stacks" aria-selected="false">Repos<span class="n" id="n-stacks"></span></button>
+      <button role="tab" data-tab="inbox" aria-selected="false">Inbox<span class="n" id="n-inbox"></span></button>
+      <button role="tab" data-tab="laptop" aria-selected="false">Laptop</button>
+      <button role="tab" data-tab="settings" aria-selected="false">Settings</button>
+    </div>
+    <span id="host">your machine</span>
+    <button id="refresh" aria-label="Refresh" title="Refresh"><i>&#x21bb;</i></button>
   </div>
   <p id="hostnote" class="hostnote" hidden></p>
-  <div class="tabs" id="tabs" role="tablist">
-    <button role="tab" data-tab="ideas" aria-selected="true">Ideas<span class="n" id="n-ideas"></span></button>
-    <button role="tab" data-tab="sessions" aria-selected="false">Agents<span class="n" id="n-sessions"></span></button>
-    <button role="tab" data-tab="kanban" aria-selected="false">Board<span class="n" id="n-kanban"></span></button>
-    <button role="tab" data-tab="stacks" aria-selected="false">Repos<span class="n" id="n-stacks"></span></button>
-    <button role="tab" data-tab="inbox" aria-selected="false">Inbox<span class="n" id="n-inbox"></span></button>
-    <button role="tab" data-tab="laptop" aria-selected="false">Laptop</button>
-    <button role="tab" data-tab="settings" aria-selected="false">Settings</button>
-  </div>
 </header>
 <main>
   <div data-pane="inbox" hidden>
-    <section id="inbox" class="board" hidden></section>
+    <section id="inbox"><p class="msg">Loading…</p></section>
   </div>
   <div data-pane="kanban" hidden>
-    <section id="kanban" class="board" hidden></section>
+    <section id="kanban"><p class="msg">Loading…</p></section>
   </div>
   <div data-pane="sessions" hidden>
-    <section id="newchat" class="board" hidden></section>
-    <section id="board" class="board" hidden></section>
+    <section id="newchat" hidden></section>
+    <section id="board"><p class="msg">Loading…</p></section>
   </div>
   <div data-pane="stacks" hidden>
     <div id="list" class="msg">Loading…</div>
   </div>
   <div data-pane="ideas">
-    <p class="hostnote">Specs and ideas: share one, the team comments, the agent answers and fixes the page. Make one with <code>corgi idea share spec.md</code> or <code>corgi idea new "…"</code>.</p>
+    <p class="lead">A page for one thing to build. Share it, the team comments, the agent answers. Make one with <code>corgi idea new "…"</code> or <code>corgi idea share spec.md</code>.</p>
     <div id="ideas" class="msg">Loading…</div>
   </div>
   <div data-pane="laptop" hidden>
-  <details class="tips" id="tips" hidden>
-    <summary><span>On the laptop</span><span class="tips-hint">setup commands</span></summary>
+  <div id="tips" hidden>
+    <p class="lead" id="tipmsg">Commands to run on the laptop. Choose one to copy it.</p>
     <button class="tip" data-copy="/corgi:remote">
       <span class="tip-t">Set it all up, guided</span>
-      <span class="tip-d">With the corgi plugin installed, this skill walks Claude Code through registering the repo, the tunnel and login start.</span>
-      <span class="tip-cmd"><code>/corgi:remote</code><span class="tip-copy">COPY</span></span>
+      <span class="tip-d">The corgi plugin registers the repo, the tunnel and the start at login, from inside Claude Code.</span>
+      <span class="tip-cmd"><code>/corgi:remote</code><span class="tip-copy">Copy</span></span>
     </button>
     <button class="tip" data-copy="corgi agent init">
       <span class="tip-t">Add another repo</span>
       <span class="tip-d">Run it inside any git repo and it joins this list.</span>
-      <span class="tip-cmd"><code>cd ~/dev/api &amp;&amp; corgi agent init</code><span class="tip-copy">COPY</span></span>
+      <span class="tip-cmd"><code>cd ~/dev/api &amp;&amp; corgi agent init</code><span class="tip-copy">Copy</span></span>
     </button>
     <button class="tip" data-copy="corgi agent tunnel setup corgi.yourdomain.com">
       <span class="tip-t">Keep this link working</span>
       <span class="tip-d">The free tunnel changes address on every restart, which un-pairs your phone. Point it at a host you own once.</span>
-      <span class="tip-cmd"><code>corgi agent tunnel setup corgi.yourdomain.com</code><span class="tip-copy">COPY</span></span>
+      <span class="tip-cmd"><code>corgi agent tunnel setup corgi.yourdomain.com</code><span class="tip-copy">Copy</span></span>
     </button>
     <button class="tip" data-copy="corgi agent init --config-dir ~/.claude-work">
       <span class="tip-t">Use a second Claude account</span>
-      <span class="tip-d">Give a work repo its own account, then set its <b>open in</b> pill to <b>chrome</b>.</span>
-      <span class="tip-cmd"><code>corgi agent init --config-dir ~/.claude-work</code><span class="tip-copy">COPY</span></span>
+      <span class="tip-d">Give a work repo its own account, then set its links to <b>Open in chrome</b>.</span>
+      <span class="tip-cmd"><code>corgi agent init --config-dir ~/.claude-work</code><span class="tip-copy">Copy</span></span>
     </button>
     <button class="tip" data-copy="corgi agent install">
       <span class="tip-t">Survive a reboot</span>
-      <span class="tip-d">Starts corgi at login, so this page still works when you are away from the desk.</span>
-      <span class="tip-cmd"><code>corgi agent install</code><span class="tip-copy">COPY</span></span>
+      <span class="tip-d">Starts corgi at login, so this page works when you are away from the desk.</span>
+      <span class="tip-cmd"><code>corgi agent install</code><span class="tip-copy">Copy</span></span>
     </button>
     <button class="tip" data-copy="corgi agent hooks enable --all">
       <span class="tip-t">Tell me when a session needs me</span>
-      <span class="tip-d">A session waiting on a permission prompt is invisible from here. <b>--all</b> covers every repo in this list. These reach the laptop only - <b>corgi agent notify telegram --token …</b> sends them to this phone too.</span>
-      <span class="tip-cmd"><code>corgi agent hooks enable --all</code><span class="tip-copy">COPY</span></span>
+      <span class="tip-d">A session waiting on a permission prompt does not show here. <b>--all</b> covers every repo in this list. These reach the laptop; <b>corgi agent notify telegram --token …</b> sends them to the phone too.</span>
+      <span class="tip-cmd"><code>corgi agent hooks enable --all</code><span class="tip-copy">Copy</span></span>
     </button>
-    <p class="tipnote" id="tipmsg">Tap a row to copy its command.</p>
-  </details>
-
+  </div>
   </div>
   <div data-pane="settings" hidden>
-  <details class="settings" id="settings" hidden>
-    <summary>Settings</summary>
-
-    <h3>Claude app</h3>
+  <div id="settings" hidden>
+    <section class="sec">
+    <h2>Claude app</h2>
     <p>Add corgi as a custom connector on claude.ai (Settings → Connectors → Add custom) to drive this machine from the Claude app too.</p>
     <pre id="cfg"></pre>
     <button id="copycfg">Copy connector config</button>
     <p id="copymsg" class="msg"></p>
+    </section>
 
-    <h3>This browser</h3>
-    <p>The <b>open in</b> pill on each card cycles where session links open: <b>app</b> deep-links into the Claude app, <b>browser</b> keeps them here, <b>chrome</b> forces Chrome - the one to pick for a repo on a different Claude account. Remembered per workspace, here only.</p>
-    <p><b>hide</b> tucks a card away when you are showing this screen to someone. Hidden cards collapse into one button; nothing on the machine changes.</p>
-    <label class="toggle"><input type="checkbox" id="showbridges"> Show hand-started (bridge) sessions</label>
-    <p>A bridge is a session started on the laptop itself. Its claude.ai page shows only what you send from here, so it looks empty at first - the full transcript stays on the laptop.</p>
+    <section class="sec">
+    <h2>This browser</h2>
+    <p><b>Open in</b> on a repo says where its session links open: <b>app</b> in the Claude app, <b>browser</b> here, <b>chrome</b> in Chrome, for a repo on another Claude account. Kept per repo, in this browser.</p>
+    <p><b>Hide</b> takes a repo off this screen when you show it to someone. Nothing on the machine changes.</p>
+    <label class="toggle"><input type="checkbox" id="showbridges"> Show sessions started by hand (bridge)</label>
+    <p>A bridge is a session started on the laptop itself. Its claude.ai page shows only what you send from here; the whole transcript stays on the laptop.</p>
+    </section>
 
-    <h3>Devices</h3>
+    <section class="sec">
+    <h2>Devices</h2>
     <p>Everything that scanned a pairing QR. Revoking one leaves the others working.</p>
     <div id="devices" class="msg">Loading…</div>
+    </section>
 
-    <h3>If something will not start</h3>
+    <section class="sec">
+    <h2>If something will not start</h2>
     <p>The same checks as <code>corgi agent doctor</code>, run from here.</p>
     <button id="rundoctor">Run doctor</button>
     <div id="doctor"></div>
-    <p>For a push to this phone when a session needs you, set <code>notifyUrl</code> in the agent config on the laptop. A Discord, Slack or Telegram webhook works as well as an ntfy topic - corgi picks the payload from the host, which matters because ntfy's iOS app is paid. Without it, notifications only reach the laptop.</p>
-  </details>
-  <p class="foot">
-    <a id="allsessions" target="_blank" rel="noopener">See all your sessions on claude.ai ↗</a>
-  </p>
+    <p>To get a push when a session needs you, set <code>notifyUrl</code> in the agent config on the laptop: Telegram, Slack, Discord or ntfy. Without it, notifications reach the laptop only.</p>
+    </section>
+  </div>
+  <p class="foot"><a id="allsessions" target="_blank" rel="noopener">All your sessions on claude.ai</a></p>
   </div>
 </main>
 <div class="toast" id="toast" hidden></div>
@@ -1667,6 +1540,55 @@ const launcherPageHTML = `<!doctype html>
     const saved = localStorage.getItem('corgi.tab');
     if (saved && document.querySelector('[data-pane="' + saved + '"]')) showTab(saved);
   } catch {}
+
+  const make = (tag, cls, text) => {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  };
+  const press = (text, cls, fn) => { const b = make('button', cls, text); b.type = 'button'; b.onclick = fn; return b; };
+  const httpsLink = (url, text, cls) => {
+    const a = make('a', cls, text);
+    a.href = url; a.target = '_blank'; a.rel = 'noopener noreferrer';
+    return a;
+  };
+  const isHttps = url => /^https:\/\//.test(url || '');
+  const shortRef = ref => { const t = String(ref || ''); return t.slice(t.lastIndexOf('/') + 1) || t; };
+  const refLabel = (ref, url) => {
+    const el = isHttps(url) ? httpsLink(url, shortRef(ref), 'ref') : make('span', 'ref', shortRef(ref));
+    if (shortRef(ref) !== ref) el.title = ref;
+    return el;
+  };
+  // Long text starts at two lines, and stays open once opened: the page
+  // redraws every few seconds.
+  const readOn = new Set();
+  function longWords(key, text) {
+    const wrap = make('div');
+    const p = make('div', 'words', text);
+    const more = press('', 'text', () => { readOn.has(key) ? readOn.delete(key) : readOn.add(key); paint(); });
+    const paint = () => {
+      const open = readOn.has(key);
+      p.classList.toggle('all', open);
+      more.textContent = open ? 'Show less' : 'Show all';
+      more.setAttribute('aria-expanded', String(open));
+      more.hidden = !open && p.scrollHeight <= p.clientHeight + 1;
+    };
+    wrap.append(p, more);
+    paint();
+    new ResizeObserver(paint).observe(p);
+    return wrap;
+  }
+  // A redraw never takes a half-typed comment or a selection with it.
+  const inUse = box => [...box.querySelectorAll('input.say')].some(i => i.value || i === document.activeElement) ||
+    [...box.querySelectorAll('input[type=checkbox]')].some(i => i.checked);
+  function failed(box, again) {
+    if (box.dataset.drawn) return;
+    box.textContent = '';
+    const e = make('div', 'empty');
+    e.append(make('h2', '', 'This page cannot reach corgi'), make('p', '', 'The laptop may be asleep or offline. On it, corgi agent status says more.'), press('Try again', '', again));
+    box.appendChild(e);
+  }
 
   // A count only earns its place when it is not zero.
   function tabCount(name, n) {
@@ -1739,10 +1661,9 @@ const launcherPageHTML = `<!doctype html>
     }
     const pair = document.createElement('div');
     pair.className = 'empty';
-    pair.innerHTML = '<h2>Pair this browser</h2><p>This page needs a key before it can show ' +
-      'anything. On the laptop run <code>corgi agent up</code> and open the <b>pair:</b> link it ' +
-      'prints - in this browser for this machine, or by scanning the QR on a phone.</p>' +
-      '<p>The key is kept in this browser only, and pairing again replaces it.</p>';
+    pair.innerHTML = '<h2>Pair this browser</h2><p>This page needs a key before it can show anything. ' +
+      'On this laptop run <code>corgi agent dashboard</code>. On a phone run <code>corgi agent up</code> ' +
+      'on the laptop and scan the QR it prints.</p><p>The key is kept in this browser only.</p>';
     document.querySelector('main').prepend(pair);
     document.getElementById('refresh').hidden = true;
   } else {
@@ -1755,8 +1676,8 @@ const launcherPageHTML = `<!doctype html>
   }
 
   function skeleton() {
-    list.className = '';
-    list.innerHTML = '<div class="skel"></div><div class="skel"></div><div class="skel"></div>';
+    list.className = 'msg';
+    list.textContent = 'Loading…';
   }
 
   // A session's name and its state both change while you are looking at them:
@@ -1801,18 +1722,23 @@ const launcherPageHTML = `<!doctype html>
       const ideas = j.ideas || [];
       tabCount('ideas', ideas.reduce((n, m) => n + (m.open || 0), 0));
       box.className = ''; box.innerHTML = '';
-      if (!ideas.length) { box.className = 'msg'; box.textContent = 'No pages yet. corgi idea new "a scheduling app for a coffee shop"'; return; }
+      if (!ideas.length) {
+        const none = make('div', 'empty');
+        none.append(make('h2', '', 'No pages yet'), make('p', '', 'On the laptop: corgi idea new "a scheduling app for a coffee shop". The agent writes the first version.'));
+        box.appendChild(none);
+        return;
+      }
       for (const m of ideas) {
-        const a = document.createElement('a'); a.href = '/idea/' + encodeURIComponent(m.slug); a.className = 'ev idea';
-        const top = document.createElement('div'); top.className = 'itop';
-        const b = document.createElement('b'); b.textContent = m.name || m.title; top.appendChild(b);
-        const sh = document.createElement('button'); sh.className = 'ishare'; sh.textContent = 'Share';
-        sh.onclick = ev => { ev.preventDefault(); ev.stopPropagation(); shareIdea(m, sh); };
+        const a = make('a', 'row idea'); a.href = '/idea/' + encodeURIComponent(m.slug);
+        const top = make('div', 'itop');
+        top.appendChild(make('span', 'title', m.name || m.title));
+        const sh = press('Share', 'text', ev => { ev.preventDefault(); ev.stopPropagation(); shareIdea(m, sh); });
         top.appendChild(sh); a.appendChild(top);
         const sub = m.summary || (m.title !== (m.name || m.title) ? m.title : '');
-        if (sub) { const s = document.createElement('div'); s.style.cssText = 'color:var(--dim);font-size:.78rem;margin-top:.1rem'; s.textContent = sub; a.appendChild(s); }
-        const meta = document.createElement('div'); meta.style.cssText = 'display:flex;gap:.5rem;flex-wrap:wrap;font-size:.7rem;color:var(--dim);margin-top:.3rem';
-        for (const t of [m.type || 'idea', m.status || 'draft', (m.open || 0) + ' open', m.forAgent ? m.forAgent + ' waiting on the agent' : '', m.workspace || '']) { if (!t) continue; const sp = document.createElement('span'); sp.textContent = t; meta.appendChild(sp); }
+        if (sub) a.appendChild(make('div', 'facts why', sub));
+        const bits = [m.type || 'idea', m.status || 'draft', m.open ? m.open + ' open' : '', m.workspace || ''].filter(Boolean);
+        const meta = make('div', 'facts', bits.join(' · '));
+        if (m.forAgent) { meta.append(' · '); meta.appendChild(make('span', 'is-run', m.forAgent + ' with the agent')); }
         a.appendChild(meta); box.appendChild(a);
       }
     } catch (e) { box.className = 'msg err'; box.textContent = '✗ ' + e.message; }
@@ -1848,7 +1774,6 @@ const launcherPageHTML = `<!doctype html>
       url: location.origin + '/mcp', headers: { Authorization: 'Bearer ' + token } } } }, null, 2);
     document.getElementById('cfg').textContent = connector;
     s.hidden = false;
-    s.open = true;
     document.getElementById('copycfg').onclick = async (e) => {
       const msg = document.getElementById('copymsg');
       try { await navigator.clipboard.writeText(connector); msg.textContent = '✓ Copied'; }
@@ -1865,7 +1790,6 @@ const launcherPageHTML = `<!doctype html>
   function initTips() {
     const box = document.getElementById('tips');
     box.hidden = false;
-    box.open = true;
     const msg = document.getElementById('tipmsg');
     for (const tip of box.querySelectorAll('.tip')) {
       tip.onclick = async () => {
@@ -1874,11 +1798,11 @@ const launcherPageHTML = `<!doctype html>
           await navigator.clipboard.writeText(text);
           tip.classList.add('copied');
           const label = tip.querySelector('.tip-copy');
-          if (label) label.textContent = 'COPIED';
-          msg.textContent = 'Copied - paste it in a terminal on that machine.';
+          if (label) label.textContent = 'Copied';
+          msg.textContent = 'Copied. Paste it in a terminal on that machine.';
           setTimeout(() => {
             tip.classList.remove('copied');
-            if (label) label.textContent = 'COPY';
+            if (label) label.textContent = 'Copy';
           }, 1400);
         } catch {
           msg.textContent = 'Long-press the command to copy it.';
@@ -1946,12 +1870,13 @@ const launcherPageHTML = `<!doctype html>
   async function load() {
     try {
       const r = await fetch('/launch/workspaces', { headers: auth });
-      if (r.status === 401) throw new Error('This device is not authorized. Re-pair from corgi agent up.');
+      if (r.status === 401) throw new Error('This browser is not paired any more. On the laptop run corgi agent dashboard.');
+      if (!r.ok) throw new Error('This page cannot reach corgi on the laptop. On it, corgi agent status says more.');
       const j = await r.json();
       window.__workspaces = (j.workspaces || []).map(w => w.id);
       render(j.workspaces || []);
     } catch (e) {
-      list.className = 'msg err'; list.textContent = '✗ ' + e.message;
+      if (!lastWorkspaces.length) { list.className = 'msg err'; list.textContent = e.message; }
     }
   }
 
@@ -1977,7 +1902,7 @@ const launcherPageHTML = `<!doctype html>
       const name = document.createElement('b'); name.textContent = a.profile || 'default';
       span.appendChild(name);
       const bar = document.createElement('span');
-      bar.className = 'bar' + (pct >= 90 ? ' hot' : pct >= 70 ? ' warm' : '');
+      bar.className = 'bar5' + (pct >= 90 ? ' hot' : pct >= 70 ? ' warm' : '');
       const fill = document.createElement('i'); fill.style.width = Math.min(100, pct) + '%';
       bar.appendChild(fill); span.appendChild(bar);
       let text = pct + '%';
@@ -1995,75 +1920,59 @@ const launcherPageHTML = `<!doctype html>
   }
   async function loadBoard() {
     const box = document.getElementById('board');
+    loadInbox();
+    loadKanban();
     try {
       const r = await fetch('/launch/board', { headers: auth });
-      if (!r.ok) { box.hidden = true; return; }
+      if (!r.ok) { failed(box, loadBoard); return; }
       const j = await r.json();
+      box.dataset.drawn = '1';
       renderNewChat(j);
-      loadInbox();
-      loadKanban();
       const sessions = (j.sessions || []).filter(s => s.status !== 'gone');
       tabCount('sessions', sessions.length);
-      if (!sessions.length) { box.hidden = true; return; }
       box.innerHTML = '';
       renderAccounts(j.accounts, box);
-      const hot = sessions.filter(s => s.status === 'needs_input');
-      const sum = document.createElement('p');
-      sum.className = 'sum' + (hot.length ? ' hot' : '');
-      const parts = [];
-      if (hot.length) parts.push(hot.length + ' waiting on you');
+      if (!sessions.length) {
+        const none = make('div', 'empty');
+        none.append(make('h2', '', 'No agent is running'), make('p', '', 'A Claude session on this machine shows up here by itself. Start one above, or in a terminal.'));
+        box.appendChild(none);
+        return;
+      }
+      const hot = sessions.filter(s => s.status === 'needs_input').length;
       const working = sessions.filter(s => s.status === 'working').length;
-      if (working) parts.push(working + ' working');
-      const rest = sessions.length - hot.length - working;
-      if (rest) parts.push(rest + ' idle');
-      sum.textContent = 'Claude sessions on this machine · ' + parts.join(' · ');
+      const rest = sessions.length - hot - working;
+      const sum = make('p', 'sum');
+      if (hot) { sum.appendChild(make('span', 'now', hot + (hot === 1 ? ' waits for you' : ' wait for you'))); }
+      const others = [working ? working + ' working' : '', rest ? rest + ' idle' : ''].filter(Boolean).join(' · ');
+      if (others) sum.append((hot ? ' · ' : '') + others);
+      sum.style.marginBottom = 'var(--s3)';
       box.appendChild(sum);
-      // All of them, the ones wanting a person first. This was a three-row
-      // teaser when the board was squeezed above the workspace list; it has a
-      // tab of its own now, and a tab that counts five must show five.
       const rank = { needs_input: 0, working: 1, limited: 2, done: 3, stale: 4, unknown: 5 };
       const shown = sessions.slice().sort((a, b) =>
         (rank[a.status] ?? 9) - (rank[b.status] ?? 9));
       for (const s of shown) {
-        const row = document.createElement('div');
-        row.className = 'sess';
-        const dot = document.createElement('span');
-        dot.className = 'sdot ' + (s.status === 'needs_input' ? 'needs' : esc(s.status || 'unknown'));
-        const label = document.createElement('span');
-        label.className = 'slabel'; label.textContent = s.display || s.label || '?';
-        row.appendChild(dot); row.appendChild(label);
-        let detail = s.detail || STATUS_WORD[s.status] || '';
+        const row = make('div', 'sess');
+        const dot = make('span', 'sdot ' + (s.status === 'needs_input' ? 'needs' : esc(s.status || 'unknown')));
+        const label = make('span', 'slabel', s.display || s.label || '?');
+        if (s.profile && s.profile !== 'default') label.appendChild(make('span', 'sbadge', s.profile));
+        let detail = s.status === 'needs_input' ? ['needs you', s.detail].filter(Boolean).join(': ') : s.detail || STATUS_WORD[s.status] || '';
         if (s.status === 'limited' && s.limit === 'overload') detail = 'API overloaded';
         if (s.drift && s.drift.length) detail = 'drifting: ' + s.drift[0];
         if (s.resumeAt) detail += (detail ? ' · ' : '') + 'continues ' + clock(s.resumeAt);
-        if (s.context && s.context.percent >= 50) detail += (detail ? ' · ' : '') + 'ctx ' + s.context.percent + '%';
-        if (detail) {
-          const d = document.createElement('span');
-          d.className = 'sdetail'; d.textContent = detail;
-          row.appendChild(d);
-        }
-        if (s.profile && s.profile !== 'default') {
-          const b = document.createElement('span');
-          b.className = 'sbadge'; b.textContent = s.profile;
-          row.appendChild(b);
-        }
-        const sum = sessionSummary(s);
-        if (sum) {
-          const l = document.createElement('div');
-          l.className = 'ssum'; l.textContent = sum;
-          row.appendChild(l);
-        }
+        if (s.context && s.context.percent >= 50) detail += (detail ? ' · ' : '') + 'context ' + s.context.percent + '%';
+        row.append(dot, label, make('span', 'sdetail' + (s.status === 'needs_input' ? ' is-wait' : ''), detail));
+        const line = sessionSummary(s);
+        if (line) row.appendChild(make('div', 'ssum', line));
         const act = sessionActions(s);
         if (act) row.appendChild(act);
         box.appendChild(row);
       }
-      box.hidden = false;
-    } catch { box.hidden = true; }
+    } catch { failed(box, loadBoard); }
   }
 
   // The new-chat card is built once and only its choices refresh, so a
   // prompt being typed survives the board's periodic reload.
-  const MODELS = [['', 'default model'], ['opus', 'Opus'], ['sonnet', 'Sonnet'], ['haiku', 'Haiku']];
+  const MODELS = [['', 'Default model'], ['opus', 'Opus'], ['sonnet', 'Sonnet'], ['haiku', 'Haiku']];
   function windowLabel(w) {
     const f = (w.folders || [])[0];
     return f ? f.replace(/[\\/]+$/, '').split(/[\\/]/).pop() : (w.app || w.id);
@@ -2093,7 +2002,7 @@ const launcherPageHTML = `<!doctype html>
       fillSelect(model, MODELS, false);
       try { const m = localStorage.getItem('corgi.newchat.model'); if (m !== null) model.value = m; } catch {}
       model.onchange = () => { try { localStorage.setItem('corgi.newchat.model', model.value); } catch {} };
-      const go = document.createElement('button'); go.type = 'button'; go.className = 'ok'; go.textContent = 'Start chat';
+      const go = document.createElement('button'); go.type = 'button'; go.className = 'fill'; go.textContent = 'Start chat';
       go.onclick = async () => {
         const prompt = ta.value.trim();
         go.disabled = true;
@@ -2119,7 +2028,7 @@ const launcherPageHTML = `<!doctype html>
     if (!had && front && windows.some(w => w.id === front)) win.value = front;
     const profiles = (j.accounts || []).map(a => a.profile).filter(p => p && p !== 'default');
     const prof = card.querySelector('.nprof');
-    fillSelect(prof, [['', 'default account'], ...profiles.map(p => [p, p])], true);
+    fillSelect(prof, [['', 'Default account'], ...profiles.map(p => [p, p])], true);
     prof.hidden = !profiles.length;
     // Which checkout it opens in. A phone has no folder of its own, so
     // without this the chat lands wherever that editor window happened to
@@ -2131,7 +2040,7 @@ const launcherPageHTML = `<!doctype html>
       // sessions name their workspaces, which is enough to choose one.
       ids = [...new Set((j.sessions || []).map(s => s.workspace || s.display).filter(Boolean))];
     }
-    fillSelect(ws, [['', 'window\u2019s folder'], ...ids.map(i => [i, i])], true);
+    fillSelect(ws, [['', 'The window\u2019s folder'], ...ids.map(i => [i, i])], true);
     if (!ws.value) {
       try { const saved = localStorage.getItem('corgi.newchat.workspace'); if (saved && ids.includes(saved)) ws.value = saved; } catch {}
     }
@@ -2212,7 +2121,7 @@ const launcherPageHTML = `<!doctype html>
     return box.childElementCount ? box : null;
   }
 
-  const EVENT_KIND = { 'issue.new': 'new issue', 'issue.comment': 'comment', 'pr.comment': 'PR comment', 'pr.review': 'PR review', 'task': 'task' };
+  const EVENT_KIND = { 'issue.new': 'new issue', 'issue.comment': 'comment', 'pr.comment': 'PR comment', 'pr.review': 'PR review', 'review.requested': 'review request', 'ci.failed': 'red build', 'routine': 'routine', 'task': 'task' };
   // What a card says under its title while a session is on it or on its way.
   const pickedLine = (p) => {
     if (!p) return '';
@@ -2252,21 +2161,16 @@ const launcherPageHTML = `<!doctype html>
   // A task of your own: a title, a description, the workspace it is for.
   // Lands in Todo like a ticket; Work on it opens a session on it.
   function taskSheet(after) {
-    const scrim = document.createElement('div');
-    scrim.className = 'scrim';
-    const sheet = document.createElement('div');
-    sheet.className = 'sheet';
-    const close = () => scrim.remove();
-    scrim.onclick = e => { if (e.target === scrim) close(); };
-    const grab = document.createElement('div'); grab.className = 'grab';
-    const h = document.createElement('h3'); h.textContent = 'A task for later';
-    const title = document.createElement('input'); title.className = 'tin'; title.placeholder = 'Title'; title.maxLength = 200;
-    const body = document.createElement('textarea'); body.className = 'tin'; body.rows = 5; body.placeholder = 'What to do, and how you will know it is done';
-    const ws = document.createElement('select'); ws.className = 'tin';
-    const none = document.createElement('option'); none.value = ''; none.textContent = 'any workspace'; ws.appendChild(none);
-    for (const w of (window.__workspaces || [])) { const o = document.createElement('option'); o.value = w; o.textContent = w; ws.appendChild(o); }
-    const add = document.createElement('button'); add.className = 'primary'; add.textContent = 'Add to the board';
-    add.onclick = async () => {
+    const { sheet, close } = openSheet('Add a task');
+    const title = make('input', 'tin'); title.placeholder = 'Title'; title.maxLength = 200;
+    const body = make('textarea', 'tin'); body.rows = 6; body.placeholder = 'What to do, and how you will know it is done';
+    const ws = make('select', 'tin');
+    const none = make('option', '', 'Any workspace'); none.value = ''; ws.appendChild(none);
+    for (const w of (window.__workspaces || [])) { const o = make('option', '', w); o.value = w; ws.appendChild(o); }
+    const startRow = make('label', 'toggle');
+    const start = make('input'); start.type = 'checkbox';
+    startRow.append(start, 'Start now, without me');
+    const add = press('Add to the board', 'fill', async () => {
       if (!title.value.trim()) { title.focus(); return; }
       add.disabled = true;
       try {
@@ -2275,14 +2179,25 @@ const launcherPageHTML = `<!doctype html>
         if (!r.ok) { toast(j.error || 'that did not go through', true); add.disabled = false; return; }
         toast(j.done || 'on the board'); close(); if (after) after();
       } catch { toast('no connection', true); add.disabled = false; }
-    };
-    const startRow = document.createElement('label'); startRow.className = 'kmeta';
-    const start = document.createElement('input'); start.type = 'checkbox';
-    startRow.append(start, ' Start now, without me');
-    sheet.append(grab, h, title, body, ws, startRow, add);
+    });
+    const end = make('div', 'end'); end.append(press('Cancel', '', close), add);
+    sheet.append(title, body, ws, startRow, end);
+    title.focus();
+  }
+
+  function openSheet(name, wide) {
+    const scrim = make('div', 'scrim');
+    const sheet = make('div', 'sheet' + (wide ? ' wide' : ''));
+    sheet.setAttribute('role', 'dialog'); sheet.setAttribute('aria-modal', 'true'); sheet.setAttribute('aria-label', name);
+    const before = document.activeElement;
+    const keys = e => { if (e.key === 'Escape') close(); };
+    const close = () => { scrim.remove(); document.removeEventListener('keydown', keys); if (before && before.focus) before.focus(); };
+    document.addEventListener('keydown', keys);
+    scrim.onclick = e => { if (e.target === scrim) close(); };
+    sheet.append(make('div', 'grab'), make('h2', '', name));
     scrim.appendChild(sheet);
     document.body.appendChild(scrim);
-    title.focus();
+    return { sheet, close };
   }
 
   // One change to one ticket. Every call here is something someone tapped.
@@ -2301,16 +2216,7 @@ const launcherPageHTML = `<!doctype html>
   // The columns as a sheet: a phone has no room for twelve buttons in a row,
   // and the list is the workspace's real board, not a guess.
   function moveSheet(ev, columns, onPick) {
-    const scrim = document.createElement('div');
-    scrim.className = 'scrim';
-    const sheet = document.createElement('div');
-    sheet.className = 'sheet';
-    const close = () => scrim.remove();
-    scrim.onclick = e => { if (e.target === scrim) close(); };
-    const grab = document.createElement('div'); grab.className = 'grab';
-    const h = document.createElement('h3');
-    h.textContent = 'Move ' + (ev.ref || ev.key) + ' to';
-    sheet.append(grab, h);
+    const { sheet, close } = openSheet('Move ' + shortRef(ev.ref || ev.key) + ' to');
     for (const name of columns) {
       const b = document.createElement('button');
       const here = ev.state && name.toLowerCase() === String(ev.state).toLowerCase();
@@ -2333,8 +2239,6 @@ const launcherPageHTML = `<!doctype html>
       if (await ticket(ev, { do: 'assign' })) close(); else mine.disabled = false;
     };
     sheet.appendChild(mine);
-    scrim.appendChild(sheet);
-    document.body.appendChild(scrim);
   }
 
   // What a run said, on the phone: the tail of its log, the handoff it left,
@@ -2347,184 +2251,168 @@ const launcherPageHTML = `<!doctype html>
   }
 
   async function runSheet(fx) {
-    const scrim = document.createElement('div');
-    scrim.className = 'scrim';
-    const sheet = document.createElement('div');
-    sheet.className = 'sheet';
-    const close = () => scrim.remove();
-    scrim.onclick = e => { if (e.target === scrim) close(); };
-    const grab = document.createElement('div'); grab.className = 'grab';
-    const h = document.createElement('h3');
-    h.textContent = fx.ref + (fx.running ? ' · running' : '');
-    const pre = document.createElement('pre');
-    pre.className = 'runlog';
-    pre.textContent = 'loading…';
-    sheet.append(grab, h, pre);
-    scrim.appendChild(sheet);
-    document.body.appendChild(scrim);
+    const { sheet } = openSheet(shortRef(fx.ref) + (fx.running ? ' · running' : ''), true);
+    const pre = make('pre', 'runlog', 'Loading…');
+    sheet.appendChild(pre);
     try {
       const r = await fetch('/launch/run?key=' + encodeURIComponent(fx.key) + '&tail=200', { headers: auth });
       const j = await r.json();
-      if (!r.ok) { pre.textContent = j.error || 'no log'; return; }
-      const meta = document.createElement('p');
-      meta.className = 'etitle';
+      if (!r.ok) { pre.textContent = j.error || 'This run left no log.'; return; }
       const bits = [];
       if (j.outcome) bits.push(j.outcome);
       if (j.tokens) bits.push(humanTokens(j.tokens) + ' tok' + (j.costUSD ? ' · $' + j.costUSD.toFixed(2) : ''));
       if (j.spentPercent) bits.push(j.spentPercent + '% of the 5h window');
       if (j.handover) bits.push(j.handover);
-      meta.textContent = bits.join(' · ');
-      sheet.insertBefore(meta, pre);
-      pre.textContent = j.log || '(the log is empty)';
-      pre.scrollTop = pre.scrollHeight;
-    } catch { pre.textContent = 'no connection'; }
+      if (bits.length) sheet.insertBefore(make('p', 'facts', bits.join(' · ')), pre);
+      pre.textContent = j.log || 'This run left no log.';
+    } catch { pre.textContent = 'No connection.'; }
   }
 
   // The kanban: one card per ticket, column worked out by corgi. A card is
   // moved on the tracker, worked on, or unblocked - the column follows.
+  const NOTHING = { Inbox: 'Nothing waits here', Ready: 'Nothing is ready', Running: 'Nothing is running', Blocked: 'Nothing is stuck', Review: 'No open pull request', Done: 'Nothing finished yet' };
   async function loadKanban() {
     const box = document.getElementById('kanban');
     let cards = [], columns = [], boards = {}, features = [];
     try {
       const r = await fetch('/launch/kanban', { headers: auth });
-      if (!r.ok) { box.hidden = true; return; }
+      if (!r.ok) { failed(box, loadKanban); return; }
       const j = await r.json();
       cards = j.cards || []; columns = j.columns || []; boards = j.boards || {}; features = j.features || [];
-    } catch { box.hidden = true; tabCount('kanban', 0); return; }
+    } catch { tabCount('kanban', 0); failed(box, loadKanban); return; }
     const done = cards.filter(c => c.column === 'Done').length;
-    const live = cards.length - done;
-    tabCount('kanban', live);
+    tabCount('kanban', cards.length - done);
+    if (inUse(box)) return;
+    box.dataset.drawn = '1';
+    box.innerHTML = '';
+    const again = () => { loadKanban(); loadInbox(); };
+    if (!cards.length) {
+      const none = make('div', 'empty');
+      none.append(make('h2', '', 'The board is empty'), make('p', '', 'Tickets assigned to you, your pull requests and your own tasks land here.'), press('Add a task', 'fill', () => taskSheet(again)));
+      box.appendChild(none);
+      return;
+    }
     // Done is history: hidden until asked for, so the live work comes first.
     let showDone = false;
     try { showDone = localStorage.getItem('corgi.showDone') === '1'; } catch {}
-    if (!cards.length) {
-      box.hidden = false; box.innerHTML = '';
-      const e = document.createElement('p'); e.className = 'sum'; e.textContent = 'No cards yet. ';
-      const b = document.createElement('button'); b.textContent = '+ Task for later'; b.onclick = () => taskSheet(() => { loadKanban(); loadInbox(); });
-      e.appendChild(b); box.appendChild(e);
-      return;
-    }
-    box.hidden = false;
-    box.innerHTML = '';
-    const addBar = document.createElement('p'); addBar.className = 'sum';
-    const addBtn = document.createElement('button'); addBtn.textContent = '+ Task for later';
-    addBtn.onclick = () => taskSheet(() => { loadKanban(); loadInbox(); });
-    addBar.appendChild(addBtn);
-    if (done) {
-      const tg = document.createElement('button'); tg.textContent = showDone ? 'Hide done' : 'Show done (' + done + ')';
-      tg.onclick = () => { try { localStorage.setItem('corgi.showDone', showDone ? '0' : '1'); } catch {} loadKanban(); };
-      addBar.appendChild(tg);
-    }
-    const hist = document.createElement('a'); hist.className = 'eopen'; hist.href = '#'; hist.textContent = 'History';
-    hist.onclick = e => { e.preventDefault(); historySheet(); };
-    addBar.appendChild(hist);
-    box.appendChild(addBar);
-    if (features.length) {
-      const fw = document.createElement('div'); fw.className = 'kfeat';
-      for (const f of features) {
-        const row = document.createElement('div'); row.className = 'kcard' + (f.state === 'blocked' ? ' blocked' : f.state === 'running' ? ' running' : '');
-        const head = document.createElement('div');
-        const ref = document.createElement('span'); ref.className = 'kref'; ref.textContent = f.ref; head.appendChild(ref);
-        if (f.title) { const t = document.createElement('span'); t.className = 'kws'; t.textContent = f.title; head.appendChild(t); }
-        row.appendChild(head);
-        const why = document.createElement('p'); why.className = 'kwhy'; why.textContent = f.state + ' · ' + f.why; row.appendChild(why);
-        const waves = document.createElement('p'); waves.className = 'kmeta';
-        waves.textContent = (f.waves || []).map(w => w.join(' + ')).join('  →  ');
-        row.appendChild(waves);
-        if (f.cost && f.cost.tokens) {
-          const m = document.createElement('p'); m.className = 'kmeta'; m.textContent = costBits(f.cost).join(' · '); row.appendChild(m);
-        }
-        fw.appendChild(row);
-      }
-      box.appendChild(fw);
-    }
-    const wrap = document.createElement('div');
-    wrap.className = 'kb';
-    for (const col of columns) {
-      if (col === 'Done' && !showDone) continue;
-      const rows = cards.filter(c => c.column === col);
-      const kc = document.createElement('div');
-      kc.className = 'kcol';
-      const h = document.createElement('h3');
-      h.textContent = col;
-      const n = document.createElement('span'); n.textContent = String(rows.length);
-      h.appendChild(n);
+    const bar = make('div', 'barline');
+    bar.appendChild(press('Add a task', 'fill', () => taskSheet(again)));
+    if (done) bar.appendChild(press(showDone ? 'Hide done' : 'Show done (' + done + ')', 'text', () => {
+      try { localStorage.setItem('corgi.showDone', showDone ? '0' : '1'); } catch {}
+      loadKanban();
+    }));
+    bar.appendChild(press('History', 'text', historySheet));
+    box.appendChild(bar);
+    if (features.length) box.appendChild(featureRows(features));
+    const shown = columns.filter(col => col !== 'Done');
+    const rowsOf = col => cards.filter(c => c.column === col);
+    const wrap = make('div', 'kb');
+    wrap.style.gridTemplateColumns = shown.map(col => rowsOf(col).length ? 'minmax(10rem,1fr)' : 'minmax(7rem,.4fr)').join(' ');
+    for (const col of shown) {
+      const rows = rowsOf(col);
+      const kc = make('section', 'kcol' + (rows.length ? '' : ' zero'));
+      const h = make('h2', '', col);
+      h.appendChild(make('span', 'n', String(rows.length)));
       kc.appendChild(h);
-      if (!rows.length) {
-        const e = document.createElement('div'); e.className = 'empty'; e.textContent = '-';
-        kc.appendChild(e);
-      }
-      for (const c of rows) {
-        const card = document.createElement('div');
-        card.className = 'kcard' + (col === 'Blocked' ? ' blocked' : col === 'Running' ? ' running' : '');
-        const head = document.createElement('div');
-        const ref = document.createElement('span'); ref.className = 'kref'; ref.textContent = c.ref;
-        head.appendChild(ref);
-        if (c.workspace) { const w = document.createElement('span'); w.className = 'kws'; w.textContent = c.workspace; head.appendChild(w); }
-        card.appendChild(head);
-        if (c.title) { const t = document.createElement('p'); t.className = 'ktitle'; t.textContent = c.title; card.appendChild(t); }
-        const why = document.createElement('p'); why.className = 'kwhy'; why.textContent = c.why || ''; card.appendChild(why);
-        if (c.body) { const d = document.createElement('p'); d.className = 'kmeta kbody'; d.textContent = c.body; card.appendChild(d); }
-        if (c.now) { const m = document.createElement('p'); m.className = 'kmeta know'; m.textContent = 'now: ' + c.now.doing + (c.now.model ? ' · ' + c.now.model : '') + (c.now.agent && c.now.agent !== 'claude' ? ' · ' + c.now.agent : ''); card.appendChild(m); }
-        if (c.session) { const m = document.createElement('p'); m.className = 'kmeta'; m.textContent = sessionLine(c.session); card.appendChild(m); }
-        if (c.feature) { const m = document.createElement('p'); m.className = 'kmeta'; m.textContent = 'part of ' + c.feature.ref + (c.feature.title ? ' ' + c.feature.title : '') + (c.after && c.after.length ? ' · after ' + c.after.join(', ') : ''); card.appendChild(m); }
-        if (c.touches && c.touches.length) { const m = document.createElement('p'); m.className = 'kmeta'; m.textContent = 'touches ' + c.touches.join(' + '); card.appendChild(m); }
-        if (c.branch) { const m = document.createElement('p'); m.className = 'kmeta'; m.textContent = c.branch; card.appendChild(m); }
-        if (c.handoff && c.handoff.next) { const m = document.createElement('p'); m.className = 'kmeta'; m.textContent = 'next: ' + c.handoff.next; card.appendChild(m); }
-        if (c.cost) {
-          const m = document.createElement('p'); m.className = 'kmeta'; m.textContent = costBits(c.cost).join(' · '); card.appendChild(m);
-        }
-        if (c.kind === 'task' && c.key && col !== 'Done') {
-          const say = document.createElement('input'); say.className = 'tin'; say.placeholder = 'Comment: the agent picks it up'; say.maxLength = 8000;
-          say.onkeydown = async e => {
-            if (e.key !== 'Enter' || !say.value.trim()) return;
-            say.disabled = true;
-            try {
-              const r = await fetch('/launch/task/comment', { method: 'POST', headers: auth, body: JSON.stringify({ key: c.key, text: say.value }) });
-              const j = await r.json().catch(() => ({}));
-              if (!r.ok) { toast(j.error || 'that did not go through', true); say.disabled = false; return; }
-              toast(j.done || 'sent'); loadKanban();
-            } catch { toast('no connection', true); say.disabled = false; }
-          };
-          card.appendChild(say);
-        }
-        const row = document.createElement('div'); row.className = 'erow';
-        const ev = { key: c.key, ref: c.ref, workspace: c.workspace, kind: c.kind, url: c.url };
-        if (c.url && /^https:\/\//.test(c.url)) {
-          const a = document.createElement('a'); a.className = 'eopen'; a.href = c.url; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.textContent = 'Open'; row.appendChild(a);
-        }
-        const cardPR = (c.fix && (c.fix.prs || [])[0]) || (c.session && c.session.pr) || '';
-        if (cardPR && /^https:\/\//.test(cardPR)) {
-          const a = document.createElement('a'); a.className = 'eopen'; a.href = cardPR; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.textContent = 'Open PR'; row.appendChild(a);
-          if (c.key && col !== 'Done') prButtons(row, ev, cardPR);
-        }
-        if (col === 'Blocked' && c.key) {
-          const ub = document.createElement('button'); ub.className = 'primary'; ub.textContent = 'Unblock';
-          ub.onclick = () => { ub.disabled = true; ticket(ev, { do: 'unblock' }).finally(() => { ub.disabled = false; loadKanban(); }); };
-          row.appendChild(ub);
-        } else if ((col === 'Inbox' || col === 'Ready' || (c.kind === 'task' && col === 'Running' && !c.session)) && c.key && c.kind && (c.kind.startsWith('issue.') || c.kind === 'task')) {
-          const go = document.createElement('button'); go.className = 'primary'; go.textContent = c.picked && !c.session ? 'Work on it again' : 'Work on it';
-          go.onclick = () => { go.disabled = true; workOn(ev).finally(() => { go.disabled = false; loadKanban(); }); };
-          row.appendChild(go);
-        }
-        const board = boards[c.workspace] || {};
-        const cols = c.columns || board.columns || [];
-        if (cols.length && c.key) {
-          const mv = document.createElement('button'); mv.textContent = 'Move…';
-          mv.onclick = () => moveSheet(Object.assign({ state: c.state }, ev), cols);
-          row.appendChild(mv);
-        }
-        if (c.kind === 'task' && c.key && col !== 'Done') {
-          const dn = document.createElement('button'); dn.textContent = 'Done';
-          dn.onclick = () => { dn.disabled = true; ticket(ev, { do: 'close' }).finally(() => { dn.disabled = false; }); };
-          row.appendChild(dn);
-        }
-        if (row.children.length) card.appendChild(row);
-        kc.appendChild(card);
-      }
+      if (!rows.length) kc.appendChild(make('p', 'none', NOTHING[col] || 'Nothing here'));
+      for (const c of rows) kc.appendChild(kanbanCard(c, col, boards[c.workspace] || {}));
       wrap.appendChild(kc);
     }
     box.appendChild(wrap);
+    if (done && showDone) {
+      const sec = make('section', 'kdone');
+      const h = make('h2', 'gh', 'Done'); h.appendChild(make('span', 'n', String(done)));
+      const list = make('div', 'kgrid');
+      for (const c of rowsOf('Done')) list.appendChild(kanbanCard(c, 'Done', boards[c.workspace] || {}));
+      sec.append(h, list);
+      box.appendChild(sec);
+    }
+  }
+
+  function featureRows(features) {
+    const wrap = make('section', 'kfeat');
+    const h = make('h2', 'gh', 'Features'); h.appendChild(make('span', 'n', String(features.length)));
+    wrap.appendChild(h);
+    for (const f of features) {
+      const row = make('div', 'row');
+      const top = make('div', 'rtop'); top.appendChild(make('span', 'ref', f.ref)); row.appendChild(top);
+      if (f.title) row.appendChild(make('div', 'title', f.title));
+      const why = make('div', 'facts why', '');
+      why.append(make('span', f.state === 'blocked' ? 'is-bad' : f.state === 'running' ? 'is-run' : '', f.state), ' · ' + f.why);
+      row.appendChild(why);
+      const bits = [(f.waves || []).map(w => w.join(' + ')).join('  →  ')];
+      if (f.cost && f.cost.tokens) bits.push(costBits(f.cost).join(' · '));
+      row.appendChild(make('div', 'facts', bits.filter(Boolean).join(' · ')));
+      wrap.appendChild(row);
+    }
+    return wrap;
+  }
+
+  function cardFacts(c) {
+    const bits = [];
+    if (c.session) bits.push(sessionLine(c.session));
+    if (c.feature) bits.push('part of ' + c.feature.ref + (c.feature.title ? ' ' + c.feature.title : '') + (c.after && c.after.length ? ' · after ' + c.after.join(', ') : ''));
+    if (c.handoff && c.handoff.next && !(c.why || '').includes(c.handoff.next)) bits.push('next: ' + c.handoff.next);
+    const last = [c.touches && c.touches.length ? 'touches ' + c.touches.join(' + ') : '', c.branch || ''].filter(Boolean).join(' · ');
+    if (last) bits.push(last);
+    if (c.cost) bits.push(costBits(c.cost).join(' · '));
+    return bits;
+  }
+
+  const saying = new Set();
+  function kanbanCard(c, col, board) {
+    const card = make('article', 'row');
+    const ev = { key: c.key, ref: c.ref, workspace: c.workspace, kind: c.kind, url: c.url };
+    const top = make('div', 'rtop');
+    top.appendChild(refLabel(c.ref, c.url));
+    if (c.workspace) top.appendChild(make('span', '', c.workspace));
+    card.appendChild(top);
+    if (c.title) card.appendChild(make('div', 'title', c.title));
+    if (c.why) card.appendChild(make('div', 'facts why' + (col === 'Blocked' ? ' is-bad' : ''), c.why));
+    if (c.now) card.appendChild(make('div', 'facts why is-run', c.now.doing + (c.now.model ? ' · ' + c.now.model : '') + (c.now.agent && c.now.agent !== 'claude' ? ' · ' + c.now.agent : '')));
+    if (c.body) card.appendChild(longWords('card ' + c.key, c.body));
+    for (const line of cardFacts(c)) card.appendChild(make('div', 'facts', line));
+    const open = c.kind === 'task' && c.key && col !== 'Done';
+    const row = make('div', 'erow');
+    const workable = c.key && c.kind && (c.kind.startsWith('issue.') || c.kind === 'task');
+    if (col === 'Blocked' && c.key) {
+      const ub = press('Unblock', 'primary', () => { ub.disabled = true; ticket(ev, { do: 'unblock' }).finally(() => { ub.disabled = false; loadKanban(); }); });
+      row.appendChild(ub);
+    } else if (workable && (col === 'Inbox' || col === 'Ready' || (c.kind === 'task' && col === 'Running' && !c.session))) {
+      const go = press(c.picked && !c.session ? 'Work on it again' : 'Work on it', 'primary', () => { go.disabled = true; workOn(ev).finally(() => { go.disabled = false; loadKanban(); }); });
+      row.appendChild(go);
+    }
+    const cardPR = (c.fix && (c.fix.prs || [])[0]) || (c.session && c.session.pr) || '';
+    if (isHttps(cardPR)) {
+      if (cardPR !== c.url) row.appendChild(httpsLink(cardPR, cardPR.includes('/merge_requests/') ? 'Merge request' : 'Pull request'));
+      if (c.key && col !== 'Done') prButtons(row, ev, cardPR);
+    }
+    const cols = c.columns || board.columns || [];
+    if (cols.length && c.key) row.appendChild(press('Move…', '', () => moveSheet(Object.assign({ state: c.state }, ev), cols)));
+    if (open) {
+      const say = make('input', 'say'); say.placeholder = 'Comment, and the agent picks it up'; say.maxLength = 8000;
+      say.hidden = !saying.has(c.key);
+      say.onkeydown = async e => {
+        if (e.key === 'Escape') { say.value = ''; say.hidden = true; saying.delete(c.key); return; }
+        if (e.key !== 'Enter' || !say.value.trim()) return;
+        say.disabled = true;
+        try {
+          const r = await fetch('/launch/task/comment', { method: 'POST', headers: auth, body: JSON.stringify({ key: c.key, text: say.value }) });
+          const j = await r.json().catch(() => ({}));
+          if (!r.ok) { toast(j.error || 'that did not go through', true); say.disabled = false; return; }
+          say.value = ''; say.blur(); saying.delete(c.key);
+          toast(j.done || 'sent'); loadKanban();
+        } catch { toast('no connection', true); say.disabled = false; }
+      };
+      row.appendChild(press('Comment', '', () => { saying.add(c.key); say.hidden = false; say.focus(); }));
+      const dn = press('Done', '', () => { dn.disabled = true; ticket(ev, { do: 'close' }).finally(() => { dn.disabled = false; }); });
+      row.appendChild(dn);
+      card.appendChild(row);
+      card.appendChild(say);
+      return card;
+    }
+    if (row.children.length) card.appendChild(row);
+    return card;
   }
 
   function costBits(cost) {
@@ -2544,274 +2432,71 @@ const launcherPageHTML = `<!doctype html>
       const r = await fetch('/launch/history?days=14', { headers: auth });
       if (r.ok) entries = (await r.json()).entries || [];
     } catch { toast('no connection', true); return; }
-    const scrim = document.createElement('div'); scrim.className = 'scrim';
-    const panel = document.createElement('div'); panel.className = 'sheet hist';
-    const grab = document.createElement('div'); grab.className = 'grab'; panel.appendChild(grab);
-    const h = document.createElement('h3'); h.textContent = 'History · last 14 days'; panel.appendChild(h);
-    if (!entries.length) { const e = document.createElement('p'); e.className = 'sum'; e.textContent = 'Nothing yet.'; panel.appendChild(e); }
+    const { sheet } = openSheet('The last 14 days', true);
+    if (!entries.length) sheet.appendChild(make('p', 'sum', 'Nothing happened yet.'));
     let day = '';
     for (const e of entries) {
       const d = new Date(e.at);
       const label = d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
-      if (label !== day) { day = label; const dh = document.createElement('h4'); dh.textContent = label; panel.appendChild(dh); }
-      const row = document.createElement('p'); row.className = 'kmeta';
-      const bits = [d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }), e.ref, e.kind + (e.why && e.why !== e.kind ? ': ' + e.why : '')];
-      if (e.cost && e.cost.tokens) bits.push(costBits(e.cost).join(' · '));
-      if (e.took) bits.push(e.took);
-      row.textContent = bits.join('  ');
-      if (e.url && /^https:\/\//.test(e.url)) { const a = document.createElement('a'); a.className = 'eopen'; a.href = e.url; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.textContent = 'Open'; row.appendChild(a); }
-      panel.appendChild(row);
+      if (label !== day) { day = label; sheet.appendChild(make('h3', '', label)); }
+      const row = make('div', 'hrow');
+      const what = make('span');
+      what.append(refLabel(e.ref, e.url), ' ' + e.kind + (e.why && e.why !== e.kind ? ': ' + e.why : ''));
+      const bits = [e.cost && e.cost.tokens ? costBits(e.cost).join(' · ') : '', e.took || ''].filter(Boolean);
+      row.append(make('span', 't', d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })), what, make('span', 'facts', bits.join(' · ')));
+      sheet.appendChild(row);
     }
-    scrim.appendChild(panel);
-    scrim.onclick = e => { if (e.target === scrim) scrim.remove(); };
-    document.body.appendChild(scrim);
   }
 
+  let wholeInbox = false;
   async function loadInbox() {
     const box = document.getElementById('inbox');
     let events = [], fixes = [], boards = {};
     try {
       const r = await fetch('/launch/events', { headers: auth });
-      if (!r.ok) { box.hidden = true; return; }
+      if (!r.ok) { failed(box, loadInbox); return; }
       const j = await r.json();
       events = j.events || [];
       fixes = j.fixes || [];
       boards = j.boards || {};
-    } catch { box.hidden = true; tabCount('inbox', 0); return; }
+    } catch { tabCount('inbox', 0); failed(box, loadInbox); return; }
     tabCount('inbox', events.length);
+    if (inUse(box)) return;
+    box.dataset.drawn = '1';
+    box.innerHTML = '';
+    const again = () => { loadInbox(); loadKanban(); };
     if (!events.length && !fixes.length) {
-      box.hidden = false; box.innerHTML = '';
-      const e = document.createElement('p'); e.className = 'sum'; e.textContent = 'Nothing is waiting on you. ';
-      const b = document.createElement('button'); b.textContent = '+ Task for later'; b.onclick = () => taskSheet(() => { loadInbox(); loadKanban(); });
-      e.appendChild(b); box.appendChild(e);
+      const none = make('div', 'empty');
+      none.append(make('h2', '', 'Nothing waits for you'), make('p', '', 'New tickets, review comments and your own tasks land here.'), press('Add a task', 'fill', () => taskSheet(again)));
+      box.appendChild(none);
       return;
     }
-
-    box.innerHTML = '';
-    // One line before the list: what is waiting, and what corgi did about it.
-    // The phone is unlocked to read exactly this.
-    const tally = document.createElement('p');
-    tally.className = 'sum hot';
-    const running = fixes.filter((f) => f.running).length;
-    const toReview = fixes.filter((f) => !f.running && (f.prs || []).length).length;
+    const running = fixes.filter(f => f.running).length;
+    const toReview = fixes.filter(f => !f.running && (f.prs || []).length).length;
     const bits = [];
-    if (events.length) bits.push(events.length + (events.length === 1 ? ' thing waiting on you' : ' things waiting on you'));
+    if (events.length) bits.push(events.length + (events.length === 1 ? ' thing waits for you' : ' things wait for you'));
     if (toReview) bits.push(toReview + (toReview === 1 ? ' pull request corgi opened' : ' pull requests corgi opened'));
     if (running) bits.push(running + ' still running');
-    if (bits.length) {
-      tally.textContent = bits.join(' \u00b7 ');
-      box.appendChild(tally);
-    }
-    const sum = document.createElement('p');
-    sum.className = 'sum';
-    sum.textContent = 'From the tracker, your pull requests, and your own tasks \u00b7 ';
-    const addTask = document.createElement('button'); addTask.textContent = '+ Task for later';
-    addTask.onclick = () => taskSheet(() => { loadInbox(); loadKanban(); });
-    sum.appendChild(addTask);
-    box.appendChild(sum);
+    const bar = make('div', 'barline');
+    bar.append(make('p', 'sum', bits.join(' \u00b7 ')), press('Add a task', 'fill', () => taskSheet(again)));
+    box.appendChild(bar);
 
-    // One heading per workspace: a batch is shipped against one checkout.
     const groups = new Map();
-    for (const ev of events.slice(0, 12)) {
+    const shown = wholeInbox ? events : events.slice(0, 12);
+    for (const ev of shown) {
       const key = ev.workspace || '';
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push(ev);
     }
+    for (const [workspace, rows] of groups) box.appendChild(inboxGroup(workspace, rows, boards[workspace] || {}));
+    if (events.length > shown.length) box.appendChild(press('Show ' + (events.length - shown.length) + ' more', 'text', () => { wholeInbox = true; loadInbox(); }));
 
-    for (const [workspace, rows] of groups) {
-      const picked = new Set();
-      // The group is one workspace, so its columns are the batch's columns.
-      const board = boards[workspace] || {};
-      const head = document.createElement('div');
-      head.className = 'evgroup';
-      const name = document.createElement('span');
-      name.className = 'gname';
-      name.textContent = workspace || 'elsewhere';
-      // Selecting rows was only ever wired to one verb. Clearing a morning's
-      // worth of noise one Ignore at a time is the thing people actually do
-      // most, and it was the one thing the checkboxes could not do.
-      const bar = document.createElement('div');
-      bar.className = 'batch';
-      bar.hidden = true;
-      const count = document.createElement('span');
-      count.className = 'bcount';
-      const batch = document.createElement('button');
-      batch.className = 'primary';
-      const moveMany = document.createElement('button');
-      moveMany.textContent = 'Move\u2026';
-      const ignoreMany = document.createElement('button');
-      ignoreMany.textContent = 'Ignore';
-      bar.append(count, batch, moveMany, ignoreMany);
-      head.append(name);
-      box.appendChild(head);
-      box.appendChild(bar);
-
-      // Only new issues can be handed to one session together - a review
-      // comment is about its own thread - but anything can be moved or
-      // dismissed in a batch.
-      const workable = () => [...picked].filter((k) => {
-        const ev = rows.find((r) => r.key === k);
-        return ev && ev.actionable && ev.kind === 'issue.new';
-      });
-      const refresh = () => {
-        bar.hidden = picked.size === 0;
-        count.textContent = picked.size + ' selected';
-        const canShip = workable().length;
-        batch.hidden = canShip < 2;
-        batch.textContent = 'Ship ' + canShip + ' together';
-        moveMany.hidden = !(board.columns || []).length;
-      };
-      batch.onclick = () => {
-        batch.disabled = true;
-        const keys = workable();
-        workOn({ keys, ref: keys.length + ' issues' }).finally(() => { batch.disabled = false; });
-      };
-      ignoreMany.onclick = async () => {
-        const keys = [...picked];
-        if (!confirm('Ignore ' + keys.length + (keys.length === 1 ? ' row?' : ' rows?') +
-          '\nThey leave the inbox and the unattended mode skips them. Nothing is written to the tracker.')) return;
-        ignoreMany.disabled = true;
-        for (const key of keys) {
-          await ticket({ key }, { do: 'ignore' }, true);
-        }
-        picked.clear();
-        toast(keys.length + (keys.length === 1 ? ' row ignored' : ' rows ignored'));
-        ignoreMany.disabled = false;
-        loadInbox();
-      };
-      moveMany.onclick = () => {
-        const keys = [...picked];
-        moveSheet({ ref: keys.length + (keys.length === 1 ? ' ticket' : ' tickets'), keys },
-          board.columns, async (status) => {
-            let done = 0;
-            for (const key of keys) {
-              if (await ticket({ key }, { do: 'move', status }, true)) done++;
-            }
-            picked.clear();
-            toast(done + ' of ' + keys.length + ' moved to ' + status);
-            loadInbox();
-          });
-      };
-
-      for (const ev of rows) {
-        const card = document.createElement('div');
-        card.className = 'ev';
-
-        const head2 = document.createElement('div');
-        head2.style.display = 'flex';
-        head2.style.alignItems = 'center';
-        head2.style.gap = '.4rem';
-        // Anything can be selected: a batch can be moved or dismissed even
-        // when it cannot be handed to one session.
-        {
-          const tick = document.createElement('input');
-          tick.type = 'checkbox';
-          tick.onchange = () => { tick.checked ? picked.add(ev.key) : picked.delete(ev.key); refresh(); };
-          head2.appendChild(tick);
-        }
-        const ref = document.createElement('span');
-        ref.className = 'eref';
-        ref.textContent = ev.ref || ev.key;
-        const kind = document.createElement('span');
-        kind.className = 'ekind';
-        kind.textContent = EVENT_KIND[ev.kind] || ev.kind;
-        head2.append(ref, kind);
-        // Which column it sits in. Without it a move you just made looks
-        // like it did nothing.
-        if (ev.state) {
-          const st = document.createElement('span');
-          st.className = 'estate';
-          st.textContent = ev.state;
-          head2.appendChild(st);
-        }
-        card.appendChild(head2);
-
-        if (ev.title) {
-          const t = document.createElement('p');
-          t.className = 'etitle';
-          t.textContent = ev.title;
-          card.appendChild(t);
-        }
-        if (ev.kind === 'task' && ev.body) {
-          const d = document.createElement('p'); d.className = 'etitle kbody'; d.textContent = ev.body; card.appendChild(d);
-        }
-        // A session on it, or one on its way: the row says so instead of
-        // sitting there as if Work on it did nothing.
-        if (ev.session || ev.picked) {
-          const m = document.createElement('p'); m.className = 'emeta'; m.textContent = ev.session ? sessionLine(ev.session) : pickedLine(ev.picked); card.appendChild(m);
-        }
-        // Blocked is a column of its own: the reason, and the one button
-        // that puts the ticket back in front of the unattended mode.
-        if (ev.blocked) {
-          const b = document.createElement('p');
-          b.className = 'eblocked';
-          b.textContent = 'Blocked' + (ev.blockedBy === 'breaker' ? ' after repeated failures' : ev.blockedBy === 'run' ? ' by the run' : '') + ': ' + ev.blocked;
-          card.appendChild(b);
-        }
-
-        const row = document.createElement('div');
-        row.className = 'erow';
-        if (ev.blocked) {
-          const ub = document.createElement('button');
-          ub.className = 'primary';
-          ub.textContent = 'Unblock';
-          ub.onclick = () => {
-            ub.disabled = true;
-            ticket(ev, { do: 'unblock' }).finally(() => { ub.disabled = false; });
-          };
-          row.appendChild(ub);
-        }
-        if (ev.url && /^https:\/\//.test(ev.url)) {
-          const a = document.createElement('a');
-          a.className = 'eopen';
-          a.href = ev.url;
-          a.target = '_blank';
-          a.rel = 'noopener noreferrer';
-          a.textContent = ev.kind && ev.kind.startsWith('pr.') ? 'Open PR' : 'Open issue';
-          row.appendChild(a);
-        }
-        if (ev.actionable && !ev.blocked && !ev.session) {
-          const go = document.createElement('button');
-          go.className = 'primary';
-          go.textContent = ev.picked ? 'Work on it again' : 'Work on it';
-          go.onclick = () => {
-            go.disabled = true;
-            workOn(ev).finally(() => { go.disabled = false; setTimeout(loadInbox, 1500); });
-          };
-          row.appendChild(go);
-        }
-        if (ev.pr) prButtons(row, ev, ev.pr);
-        const cols = ev.columns || board.columns || [];
-        if (cols.length) {
-          const mv = document.createElement('button');
-          mv.textContent = 'Move…';
-          mv.onclick = () => moveSheet(ev, cols);
-          row.appendChild(mv);
-        }
-        if (ev.kind === 'task') {
-          const dn = document.createElement('button'); dn.textContent = 'Done';
-          dn.onclick = () => { dn.disabled = true; ticket(ev, { do: 'close' }).finally(() => { dn.disabled = false; }); };
-          row.appendChild(dn);
-        }
-        const ig = document.createElement('button');
-        ig.textContent = 'Ignore';
-        ig.onclick = () => {
-          ig.disabled = true;
-          ticket(ev, { do: 'ignore' }).finally(() => { ig.disabled = false; });
-        };
-        row.appendChild(ig);
-        if (row.children.length) card.appendChild(row);
-        box.appendChild(card);
-      }
-    }
-
-    // What the unattended mode did while nobody watched, and what it opened.
-    // Grouped by day, because "corgi opened this while you slept" and "corgi
-    // opened this last week" are not the same news.
+    // Grouped by day: "corgi opened this while you slept" and "corgi opened
+    // this last week" are not the same news.
     const dayOf = (iso) => {
       const t = Date.parse(iso || '');
       if (Number.isNaN(t)) return 'earlier';
-      const d = new Date(t), now = new Date();
+      const now = new Date();
       const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
       if (t >= midnight) return 'today';
       if (t >= midnight - 86400000) return 'yesterday';
@@ -2819,59 +2504,146 @@ const launcherPageHTML = `<!doctype html>
     };
     for (const bucket of ['today', 'yesterday', 'earlier']) {
       const group = fixes.filter((f) => dayOf(f.startedAt) === bucket);
-      if (!group.length) continue;
-      renderFixGroup(bucket, group);
+      if (group.length) box.appendChild(fixGroup(bucket, group));
     }
-    function renderFixGroup(bucket, fixes) {
-      const head = document.createElement('div');
-      head.className = 'evgroup';
-      const name = document.createElement('span');
-      name.className = 'gname';
-      const opened = fixes.filter((f) => (f.prs || []).length).length;
-      name.textContent = bucket === 'today' ? 'corgi did today' :
-        bucket === 'yesterday' ? 'corgi did yesterday' : 'corgi did earlier';
-      head.appendChild(name);
-      if (opened) {
-        const n = document.createElement('span');
-        n.className = 'gcount';
-        n.textContent = opened + (opened === 1 ? ' waiting on your review' : ' waiting on your review');
-        head.appendChild(n);
+  }
+
+  // One heading per workspace: a batch is shipped against one checkout.
+  function inboxGroup(workspace, rows, board) {
+    const wrap = make('section');
+    const picked = new Set();
+    const head = make('h2', 'gh', workspace || 'Elsewhere');
+    head.appendChild(make('span', 'n', String(rows.length)));
+    const bar = make('div', 'batch'); bar.hidden = true;
+    const count = make('span', 'bcount');
+    // Only new issues can be handed to one session together - a review
+    // comment is about its own thread - but anything can be moved or
+    // dismissed in a batch.
+    const workable = () => [...picked].filter((k) => {
+      const ev = rows.find((r) => r.key === k);
+      return ev && ev.actionable && ev.kind === 'issue.new';
+    });
+    const batch = press('', '', () => {
+      batch.disabled = true;
+      const keys = workable();
+      workOn({ keys, ref: keys.length + ' issues' }).finally(() => { batch.disabled = false; });
+    });
+    const clear = () => { picked.clear(); wrap.querySelectorAll('input[type=checkbox]').forEach(t => { t.checked = false; }); };
+    const moveMany = press('Move…', '', () => {
+      const keys = [...picked];
+      moveSheet({ ref: keys.length + (keys.length === 1 ? ' ticket' : ' tickets'), keys },
+        board.columns, async (status) => {
+          let done = 0;
+          for (const key of keys) {
+            if (await ticket({ key }, { do: 'move', status }, true)) done++;
+          }
+          clear();
+          toast(done + ' of ' + keys.length + ' moved to ' + status);
+          loadInbox();
+        });
+    });
+    const ignoreMany = press('Ignore', '', async () => {
+      const keys = [...picked];
+      if (!confirm('Ignore ' + keys.length + (keys.length === 1 ? ' row?' : ' rows?') +
+        '\nThey leave the inbox and the unattended mode skips them. Nothing is written to the tracker.')) return;
+      ignoreMany.disabled = true;
+      for (const key of keys) {
+        await ticket({ key }, { do: 'ignore' }, true);
       }
-      box.appendChild(head);
-      for (const fx of fixes) {
-        const card = document.createElement('div');
-        card.className = 'ev';
-        const ref = document.createElement('div');
-        ref.className = 'eref';
-        ref.textContent = fx.ref;
-        card.appendChild(ref);
-        const t = document.createElement('p');
-        t.className = 'etitle';
-        t.textContent = fx.running ? 'running…' : (fx.error ? 'failed: ' + fx.error : (fx.prs || []).length ? '' : 'done, nothing opened');
-        if (t.textContent) card.appendChild(t);
-        const row = document.createElement('div');
-        row.className = 'erow';
-        const log = document.createElement('button');
-        log.textContent = 'Log';
-        log.onclick = () => runSheet(fx);
-        row.appendChild(log);
-        for (const pr of fx.prs || []) {
-          if (!/^https:\/\//.test(pr)) continue;
-          const a = document.createElement('a');
-          a.className = 'eopen';
-          a.href = pr; a.target = '_blank'; a.rel = 'noopener noreferrer';
-          a.textContent = pr.includes('/pull/') ? 'Open PR' : 'Open MR';
-          row.appendChild(a);
-          // Finishing corgi's own work without leaving the row. One tap,
-          // and only on what corgi opened.
-          prButtons(row, { key: fx.key, ref: fx.ref }, pr);
-          break;
-        }
-        if (row.children.length) card.appendChild(row);
-        box.appendChild(card);
-      }
+      clear();
+      toast(keys.length + (keys.length === 1 ? ' row ignored' : ' rows ignored'));
+      ignoreMany.disabled = false;
+      loadInbox();
+    });
+    bar.append(count, batch, moveMany, ignoreMany);
+    const refresh = () => {
+      bar.hidden = picked.size === 0;
+      count.textContent = picked.size + ' selected';
+      const canShip = workable().length;
+      batch.hidden = canShip < 2;
+      batch.textContent = 'Ship ' + canShip + ' together';
+      moveMany.hidden = !(board.columns || []).length;
+    };
+    wrap.append(head, bar);
+    for (const ev of rows) wrap.appendChild(inboxRow(ev, board, picked, refresh));
+    return wrap;
+  }
+
+  function inboxRow(ev, board, picked, refresh) {
+    const card = make('article', 'row');
+    const top = make('div', 'rtop');
+    const tick = make('input'); tick.type = 'checkbox'; tick.setAttribute('aria-label', 'Select ' + (ev.ref || ev.key));
+    tick.onchange = () => { tick.checked ? picked.add(ev.key) : picked.delete(ev.key); refresh(); };
+    top.append(tick, refLabel(ev.ref || ev.key, ev.url));
+    // The kind, and the column it sits in: without that a move you just made
+    // looks like it did nothing.
+    const kind = EVENT_KIND[ev.kind] || ev.kind;
+    const what = [kind !== 'task' ? kind : '', ev.state || ''].filter(Boolean).join(' \u00b7 ');
+    if (what) top.appendChild(make('span', '', what));
+    card.appendChild(top);
+    const said = ev.kind === 'routine' ? String(ev.title || '').replace(shortRef(ev.ref) + ' - ', '') : ev.title;
+    if (said) card.appendChild(make('div', 'title', said));
+    if (ev.kind === 'task' && ev.body) card.appendChild(longWords('inbox ' + ev.key, ev.body));
+    if (ev.session || ev.picked) card.appendChild(make('div', 'facts why is-run', ev.session ? sessionLine(ev.session) : pickedLine(ev.picked)));
+    if (ev.blocked) card.appendChild(make('div', 'facts why is-bad', 'Blocked' + (ev.blockedBy === 'breaker' ? ' after repeated failures' : ev.blockedBy === 'run' ? ' by the run' : '') + ': ' + ev.blocked));
+
+    const row = make('div', 'erow');
+    if (ev.blocked) {
+      const ub = press('Unblock', 'primary', () => {
+        ub.disabled = true;
+        ticket(ev, { do: 'unblock' }).finally(() => { ub.disabled = false; });
+      });
+      row.appendChild(ub);
     }
-    box.hidden = false;
+    if (ev.actionable && !ev.blocked && !ev.session) {
+      const go = press(ev.picked ? 'Work on it again' : 'Work on it', 'primary', () => {
+        go.disabled = true;
+        workOn(ev).finally(() => { go.disabled = false; setTimeout(loadInbox, 1500); });
+      });
+      row.appendChild(go);
+    }
+    if (ev.kind === 'routine') row.appendChild(press('Read the report', 'primary', () => runSheet({ key: ev.key.replace(/:report$/, ''), ref: ev.ref })));
+    if (ev.pr) {
+      if (isHttps(ev.pr) && ev.pr !== ev.url) row.appendChild(httpsLink(ev.pr, ev.pr.includes('/merge_requests/') ? 'Merge request' : 'Pull request'));
+      prButtons(row, ev, ev.pr);
+    }
+    const cols = ev.columns || board.columns || [];
+    if (cols.length && ev.kind !== 'routine') row.appendChild(press('Move…', '', () => moveSheet(ev, cols)));
+    if (ev.kind === 'task') {
+      const dn = press('Done', '', () => { dn.disabled = true; ticket(ev, { do: 'close' }).finally(() => { dn.disabled = false; }); });
+      row.appendChild(dn);
+    }
+    const ig = press('Ignore', '', () => {
+      ig.disabled = true;
+      ticket(ev, { do: 'ignore' }).finally(() => { ig.disabled = false; });
+    });
+    row.appendChild(ig);
+    card.appendChild(row);
+    return card;
+  }
+
+  // What the unattended mode did while nobody watched, and what it opened.
+  function fixGroup(bucket, fixes) {
+    const wrap = make('section');
+    const opened = fixes.filter((f) => (f.prs || []).length).length;
+    const head = make('h2', 'gh', bucket === 'today' ? 'corgi did today' : bucket === 'yesterday' ? 'corgi did yesterday' : 'corgi did earlier');
+    if (opened) head.appendChild(make('span', 'n', opened + (opened === 1 ? ' waits for your review' : ' wait for your review')));
+    wrap.appendChild(head);
+    for (const fx of fixes) {
+      const card = make('article', 'row');
+      const pr = (fx.prs || []).find(isHttps);
+      const top = make('div', 'rtop'); top.appendChild(refLabel(fx.ref, pr)); card.appendChild(top);
+      const line = fx.running ? 'running' : fx.error ? 'failed: ' + fx.error : pr ? '' : 'done, nothing opened';
+      if (line) card.appendChild(make('div', 'facts why' + (fx.running ? ' is-run' : fx.error ? ' is-bad' : ''), line));
+      const row = make('div', 'erow');
+      row.appendChild(press('Log', '', () => runSheet(fx)));
+      // Finishing corgi's own work without leaving the row, and only on what
+      // corgi opened.
+      if (pr) prButtons(row, { key: fx.key, ref: fx.ref }, pr);
+      card.appendChild(row);
+      wrap.appendChild(card);
+    }
+    return wrap;
   }
 
   async function workOn(ev) {
@@ -2929,7 +2701,7 @@ const launcherPageHTML = `<!doctype html>
         }
         el.appendChild(document.createTextNode(bit));
       });
-      if (!j.daemon) el.style.color = 'var(--red)';
+      el.classList.toggle('down', !j.daemon);
     } catch {}
   }
 
@@ -2948,7 +2720,7 @@ const launcherPageHTML = `<!doctype html>
     if (!workspaces.length) {
       list.className = 'empty';
       list.innerHTML = '<h2>No repos yet</h2><p>On the laptop run <code>corgi agent scan ~/dev</code> ' +
-        'to register the stacks it finds, then tap refresh.</p>';
+        'to add the ones it finds, then refresh.</p>';
       return;
     }
     list.className = '';
@@ -3006,7 +2778,7 @@ const launcherPageHTML = `<!doctype html>
       const sessionsBox = document.createElement('div');
       sessionsBox.className = 'sessions'; sessionsBox.style.display = 'none';
       const sbtn = document.createElement('button');
-      sbtn.className = 'chip'; sbtn.textContent = sessionsChipLabel(ws);
+      sbtn.textContent = sessionsChipLabel(ws);
       sbtn.onclick = () => toggleSessions(ws, sbtn, sessionsBox);
       actions.appendChild(sbtn);
       actions.appendChild(modeSwitch(ws.id));
@@ -3014,15 +2786,14 @@ const launcherPageHTML = `<!doctype html>
       if (top) row.appendChild(top);
       if (!ws.running && startBox) {
         const opts = document.createElement('button');
-        opts.className = 'chip'; opts.textContent = 'options ⌄';
+        opts.textContent = 'Options';
         opts.onclick = () => { startBox.classList.toggle('on'); };
         actions.appendChild(opts);
       }
       if (ws.running) actions.appendChild(stopControl(ws.id));
       const hideBtn = document.createElement('button');
-      hideBtn.className = 'chip';
       hideBtn.title = 'Hide this workspace on this browser';
-      hideBtn.textContent = hide.has(ws.id) ? 'unhide' : 'hide';
+      hideBtn.textContent = hide.has(ws.id) ? 'Show again' : 'Hide';
       hideBtn.onclick = () => toggleHidden(ws.id);
       actions.appendChild(hideBtn);
       if (startBox) actions.appendChild(startBox);
@@ -3032,8 +2803,8 @@ const launcherPageHTML = `<!doctype html>
     }
     if (hiddenCount || revealHidden) {
       const b = document.createElement('button');
-      b.className = 'chip revealer';
-      b.textContent = revealHidden ? 'hide again' : hiddenCount + ' hidden - show';
+      b.className = 'text revealer';
+      b.textContent = revealHidden ? 'Hide them again' : 'Show ' + hiddenCount + ' hidden';
       b.onclick = () => { revealHidden = !revealHidden; render(lastWorkspaces); };
       list.appendChild(b);
     }
@@ -3042,15 +2813,14 @@ const launcherPageHTML = `<!doctype html>
   function introLine(workspaces) {
     if (workspaces.some(w => (w.live || 0) > 0)) return null;
     const el = document.createElement('div');
-    el.className = 'intro';
-    el.textContent = 'Tap a repo to start a Claude Code session on that machine. ' +
-      'It runs there with your files and databases; you drive it from here.';
+    el.className = 'lead';
+    el.textContent = 'Start a Claude Code session in a repo. It runs on that machine, with its files and databases; you drive it from here.';
     return el;
   }
 
   function sessionsChipLabel(ws) {
     const more = (ws.live || 0) - (ws.topSession ? 1 : 0);
-    return more > 0 ? 'sessions +' + more + ' \u2304' : 'sessions \u2304';
+    return more > 0 ? 'Sessions (' + (more + 1) + ')' : 'Sessions';
   }
 
   // Inside one repo's card the leading workspace name is noise - the card
@@ -3079,7 +2849,7 @@ const launcherPageHTML = `<!doctype html>
     if (!top.url || !safeClaudeUrl(top.url)) {
       const el = document.createElement('div');
       el.className = 'top';
-      el.innerHTML = '<span><i class="sdot"></i><span class="tname">' +
+      el.innerHTML = '<span><i class="sdot on"></i><span class="tname">' +
         esc(shortSessionName(top.name, ws.id)) + '</span></span>' +
         '<span class="when">' + esc(when) + ' \u00b7 local only</span>';
       return el;
@@ -3090,7 +2860,7 @@ const launcherPageHTML = `<!doctype html>
     const mode = openMode(ws.id);
     if (mode === 'browser') el.onclick = (e) => { e.preventDefault(); window.open(top.url, '_blank', 'noopener'); };
     if (mode === 'chrome') el.onclick = (e) => { e.preventDefault(); location.href = chromeUrl(top.url); };
-    el.innerHTML = '<span><i class="sdot"></i><span class="tname">' +
+    el.innerHTML = '<span><i class="sdot on"></i><span class="tname">' +
       esc(shortSessionName(top.name, ws.id)) + '</span></span>' +
       '<span class="when">' + esc(when) + ' \u00b7 open \u2197</span>';
     return el;
@@ -3141,7 +2911,7 @@ const launcherPageHTML = `<!doctype html>
     const el = document.createElement('div');
     el.className = 'usage';
     el.title = 'tokens today / this week';
-    el.textContent = fmtTokens(sum(ws.usage.today)) + ' today \u00b7 ' + fmtTokens(week) + ' this week';
+    el.textContent = fmtTokens(sum(ws.usage.today)) + ' tokens today \u00b7 ' + fmtTokens(week) + ' this week';
     return el;
   }
 
@@ -3193,8 +2963,8 @@ const launcherPageHTML = `<!doctype html>
   }
 
   async function toggleSessions(ws, btn, box) {
-    if (box.style.display !== 'none') { box.style.display = 'none'; btn.textContent = 'sessions \u2304'; return; }
-    box.style.display = ''; btn.textContent = 'sessions \u2303';
+    if (box.style.display !== 'none') { box.style.display = 'none'; btn.textContent = sessionsChipLabel(ws); return; }
+    box.style.display = ''; btn.textContent = 'Hide sessions';
     box.innerHTML = '';
     const group = (label) => {
       const el = document.createElement('div');
@@ -3211,7 +2981,7 @@ const launcherPageHTML = `<!doctype html>
       if (m === 'chrome') el.onclick = (e) => { e.preventDefault(); location.href = chromeUrl(url); };
       const tag = o.bridge ? '<span class="tag" title="Hand-started on the laptop - its web page may look empty">bridge</span>' : '';
       const text = o.label ? esc(o.label) : esc(url.split('/').pop().slice(0, 14)) + '\u2026';
-      const dot = o.past ? '' : '<i class="sdot"></i>';
+      const dot = o.past ? '' : '<i class="sdot on"></i>';
       el.innerHTML = '<span>' + dot + '<span class="tname">' + text + '</span>' + tag + '</span>' +
         '<span class="when">' + esc(o.when || '') + (o.past ? 'reopen' : 'open \u2197') + '</span>';
       box.appendChild(el);
@@ -3219,7 +2989,7 @@ const launcherPageHTML = `<!doctype html>
     const renderLocal = (label, when, sess) => {
       const el = document.createElement('div');
       el.className = 's';
-      el.innerHTML = '<span><i class="sdot"></i><span class="tname">' + esc(label) +
+      el.innerHTML = '<span><i class="sdot on"></i><span class="tname">' + esc(label) +
         '</span></span><span class="when">' + esc(when) + ' \u00b7 local only</span>';
       // corgi can type /remote-control into the session itself, which is the
       // whole of what makes it reachable from here. Only while it is idle:
@@ -3277,7 +3047,7 @@ const launcherPageHTML = `<!doctype html>
       let localOnly = 0;
       const showB = showBridges();
       const liveCount = running.length + (showB ? bridges.filter(u => !running.some(s => s.url === u)).length : 0);
-      if (liveCount) group('live now');
+      if (liveCount) group('Live now');
       for (const sess of running) {
         const where = whereLabel(sess);
         const waiting = sessionWaiting(sess);
@@ -3303,12 +3073,12 @@ const launcherPageHTML = `<!doctype html>
         bridgeRows++;
         renderLink(url, { bridge: true });
       }
-      if (localOnly) note('local only = running on the laptop with no web link yet. Link asks the session for one; a busy session has to be asked by hand with /remote-control.');
-      if (bridgeRows) note('bridge = started by hand on the laptop; its page shows only what you send from it.');
-      if (bridgeHidden) note(bridgeHidden + ' bridge session' + (bridgeHidden > 1 ? 's' : '') + ' hidden - enable in Settings.');
+      if (localOnly) note('Local only: it runs on the laptop and has no web link yet. Link asks the session for one; ask a busy session by hand with /remote-control.');
+      if (bridgeRows) note('Bridge: started by hand on the laptop; its page shows only what you send from it.');
+      if (bridgeHidden) note(bridgeHidden + ' bridge session' + (bridgeHidden > 1 ? 's' : '') + ' hidden. Show them in Settings.');
 
       if (older.length) {
-        group('earlier \u00b7 not running');
+        group('Earlier, not running');
         for (const row of older) renderLink(row.url, { past: true, when: row.when });
       }
       if (!liveCount && !older.length && !evs.length) {
@@ -3317,7 +3087,7 @@ const launcherPageHTML = `<!doctype html>
         box.appendChild(none);
         return;
       }
-      if (evs.length) group('activity');
+      if (evs.length) group('Activity');
       for (const ev of evs) {
         const el = document.createElement('div');
         el.className = 'evrow';
@@ -3353,7 +3123,7 @@ const launcherPageHTML = `<!doctype html>
   function renderWorkspaceFacts(ws, box, group) {
     const facts = workspaceFacts(ws);
     if (!facts.length) return;
-    group('this workspace');
+    group('This repo');
     for (const [label, value] of facts) {
       const el = document.createElement('div');
       el.className = 'kv';
@@ -3449,16 +3219,15 @@ const launcherPageHTML = `<!doctype html>
     const order = ['app', 'browser', 'chrome'];
     const cur = openMode(id);
     const b = document.createElement('button');
-    b.className = 'chip';
-    b.title = 'Where session links open - tap to change';
-    b.innerHTML = 'open in <b>' + esc(cur) + '</b> ▾';
+    b.title = 'Where session links open. Press to change';
+    b.innerHTML = 'Open in <b>' + esc(cur) + '</b>';
     b.onclick = () => { setOpenMode(id, order[(order.indexOf(cur) + 1) % order.length]); render(lastWorkspaces); };
     return b;
   }
 
   function stopControl(id) {
     const b = document.createElement('button');
-    b.className = 'chip danger'; b.textContent = 'Stop';
+    b.className = 'danger'; b.textContent = 'Stop';
     b.onclick = async () => {
       b.disabled = true; b.textContent = 'Stopping…';
       try {

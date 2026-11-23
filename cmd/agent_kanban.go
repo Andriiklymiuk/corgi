@@ -256,7 +256,7 @@ func (b *kanbanBoard) placeTicket(c *KanbanCard, e watch.Event, current string) 
 	over := watch.Settled(e, current)
 	switch {
 	case over != "" && strings.HasPrefix(over, "picked up"):
-		c.Column, c.Why = ColReady, over
+		c.Column, c.Why = ColReady, "picked up, "+strings.TrimSpace(current)+" on the tracker"
 	case over != "":
 		if b.in.now.Sub(e.At) > 24*time.Hour {
 			b.drop(e.Workspace, e.Ref)
@@ -452,8 +452,30 @@ func (b *kanbanBoard) placeHandoffs() {
 	}
 }
 
+func (b *kanbanBoard) cardOfHandoff(ws, ref string) *KanbanCard {
+	for _, c := range b.byRef {
+		if c.Workspace == ws && strings.EqualFold(c.Ref, ref) {
+			return c
+		}
+	}
+	if b.in.fixes == nil {
+		return b.card(ws, ref)
+	}
+	var run watch.FixRecord
+	for _, r := range b.in.fixes.Records() {
+		if r.Workspace == ws && strings.EqualFold(r.Ref, ref) {
+			run = r
+		}
+	}
+	c := b.card(ws, firstNonEmpty(run.Ref, ref))
+	if c.Title == "" {
+		c.Title, c.URL = firstLineOf(run.Title), run.URL
+	}
+	return c
+}
+
 func (b *kanbanBoard) placeHandoff(ws string, p handoff.Packet) {
-	c := b.card(ws, p.Ref)
+	c := b.cardOfHandoff(ws, p.Ref)
 	c.Handoff = &CardHand{State: p.State, Next: p.Next, Path: handoff.MarkdownPath("", p.Ref), Draft: p.Draft}
 	if c.Branch == "" {
 		c.Branch = p.Where.Branch

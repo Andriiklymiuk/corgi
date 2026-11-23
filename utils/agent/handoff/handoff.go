@@ -167,9 +167,20 @@ func Write(composeDir string, p Packet) error {
 	return atomicfile.Write(MarkdownPath(composeDir, p.Ref), []byte(p.Markdown()), 0o600)
 }
 
+func CleanRef(ref string) string {
+	ref = strings.TrimSpace(ref)
+	if strings.Contains(ref, "/") {
+		return ref
+	}
+	return strings.ToUpper(ref)
+}
+
 func Read(composeDir, ref string) (Packet, error) {
 	var p Packet
 	data, err := os.ReadFile(Path(composeDir, ref))
+	if os.IsNotExist(err) {
+		data, err = os.ReadFile(Path(composeDir, strings.ToUpper(ref)))
+	}
 	if err != nil {
 		return p, err
 	}

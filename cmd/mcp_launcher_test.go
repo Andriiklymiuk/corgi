@@ -346,7 +346,7 @@ func TestLaunchBoardServesTheSessionBoard(t *testing.T) {
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("POST = %d", rec.Code)
 	}
-	if !strings.Contains(launcherPageHTML, "/launch/board") || !strings.Contains(launcherPageHTML, "waiting on you") {
+	if !strings.Contains(launcherPageHTML, "/launch/board") || !strings.Contains(launcherPageHTML, "waits for you") {
 		t.Fatal("the page must fetch and show the board")
 	}
 }

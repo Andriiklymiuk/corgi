@@ -160,7 +160,7 @@ func runAgentHandoff(cmd *cobra.Command, _ []string) {
 	model, _ := f.GetString("model")
 	sessionRef, _ := f.GetString("session")
 
-	p := handoff.Packet{Ref: strings.ToUpper(strings.TrimSpace(ref)), Tracker: tracker, State: state, Blocked: blocked,
+	p := handoff.Packet{Ref: handoff.CleanRef(ref), Tracker: tracker, State: state, Blocked: blocked,
 		Where: where, Done: done, Remaining: remaining, Decisions: decisions, Uncertain: uncertain, Next: next,
 		From: handoff.From{Harness: harnessHere(), Model: model, Host: hostname()}}
 	fillFromBoard(&p, sessionRef, cwd)

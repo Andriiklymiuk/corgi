@@ -214,3 +214,40 @@ func TestADeferredRunAndASlackPostSettleWithTheirPullRequests(t *testing.T) {
 		}
 	}
 }
+
+func TestAHandoffOnAPullRequestKeepsItsRefAndItsLink(t *testing.T) {
+	now := time.Now()
+	fixes := watch.LoadFixLog(t.TempDir())
+	e := watch.Event{Key: "gitlab:note:1", Workspace: "acme", Ref: "acme/core!9", Kind: watch.KindPRComment, Title: "Cap the retries", URL: "https://gitlab.com/acme/core/-/merge_requests/9"}
+	fixes.StartFor(e, now.Add(-time.Hour))
+	fixes.Finish(e.Key, nil, "", "", now)
+	cards := buildKanban(kanbanInputs{
+		events: []watch.Event{{Key: "linear:ABC-1", Workspace: "acme", Ref: "ABC-1", Kind: watch.KindIssueNew, State: "Todo", At: now}},
+		moved:  movedTo(t, "linear:ABC-1", "In Progress", now),
+		fixes:  fixes, picks: watch.LoadPicks(t.TempDir()), pulls: watch.LoadPullLog(t.TempDir()), now: now,
+		packets: map[string][]handoff.Packet{"acme": {{Ref: "ACME/CORE!9", State: handoff.StateInputRequired, Next: "x", WrittenAt: now}, {Ref: "ABC-9", State: handoff.StateInputRequired, Next: "y", WrittenAt: now}}},
+	})
+	got := map[string]KanbanCard{}
+	for _, c := range cards {
+		got[c.Ref] = c
+	}
+	c, ok := got["acme/core!9"]
+	if !ok || c.Handoff == nil || c.URL != e.URL || c.Title != e.Title || got["ACME/CORE!9"].Ref != "" {
+		t.Fatalf("one card, spelled as the forge does, with its link: %+v", cards)
+	}
+	if got["ABC-9"].Handoff == nil {
+		t.Fatalf("a ticket's handoff is a card of its own: %+v", cards)
+	}
+	if why := got["ABC-1"].Why; why != "picked up, In Progress on the tracker" {
+		t.Fatalf("%q", why)
+	}
+}
+
+func movedTo(t *testing.T, key, status string, now time.Time) *watch.StateLog {
+	t.Helper()
+	l := watch.LoadStateLog(t.TempDir())
+	if err := l.Set(key, status, now); err != nil {
+		t.Fatal(err)
+	}
+	return l
+}
