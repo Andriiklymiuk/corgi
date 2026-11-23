@@ -1657,6 +1657,68 @@ branch stays, a worktree with uncommitted work stays and is named. `watch
 enable --prune-after 7d` has the daemon do it on its own, once an hour
 (2.28.14).
 
+### Reviews: only the lines that need a person
+
+```bash
+corgi agent reviews                                         # yours, and the ones waiting for your review
+corgi agent reviews https://github.com/acme/api/pull/42     # that change, sorted
+corgi agent reviews https://github.com/acme/api/pull/42 --json
+```
+
+The list comes from GitHub and GitLab with the token each watched workspace
+already has: what you opened (ready to merge, open, draft, and what nobody
+touched for two months, apart) and what somebody asked you to review, with the
+ones you already approved apart. Merged ones are left out.
+
+Each row belongs to a workspace, and only repos a watched workspace has are
+listed: the repos of the services in its `corgi-compose.yml`, or its
+`watch enable --repos` list when it has one. A workspace with neither takes
+every repo its token can see. The phone filters the list by workspace.
+
+With a link, corgi reads the change and sorts it. No model reads it: these are
+rules, so it costs no tokens and gives the same answer twice.
+
+| folded away | kept for you, and why |
+|---|---|
+| tests, docs, lock files, generated code, moved and removed files, pictures | every other file |
+| | first the ones whose path says **changes the database**, **who may do what**, **money**, **build or deploy**, **dependencies**, **secrets or env** |
+| | a test file that mostly loses lines: **tests are removed** |
+
+Inside a kept file each piece of the diff is flagged by what its lines show:
+a guard removed, a check switched off (`@ts-ignore`, `eslint-disable`,
+`nolint`), a test skipped, an error swallowed, a forceful or unsafe switch,
+a debug line or a TODO left, text run as code, data deleted, something that
+looks like a secret. The header says how much is left: `24 of 128 changed
+lines need a person`.
+
+The answer also carries what a person looks for first: who reviews it and what
+each said, every check by name with the failed ones first, whether the branch
+is behind its base or conflicts with it, the description, and what happened in
+order (opened, commits, reviews, merged).
+
+The phone's **Reviews** tab is the same list and the same sorting. A pull
+request opens on one page: status, reviewers, checks and branch at the top,
+then the description, then the pieces that need you, then the activity. Swipe
+a piece right when it is fine, left to say what should change. Beside the code
+it shows what corgi knows and a forge does not: the check the session ran and
+whether it ran on the newest commit, what the session decided and what it was
+not sure about (its handoff), and, on **Why?**, what the agent said when it
+wrote that file. Then one button:
+
+| the pull request is | you left notes | the button |
+|---|---|---|
+| yours, a session is on its branch | yes | the notes are typed to that session; a new push follows |
+| yours, no session | yes | the notes go on the pull request as line comments |
+| yours | no | Merge, once checks passed and it is approved |
+| someone else's | yes | one review asking for changes, each note on its line |
+| someone else's | no | Approve |
+
+Routes for the apps: `GET /launch/reviews` (`?fresh=1` asks the forge again),
+`GET /launch/reviews/change?link=` (never for a read-only guest), and
+`POST /launch/reviews {link, do: send|fix|merge, verdict, body, notes}`.
+Your own pull request cannot be approved from here, someone else's cannot be
+merged, and nothing is posted under your name without the tap.
+
 ## Wake lock
 
 A machine that sleeps mid-session kills the session, the stack, and any tunnel.

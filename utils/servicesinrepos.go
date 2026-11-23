@@ -38,6 +38,14 @@ func RemoteProject(remoteURL string) string {
 	return strings.ToLower(strings.Trim(u, "/"))
 }
 
+func RepoProject(dir string) string {
+	url, err := gitOut(dir, "remote", "get-url", "origin")
+	if err != nil {
+		return ""
+	}
+	return RemoteProject(url)
+}
+
 func RepoIsOneOf(dir string, projects []string) (here, known bool) {
 	url, err := gitOut(dir, "remote", "get-url", "origin")
 	project := RemoteProject(url)

@@ -77,6 +77,7 @@ everything that has to be true before a phone is any use:
 
 - **It is running when you are not there.** `corgi agent up --at-login` brings the daemon, the endpoint and the tunnel back at login, so the laptop answers after a reboot without you having set anything up before you left. Sessions come back after a crash, and a wake lock stops the laptop sleeping through a long task. If one dies anyway, `corgi agent brief` says where it stopped and which repo it left dirty. The supervised servers wait as **devices**, not as pre-opened conversations, so a restart leaves no empty `corgi · main · 10:00` rows in your session list - a session exists once you start one, from the launcher or the Claude app.
 - **Every repo, on its own Claude account.** One launcher lists them all. Personal projects open in the Claude app; a work repo opens in Chrome signed into the work account.
+- **Reviews that fit a phone.** The Reviews tab lists your pull requests and the ones waiting for you, and opens each as only the lines that need a person, with the session's own check and notes beside them. [How it sorts](agent.md#reviews-only-the-lines-that-need-a-person).
 - **One branch across the whole stack.** A session is not stuck in one directory: corgi puts the same branch in every repo that has it, and hands back a single diff over all of them - readable on the phone with no tunnel and nothing running.
 
 ## Keeping the same URL
