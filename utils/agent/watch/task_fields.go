@@ -172,7 +172,7 @@ func (l *TaskLog) Claim(arg, who string, force bool, now time.Time) (Task, error
 }
 
 func (l *TaskLog) Release(arg string, now time.Time) (Task, error) {
-	return l.update(arg, func(t *Task) { t.Owner, t.ClaimedAt, t.UpdatedAt = "", time.Time{}, now })
+	return l.update(arg, func(t *Task) { t.Owner, t.ClaimedAt, t.LeaseUntil, t.UpdatedAt = "", time.Time{}, time.Time{}, now })
 }
 
 func (l *TaskLog) SetPriority(arg, priority string, now time.Time) (Task, error) {

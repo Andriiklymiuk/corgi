@@ -74,6 +74,12 @@ in `corgi agent task triage` until `task accept TASK-7`; `task snooze TASK-7 --f
 blocked|triage|mine|cycle` filters the board; `kanban views save <name> --owner anna --priority urgent`
 keeps a filter. Over MCP an agent claims before it starts: `corgi_task_claim`, then `corgi_task_release`
 when it stops without finishing.
+**An agent that asks for work**: `corgi agent task next --as <name> [--tag bug] [--wait 10m]` (MCP
+`corgi_task_next`) takes the most urgent ready task for a lease; `task renew` keeps it, `task done
+TASK-n "result"` (MCP `corgi_task_finish`) closes it. Exit 3 means nothing is ready. **Rooms**: `corgi
+agent room post|read <room>` (MCP `corgi_room_post`, `corgi_room_read`) for findings and handovers
+between agents; `room shape add` checks data; `room grant <device> <path>=read,post` limits a paired
+device.
 
 **Show the board to a teammate**: `corgi agent kanban share --workspace api
 --for 7d --label "for Anna"` prints a read-only link once. It shows titles,

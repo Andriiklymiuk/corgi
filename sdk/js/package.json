@@ -1,0 +1,28 @@
+{
+  "name": "corgi-agent",
+  "version": "0.1.0",
+  "description": "Let any agent take work from a corgi board, keep it, finish it, and talk to other agents in rooms",
+  "type": "module",
+  "main": "./index.js",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    }
+  },
+  "files": ["index.js", "index.d.ts", "README.md"],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test test/kit.test.js"
+  },
+  "keywords": ["corgi", "agents", "claude", "codex", "task-queue"],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Andriiklymiuk/corgi.git",
+    "directory": "sdk/js"
+  },
+  "license": "MIT"
+}

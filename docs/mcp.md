@@ -387,3 +387,9 @@ taking one, so no other agent or person starts it, and `corgi_task_release` give
 `corgi_task_add` puts a task in triage, where it waits for the person's yes. `corgi_task_update` sets the
 priority, the due date, what it waits for and its links; `corgi_task_note` leaves the agent's note.
 None of them moves a task between columns or out of triage.
+
+`corgi_task_next` is for an agent that asks for work: it takes the most urgent
+ready task for a lease and moves it to Doing; `corgi_task_renew` keeps it and
+`corgi_task_finish` closes it with the result. `corgi_room_post` and
+`corgi_room_read` leave and read messages in rooms, other agents' findings and
+questions. See [agent.md](agent.md#a-work-queue-and-rooms-for-any-agent).

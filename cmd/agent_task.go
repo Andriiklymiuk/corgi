@@ -167,11 +167,92 @@ var agentTaskMoveCmd = &cobra.Command{
 }
 
 var agentTaskDoneCmd = &cobra.Command{
-	Use:   "done <TASK-N>",
-	Short: "Finish a task: it leaves the inbox, the card goes to Done",
+	Use:   "done <TASK-N> [result]",
+	Short: "Finish a task: it leaves the inbox, the card goes to Done; words after it are kept as its result",
+	Args:  cobra.MinimumNArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		result := strings.TrimSpace(strings.Join(args[1:], " "))
+		if result == "" {
+			moveTask(args[0], "Done")
+			return
+		}
+		dir := mustAgentDir()
+		who, _ := cmd.Flags().GetString("as")
+		t, err := watch.FinishTask(dir, args[0], firstNonEmpty(strings.TrimSpace(who), watch.TaskAgent), result, time.Now())
+		if err == nil {
+			nudgeDaemon(dir)
+		}
+		taskChanged(dir, t, err, "done")
+	},
+}
+
+var agentTaskNextCmd = &cobra.Command{
+	Use:   "next",
+	Short: "Take the next ready task for an agent: claims it for a while and moves it to Doing; exit 3 when nothing is ready",
+	Long: `For an agent that asks for work instead of being started on it. A task is
+ready when it is in Todo, nobody holds it, it is not in triage or snoozed, and
+every task it waits for is finished. Highest priority first, then the oldest.
+
+  corgi agent task next --as fixer-1                         the next ready task
+  corgi agent task next --as fixer-1 --tag bug --wait 10m    the next bug, or wait for one
+  corgi agent task renew TASK-12 --as fixer-1 --lease 1h     still on it
+  corgi agent task done TASK-12 "fixed, review: https://github.com/acme/api/pull/88"
+
+The claim is a lease (default 1h, at most 24h). An agent that dies stops
+renewing, and when the lease is over the task is ready for the next one. Two
+agents asking at the same moment never get the same task. Over HTTP:
+POST /launch/task/next {as, tags, workspace, lease, wait} and /launch/task/renew.`,
+	Args: cobra.NoArgs,
+	Run: func(cmd *cobra.Command, _ []string) {
+		dir := mustAgentDir()
+		who, _ := cmd.Flags().GetString("as")
+		tags, _ := cmd.Flags().GetStringArray("tag")
+		ws, _ := cmd.Flags().GetString("workspace")
+		lease, _ := cmd.Flags().GetDuration("lease")
+		wait, _ := cmd.Flags().GetDuration("wait")
+		q := watch.NextQuery{Owner: firstNonEmpty(strings.TrimSpace(who), peers.Me()), Tags: tags, Workspace: ws, Lease: lease}
+		deadline := time.Now().Add(wait)
+		t, ok, err := watch.TakeNextTask(dir, q, time.Now())
+		for err == nil && !ok && time.Now().Before(deadline) {
+			time.Sleep(2 * time.Second)
+			t, ok, err = watch.TakeNextTask(dir, q, time.Now())
+		}
+		if err != nil {
+			exitWithError("agent_task", err, 2)
+		}
+		if !ok {
+			if utils.JSONOutput {
+				utils.PrintJSON(map[string]any{"task": nil})
+			} else {
+				fmt.Println("nothing is ready")
+			}
+			exitProcess(3)
+			return
+		}
+		nudgeDaemon(dir)
+		if utils.JSONOutput {
+			utils.PrintJSON(map[string]any{"ref": t.Ref(), "task": t, "leaseUntil": t.LeaseUntil})
+			return
+		}
+		fmt.Printf("%s  %s\n", t.Ref(), t.Title)
+		if t.Body != "" {
+			fmt.Println(t.Body)
+		}
+		fmt.Printf("yours until %s - corgi agent task renew %s to keep it\n", t.LeaseUntil.Local().Format("15:04"), t.Ref())
+	},
+}
+
+var agentTaskRenewCmd = &cobra.Command{
+	Use:   "renew <TASK-n>",
+	Short: "Keep a task you took with next: the lease starts again",
 	Args:  cobra.ExactArgs(1),
-	Run: func(_ *cobra.Command, args []string) {
-		moveTask(args[0], "Done")
+	Run: func(cmd *cobra.Command, args []string) {
+		dir := mustAgentDir()
+		who, _ := cmd.Flags().GetString("as")
+		lease, _ := cmd.Flags().GetDuration("lease")
+		who = firstNonEmpty(strings.TrimSpace(who), peers.Me())
+		t, err := watch.RenewTask(dir, args[0], who, lease, time.Now())
+		taskChanged(dir, t, err, "is "+who+"'s until "+t.LeaseUntil.Local().Format("15:04"))
 	},
 }
 
@@ -507,6 +588,15 @@ func init() {
 	agentTaskSetCmd.Flags().String("priority", "", "urgent, high, medium, low or none; the highest starts first")
 	agentTaskSetCmd.Flags().String("due", "", "the day it is due, like 2026-12-01, or none")
 	agentTaskSetCmd.Flags().StringSlice("blocked-by", nil, "tasks that must finish first (TASK-3,TASK-4); empty clears it")
+	agentTaskDoneCmd.Flags().String("as", "", "Who writes the result (default: agent)")
+	agentTaskNextCmd.Flags().String("as", "", "The agent's name the task is claimed under (default: this machine's name)")
+	agentTaskNextCmd.Flags().StringArray("tag", nil, "Only tasks with this tag, repeatable")
+	agentTaskNextCmd.Flags().String("workspace", "", "Only tasks for this workspace")
+	agentTaskNextCmd.Flags().Duration("lease", watch.DefaultTaskLease, "How long the task is yours before it is ready for another")
+	agentTaskNextCmd.Flags().Duration("wait", 0, "With nothing ready, wait this long for a task: 10m")
+	agentTaskRenewCmd.Flags().String("as", "", "The name the task was taken under (default: this machine's name)")
+	agentTaskRenewCmd.Flags().Duration("lease", watch.DefaultTaskLease, "The new lease, from now")
+	agentTaskCmd.AddCommand(agentTaskNextCmd, agentTaskRenewCmd)
 	agentTaskCmd.AddCommand(agentTaskLinkCmd, agentTaskClaimCmd, agentTaskReleaseCmd, agentTaskSetCmd)
 	agentTaskCmd.AddCommand(agentTaskCommentCmd, agentTaskSendCmd, agentTaskAddCmd, agentTaskListCmd, agentTaskMoveCmd, agentTaskDoneCmd, agentTaskEditCmd, agentTaskRmCmd)
 	agentCmd.AddCommand(agentTaskCmd)

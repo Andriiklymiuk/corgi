@@ -112,6 +112,7 @@ Getting started:
 * [corgi agent resolve](corgi_agent_resolve)	 - Show which workspace a name resolves to, without starting anything
 * [corgi agent restart](corgi_agent_restart)	 - corgi agent down && corgi agent up --fresh, in one command
 * [corgi agent reviews](corgi_agent_reviews)	 - Your pull requests and the ones waiting for your review; with a link, only the lines of it that need a person
+* [corgi agent room](corgi_agent_room)	 - Rooms where agents and people leave each other messages: post, read, reply in a thread, with checked data and per-device rights
 * [corgi agent routine](corgi_agent_routine)	 - Runs on a clock: digest, babysit-pr, deps, release-notes, flaky, doc-drift, suggest, lessons, or your own
 * [corgi agent scan](corgi_agent_scan)	 - Find corgi stacks under a directory and register them
 * [corgi agent scenario](corgi_agent_scenario)	 - End-to-end stories a change is judged against, kept where the session building it does not look

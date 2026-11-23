@@ -32,16 +32,17 @@ type Task struct {
 	Touches []string `json:"touches,omitempty"`
 	// From names what the task was made from outside a tracker (a mail, a chat
 	// message, a wiki page), so the same one is never added twice.
-	From      string    `json:"from,omitempty"`
-	Links     []string  `json:"links,omitempty"`
-	Owner     string    `json:"owner,omitempty"`
-	ClaimedAt time.Time `json:"claimedAt,omitzero"`
-	Priority  string    `json:"priority,omitempty"`
-	Due       string    `json:"due,omitempty"`
-	BlockedBy []int     `json:"blockedBy,omitempty"`
-	Triage    bool      `json:"triage,omitempty"`
-	Snoozed   time.Time `json:"snoozed,omitzero"`
-	Cycle     string    `json:"cycle,omitempty"`
+	From       string    `json:"from,omitempty"`
+	Links      []string  `json:"links,omitempty"`
+	Owner      string    `json:"owner,omitempty"`
+	ClaimedAt  time.Time `json:"claimedAt,omitzero"`
+	LeaseUntil time.Time `json:"leaseUntil,omitzero"`
+	Priority   string    `json:"priority,omitempty"`
+	Due        string    `json:"due,omitempty"`
+	BlockedBy  []int     `json:"blockedBy,omitempty"`
+	Triage     bool      `json:"triage,omitempty"`
+	Snoozed    time.Time `json:"snoozed,omitzero"`
+	Cycle      string    `json:"cycle,omitempty"`
 	// Run asks the daemon to start it unattended; it clears once started.
 	Run bool `json:"run,omitempty"`
 	// Comments is the thread; a person's comment after AnsweredAt wakes a run.

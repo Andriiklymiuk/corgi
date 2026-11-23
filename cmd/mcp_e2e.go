@@ -25,8 +25,12 @@ func launchAuth(token string, next http.Handler, deviceStorePath string) http.Ha
 		// Handlers that hand out more to an owner than to a viewer read this;
 		// a client cannot set it.
 		r.Header.Del(viewerHeader)
+		r.Header.Del(deviceHeader)
 		if id.viewer {
 			r.Header.Set(viewerHeader, "1")
+		}
+		if id.device != "" {
+			r.Header.Set(deviceHeader, id.device)
 		}
 		if id.key == nil {
 			next.ServeHTTP(w, r)
@@ -41,9 +45,14 @@ const viewerHeader = "X-Corgi-Viewer"
 
 func isViewer(r *http.Request) bool { return r.Header.Get(viewerHeader) == "1" }
 
+const deviceHeader = "X-Corgi-Device"
+
+func deviceOf(r *http.Request) string { return r.Header.Get(deviceHeader) }
+
 type launchIdentity struct {
 	key    []byte
 	viewer bool
+	device string
 }
 
 func identifyLaunch(w http.ResponseWriter, r *http.Request, token, deviceStorePath string) (launchIdentity, bool) {
@@ -75,7 +84,7 @@ func identifyLaunch(w http.ResponseWriter, r *http.Request, token, deviceStorePa
 			writeLaunchError(w, http.StatusBadRequest, "this device did not pair with a key; pair again to talk encrypted")
 			return launchIdentity{}, false
 		}
-		return launchIdentity{viewer: device.Viewer()}, true
+		return launchIdentity{viewer: device.Viewer(), device: device.Name}, true
 	}
 	key, err := e2eKeyFor(deviceStorePath, device)
 	if err != nil {
@@ -86,7 +95,7 @@ func identifyLaunch(w http.ResponseWriter, r *http.Request, token, deviceStorePa
 		writeLaunchError(w, http.StatusForbidden, pairing.ErrNotEncrypted.Error())
 		return launchIdentity{}, false
 	}
-	return launchIdentity{key: key, viewer: device.Viewer()}, true
+	return launchIdentity{key: key, viewer: device.Viewer(), device: device.Name}, true
 }
 
 func authorizedDeviceFull(storePath, header string) (pairing.Device, bool) {

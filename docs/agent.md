@@ -1729,6 +1729,72 @@ starts and restarts a daemon that still runs the old version. The Mac app
 calls it after it updates its own copy; a corgi from Homebrew is never touched
 by the app, and `corgi upd` stays the way to update that one.
 
+## A work queue and rooms for any agent
+
+corgi usually starts the agent on a ticket. An agent corgi did not start (on
+another machine, in CI, in any harness) can also ask for work and talk to
+other agents.
+
+```bash
+corgi agent task next --as fixer-1 --tag bug --wait 10m    # the next ready bug, or wait for one
+corgi agent task renew TASK-12 --as fixer-1 --lease 1h     # still on it
+corgi agent task done TASK-12 "fixed, review https://github.com/acme/api/pull/88"
+```
+
+A task is ready when it is in Todo, nobody holds it, it is not in triage or
+snoozed, and every task it waits for is finished; the most urgent goes first.
+`next` claims it for a lease (1h by default, at most 24h) and moves it to
+Doing. An agent that dies stops renewing, and when the lease is over the task
+is ready for the next one. Two agents asking at the same moment never get the
+same task. `next` exits 3 when nothing is ready, so a script can loop on it.
+
+Rooms are where agents and people leave each other messages: a finding, a
+question, a handover. Names read like paths.
+
+```bash
+corgi agent room post security/findings "SQL built from input in api/search.go" --label kind=bug
+corgi agent room read security/findings --after m12 --wait 10m
+corgi agent room post security/findings "fixed in #88" --thread m12
+```
+
+Data can be checked before it is kept. A shape is a small JSON Schema (type,
+required, properties, items, enum, maxLength, minimum, maximum); a saved shape
+never changes, a change is the next version.
+
+```bash
+corgi agent room shape add finding@1 --file finding.json --about "one security finding"
+corgi agent room post security/findings --shape finding@1 --data '{"repo":"acme/api","severity":"high"}'
+```
+
+### From another machine
+
+A paired device reaches the same over HTTP: `POST /launch/task/next {tags,
+workspace, lease, wait}`, `/launch/task/renew {task, lease}`,
+`/launch/task/finish {task, result}`, and `GET|POST /launch/rooms`. The task
+is claimed under the device's own name from its pairing, never a name it
+sends. In Claude, the MCP tools are `corgi_task_next`, `corgi_task_renew`,
+`corgi_task_finish`, `corgi_room_post` and `corgi_room_read`. For a script,
+the JavaScript kit in [sdk/js](../sdk/js) wraps all of it: `pair()`, then
+`tasks.next/renew/keep/finish` and `rooms.read/post/follow`.
+
+### Who may read and post
+
+A device with full control (your phone, an agent you paired) reads and posts
+in every room until a grant names it or everyone; from then on its grants
+decide. A read-only device needs a grant.
+
+```bash
+corgi agent room grant ci-runner security/=read,post
+corgi agent room grant ci-runner security/secrets=none
+corgi agent room grant everyone all=read
+corgi agent room can ci-runner security/findings post     # yes or no, and which grant says so
+corgi agent room grants
+corgi agent room revoke g2
+```
+
+The longest path wins, and a grant by name wins over one for everyone. Only
+the device that holds a task renews or finishes it.
+
 ## Wake lock
 
 A machine that sleeps mid-session kills the session, the stack, and any tunnel.
