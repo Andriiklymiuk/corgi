@@ -37,6 +37,7 @@ Answer one from here too:
   corgi agent reviews send <url> --verdict approve
   corgi agent reviews merge <url>
   corgi agent reviews fix <url> --notes '[...]'      hand notes to the session on that branch
+  corgi agent reviews fix-all <url>                  hand every open comment, failed check and conflict to it
   corgi agent reviews phone on "<device>"            let a phone review while this Mac is off
 
 The phone's and the Mac app's Reviews read the same from /launch/reviews.`,
@@ -124,6 +125,13 @@ func reviewChangeText(c reviewChange) string {
 	if facts := strings.Join(reviewFacts(c.Checks, c.Review), " · "); facts != "" {
 		fmt.Fprintf(&b, "%s\n", facts)
 	}
+	for _, o := range c.Open {
+		where := "on the pull request"
+		if o.Path != "" {
+			where = fmt.Sprintf("%s:%d", o.Path, o.Line)
+		}
+		fmt.Fprintf(&b, "  open: %s, %s: %s\n", o.Author, where, firstLineOf(o.Body))
+	}
 	for _, f := range c.Files {
 		if !f.Eyes {
 			continue
@@ -210,6 +218,18 @@ var agentReviewsFixCmd = &cobra.Command{
 	Run:   func(cmd *cobra.Command, args []string) { runReviewCommand(cmd, "fix", args[0]) },
 }
 
+var agentReviewsFixAllCmd = &cobra.Command{
+	Use:   "fix-all <url>",
+	Short: "Hand everything open on a pull request of yours to an agent: comments, failed checks, conflicts",
+	Long: `Goes to the live session on that pull request, or opens a new one in an editor
+window on its workspace when none is. A comment counts while its thread is
+unresolved and the last word is not yours.
+
+  corgi agent reviews fix-all https://github.com/acme/api/pull/42`,
+	Args: cobra.ExactArgs(1),
+	Run:  func(cmd *cobra.Command, args []string) { runReviewCommand(cmd, "fix-all", args[0]) },
+}
+
 func init() {
 	for _, c := range []*cobra.Command{agentReviewsSendCmd, agentReviewsFixCmd} {
 		c.Flags().String("body", "", "Words for the whole review")
@@ -217,7 +237,7 @@ func init() {
 	}
 	agentReviewsSendCmd.Flags().String("verdict", "comment", "approve, request or comment")
 	agentReviewsSendCmd.Flags().String("head", "", "The commit you read; refuses when the pull request moved on")
-	for _, c := range []*cobra.Command{agentReviewsSendCmd, agentReviewsFixCmd, agentReviewsMergeCmd} {
+	for _, c := range []*cobra.Command{agentReviewsSendCmd, agentReviewsFixCmd, agentReviewsFixAllCmd, agentReviewsMergeCmd} {
 		c.Flags().String("from", "", "Which app sends it")
 		_ = c.Flags().MarkHidden("from")
 		agentReviewsCmd.AddCommand(c)

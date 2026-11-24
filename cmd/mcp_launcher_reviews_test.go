@@ -50,13 +50,14 @@ func reviewsHome(t *testing.T, status watch.PullStatus) *[]string {
 		}
 	}))
 	t.Cleanup(srv.Close)
-	oldForge, oldAsker := forgeFor, pullAskerFor
+	oldForge, oldAsker, oldThreads := forgeFor, pullAskerFor, reviewThreadsFor
+	reviewThreadsFor = func(context.Context, string, string, string) ([]watch.ReviewThread, error) { return nil, nil }
 	forgeFor = func(string, string) watch.Forge {
 		return watch.Forge{HTTP: srv.Client(), GitHubAPI: srv.URL, Secrets: watch.Secrets{GitHub: "tok"}}
 	}
 	pullAskerFor = func(string, string, string) watch.PullAsker { return fixedAsker{status} }
 	reviewCache = &reviewStore{status: map[string]watch.PullStatus{}, changes: map[string]reviewChange{}}
-	t.Cleanup(func() { forgeFor, pullAskerFor = oldForge, oldAsker })
+	t.Cleanup(func() { forgeFor, pullAskerFor, reviewThreadsFor = oldForge, oldAsker, oldThreads })
 	return &posts
 }
 

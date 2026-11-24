@@ -29,6 +29,7 @@ const (
 	reviewChangeFresh = 90 * time.Second
 	reviewStatusAsks  = 30
 	reviewAskers      = 12
+	fixAllOnceIn      = 2 * time.Minute
 )
 
 type reviewChange struct {
@@ -44,6 +45,12 @@ type reviewChange struct {
 	Unsure  []string       `json:"unsure,omitempty"`
 	Why     map[string]why `json:"why,omitempty"`
 	At      time.Time      `json:"at"`
+
+	Open []watch.OpenComment `json:"open"`
+}
+
+func (c reviewChange) openWork() watch.OpenWork {
+	return watch.OpenWork{Comments: c.Open, FailedChecks: c.FailedChecks(), Conflicts: c.Conflicts}
 }
 
 type reviewProof struct {
@@ -67,11 +74,16 @@ type reviewStore struct {
 	refreshing bool
 	status     map[string]watch.PullStatus
 	changes    map[string]reviewChange
+	fixAllAt   map[string]time.Time
 }
 
 var reviewCache = &reviewStore{status: map[string]watch.PullStatus{}, changes: map[string]reviewChange{}}
 
 var forgeFor = func(dir, ws string) watch.Forge { return watch.NewForge(watch.LoadSecretsFor(dir, ws)) }
+
+var reviewThreadsFor = func(ctx context.Context, dir, ws, link string) ([]watch.ReviewThread, error) {
+	return watch.ReviewThreads(ctx, watch.LoadSecretsFor(dir, ws), link)
+}
 
 var pullAskerFor = func(dir, ws, link string) watch.PullAsker {
 	secrets := watch.LoadSecretsFor(dir, ws)
@@ -415,11 +427,25 @@ func reviewChangeFor(ctx context.Context, dir, link string, fresh bool) (reviewC
 		return cached, nil
 	}
 	row, known := reviewRowFor(ctx, dir, link)
+	var threads []watch.ReviewThread
+	var threadsErr error
+	var wg sync.WaitGroup
+	if row.Mine {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			threads, threadsErr = reviewThreadsFor(ctx, dir, row.Workspace, link)
+		}()
+	}
 	change, err := forgeFor(dir, row.Workspace).PullChange(ctx, link)
+	wg.Wait()
 	if err != nil {
 		return reviewChange{}, err
 	}
 	out := reviewChange{Change: change, Mine: row.Mine, At: time.Now()}
+	if row.Mine && threadsErr == nil {
+		out.Open = watch.OpenComments(threads, change.Author, change.NewestCommit())
+	}
 	if !known {
 		out.Mine = false
 	}
@@ -521,7 +547,7 @@ func launchReviewsHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		reviewAction(w, r, dir, req)
 	default:
-		writeLaunchError(w, http.StatusMethodNotAllowed, "GET the list, POST {link, do: send|fix|merge}")
+		writeLaunchError(w, http.StatusMethodNotAllowed, "GET the list, POST {link, do: send|fix|fix-all|merge}")
 	}
 }
 
@@ -565,6 +591,8 @@ func runReviewAction(ctx context.Context, dir string, req reviewRequest, from st
 		return map[string]any{"done": map[string]string{"approve": "approved", "request": "changes requested", "comment": "commented"}[verdict], "url": link}, http.StatusOK, ""
 	case "fix":
 		return reviewFix(dir, row, req, from)
+	case "fix-all":
+		return reviewFixAll(ctx, dir, row, from)
 	case "merge":
 		if !row.Mine {
 			return nil, http.StatusBadRequest, "not a pull request of yours"
@@ -578,7 +606,7 @@ func runReviewAction(ctx context.Context, dir string, req reviewRequest, from st
 		}
 		return map[string]any{"done": "merged", "url": link}, http.StatusOK, ""
 	}
-	return nil, http.StatusBadRequest, "do is send, fix or merge"
+	return nil, http.StatusBadRequest, "do is send, fix, fix-all or merge"
 }
 
 func reviewFix(dir string, row watch.ReviewRow, req reviewRequest, from string) (map[string]any, int, string) {
@@ -603,6 +631,81 @@ func reviewFix(dir string, row watch.ReviewRow, req reviewRequest, from string) 
 	}
 	daemon.Nudge(info)
 	return map[string]any{"ok": true, "action": command.ActionSend}, http.StatusOK, ""
+}
+
+func reviewFixAll(ctx context.Context, dir string, row watch.ReviewRow, from string) (map[string]any, int, string) {
+	if !row.Mine {
+		return nil, http.StatusBadRequest, "fix-all is for a pull request of yours"
+	}
+	change, err := reviewChangeFor(ctx, dir, row.Link, true)
+	if err != nil {
+		return nil, http.StatusBadGateway, firstLineOf(err.Error())
+	}
+	if change.State == "merged" || change.State == "closed" {
+		return map[string]any{"done": "it is " + change.State + " already"}, http.StatusOK, ""
+	}
+	if change.Open == nil {
+		return nil, http.StatusBadGateway, "the comments on it could not be read, so nothing was sent"
+	}
+	text := watch.FixAllMessage(row.Link, change.openWork())
+	if text == "" {
+		return map[string]any{"done": "nothing is open on it any more"}, http.StatusOK, ""
+	}
+	if justSentFixAll(row.Link) {
+		return map[string]any{"done": "an agent got it a moment ago"}, http.StatusOK, ""
+	}
+	info, err := daemon.ReadInfo(dir)
+	if err != nil || info == nil {
+		return nil, http.StatusServiceUnavailable, "the corgi daemon is not running on that machine"
+	}
+	cmd, done, no := fixAllCommand(dir, row, change.Branch, text)
+	if no != nil {
+		return nil, no.status, no.msg
+	}
+	cmd.Source = from
+	if _, err := command.Write(dir, cmd); err != nil {
+		return nil, http.StatusInternalServerError, err.Error()
+	}
+	forgetReview(row.Link)
+	reviewCache.mu.Lock()
+	if reviewCache.fixAllAt == nil {
+		reviewCache.fixAllAt = map[string]time.Time{}
+	}
+	reviewCache.fixAllAt[row.Link] = time.Now()
+	reviewCache.mu.Unlock()
+	daemon.Nudge(info)
+	return map[string]any{"ok": true, "action": cmd.Action, "done": done}, http.StatusOK, ""
+}
+
+func justSentFixAll(link string) bool {
+	reviewCache.mu.Lock()
+	defer reviewCache.mu.Unlock()
+	return time.Since(reviewCache.fixAllAt[link]) < fixAllOnceIn
+}
+
+func fixAllCommand(dir string, row watch.ReviewRow, branch, text string) (command.Command, string, *launchRefusal) {
+	target := liveSessionsByPull(dir)[row.Link]
+	if target == nil {
+		if session, found, live := authorSession(dir, row.Link, branch); found && live {
+			target = &session
+		}
+	}
+	if target != nil {
+		name := firstNonEmpty(target.Display, target.Label, "the session on it")
+		return command.Command{Action: command.ActionSend, SessionID: target.ID, Text: text, Enter: true}, "sent to " + name, nil
+	}
+	window, no := workWindow(dir, "", row.Workspace)
+	if no != nil {
+		return command.Command{}, "", no
+	}
+	if window == "" {
+		return command.Command{}, "", refuse(http.StatusNotFound, "no live session is on this pull request, and no editor window is open on its workspace to start one")
+	}
+	_, args, no := newChatCommand(newChatRequest{Window: window, Workspace: row.Workspace, Prompt: text})
+	if no != nil {
+		return command.Command{}, "", no
+	}
+	return command.Command{Action: command.ActionNew, WindowID: window, Command: daemon.NewSessionCommandFor("", args...)}, "a new session is on it", nil
 }
 
 func launchFrom(r *http.Request) string {

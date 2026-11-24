@@ -1672,7 +1672,15 @@ enable --prune-after 7d` has the daemon do it on its own, once an hour
 corgi agent reviews                                         # yours, and the ones waiting for your review
 corgi agent reviews https://github.com/acme/api/pull/42     # that change, sorted
 corgi agent reviews https://github.com/acme/api/pull/42 --json
+corgi agent reviews fix-all https://github.com/acme/api/pull/42
 ```
+
+`fix-all` hands everything open on a pull request of yours to an agent: review
+comments whose thread is unresolved and whose last word is not yours, failed
+checks, conflicts. It goes to the live session on that pull request or branch;
+with none, a new one opens in an editor window on the workspace. The message
+counts the work and never carries the words of a comment. The phone has it as
+**Fix all** on the pull request, and keeps it until the Mac answers.
 
 The list comes from GitHub and GitLab with the token each watched workspace
 already has: what you opened (ready to merge, open, draft, and what nobody

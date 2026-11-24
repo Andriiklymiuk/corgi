@@ -28,6 +28,7 @@ Answer one from here too:
   corgi agent reviews send `<url>` --verdict approve
   corgi agent reviews merge `<url>`
   corgi agent reviews fix `<url>` --notes '[...]'      hand notes to the session on that branch
+  corgi agent reviews fix-all `<url>`                  hand every open comment, failed check and conflict to it
   corgi agent reviews phone on `"<device>"`            let a phone review while this Mac is off
 
 The phone's and the Mac app's Reviews read the same from /launch/reviews.
@@ -65,6 +66,7 @@ corgi agent reviews [url] [flags]
 
 * [corgi agent](corgi_agent)	 - Keep Claude Code Remote Control running for your corgi workspaces
 * [corgi agent reviews fix](corgi_agent_reviews_fix)	 - Hand your notes to the live session on that pull request, as its next prompt
+* [corgi agent reviews fix-all](corgi_agent_reviews_fix-all)	 - Hand everything open on a pull request of yours to an agent: comments, failed checks, conflicts
 * [corgi agent reviews merge](corgi_agent_reviews_merge)	 - Merge a pull request of yours
 * [corgi agent reviews phone](corgi_agent_reviews_phone)	 - Let a paired phone review while this Mac is off: it gets the Mac's GitHub and GitLab access, sealed, to keep in its Keychain
 * [corgi agent reviews send](corgi_agent_reviews_send)	 - Post a review under your name: approve, ask for changes, or comment, with notes on lines
