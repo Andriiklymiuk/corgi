@@ -492,3 +492,88 @@ func TestReleaseStillRemovesACleanWorktree(t *testing.T) {
 		t.Errorf("removed=%v keptDirty=%v; a clean worktree should just go", removed, keptDirty)
 	}
 }
+
+func TestReleaseRemovesAWorktreeLeftOnADetachedHead(t *testing.T) {
+	corgi, dir := stack(t, "api")
+	set, err := MaterializeBranchAcrossRepos(corgi, dir, "feature/x", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wt := set.Worktrees[0].Dir
+	if err := gitRun(wt, "checkout", "-q", "--detach"); err != nil {
+		t.Fatal(err)
+	}
+
+	removed, err := ReleaseBranchWorktrees(dir, "feature/x")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(removed) != 1 {
+		t.Fatalf("removed %v; a run that left its worktree detached must still be cleaned", removed)
+	}
+	if _, statErr := os.Stat(wt); !os.IsNotExist(statErr) {
+		t.Errorf("%s should have been removed", wt)
+	}
+}
+
+func TestReleaseKeepsADetachedWorktreeTwoBranchesCouldOwn(t *testing.T) {
+	corgi, dir := stack(t, "api")
+	set, err := MaterializeBranchAcrossRepos(corgi, dir, "feature/login", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wt := set.Worktrees[0].Dir
+	if err := gitRun(corgi.Services[0].AbsolutePath, "branch", "feature-login"); err != nil {
+		t.Fatal(err)
+	}
+	if err := gitRun(wt, "checkout", "-q", "--detach"); err != nil {
+		t.Fatal(err)
+	}
+
+	removed, err := ReleaseBranchWorktrees(dir, "feature-login")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(removed) != 0 {
+		t.Errorf("removed %v; a detached worktree two branches flatten to must be left alone", removed)
+	}
+	if _, statErr := os.Stat(wt); statErr != nil {
+		t.Error("the detached worktree was removed without knowing whose it is")
+	}
+}
+
+func TestReleaseRemovesTheServiceWorktreeOfTheBranch(t *testing.T) {
+	corgi, dir := stack(t, "api")
+	repo := corgi.Services[0].AbsolutePath
+	if err := gitRun(repo, "branch", "feature/x"); err != nil {
+		t.Fatal(err)
+	}
+	other := filepath.Join(AgentWorktreeBase(dir), "api-feature-y")
+	if err := gitRun(repo, "branch", "feature/y"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := EnsureServiceWorktree(repo, "feature/y", other); err != nil {
+		t.Fatal(err)
+	}
+	wt, err := EnsureServiceWorktree(repo, "feature/x", filepath.Join(AgentWorktreeBase(dir), "api-feature-x"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	removed, err := ReleaseBranchWorktrees(dir, "feature/x")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(removed) != 1 {
+		t.Fatalf("removed %v; the worktree exec --feature made for the branch must go with it", removed)
+	}
+	if _, statErr := os.Stat(wt); !os.IsNotExist(statErr) {
+		t.Errorf("%s should have been removed", wt)
+	}
+	if _, statErr := os.Stat(other); statErr != nil {
+		t.Error("another branch's service worktree was removed")
+	}
+}

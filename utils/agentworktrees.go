@@ -276,13 +276,12 @@ func releaseBranchWorktrees(composeDir, branch string, force bool) (removed, ski
 		return nil, nil, rerr
 	}
 
-	suffix := "@" + branchDirSegment(branch)
 	for _, e := range entries {
-		if !strings.HasSuffix(e.Name(), suffix) {
+		if !dirNamedForBranch(e.Name(), branch) {
 			continue
 		}
 		dest := filepath.Join(base, e.Name())
-		if head, herr := gitOut(dest, gitRevParse, gitAbbrevRef, "HEAD"); herr == nil && head != branch {
+		if !worktreeBelongsToBranch(dest, e.Name(), branch) {
 			continue
 		}
 		if !force && HasUncommittedWork(dest) {
@@ -296,6 +295,35 @@ func releaseBranchWorktrees(composeDir, branch string, force bool) (removed, ski
 	sort.Strings(removed)
 	sort.Strings(skippedDirty)
 	return removed, skippedDirty, nil
+}
+
+// A worktree dir is named <repo>-<hash>@<branch> by a run and <service>-<branch>
+// by exec/run --feature; both live in the same base and both end a run's life.
+func dirNamedForBranch(name, branch string) bool {
+	return strings.HasSuffix(name, "@"+branchDirSegment(branch)) || strings.HasSuffix(name, "-"+branchSlug(branch))
+}
+
+// A run often leaves its worktree on a detached HEAD (a rebase, a checkout of the
+// pushed head). The dir name then is the only owner mark, so it counts unless
+// another local branch flattens to the same name.
+func worktreeBelongsToBranch(dest, name, branch string) bool {
+	head, err := gitOut(dest, gitRevParse, gitAbbrevRef, "HEAD")
+	if err != nil {
+		return strings.HasSuffix(name, "@"+branchDirSegment(branch))
+	}
+	if head != "HEAD" {
+		return head == branch
+	}
+	refs, err := gitOut(dest, "for-each-ref", "--format=%(refname:short)", "refs/heads")
+	if err != nil {
+		return false
+	}
+	for _, other := range strings.Fields(refs) {
+		if other != branch && dirNamedForBranch(name, other) {
+			return false
+		}
+	}
+	return true
 }
 
 func existingWorktreeDir(root, base, branch string) string {

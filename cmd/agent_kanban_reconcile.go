@@ -6,6 +6,7 @@ import (
 
 	"andriiklymiuk/corgi/utils"
 	"andriiklymiuk/corgi/utils/agent/watch"
+	"andriiklymiuk/corgi/utils/agent/workspace"
 	"github.com/spf13/cobra"
 )
 
@@ -149,6 +150,47 @@ func init() {
 
 func reconcileBoard(dir string) func(now time.Time) []string {
 	return func(now time.Time) []string {
-		return reconcileKanban(gatherKanban(dir, "", now), watch.LoadArchive(dir), reconcileKeep, now, false)
+		cards := gatherKanban(dir, "", now)
+		out := pruneMergedWorktrees(cards, workspaceRoots(dir), releaseFixWorktrees, now)
+		return append(out, reconcileKanban(cards, watch.LoadArchive(dir), reconcileKeep, now, false)...)
 	}
+}
+
+func workspaceRoots(dir string) func(string) string {
+	return func(id string) string {
+		registry, err := workspace.Load(agentRegistryPath(dir))
+		if err != nil {
+			return ""
+		}
+		if ws, ok := registry.Find(id); ok {
+			return ws.AbsPath
+		}
+		return ""
+	}
+}
+
+// pruneMergedWorktrees removes the worktrees of a run whose pull request merged,
+// without waiting for --prune-after: nothing lands in them again. A worktree with
+// uncommitted work stays, and so does one a session or a run still holds.
+func pruneMergedWorktrees(cards []KanbanCard, root func(workspace string) string,
+	release func(dir, branch string) (removed, kept []string, err error), now time.Time) []string {
+	var out []string
+	for _, c := range cards {
+		if c.Fix == nil || c.Fix.Branch == "" || c.Pull == nil || pullOver(c.Pull.State) != "merged" || cardBusy(c, now) {
+			continue
+		}
+		dir := root(c.Workspace)
+		if dir == "" {
+			continue
+		}
+		removed, _, err := release(dir, c.Fix.Branch)
+		if err != nil {
+			utils.Infof("agent: prune %s: %v\n", c.Fix.Branch, err)
+			continue
+		}
+		if len(removed) > 0 {
+			out = append(out, fmt.Sprintf("%s merged: removed %d worktree(s) of %s", c.Ref, len(removed), c.Fix.Branch))
+		}
+	}
+	return out
 }
