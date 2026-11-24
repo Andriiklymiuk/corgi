@@ -159,13 +159,16 @@ func TestHereIsEveryoneWhoWroteInTheRoom(t *testing.T) {
 
 func TestSessionsGetNamesThatCanBeTyped(t *testing.T) {
 	list := roomAgentsOf([]sessions.Session{
-		{ID: "abcd1234", Label: "corgi", Display: "corgi·fix login", Status: sessions.StatusWorking},
+		{ID: "abcd1234", Label: "corgi", Display: "corgi·fix login", Status: sessions.StatusWorking, Branch: "fix/login", Ticket: "ABC-7"},
 		{ID: "ef561234", Label: "corgi", Display: "corgi·fix login", Status: sessions.StatusDone},
 		{ID: "gone", Label: "old", Status: sessions.StatusGone},
 		{ID: "p1", Label: "api", Status: sessions.StatusNeedsInput, Pending: &sessions.Pending{}},
 	})
 	if len(list) != 3 || list[0].Handle != "corgi-fix-login" || list[1].Handle != "corgi-fix-login-ef56" || list[2].Busy == "" {
 		t.Fatalf("agents = %+v", list)
+	}
+	if list[0].Workspace != "corgi" || list[0].Branch != "fix/login" || list[0].Ticket != "ABC-7" {
+		t.Fatalf("where = %+v", list[0])
 	}
 	if got := rooms.Mentions("hi @Api, and (@web-2) not mail@host.com @api"); len(got) != 2 || got[0] != "api" || got[1] != "web-2" {
 		t.Fatalf("mentions = %v", got)

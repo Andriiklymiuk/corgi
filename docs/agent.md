@@ -1319,6 +1319,15 @@ error changed. `corgi agent doctor` asks GitLab what the token may do before
 any of that: a workspace with `--auto-merge` on and a `read_api` token is a
 red check with the fix.
 
+`--arm-merge` is the lighter switch: after a run fixed review comments or a
+red build on a pull request of yours, corgi turns on the forge's own
+auto-merge for it (GitHub auto-merge, GitLab "merge when the pipeline
+succeeds"), the step people forget after a fix. The forge then merges by its
+own rules, so the repo's required approvals and checks still decide. A draft,
+someone else's pull request and a GitLab merge request with no pipeline
+running are left alone, since arming that last one would merge it at once.
+The push says "auto-merge armed" with the reference.
+
 **A mention can start a run**, and that is the one place a stranger could
 reach your machine, so it is gated on a list of people rather than on
 anything about the message: `--trust @teammate @reviewer`. Empty means nobody.
@@ -1830,7 +1839,8 @@ sessions, and a room carries 30 such messages in ten minutes, so two agents
 cannot call each other without end. A session that posts is named by its own
 label. Its reply in a thread a phone started rings that phone. A read-only
 device can post where a grant lets it, and names nobody. `GET /launch/rooms`
-lists the names under `agents`.
+lists the names under `agents`, each with the workspace, branch and ticket
+its session works on, so the apps show where an agent is.
 
 ### Who may read and post
 

@@ -29,6 +29,8 @@ type roomAgent struct {
 	Handle    string `json:"handle"`
 	Name      string `json:"name"`
 	Workspace string `json:"workspace,omitempty"`
+	Branch    string `json:"branch,omitempty"`
+	Ticket    string `json:"ticket,omitempty"`
 	Status    string `json:"status"`
 	Busy      string `json:"busy,omitempty"`
 	id        string
@@ -54,7 +56,7 @@ func roomAgentsOf(list []sessions.Session) []roomAgent {
 			continue
 		}
 		seen[handle] = true
-		agent := roomAgent{Handle: handle, Name: name, Workspace: s.Label, Status: string(s.Status), id: s.ID}
+		agent := roomAgent{Handle: handle, Name: name, Workspace: s.Label, Branch: s.Branch, Ticket: s.Ticket, Status: string(s.Status), id: s.ID}
 		switch {
 		case s.Pending != nil:
 			agent.Busy = "waits on a permission"

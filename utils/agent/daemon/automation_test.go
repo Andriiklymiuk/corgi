@@ -524,3 +524,33 @@ func TestTheTicketOfARunIsATrackerKeyNeverAPullRequest(t *testing.T) {
 		}
 	}
 }
+
+func TestAutoMergeIsArmedAfterAFixOnlyWhenTheWorkspaceSaysSo(t *testing.T) {
+	d := testDaemon(t)
+	var asked []string
+	d.ArmPull = func(_ context.Context, workspace, link string) (string, error) {
+		asked = append(asked, workspace+" "+link)
+		if strings.HasSuffix(link, "/9") {
+			return "", errors.New("a draft")
+		}
+		return watch.ArmedNow, nil
+	}
+	spec := WatchSpec{Workspace: "acme", Dir: t.TempDir(), AgentDir: d.Dir}
+	e := watch.Event{Kind: watch.KindPRComment, Ref: "acme/api#7", URL: "https://github.com/acme/api/pull/7#discussion_r1"}
+	if said := d.armAfterFix(context.Background(), spec, e, nil); said != "" || len(asked) != 0 {
+		t.Fatalf("armed with the switch off: %q %v", said, asked)
+	}
+	writeWatchConfig(t, d, "acme", "      armMerge: true\n")
+	said := d.armAfterFix(context.Background(), spec, e, []string{"https://github.com/acme/api/pull/7", "https://github.com/acme/api/pull/9"})
+	if !strings.Contains(said, "auto-merge armed: acme/api#7") || strings.Contains(said, "#9") {
+		t.Fatalf("said = %q", said)
+	}
+	if len(asked) != 2 || asked[0] != "acme https://github.com/acme/api/pull/7" {
+		t.Fatalf("asked = %v", asked)
+	}
+	asked = nil
+	issue := watch.Event{Kind: watch.KindIssueNew, Ref: "ABC-1", URL: "https://linear.app/acme/issue/ABC-1"}
+	if said := d.armAfterFix(context.Background(), spec, issue, []string{"https://github.com/acme/api/pull/11"}); said != "" || len(asked) != 0 {
+		t.Fatalf("a new ticket's pull request was armed: %q %v", said, asked)
+	}
+}

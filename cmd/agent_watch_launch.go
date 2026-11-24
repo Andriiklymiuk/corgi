@@ -25,6 +25,7 @@ type WatchSwitches struct {
 	Quiet      string   `json:"quiet"`
 	DaysOff    []string `json:"daysOff"`
 	AutoMerge  bool     `json:"autoMerge"`
+	ArmMerge   bool     `json:"armMerge"`
 	Approve    bool     `json:"approve"`
 	HandOver   bool     `json:"handOver"`
 	AutoAllow  string   `json:"autoAllow"`
@@ -47,6 +48,7 @@ func switchesOf(id string, wc *config.WatchConfig) WatchSwitches {
 	}
 	out.Enabled, out.Comments, out.PRs, out.Reviews, out.CI, out.Isolate = wc.Enabled, wc.Comments, wc.PRs, wc.Reviews, wc.CI, wc.Isolate
 	out.Quiet, out.AutoMerge, out.Approve, out.HandOver, out.AutoAllow = wc.Quiet, wc.AutoMerge, wc.Approve, wc.HandOver, wc.AutoAllow
+	out.ArmMerge = wc.ArmMerge
 	if wc.Action != "" {
 		out.Action = wc.Action
 	}
@@ -80,6 +82,7 @@ type watchSwitchRequest struct {
 	DaysOff    *[]string `json:"daysOff"`
 	Labels     *[]string `json:"labels"`
 	AutoMerge  *bool     `json:"autoMerge"`
+	ArmMerge   *bool     `json:"armMerge"`
 	Approve    *bool     `json:"approve"`
 	HandOver   *bool     `json:"handOver"`
 	AutoAllow  *string   `json:"autoAllow"`
@@ -195,7 +198,7 @@ func applyWatchToggles(wc *config.WatchConfig, req watchSwitchRequest) bool {
 		{req.Enabled, &wc.Enabled, true}, {req.Comments, &wc.Comments, true}, {req.PRs, &wc.PRs, true},
 		{req.Reviews, &wc.Reviews, true}, {req.CI, &wc.CI, true}, {req.Isolate, &wc.Isolate, true},
 		{req.RerunCI, &wc.RerunCI, true}, {req.Silent, &wc.Silent, true},
-		{req.Approve, &wc.Approve, false}, {req.AutoMerge, &wc.AutoMerge, false}, {req.HandOver, &wc.HandOver, false},
+		{req.Approve, &wc.Approve, false}, {req.AutoMerge, &wc.AutoMerge, false}, {req.ArmMerge, &wc.ArmMerge, false}, {req.HandOver, &wc.HandOver, false},
 		{req.Rebase, &wc.Rebase, false}, {req.Lessons, &wc.Lessons, false}, {req.AutoCarry, &wc.AutoCarry, false},
 		{req.NightShift, &wc.NightShift, false}, {req.Headless, &wc.Headless, false},
 	} {

@@ -135,6 +135,7 @@ type Daemon struct {
 	Sessions  *sessions.Registry
 	Ledger    *usage.Ledger
 	MergePull func(ctx context.Context, workspace, link string) error
+	ArmPull   func(ctx context.Context, workspace, link string) (string, error)
 	// Level 5: what a pull request changes, marking it ready, and judging a
 	// checkout against the hidden scenarios (their share in percent and how many).
 	PullChanges    func(ctx context.Context, workspace, link string) (watch.PullChanges, error)

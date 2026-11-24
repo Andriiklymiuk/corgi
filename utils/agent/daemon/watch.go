@@ -1918,6 +1918,7 @@ func (d *Daemon) fixDone(ctx context.Context, run fixRun) {
 	}
 	d.watchState.Fixes.Finish(e.Key, links, note, "", time.Now())
 	body += d.judgeRun(ctx, run, links)
+	body += d.armAfterFix(ctx, spec, e, links)
 	d.replyOnTask(e, strings.TrimSpace(strings.Join(append(append([]string{}, links...), note), " ")))
 	d.watchState.Fixes.SetOutcome(e.Key, watch.OutcomeOf(e.Kind, out))
 	if !watch.ReadOnlyRoutine(e) {

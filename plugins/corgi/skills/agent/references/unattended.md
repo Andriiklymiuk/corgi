@@ -30,6 +30,9 @@ CLI or the phone's repo sheet, no restart:
   reading them; the rest wait for a person. See [docs/software-factory.md](https://github.com/Andriiklymiuk/corgi/blob/main/docs/software-factory.md).
 - `--hand-over`, `--auto-merge`: feedback typed into the session on
   the branch; a ready pull request merged.
+- `--arm-merge`: after a run fixed review comments or a red build on a pull request of mine, corgi
+  turns on the forge's own auto-merge for it. The forge's required approvals and checks still decide.
+  A draft, someone else's, and a GitLab merge request with no pipeline running are left alone.
 - `--after-merge "<column>"`: once **every** pull request of a run is
   merged (by the daemon or by a person), the ticket moves to that column -
   a name `corgi agent watch board` prints. `--after-merge-subtasks Done`

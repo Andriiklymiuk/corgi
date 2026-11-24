@@ -49,6 +49,7 @@ const (
 	watchFlagReviewStatus       = "review-status"
 	watchFlagNoRetry            = "no-retry"
 	watchFlagAutoMerge          = "auto-merge"
+	watchFlagArmMerge           = "arm-merge"
 	watchFlagMergeUnread        = "merge-unread"
 	watchFlagAfterMerge         = "after-merge"
 	watchFlagAfterMergeSubtasks = "after-merge-subtasks"
@@ -220,6 +221,9 @@ var agentWatchEnableCmd = &cobra.Command{
 		}
 		if flags.Changed(watchFlagAutoMerge) {
 			wc.AutoMerge, _ = flags.GetBool(watchFlagAutoMerge)
+		}
+		if flags.Changed(watchFlagArmMerge) {
+			wc.ArmMerge, _ = flags.GetBool(watchFlagArmMerge)
 		}
 		if flags.Changed(watchFlagMergeUnread) {
 			wc.MergeUnread, _ = flags.GetBool(watchFlagMergeUnread)
@@ -1461,6 +1465,7 @@ func describeWatchParts(wc *config.WatchConfig) []string {
 		{wc.PRs, "PR reviews and comments"},
 		{wc.HandOver, "handed to the session on the branch"},
 		{wc.AutoMerge, "merged when green and approved"},
+		{wc.ArmMerge, "auto-merge armed on my pull request after a fix"},
 		{wc.MergeUnread, "low risk merges with nobody reading it, the rest waits for you"},
 		{wc.NightShift && wc.Quiet != "", "works through " + wc.Quiet + ", the phone hears in the morning"},
 		{wc.AfterMerge != "", "then the ticket goes to " + wc.AfterMerge + subtaskColumn(wc.AfterMergeSubtasks)},
@@ -1586,6 +1591,7 @@ func init() {
 	f.Bool("reviews", false, "Also pull requests someone asked me to review - theirs, not mine")
 	f.String(watchFlagReviewDelay, "", "Hold a review someone asked for this long before it runs, e.g. 1h; it is checked again then - merged, closed or already reviewed drops it (empty or 0 reviews at once)")
 	f.Bool(watchFlagMergeUnread, false, "Merge low-risk pull requests a run opened with nobody reading them: green, small, away from auth, payments, data, CI and dependencies, and they satisfy the hidden scenarios. The rest waits for you. Usually set with corgi agent level 5")
+	f.Bool(watchFlagArmMerge, false, "After a run fixed review comments or a red build on a pull request of mine, turn on the forge's own auto-merge for it (GitHub auto-merge, GitLab merge when the pipeline succeeds)")
 	f.Bool(watchFlagAutoMerge, false, "Merge a pull request of mine the moment its checks pass and it is approved (read from the forge once a round)")
 	f.Int("batch", 1, "Tickets that arrive within 90 s of each other share one run, up to this many (1 is off); one preflight and one context for the lot")
 	f.String(watchFlagAfterMerge, "", "Move the ticket to this column once every pull request of its run is merged - a name from `corgi agent watch board`; empty leaves it where it is")

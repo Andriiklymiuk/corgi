@@ -179,6 +179,52 @@ func (d *Daemon) autoMerge(ctx context.Context, spec WatchSpec, ref, link string
 	return watch.PullStatus{State: "merged", Checks: now.Checks, Review: now.Review, At: now.At}, true
 }
 
+func armsMerge(kind watch.Kind) bool {
+	return kind == watch.KindPRComment || kind == watch.KindPRReview || kind == watch.KindCIFailed
+}
+
+func (d *Daemon) armAfterFix(ctx context.Context, spec WatchSpec, e watch.Event, links []string) string {
+	wc := d.watchConfig(spec)
+	if wc == nil || !wc.ArmMerge || d.ArmPull == nil || !armsMerge(e.Kind) {
+		return ""
+	}
+	pulls := map[string]bool{}
+	var order []string
+	add := func(link string) {
+		link = watch.PullLink(link)
+		if watch.PullRef(link) == "" || pulls[link] {
+			return
+		}
+		pulls[link] = true
+		order = append(order, link)
+	}
+	add(watch.PullLinkOf(e))
+	for _, r := range e.Riders {
+		add(r.URL)
+	}
+	for _, l := range links {
+		add(l)
+	}
+	var armed []string
+	for _, link := range order {
+		word, err := d.ArmPull(ctx, spec.Workspace, link)
+		if err != nil {
+			utils.Infof("agent: auto-merge not armed on %s: %v\n", watch.PullRef(link), err)
+			continue
+		}
+		if word == watch.ArmedNow {
+			armed = append(armed, watch.PullRef(link))
+			if d.Events != nil {
+				d.Events.Append(spec.Workspace, events.Event{At: time.Now().UTC(), Kind: "armed", Reason: "auto-merge armed on " + watch.PullRef(link) + " after the fix", URL: link})
+			}
+		}
+	}
+	if len(armed) == 0 {
+		return ""
+	}
+	return "\nauto-merge armed: " + strings.Join(armed, ", ")
+}
+
 type mergeFailure struct {
 	At        time.Time `json:"at"`
 	Msg       string    `json:"msg"`

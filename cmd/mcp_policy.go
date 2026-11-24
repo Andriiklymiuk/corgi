@@ -38,6 +38,7 @@ func registerPolicyMCPTools(s *server.MCPServer) {
 		mcp.WithBoolean("headless", mcp.Description("Let a message for a session whose terminal is gone run as one headless turn (claude -p --resume, or codex exec resume)")),
 		mcp.WithBoolean("nightShift", mcp.Description("Work through the quiet hours: fixes and routines run, nothing rings until they end, then one summary")),
 		mcp.WithBoolean("autoMerge", mcp.Description("Merge a pull request of mine the moment it is ready")),
+		mcp.WithBoolean("armMerge", mcp.Description("After a run fixed review comments or a red build on a pull request of mine, turn on the forge's own auto-merge for it")),
 		mcp.WithBoolean("approve", mcp.Description("An unattended review of a pull request I was asked to review may approve it when clean")),
 	), jsonHandler(func(r mcp.CallToolRequest) (any, error) {
 		return mcpWatchSet(r)
@@ -176,7 +177,7 @@ func applyWatchSwitches(wc *config.WatchConfig, args map[string]any) error {
 			}
 		}
 	}
-	for key, dst := range map[string]*bool{"rebase": &wc.Rebase, "lessons": &wc.Lessons, "handOver": &wc.HandOver, "autoMerge": &wc.AutoMerge, "approve": &wc.Approve, "autoCarry": &wc.AutoCarry, "rerunCI": &wc.RerunCI, "headless": &wc.Headless, "nightShift": &wc.NightShift} {
+	for key, dst := range map[string]*bool{"rebase": &wc.Rebase, "lessons": &wc.Lessons, "handOver": &wc.HandOver, "autoMerge": &wc.AutoMerge, "armMerge": &wc.ArmMerge, "approve": &wc.Approve, "autoCarry": &wc.AutoCarry, "rerunCI": &wc.RerunCI, "headless": &wc.Headless, "nightShift": &wc.NightShift} {
 		if v, ok := args[key].(bool); ok {
 			*dst = v
 		}

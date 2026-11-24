@@ -81,7 +81,8 @@ its reply to a thread a phone started, or one with @you, rings the phone.`,
 			if i == 0 {
 				fmt.Println("\ncan be named:")
 			}
-			fmt.Printf("  @%-30s %s\n", a.Handle, strings.TrimSpace(a.Status+" "+a.Busy))
+			where := strings.Join(reviewFacts(a.Workspace, a.Branch, a.Ticket), " · ")
+			fmt.Printf("  @%-30s %-28s %s\n", a.Handle, where, strings.TrimSpace(a.Status+" "+a.Busy))
 		}
 	},
 }

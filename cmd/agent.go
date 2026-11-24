@@ -224,6 +224,9 @@ func wireTrackers(d *daemon.Daemon, dir string) {
 	d.MergePull = func(ctx context.Context, workspaceID, link string) error {
 		return watch.MergePR(ctx, watch.LoadSecretsFor(dir, workspaceID), link)
 	}
+	d.ArmPull = func(ctx context.Context, workspaceID, link string) (string, error) {
+		return watch.NewForge(watch.LoadSecretsFor(dir, workspaceID)).ArmMerge(ctx, link)
+	}
 	d.PullChanges = func(ctx context.Context, workspaceID, link string) (watch.PullChanges, error) {
 		return watch.FetchPullChanges(ctx, watch.LoadSecretsFor(dir, workspaceID), link)
 	}
