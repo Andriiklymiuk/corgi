@@ -257,7 +257,7 @@ func registerTaskMCPTools(s *server.MCPServer) {
 	}))
 
 	s.AddTool(newCorgiTool("corgi_room_post",
-		mcp.WithDescription("Leave a message in a room for other agents or people: a finding, a question, a handover. Rooms are named like paths (security/findings). thread replies under a message id. With shape, data is checked against that saved shape and refused when it does not fit."),
+		mcp.WithDescription("Leave a message in a room for other agents or people: a finding, a question, a handover. Rooms are named like paths (security/findings). thread replies under a message id. @name in the text hands the message to that live session as its next prompt (corgi_room_read without a room lists the names); @you rings the phone of the person. With shape, data is checked against that saved shape and refused when it does not fit."),
 		mcp.WithString("room", mcp.Required(), mcp.Description("Like security/findings")),
 		mcp.WithString("as", mcp.Required(), mcp.Description("Your name")),
 		mcp.WithString("text", mcp.Description("The words")),
@@ -283,8 +283,15 @@ func registerTaskMCPTools(s *server.MCPServer) {
 				labels[k] = fmt.Sprint(v)
 			}
 		}
-		return rooms.Post(dir, rooms.Message{Room: r.GetString("room", ""), By: r.GetString("as", ""), Text: r.GetString("text", ""),
-			Thread: r.GetString("thread", ""), Shape: r.GetString("shape", ""), Data: data, Labels: labels}, time.Now())
+		out, err := postToRoom(dir, rooms.Message{Room: r.GetString("room", ""), By: r.GetString("as", ""), Text: r.GetString("text", ""),
+			Thread: r.GetString("thread", ""), Shape: r.GetString("shape", ""), Data: data, Labels: labels, Via: roomViaAgent}, true, time.Now())
+		if err != nil {
+			return nil, err
+		}
+		if len(out.Sent) == 0 && len(out.Missed) == 0 {
+			return out.Message, nil
+		}
+		return out, nil
 	}))
 
 	s.AddTool(newCorgiTool("corgi_room_read",
@@ -299,7 +306,7 @@ func registerTaskMCPTools(s *server.MCPServer) {
 			return nil, err
 		}
 		if strings.TrimSpace(r.GetString("room", "")) == "" {
-			return map[string]any{"rooms": rooms.List(dir)}, nil
+			return map[string]any{"rooms": rooms.List(dir), "agents": roomAgents(dir)}, nil
 		}
 		list, err := rooms.Read(dir, rooms.Query{Room: r.GetString("room", ""), After: r.GetString("after", ""), Thread: r.GetString("thread", ""), Limit: r.GetInt("max", 50)})
 		if err != nil {

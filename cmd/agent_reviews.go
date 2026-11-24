@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -31,7 +32,14 @@ money, build or deploy, dependencies) and what the lines themselves show (a
 guard removed, a check switched off, a test skipped, a TODO left). No model
 reads it: the sorting is rules, so it costs no tokens.
 
-The phone's Reviews tab reads the same from /launch/reviews.`,
+Answer one from here too:
+
+  corgi agent reviews send <url> --verdict approve
+  corgi agent reviews merge <url>
+  corgi agent reviews fix <url> --notes '[...]'      hand notes to the session on that branch
+  corgi agent reviews phone on "<device>"            let a phone review while this Mac is off
+
+The phone's and the Mac app's Reviews read the same from /launch/reviews.`,
 	Args: cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		dir := mustAgentDir()
@@ -145,6 +153,74 @@ func reviewChangeText(c reviewChange) string {
 	return b.String()
 }
 
+func runReviewCommand(cmd *cobra.Command, do, link string) {
+	dir := mustAgentDir()
+	req := reviewRequest{Link: link, Do: do}
+	if f := cmd.Flags(); f.Lookup("body") != nil {
+		req.Body, _ = f.GetString("body")
+		raw, _ := f.GetString("notes")
+		if strings.TrimSpace(raw) != "" {
+			if err := json.Unmarshal([]byte(raw), &req.Notes); err != nil {
+				exitWithError("agent_reviews", fmt.Errorf("--notes is a JSON list of {path, line, side, body}: %w", err), 2)
+			}
+		}
+	}
+	if f := cmd.Flags(); f.Lookup("verdict") != nil {
+		req.Verdict, _ = f.GetString("verdict")
+		req.Head, _ = f.GetString("head")
+	}
+	from, _ := cmd.Flags().GetString("from")
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	out, _, why := runReviewAction(ctx, dir, req, firstNonEmpty(from, "cli"))
+	if why != "" {
+		exitWithError("agent_reviews", fmt.Errorf("%s", why), 1)
+	}
+	if utils.JSONOutput {
+		utils.PrintJSON(out)
+		return
+	}
+	fmt.Println(firstNonEmpty(fmt.Sprint(out["done"]), "sent"))
+}
+
+var agentReviewsSendCmd = &cobra.Command{
+	Use:   "send <url>",
+	Short: "Post a review under your name: approve, ask for changes, or comment, with notes on lines",
+	Long: `  corgi agent reviews send https://github.com/acme/api/pull/42 --verdict approve
+  corgi agent reviews send <url> --verdict request --notes '[{"path":"api/auth.go","line":41,"body":"keep the guard"}]'
+  corgi agent reviews send <url> --verdict comment --body "one question" --head 4f2a91c
+
+--head is the commit you read. When the pull request got commits since, nothing
+is posted.`,
+	Args: cobra.ExactArgs(1),
+	Run:  func(cmd *cobra.Command, args []string) { runReviewCommand(cmd, "send", args[0]) },
+}
+
+var agentReviewsMergeCmd = &cobra.Command{
+	Use:   "merge <url>",
+	Short: "Merge a pull request of yours",
+	Args:  cobra.ExactArgs(1),
+	Run:   func(cmd *cobra.Command, args []string) { runReviewCommand(cmd, "merge", args[0]) },
+}
+
+var agentReviewsFixCmd = &cobra.Command{
+	Use:   "fix <url>",
+	Short: "Hand your notes to the live session on that pull request, as its next prompt",
+	Args:  cobra.ExactArgs(1),
+	Run:   func(cmd *cobra.Command, args []string) { runReviewCommand(cmd, "fix", args[0]) },
+}
+
 func init() {
+	for _, c := range []*cobra.Command{agentReviewsSendCmd, agentReviewsFixCmd} {
+		c.Flags().String("body", "", "Words for the whole review")
+		c.Flags().String("notes", "", `Notes on lines, as JSON: [{"path":"a.go","line":12,"side":"+","body":"..."}]`)
+	}
+	agentReviewsSendCmd.Flags().String("verdict", "comment", "approve, request or comment")
+	agentReviewsSendCmd.Flags().String("head", "", "The commit you read; refuses when the pull request moved on")
+	for _, c := range []*cobra.Command{agentReviewsSendCmd, agentReviewsFixCmd, agentReviewsMergeCmd} {
+		c.Flags().String("from", "", "Which app sends it")
+		_ = c.Flags().MarkHidden("from")
+		agentReviewsCmd.AddCommand(c)
+	}
 	agentCmd.AddCommand(agentReviewsCmd)
 }

@@ -235,7 +235,7 @@ func launchRoomRead(w http.ResponseWriter, r *http.Request, dir string) {
 	query := r.URL.Query()
 	name := strings.TrimSpace(query.Get("room"))
 	if name == "" {
-		writeLaunchJSON(w, map[string]any{"rooms": roomsFor(r, dir)})
+		writeLaunchJSON(w, map[string]any{"rooms": roomsFor(r, dir), "agents": roomAgents(dir), "me": firstNonEmpty(deviceOf(r), peers.Me())})
 		return
 	}
 	room, err := rooms.CleanName(name)
@@ -276,14 +276,14 @@ func launchRoomPost(w http.ResponseWriter, r *http.Request, dir string) {
 		writeLaunchError(w, http.StatusForbidden, why)
 		return
 	}
-	by := deviceOf(r)
+	by, via := deviceOf(r), roomViaDevice
 	if by == "" {
-		by = firstNonEmpty(strings.TrimSpace(req.As), peers.Me())
+		by, via = firstNonEmpty(strings.TrimSpace(req.As), peers.Me()), ""
 	}
-	m, err := rooms.Post(dir, rooms.Message{Room: room, Thread: req.Thread, By: by, Text: req.Text, Shape: req.Shape, Data: req.Data, Labels: req.Labels}, time.Now())
+	out, err := postToRoom(dir, rooms.Message{Room: room, Thread: req.Thread, By: by, Text: req.Text, Shape: req.Shape, Data: req.Data, Labels: req.Labels, Via: via}, !isViewer(r), time.Now())
 	if err != nil {
 		writeLaunchError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	writeLaunchJSON(w, map[string]any{"message": m})
+	writeLaunchJSON(w, out)
 }

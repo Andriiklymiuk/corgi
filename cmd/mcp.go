@@ -339,6 +339,7 @@ var launchRoutes = map[string]http.HandlerFunc{
 	"/launch/pull":              launchPullHandler,
 	"/launch/reviews":           launchReviewsHandler,
 	"/launch/reviews/change":    launchReviewsChangeHandler,
+	"/launch/reviews/grant":     launchReviewsGrantHandler,
 	"/launch/timeline":          launchTimelineHandler,
 	"/launch/plans":             launchPlansHandler,
 	"/launch/watch-status":      launchWatchStatusHandler,

@@ -49,20 +49,39 @@ its grants decide. A read-only device needs a grant. Grants go by path:
   corgi agent room grants
   corgi agent room revoke g2
 
-The longest path wins, and a grant by name wins over one for everyone.`,
+The longest path wins, and a grant by name wins over one for everyone.
+
+A message can name a live session, and that session gets it as its next
+prompt, with the command to answer in the room:
+
+  corgi agent room                                       also lists who can be named
+  corgi agent room post plans/search "@api what does the index cost? @web can you page it?"
+  corgi agent room post plans/search "@here one more round"     everyone who wrote in this room
+
+A name is the session's label in lower case with dashes. A session that waits
+on a permission or sits at a limit is not written to, and the answer says so.
+A room carries up to 30 such messages in ten minutes, so two agents cannot
+call each other without end. A session that posts is named by its own label;
+its reply to a thread a phone started, or one with @you, rings the phone.`,
 	Args: cobra.NoArgs,
 	Run: func(_ *cobra.Command, _ []string) {
-		list := rooms.List(mustAgentDir())
+		dir := mustAgentDir()
+		list, agents := rooms.List(dir), roomAgents(dir)
 		if utils.JSONOutput {
-			utils.PrintJSON(map[string]any{"rooms": list})
+			utils.PrintJSON(map[string]any{"rooms": list, "agents": agents, "me": peers.Me()})
 			return
 		}
 		if len(list) == 0 {
 			fmt.Println("no rooms yet - corgi agent room post <room> \"words\" opens one")
-			return
 		}
 		for _, r := range list {
 			fmt.Printf("%-32s %4d  %s\n", r.Name, r.Messages, strings.TrimSpace(roomAgo(r.Last)+" "+r.LastBy))
+		}
+		for i, a := range agents {
+			if i == 0 {
+				fmt.Println("\ncan be named:")
+			}
+			fmt.Printf("  @%-30s %s\n", a.Handle, strings.TrimSpace(a.Status+" "+a.Busy))
 		}
 	},
 }
@@ -111,14 +130,27 @@ var agentRoomPostCmd = &cobra.Command{
 		pairs, _ := cmd.Flags().GetStringArray("label")
 		labels, err := rooms.ParseLabels(pairs)
 		roomFail(err)
-		m, err := rooms.Post(dir, rooms.Message{
-			Room: args[0], Thread: thread, By: firstNonEmpty(strings.TrimSpace(who), peers.Me()),
+		by, via := strings.TrimSpace(who), ""
+		if by == "" {
+			if handle, ok := roomAuthor(dir); ok {
+				by, via = handle, roomViaAgent
+			}
+		}
+		out, err := postToRoom(dir, rooms.Message{
+			Room: args[0], Thread: thread, By: firstNonEmpty(by, peers.Me()), Via: via,
 			Text: strings.Join(args[1:], " "), Shape: shape, Data: json.RawMessage(strings.TrimSpace(data)), Labels: labels,
-		}, time.Now())
+		}, true, time.Now())
 		roomFail(err)
+		m := out.Message
 		if utils.JSONOutput {
-			utils.PrintJSON(map[string]any{"message": m})
+			utils.PrintJSON(out)
 			return
+		}
+		for _, handle := range out.Sent {
+			fmt.Printf("sent to @%s\n", handle)
+		}
+		for handle, why := range out.Missed {
+			fmt.Printf("@%s did not get it: %s\n", handle, why)
 		}
 		fmt.Printf("%s in %s\n", m.ID, m.Room)
 	},

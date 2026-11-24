@@ -30,6 +30,8 @@ type Message struct {
 	Shape  string            `json:"shape,omitempty"`
 	Data   json.RawMessage   `json:"data,omitempty"`
 	Labels map[string]string `json:"labels,omitempty"`
+	To     []string          `json:"to,omitempty"`
+	Via    string            `json:"via,omitempty"`
 	At     time.Time         `json:"at"`
 }
 

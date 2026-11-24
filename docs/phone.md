@@ -124,6 +124,36 @@ Claude Code is the default. With an order, every unattended run - a fix, a bot, 
 
 `corgi agent down` turns everything off, and nothing runs again until you start it. macOS and Linux - a headless server too, where the phone and Telegram are the screen ([running it on a server](agent.md#running-it-on-a-server)). With the plugin, `/corgi:remote` walks you through the whole setup. Full guide: [docs/agent.md](agent.md).
 
+## Reviews with the laptop asleep
+
+The Reviews tab keeps what the laptop last said, and every pull request you
+opened, on the phone. With the laptop asleep you still read them, and a review
+you write waits and goes out when the laptop answers. If new commits landed in
+between, it is held for you to read again.
+
+To read fresh pull requests and answer them with no laptop at all, let the
+phone hold the laptop's GitHub and GitLab access:
+
+```bash
+corgi agent reviews phone on "Anna's iPhone"     # the name corgi agent reviews phone lists
+corgi agent reviews phone                        # who has it
+corgi agent reviews phone off "Anna's iPhone"
+```
+
+Then Settings › Offline › Reviews without the Mac › Turn on. The access comes
+sealed with the pairing key, sits in the phone's Keychain behind Face ID, goes
+only to that GitHub or GitLab, and lasts 30 days. It is the laptop's own
+token: for a lost phone, turn it off and rotate the token. More in
+[agent.md](agent.md#reviews-with-the-mac-off).
+
+## A chat with your agents
+
+Chat (the bubble on the Agents tab, or its own tab from Settings › Tabs) holds
+rooms. Write `@` and a session's name: that session gets your message as its
+next prompt and answers in the room. Name several to hear them side by side,
+`@here` for everyone who already wrote there. When an agent answers your
+thread, the phone rings. The Mac app has the same rooms.
+
 ## Talk to your laptop from any Claude
 
 The same daemon is an MCP connector for Claude.ai, Claude Desktop and the

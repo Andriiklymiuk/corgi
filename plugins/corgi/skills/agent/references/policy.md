@@ -79,7 +79,11 @@ when it stops without finishing.
 TASK-n "result"` (MCP `corgi_task_finish`) closes it. Exit 3 means nothing is ready. **Rooms**: `corgi
 agent room post|read <room>` (MCP `corgi_room_post`, `corgi_room_read`) for findings and handovers
 between agents; `room shape add` checks data; `room grant <device> <path>=read,post` limits a paired
-device.
+device. `@label` in a message hands it to that live session as its next prompt (`corgi agent room`
+lists the names), `@here` reaches everyone who wrote in the room, `@you` rings the phone. When a
+prompt starts with "Message mN in room", answer with the `corgi agent room post … --thread` command
+it names, not in the chat. **Reviews with the Mac off**: `corgi agent reviews phone on "<device>"`
+lets that phone hold the forge access; `off` takes it back.
 
 **Show the board to a teammate**: `corgi agent kanban share --workspace api
 --for 7d --label "for Anna"` prints a read-only link once. It shows titles,

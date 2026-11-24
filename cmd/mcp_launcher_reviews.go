@@ -483,6 +483,7 @@ func launchReviewsChangeHandler(w http.ResponseWriter, r *http.Request) {
 
 type reviewRequest struct {
 	Link    string             `json:"link"`
+	Head    string             `json:"head"`
 	Do      string             `json:"do"`
 	Verdict string             `json:"verdict"`
 	Body    string             `json:"body"`
@@ -508,6 +509,9 @@ func launchReviewsHandler(w http.ResponseWriter, r *http.Request) {
 		if problem != "" {
 			out["problem"] = problem
 		}
+		if device := deviceOf(r); device != "" {
+			out["phone"] = phoneReviewsAllowed(dir, device)
+		}
 		writeLaunchJSON(w, out)
 	case http.MethodPost:
 		var req reviewRequest
@@ -524,64 +528,81 @@ func launchReviewsHandler(w http.ResponseWriter, r *http.Request) {
 func reviewAction(w http.ResponseWriter, r *http.Request, dir string, req reviewRequest) {
 	ctx, cancel := context.WithTimeout(r.Context(), 40*time.Second)
 	defer cancel()
+	out, status, why := runReviewAction(ctx, dir, req, launchFrom(r))
+	if why != "" {
+		writeLaunchError(w, status, why)
+		return
+	}
+	writeLaunchJSON(w, out)
+}
+
+func runReviewAction(ctx context.Context, dir string, req reviewRequest, from string) (map[string]any, int, string) {
 	link := watch.PullLink(strings.TrimSpace(req.Link))
 	row, known := reviewRowFor(ctx, dir, link)
 	if !known {
-		writeLaunchError(w, http.StatusNotFound, "not a pull request of yours or one you were asked to review")
-		return
+		return nil, http.StatusNotFound, "not a pull request of yours or one you were asked to review"
 	}
 	switch strings.TrimSpace(req.Do) {
 	case "send":
 		verdict := firstNonEmpty(strings.TrimSpace(req.Verdict), watch.ReviewComment)
 		if row.Mine && verdict != watch.ReviewComment {
-			writeLaunchError(w, http.StatusBadRequest, "you cannot approve or block your own pull request")
-			return
+			return nil, http.StatusBadRequest, "you cannot approve or block your own pull request"
+		}
+		if head := strings.TrimSpace(req.Head); head != "" {
+			now, err := reviewChangeFor(ctx, dir, link, true)
+			if err != nil {
+				return nil, http.StatusBadGateway, firstLineOf(err.Error())
+			}
+			if now.Head != "" && now.Head != head {
+				return nil, http.StatusConflict, "the pull request got new commits since you read it; read it again, then send"
+			}
 		}
 		if err := forgeFor(dir, row.Workspace).SendReview(ctx, link, verdict, req.Body, req.Notes); err != nil {
-			writeLaunchError(w, http.StatusBadGateway, firstLineOf(err.Error()))
-			return
+			return nil, http.StatusBadGateway, firstLineOf(err.Error())
 		}
-		markInboxDone(dir, link, launchFrom(r))
+		markInboxDone(dir, link, from)
 		forgetReview(link)
-		writeLaunchJSON(w, map[string]any{"done": map[string]string{"approve": "approved", "request": "changes requested", "comment": "commented"}[verdict], "url": link})
+		return map[string]any{"done": map[string]string{"approve": "approved", "request": "changes requested", "comment": "commented"}[verdict], "url": link}, http.StatusOK, ""
 	case "fix":
-		reviewFix(w, r, dir, row, req)
+		return reviewFix(dir, row, req, from)
 	case "merge":
 		if !row.Mine {
-			writeLaunchError(w, http.StatusBadRequest, "not a pull request of yours")
-			return
+			return nil, http.StatusBadRequest, "not a pull request of yours"
 		}
 		if err := watch.MergePR(ctx, watch.LoadSecretsFor(dir, row.Workspace), link); err != nil {
-			writeLaunchError(w, http.StatusBadGateway, firstLineOf(err.Error()))
-			return
+			return nil, http.StatusBadGateway, firstLineOf(err.Error())
 		}
 		forgetReview(link)
 		if info, err := daemon.ReadInfo(dir); err == nil && info != nil {
 			daemon.Nudge(info)
 		}
-		writeLaunchJSON(w, map[string]any{"done": "merged", "url": link})
-	default:
-		writeLaunchError(w, http.StatusBadRequest, "do is send, fix or merge")
+		return map[string]any{"done": "merged", "url": link}, http.StatusOK, ""
 	}
+	return nil, http.StatusBadRequest, "do is send, fix or merge"
 }
 
-func reviewFix(w http.ResponseWriter, r *http.Request, dir string, row watch.ReviewRow, req reviewRequest) {
+func reviewFix(dir string, row watch.ReviewRow, req reviewRequest, from string) (map[string]any, int, string) {
 	if !row.Mine {
-		writeLaunchError(w, http.StatusBadRequest, "fix is for a pull request of yours; send posts the notes on someone else's")
-		return
+		return nil, http.StatusBadRequest, "fix is for a pull request of yours; send posts the notes on someone else's"
 	}
 	text := watch.FixMessage(row.Link, req.Notes, req.Body)
 	if text == "" {
-		writeLaunchError(w, http.StatusBadRequest, "say what to change")
-		return
+		return nil, http.StatusBadRequest, "say what to change"
 	}
 	target := liveSessionsByPull(dir)[row.Link]
 	if target == nil {
-		writeLaunchError(w, http.StatusNotFound, "no live session is on this pull request")
-		return
+		return nil, http.StatusNotFound, "no live session is on this pull request"
+	}
+	info, err := daemon.ReadInfo(dir)
+	if err != nil || info == nil {
+		return nil, http.StatusServiceUnavailable, "the corgi daemon is not running on that machine"
 	}
 	forgetReview(row.Link)
-	launchBoardCommand(w, command.Command{Action: command.ActionSend, SessionID: target.ID, Text: text, Enter: true, Source: launchFrom(r)})
+	if _, err := command.Write(dir, command.Command{Action: command.ActionSend, SessionID: target.ID, Text: text, Enter: true, Source: from}); err != nil {
+		return nil, http.StatusInternalServerError, err.Error()
+	}
+	daemon.Nudge(info)
+	return map[string]any{"ok": true, "action": command.ActionSend}, http.StatusOK, ""
 }
 
 func launchFrom(r *http.Request) string {

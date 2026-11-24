@@ -26,6 +26,10 @@ func launchAuth(token string, next http.Handler, deviceStorePath string) http.Ha
 		// a client cannot set it.
 		r.Header.Del(viewerHeader)
 		r.Header.Del(deviceHeader)
+		r.Header.Del(sealedHeader)
+		if id.key != nil {
+			r.Header.Set(sealedHeader, "1")
+		}
 		if id.viewer {
 			r.Header.Set(viewerHeader, "1")
 		}
@@ -222,7 +226,7 @@ func viewerMay(method, path string) bool {
 		return false
 	}
 	switch path {
-	case "/launch/transcript", "/launch/picture", "/launch/doctor", "/launch/sessions", "/launch/preview", "/launch/diff", "/launch/reviews/change", "/launch/run",
+	case "/launch/transcript", "/launch/picture", "/launch/doctor", "/launch/sessions", "/launch/preview", "/launch/diff", "/launch/reviews/change", "/launch/reviews/grant", "/launch/run",
 		"/launch/screen", "/launch/screen/host", "/launch/screen/verify", "/launch/screen/settings", "/launch/terminal", "/launch/screen/peer", "/launch/session/screen", "/launch/screen/hands/next", "/launch/screen/do", "/launch/screen/agent":
 		return false
 	}

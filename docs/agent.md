@@ -1719,6 +1719,35 @@ Routes for the apps: `GET /launch/reviews` (`?fresh=1` asks the forge again),
 Your own pull request cannot be approved from here, someone else's cannot be
 merged, and nothing is posted under your name without the tap.
 
+A send can carry `head`, the commit the reader saw. When the pull request got
+commits since, the answer is 409 and nothing is posted: a review written with
+the Mac away never lands on code its writer did not read.
+
+### Reviews with the Mac off
+
+With the Mac asleep a phone cannot ask it for pull requests. Turned on for one
+phone, that phone takes the Mac's GitHub and GitLab access once, and reads and
+answers pull requests itself whenever the Mac does not answer.
+
+```bash
+corgi agent reviews phone                     # who has it, and when each last took it
+corgi agent reviews phone on "Anna's iPhone"
+corgi agent reviews phone off "Anna's iPhone"
+```
+
+| Guard | What it does |
+|---|---|
+| Off by default | You turn it on per phone, by name, on the Mac |
+| Who may ask | A phone with full control that paired with a key. A read-only device, a peer laptop and the launcher token are refused |
+| On the wire | `GET /launch/reviews/grant` answers sealed with the pairing key. A GitLab on plain http is left out |
+| On the phone | Keychain, that phone only, only while it has a passcode, behind Face ID. Sent only to that GitHub or GitLab, over https |
+| Lifetime | 30 days, then the phone asks again. Turned off, the phone drops it the next time it hears from the Mac. Unpaired, it is gone |
+
+The token is the one the Mac uses, with all it may do: neither forge can narrow
+a token after the fact. For a lost phone, turn it off and rotate the token.
+Without the grant the phone still opens the pull requests it read before, and
+keeps a review you write until the Mac is back.
+
 ### When something else replaced the corgi binary
 
 `corgi upd` refreshes the daemon by itself. When the binary was replaced
@@ -1776,6 +1805,32 @@ sends. In Claude, the MCP tools are `corgi_task_next`, `corgi_task_renew`,
 `corgi_task_finish`, `corgi_room_post` and `corgi_room_read`. For a script,
 the JavaScript kit in [sdk/js](../sdk/js) wraps all of it: `pair()`, then
 `tasks.next/renew/keep/finish` and `rooms.read/post/follow`.
+
+### Naming a session
+
+A message can name a live session. That session gets the message as its next
+prompt, with the command to answer in the room, so a room works as a chat
+with your agents and between them.
+
+```bash
+corgi agent room                                   # the rooms, and who can be named
+corgi agent room post plans/search "@api what does the index cost? @web can you page it?"
+corgi agent room post plans/search "@here one more round"     # everyone who wrote in this room
+```
+
+| Name | Who gets it |
+|---|---|
+| `@api` | the live session with that label, lower case with dashes |
+| `@here` | every live session that wrote in this room |
+| `@you` | the person: the phone rings |
+
+A session that waits on a permission or sits at a limit is not written to,
+and the answer says who missed it and why. A message reaches up to 6
+sessions, and a room carries 30 such messages in ten minutes, so two agents
+cannot call each other without end. A session that posts is named by its own
+label. Its reply in a thread a phone started rings that phone. A read-only
+device can post where a grant lets it, and names nobody. `GET /launch/rooms`
+lists the names under `agents`.
 
 ### Who may read and post
 
