@@ -9,6 +9,7 @@
   [![Homebrew](https://img.shields.io/badge/install-brew-orange.svg)](#install)
   [![Platforms](https://img.shields.io/badge/platform-macOS%20·%20Linux%20·%20Windows-blue.svg)](docs/install.md)
   [![Corgi Agents on the App Store](https://img.shields.io/badge/App%20Store-iPhone%20·%20Mac-black.svg?logo=apple)](https://apps.apple.com/app/id6811009400)
+  [![Corgi Agents on Google Play](https://img.shields.io/badge/Google%20Play-Android-3DDC84.svg?logo=googleplay&logoColor=white)](https://play.google.com/store/apps/details?id=com.andriiklymiuk.corgi)
   [![VS Code extension on the Visual Studio Marketplace](https://img.shields.io/badge/VS%20Code-Marketplace-007ACC.svg?logo=visualstudiocode)](https://marketplace.visualstudio.com/items?itemName=Corgi.corgi)
   [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=Andriiklymiuk_corgi&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=Andriiklymiuk_corgi)
 
@@ -166,6 +167,7 @@ Other agents: `npx skills add Andriiklymiuk/corgi`. Nothing ships without you: i
 | where | what |
 | --- | --- |
 | [iPhone](https://apps.apple.com/app/id6811009400) | the inbox, the board, every session with Allow/Deny, the lock screen |
+| [Android](https://play.google.com/store/apps/details?id=com.andriiklymiuk.corgi) | the same app as the iPhone one, from Google Play |
 | [Mac](https://apps.apple.com/app/id6811009400?platform=mac) | the menu bar and the window, over the same board |
 | [VS Code](https://marketplace.visualstudio.com/items?itemName=Corgi.corgi) | the sessions view, a status bar item, a toast when a session waits |
 | [Stream Deck](https://github.com/Andriiklymiuk/corgi-agent-deck) | one key per session, Talk, Prompt and Budget keys |
