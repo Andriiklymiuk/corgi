@@ -445,6 +445,11 @@ func reviewChangeFor(ctx context.Context, dir, link string, fresh bool) (reviewC
 	if out.Threads == nil {
 		out.Threads = []watch.ReviewThread{}
 	}
+	for i := range out.Threads {
+		if out.Threads[i].Notes == nil {
+			out.Threads[i].Notes = []watch.ThreadNote{}
+		}
+	}
 	if row.Mine && threadsErr == nil {
 		out.Open = watch.OpenComments(threads, change.Author, change.NewestCommit())
 	}
