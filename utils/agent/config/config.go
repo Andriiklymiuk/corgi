@@ -229,12 +229,54 @@ type ChatConfig struct {
 }
 
 type SlackWatch struct {
-	Mentions       bool     `yaml:"mentions"`
-	Channels       []string `yaml:"channels,omitempty"`
-	ReviewChannels []string `yaml:"reviewChannels,omitempty"`
-	Trust          []string `yaml:"trust,omitempty"`
-	PostTo         string   `yaml:"postTo,omitempty"`
-	ReplyAs        string   `yaml:"replyAs,omitempty"`
+	Mentions       bool         `yaml:"mentions"`
+	Channels       []string     `yaml:"channels,omitempty"`
+	ReviewChannels []string     `yaml:"reviewChannels,omitempty"`
+	Trust          []string     `yaml:"trust,omitempty"`
+	PostTo         string       `yaml:"postTo,omitempty"`
+	ReplyAs        string       `yaml:"replyAs,omitempty"`
+	Review         *SlackReview `yaml:"review,omitempty"`
+}
+
+type SlackReview struct {
+	Approved  string    `yaml:"approved,omitempty"`
+	Comments  string    `yaml:"comments,omitempty"`
+	Fixed     string    `yaml:"fixed,omitempty"`
+	Recheck   []string  `yaml:"recheck,omitempty"`
+	SkipRepos []string  `yaml:"skipRepos,omitempty"`
+	Since     time.Time `yaml:"since,omitempty"`
+}
+
+var defaultRecheckWords = []string{"fixed", "done", "addressed", "updated", "resolved"}
+
+func (r *SlackReview) ApprovedWord() string { return firstSet(r.Approved, "Approved") }
+func (r *SlackReview) CommentsWord() string { return firstSet(r.Comments, "Some comments") }
+func (r *SlackReview) FixedWord() string    { return firstSet(r.Fixed, "Fixed") }
+
+func (r *SlackReview) RecheckWords() []string {
+	if len(r.Recheck) > 0 {
+		return r.Recheck
+	}
+	return defaultRecheckWords
+}
+
+func (r *SlackReview) Skips(repo string) bool {
+	if r == nil {
+		return false
+	}
+	for _, skipped := range r.SkipRepos {
+		if strings.EqualFold(strings.TrimSpace(skipped), repo) {
+			return true
+		}
+	}
+	return false
+}
+
+func firstSet(value, fallback string) string {
+	if v := strings.TrimSpace(value); v != "" {
+		return v
+	}
+	return fallback
 }
 
 func (s *SlackWatch) MayRun(author string) bool {

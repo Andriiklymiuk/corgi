@@ -42,6 +42,7 @@ corgi agent watch auth sentry --token … --local               # new Sentry err
 corgi agent watch auth slack --token xoxp-… --local          # the person runs this; the token never goes through a session
 corgi agent watch enable --mentions                           # notify: @me anywhere → phone
 corgi agent watch enable --review-channel '#code-review' --reply-as me   # teammates' review posts in; chat announce out
+corgi agent watch enable --review-replies --review-skip acme/infra  # answer a review post with one word: Approved + check mark, Some comments, Fixed; skip a repo its owner reviews
 corgi agent watch enable --action fix --auto-for reviews --approve --trust @teammate   # reviews run on their own; only --trust people may start one from a mention
 ```
 

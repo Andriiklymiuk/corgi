@@ -131,16 +131,26 @@ func roomTargets(dir string, m rooms.Message, mayType bool, now time.Time) ([]ro
 		}
 		asked = append(asked, h)
 	}
-	if len(asked) == 0 {
+	agents := roomAgents(dir)
+	var inPlace []roomAgent
+	if len(asked) == 0 && !people && m.Via != roomViaAgent {
+		var isPlace bool
+		if inPlace, isPlace = agentsOfPlace(m.Room, agents); isPlace && len(inPlace) == 0 {
+			missed[m.Room] = "no live session there now; it is kept for the next one"
+		}
+	}
+	if len(asked) == 0 && len(inPlace) == 0 {
 		return nil, missed, people
 	}
 	if !mayType {
+		for _, a := range inPlace {
+			missed[a.Handle] = "a read-only device cannot write to a session"
+		}
 		for _, h := range asked {
 			missed[h] = "a read-only device cannot write to a session"
 		}
 		return nil, missed, people
 	}
-	agents := roomAgents(dir)
 	byHandle := map[string]roomAgent{}
 	for _, a := range agents {
 		byHandle[a.Handle] = a
@@ -154,6 +164,9 @@ func roomTargets(dir string, m rooms.Message, mayType bool, now time.Time) ([]ro
 		}
 		picked[a.Handle] = true
 		want = append(want, a)
+	}
+	for _, a := range inPlace {
+		add(a)
 	}
 	for _, h := range asked {
 		if h == roomHere {

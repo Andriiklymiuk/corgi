@@ -20,6 +20,15 @@ func chatRunRefusal(spec WatchSpec, e watch.Event) string {
 	if e.Self {
 		return "I wrote it"
 	}
+	if isChannelReview(spec, e) && len(e.Links) == 0 && len(e.Skipped) > 0 {
+		return "its repos are left to their owner (skipRepos)"
+	}
+	if isChannelReview(spec, e) && !e.At.IsZero() && e.At.Before(reviewWords(spec).Since) {
+		return "it was posted before review replies were turned on"
+	}
+	if namesOnlyWatchedRepos(spec, e) {
+		return ""
+	}
 	if spec.Chat == nil || len(spec.Chat.Trust) == 0 {
 		return "nobody here is trusted to start a run from chat (corgi agent watch enable --trust @someone)"
 	}

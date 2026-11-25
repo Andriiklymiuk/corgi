@@ -53,6 +53,7 @@ type Event struct {
 	Author    string   `json:"author,omitempty"`
 	Labels    []string `json:"labels,omitempty"`
 	Links     []string `json:"links,omitempty"`
+	Skipped   []string `json:"skipped,omitempty"`
 	State     string   `json:"state,omitempty"`
 	Assignee  string   `json:"assignee,omitempty"`
 	Mine      bool     `json:"mine,omitempty"`

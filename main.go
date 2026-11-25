@@ -1,6 +1,7 @@
 package main
 
 import (
+	"embed"
 	"fmt"
 	"os"
 	"os/exec"
@@ -13,7 +14,11 @@ import (
 	"github.com/manifoldco/promptui"
 )
 
+//go:embed all:plugins/corgi/skills
+var bundledSkills embed.FS
+
 func main() {
+	cmd.BundledSkills = bundledSkills
 	utils.DetectMode()
 	showWelcomeMessage()
 	var runCli func()

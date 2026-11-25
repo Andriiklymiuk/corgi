@@ -31,12 +31,15 @@ type SlackWatchConfig struct {
 	Mentions       bool
 	Channels       []string
 	ReviewChannels []string
+	Recheck        []string
+	ApprovedWord   string
 }
 
 type Slack struct {
 	api   *slackAPI
 	cfg   SlackWatchConfig
 	names map[string]string
+	me    string
 
 	listed      []slackConversation
 	listedAt    time.Time
@@ -163,6 +166,7 @@ func (s *Slack) poll(ctx context.Context, cursor Cursor) ([]Event, Cursor, error
 		}
 		events = append(events, found...)
 	}
+	events = append(events, s.reviewFollowUps(ctx, next, me, team, budget)...)
 	sort.Slice(events, func(i, j int) bool { return events[i].At.Before(events[j].At) })
 	return events, next, nil
 }
@@ -390,6 +394,9 @@ func (s *Slack) history(ctx context.Context, cursor Cursor, c slackConversation,
 		}
 		if slackTSNewer(m.TS, newest) {
 			newest = m.TS
+		}
+		if bookmark != "" {
+			s.trackReviewPost(cursor, c, m, me)
 		}
 		kind := KindChatMessage
 		if c.IsIM || strings.Contains(m.Text, "<@"+me+">") {

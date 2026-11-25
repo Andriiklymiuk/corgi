@@ -177,6 +177,13 @@ func runReviewCommand(cmd *cobra.Command, do, link string) {
 		req.Verdict, _ = f.GetString("verdict")
 		req.Head, _ = f.GetString("head")
 	}
+	if f := cmd.Flags(); f.Lookup("thread") != nil {
+		req.Thread, _ = f.GetString("thread")
+		if f.Lookup("note") != nil {
+			req.Note, _ = f.GetString("note")
+			req.Body, _ = f.GetString("body")
+		}
+	}
 	from, _ := cmd.Flags().GetString("from")
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -230,7 +237,33 @@ unresolved and the last word is not yours.
 	Run:  func(cmd *cobra.Command, args []string) { runReviewCommand(cmd, "fix-all", args[0]) },
 }
 
+var agentReviewsReplyCmd = &cobra.Command{
+	Use:   "reply <url>",
+	Short: "Answer a comment thread on a pull request under your name, or leave a plain comment",
+	Long: `The thread and note ids are in corgi agent reviews <url> --json, under threads.
+
+  corgi agent reviews reply <url> --thread PRRT_kw --note 2148 --body "done in 4f2a91c"
+  corgi agent reviews reply <url> --body "thanks, merging after the build"`,
+	Args: cobra.ExactArgs(1),
+	Run:  func(cmd *cobra.Command, args []string) { runReviewCommand(cmd, "reply", args[0]) },
+}
+
+var agentReviewsResolveCmd = &cobra.Command{
+	Use:   "resolve <url>",
+	Short: "Resolve one comment thread on a pull request",
+	Args:  cobra.ExactArgs(1),
+	Run:   func(cmd *cobra.Command, args []string) { runReviewCommand(cmd, "resolve", args[0]) },
+}
+
 func init() {
+	agentReviewsReplyCmd.Flags().String("body", "", "The answer")
+	agentReviewsReplyCmd.Flags().String("note", "", "The first comment of the thread, on GitHub")
+	for _, c := range []*cobra.Command{agentReviewsReplyCmd, agentReviewsResolveCmd} {
+		c.Flags().String("thread", "", "The thread to answer or resolve")
+		c.Flags().String("from", "", "Which app sends it")
+		_ = c.Flags().MarkHidden("from")
+		agentReviewsCmd.AddCommand(c)
+	}
 	for _, c := range []*cobra.Command{agentReviewsSendCmd, agentReviewsFixCmd} {
 		c.Flags().String("body", "", "Words for the whole review")
 		c.Flags().String("notes", "", `Notes on lines, as JSON: [{"path":"a.go","line":12,"side":"+","body":"..."}]`)

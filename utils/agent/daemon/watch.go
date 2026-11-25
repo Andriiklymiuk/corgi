@@ -460,6 +460,8 @@ func (d *Daemon) watchSink(spec WatchSpec) watch.Sink {
 }
 
 func (d *Daemon) sinkEvent(ctx context.Context, spec WatchSpec, e watch.Event) {
+	e = withoutSkippedRepos(spec, e)
+	d.rememberOwnReviewPost(spec, e)
 	d.appendWatchEvent(e)
 	if d.Events != nil {
 		d.Events.Append(spec.Workspace, events.Event{At: time.Now().UTC(), Kind: "watch", Reason: string(e.Kind) + " " + e.Ref, URL: e.URL})
@@ -1035,7 +1037,7 @@ func (d *Daemon) takeFollowUp(spec WatchSpec, ref string) (watch.Event, bool) {
 }
 
 func (d *Daemon) spawnFix(ctx context.Context, spec WatchSpec, e watch.Event) {
-	if e.Source == "slack" {
+	if e.Source == "slack" && !isChannelReview(spec, e) {
 		d.say(ctx, spec, e, "", "eyes")
 	}
 	d.runs.Add(1)
@@ -1934,6 +1936,7 @@ func (d *Daemon) fixDone(ctx context.Context, run fixRun) {
 	if e.Source == "slack" {
 		d.sayFixDone(ctx, run, links, note)
 	}
+	d.sayFixedInReviewThreads(ctx, spec, e)
 	if e.Kind == watch.KindRoutine {
 		// The report is the routine's one notification; a run that opened
 		// pull requests names them there rather than as "fixed routine/x".
@@ -1948,6 +1951,10 @@ func (d *Daemon) fixDone(ctx context.Context, run fixRun) {
 }
 
 func (d *Daemon) sayFixDone(ctx context.Context, run fixRun, links []string, note string) {
+	if isChannelReview(run.spec, run.e) {
+		d.sayReviewVerdict(ctx, run)
+		return
+	}
 	said := chatOutcome(links, note, "")
 	mark := d.chatMark(ctx, run.spec, run.e)
 	if lines, outcome, ok := d.chatReviewReply(ctx, run.spec, run.e, run.started); ok {

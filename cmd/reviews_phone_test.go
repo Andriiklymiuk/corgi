@@ -192,3 +192,37 @@ func TestAReviewIsSentFromTheCommandLine(t *testing.T) {
 		t.Fatalf("someone else's pull request merged: %d", status)
 	}
 }
+
+func TestAPhoneTurnsItOnItselfUnlessTheMacSaidOff(t *testing.T) {
+	home := grantHome(t, watch.Secrets{GitHub: "gh-tok"})
+	told := ""
+	old := phoneTookReviews
+	phoneTookReviews = func(device string) { told = device }
+	t.Cleanup(func() { phoneTookReviews = old })
+	ask := func(headers map[string]string) int {
+		req := httptest.NewRequest(http.MethodPost, "/launch/reviews/grant", nil)
+		for k, v := range headers {
+			req.Header.Set(k, v)
+		}
+		rec := httptest.NewRecorder()
+		launchReviewsGrantHandler(rec, req)
+		return rec.Code
+	}
+	if code := ask(map[string]string{deviceHeader: "phone"}); code != http.StatusForbidden {
+		t.Fatalf("a phone without a key cannot ask: %d", code)
+	}
+	if code := ask(map[string]string{deviceHeader: "phone", sealedHeader: "1"}); code != http.StatusOK || told != "phone" {
+		t.Fatalf("a keyed phone with full control turns it on, and the Mac is told: %d %q", code, told)
+	}
+	if !phoneReviewsAllowed(home, "phone") {
+		t.Fatal("it stays on for the next read")
+	}
+	_ = savePhoneReviews(home, phoneReviews{Devices: map[string]phoneReviewsDevice{}, Refused: map[string]time.Time{"phone": time.Now()}})
+	if code := ask(map[string]string{deviceHeader: "phone", sealedHeader: "1"}); code != http.StatusForbidden {
+		t.Fatalf("off on the Mac stays off: %d", code)
+	}
+	_ = savePhoneReviews(home, phoneReviews{Devices: map[string]phoneReviewsDevice{}, Locked: true})
+	if code := ask(map[string]string{deviceHeader: "tablet", sealedHeader: "1"}); code != http.StatusForbidden {
+		t.Fatalf("off for everyone refuses every phone: %d", code)
+	}
+}

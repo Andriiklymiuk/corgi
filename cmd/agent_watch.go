@@ -35,6 +35,8 @@ const (
 	postToFlag        = "post-to"
 	replyAsFlag       = "reply-as"
 	reviewChannelFlag = "review-channel"
+	reviewRepliesFlag = "review-replies"
+	reviewSkipFlag    = "review-skip"
 	runDBFlag         = "run-db"
 	sentryProjectFlag = "sentry-project"
 )
@@ -965,7 +967,7 @@ func withoutSource(list []string, drop string) []string {
 
 func chatFromFlags(flags *pflag.FlagSet, current *config.ChatConfig) (*config.ChatConfig, error) {
 	touched := false
-	for _, n := range []string{"mentions", "channel", reviewChannelFlag, "trust", postToFlag, replyAsFlag} {
+	for _, n := range []string{"mentions", "channel", reviewChannelFlag, "trust", postToFlag, replyAsFlag, reviewRepliesFlag, reviewSkipFlag} {
 		if flags.Changed(n) {
 			touched = true
 		}
@@ -989,6 +991,23 @@ func chatFromFlags(flags *pflag.FlagSet, current *config.ChatConfig) (*config.Ch
 	}
 	if flags.Changed("trust") {
 		out.Slack.Trust, _ = flags.GetStringSlice("trust")
+	}
+	if flags.Changed(reviewRepliesFlag) {
+		on, _ := flags.GetBool(reviewRepliesFlag)
+		switch {
+		case !on:
+			out.Slack.Review = nil
+		case out.Slack.Review == nil:
+			out.Slack.Review = &config.SlackReview{Since: time.Now().UTC().Truncate(time.Second)}
+		}
+	}
+	if flags.Changed(reviewSkipFlag) {
+		review := config.SlackReview{Since: time.Now().UTC().Truncate(time.Second)}
+		if out.Slack.Review != nil {
+			review = *out.Slack.Review
+		}
+		review.SkipRepos, _ = flags.GetStringSlice(reviewSkipFlag)
+		out.Slack.Review = &review
 	}
 	if flags.Changed(postToFlag) {
 		v, _ := flags.GetString(postToFlag)
@@ -1214,11 +1233,15 @@ func slackSource(rules watch.Rules, wc *config.WatchConfig, secrets watch.Secret
 	if rules.DeadSource("slack") || wc.Chat == nil || wc.Chat.Slack == nil {
 		return nil
 	}
-	sl := watch.NewSlack(secrets, watch.SlackWatchConfig{
+	slackConfig := watch.SlackWatchConfig{
 		Mentions:       wc.Chat.Slack.Mentions,
 		Channels:       wc.Chat.Slack.Channels,
 		ReviewChannels: wc.Chat.Slack.ReviewChannels,
-	})
+	}
+	if review := wc.Chat.Slack.Review; review != nil {
+		slackConfig.Recheck, slackConfig.ApprovedWord = review.RecheckWords(), review.ApprovedWord()
+	}
+	sl := watch.NewSlack(secrets, slackConfig)
 	if sl.Token() == "" {
 		return nil
 	}
@@ -1621,6 +1644,8 @@ func init() {
 	f.Bool("mentions", false, "Ring when someone names you in Slack or writes to you directly (needs corgi agent watch auth slack)")
 	f.StringSlice("channel", nil, "Slack channels every message of which is news, e.g. #incidents (repeatable)")
 	f.StringSlice(reviewChannelFlag, nil, "Slack channels where pull requests are posted for review: a post with links is one review, answered in its thread (repeatable)")
+	f.Bool(reviewRepliesFlag, false, "In a review channel, answer a post the way a teammate does: one word in its thread - Approved with a check mark on the post, Some comments, and Fixed under my own post once its comments are fixed. A reply that says fixed gets a second look. A post that names only watched repos needs no --trust. The words live under chat.slack.review in the config")
+	f.StringSlice(reviewSkipFlag, nil, "Repos a review channel post may name that are left to their owner, as owner/repo (repeatable); turns --review-replies on")
 	f.StringSlice("trust", nil, "Colleagues whose Slack mention may start an unattended run - the person who WROTE the message, e.g. @teammate (repeatable). Empty means nobody: a mention only rings")
 	f.String(postToFlag, "", "Default Slack channel for corgi agent chat post")
 	f.String(replyAsFlag, "", "Whose voice a reply speaks in: bot or me (default: the bot when a bot token is stored)")

@@ -58,6 +58,12 @@ prompt, with the command to answer in the room:
   corgi agent room post plans/search "@api what does the index cost? @web can you page it?"
   corgi agent room post plans/search "@here one more round"     everyone who wrote in this room
 
+Every workspace and every ticket with a live session has its own room, and a
+message there needs no name: it goes to the sessions on it.
+
+  corgi agent room post ws/api "is the index migration safe to run twice?"
+  corgi agent room post ticket/abc-123 "what is left?"
+
 A name is the session's label in lower case with dashes. A session that waits
 on a permission or sits at a limit is not written to, and the answer says so.
 A room carries up to 30 such messages in ten minutes, so two agents cannot
@@ -68,7 +74,7 @@ its reply to a thread a phone started, or one with @you, rings the phone.`,
 		dir := mustAgentDir()
 		list, agents := rooms.List(dir), roomAgents(dir)
 		if utils.JSONOutput {
-			utils.PrintJSON(map[string]any{"rooms": list, "agents": agents, "me": peers.Me()})
+			utils.PrintJSON(map[string]any{"rooms": list, "agents": agents, "places": roomPlaces(agents, list), "me": peers.Me()})
 			return
 		}
 		if len(list) == 0 {
@@ -76,6 +82,12 @@ its reply to a thread a phone started, or one with @you, rings the phone.`,
 		}
 		for _, r := range list {
 			fmt.Printf("%-32s %4d  %s\n", r.Name, r.Messages, strings.TrimSpace(roomAgo(r.Last)+" "+r.LastBy))
+		}
+		for i, p := range roomPlaces(agents, list) {
+			if i == 0 {
+				fmt.Println("\nworkspaces and tickets (a message there goes to the sessions on it):")
+			}
+			fmt.Printf("  %-32s %s\n", p.Room, strings.Join(p.Agents, ", "))
 		}
 		for i, a := range agents {
 			if i == 0 {

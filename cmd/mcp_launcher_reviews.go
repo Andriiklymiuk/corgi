@@ -46,7 +46,8 @@ type reviewChange struct {
 	Why     map[string]why `json:"why,omitempty"`
 	At      time.Time      `json:"at"`
 
-	Open []watch.OpenComment `json:"open"`
+	Open    []watch.OpenComment  `json:"open"`
+	Threads []watch.ReviewThread `json:"threads"`
 }
 
 func (c reviewChange) openWork() watch.OpenWork {
@@ -430,19 +431,20 @@ func reviewChangeFor(ctx context.Context, dir, link string, fresh bool) (reviewC
 	var threads []watch.ReviewThread
 	var threadsErr error
 	var wg sync.WaitGroup
-	if row.Mine {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			threads, threadsErr = reviewThreadsFor(ctx, dir, row.Workspace, link)
-		}()
-	}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		threads, threadsErr = reviewThreadsFor(ctx, dir, row.Workspace, link)
+	}()
 	change, err := forgeFor(dir, row.Workspace).PullChange(ctx, link)
 	wg.Wait()
 	if err != nil {
 		return reviewChange{}, err
 	}
-	out := reviewChange{Change: change, Mine: row.Mine, At: time.Now()}
+	out := reviewChange{Change: change, Mine: row.Mine, At: time.Now(), Threads: threads}
+	if out.Threads == nil {
+		out.Threads = []watch.ReviewThread{}
+	}
 	if row.Mine && threadsErr == nil {
 		out.Open = watch.OpenComments(threads, change.Author, change.NewestCommit())
 	}
@@ -514,6 +516,8 @@ type reviewRequest struct {
 	Verdict string             `json:"verdict"`
 	Body    string             `json:"body"`
 	Notes   []watch.ReviewNote `json:"notes"`
+	Thread  string             `json:"thread"`
+	Note    string             `json:"note"`
 }
 
 func launchReviewsHandler(w http.ResponseWriter, r *http.Request) {
@@ -589,6 +593,18 @@ func runReviewAction(ctx context.Context, dir string, req reviewRequest, from st
 		markInboxDone(dir, link, from)
 		forgetReview(link)
 		return map[string]any{"done": map[string]string{"approve": "approved", "request": "changes requested", "comment": "commented"}[verdict], "url": link}, http.StatusOK, ""
+	case "reply":
+		if err := watch.ReplyInThread(ctx, watch.LoadSecretsFor(dir, row.Workspace), link, watch.ThreadTarget{Thread: req.Thread, Note: req.Note}, req.Body); err != nil {
+			return nil, http.StatusBadGateway, firstLineOf(err.Error())
+		}
+		forgetReview(link)
+		return map[string]any{"done": "replied", "url": link}, http.StatusOK, ""
+	case "resolve":
+		if err := watch.ResolveThread(ctx, watch.LoadSecretsFor(dir, row.Workspace), link, req.Thread); err != nil {
+			return nil, http.StatusBadGateway, firstLineOf(err.Error())
+		}
+		forgetReview(link)
+		return map[string]any{"done": "resolved", "url": link}, http.StatusOK, ""
 	case "fix":
 		return reviewFix(dir, row, req, from)
 	case "fix-all":

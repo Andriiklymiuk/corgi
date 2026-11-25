@@ -7,7 +7,7 @@ require (
 	github.com/creack/pty v1.1.24
 	github.com/klauspost/compress v1.18.7
 	github.com/manifoldco/promptui v0.9.0
-	github.com/mark3labs/mcp-go v0.54.0
+	github.com/mark3labs/mcp-go v1.6.0
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/term v0.42.0

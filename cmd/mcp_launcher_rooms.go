@@ -235,7 +235,8 @@ func launchRoomRead(w http.ResponseWriter, r *http.Request, dir string) {
 	query := r.URL.Query()
 	name := strings.TrimSpace(query.Get("room"))
 	if name == "" {
-		writeLaunchJSON(w, map[string]any{"rooms": roomsFor(r, dir), "agents": roomAgents(dir), "me": firstNonEmpty(deviceOf(r), peers.Me())})
+		list, agents := roomsFor(r, dir), roomAgents(dir)
+		writeLaunchJSON(w, map[string]any{"rooms": list, "agents": agents, "places": roomPlaces(agents, list), "me": firstNonEmpty(deviceOf(r), peers.Me())})
 		return
 	}
 	room, err := rooms.CleanName(name)

@@ -32,6 +32,13 @@ type phoneReviewsDevice struct {
 
 type phoneReviews struct {
 	Devices map[string]phoneReviewsDevice `json:"devices"`
+	Refused map[string]time.Time          `json:"refused,omitempty"`
+	Locked  bool                          `json:"locked,omitempty"`
+}
+
+func (p phoneReviews) refuses(device string) bool {
+	_, refused := p.Refused[device]
+	return p.Locked || refused
 }
 
 func phoneReviewsPath(dir string) string { return filepath.Join(dir, "reviews", "phone.json") }
@@ -149,8 +156,8 @@ func firstSeat(f phoneForge) string {
 func launchReviewsGrantHandler(w http.ResponseWriter, r *http.Request) {
 	setLaunchHeaders(w)
 	w.Header().Set("Cache-Control", "no-store")
-	if r.Method != http.MethodGet {
-		writeLaunchError(w, http.StatusMethodNotAllowed, "GET")
+	if r.Method != http.MethodGet && r.Method != http.MethodPost {
+		writeLaunchError(w, http.StatusMethodNotAllowed, "GET or POST")
 		return
 	}
 	dir, err := agentDir()
@@ -172,9 +179,14 @@ func launchReviewsGrantHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	list := loadPhoneReviews(dir)
 	entry, ok := list.Devices[device]
-	if !ok {
+	asks := r.Method == http.MethodPost
+	if !ok && (!asks || list.refuses(device)) {
 		writeLaunchError(w, http.StatusForbidden, fmt.Sprintf("reviews without the Mac are off for %s. On the Mac: corgi agent reviews phone on %q", device, device))
 		return
+	}
+	if !ok {
+		entry = phoneReviewsDevice{Since: time.Now()}
+		phoneTookReviews(device)
 	}
 	forges := phoneForges(dir)
 	if len(forges) == 0 {
@@ -200,10 +212,14 @@ reads and answers pull requests itself when the Mac does not answer.
   corgi agent reviews phone                     who has it, and when each last took it
   corgi agent reviews phone on "Anna's iPhone"
   corgi agent reviews phone off "Anna's iPhone"
-  corgi agent reviews phone off                 everyone
+  corgi agent reviews phone off                 everyone, and no phone may ask again
+
+A paired phone with full control can also turn it on itself, from its
+Reviews tab: this Mac shows a notification when one does.
 
 What keeps it safe:
-  - off until you turn it on here, per phone, by name
+  - off until the phone's owner turns it on, on the phone behind Face ID or
+    here by name; off here stays off, the phone cannot turn it back on
   - only a phone with full control that paired with a key; a read-only
     device, a peer laptop and the launcher token are refused
   - the answer travels sealed with the pairing key, never in the clear
@@ -252,9 +268,13 @@ turn it off here and rotate the token (gh auth refresh, or a new GitLab token).`
 		}
 		if turn == "off" {
 			if name == "" {
-				list.Devices = map[string]phoneReviewsDevice{}
+				list.Devices, list.Locked = map[string]phoneReviewsDevice{}, true
 			} else {
 				delete(list.Devices, name)
+				if list.Refused == nil {
+					list.Refused = map[string]time.Time{}
+				}
+				list.Refused[name] = time.Now()
 			}
 			if err := savePhoneReviews(dir, list); err != nil {
 				exitWithError("agent_reviews_phone", err, 1)
@@ -280,11 +300,17 @@ turn it off here and rotate the token (gh auth refresh, or a new GitLab token).`
 		if _, ok := list.Devices[name]; !ok {
 			list.Devices[name] = phoneReviewsDevice{Since: time.Now()}
 		}
+		list.Locked = false
+		delete(list.Refused, name)
 		if err := savePhoneReviews(dir, list); err != nil {
 			exitWithError("agent_reviews_phone", err, 1)
 		}
 		fmt.Printf("on for %s. It takes the access the next time it opens Reviews with this Mac in reach.\n", name)
 	},
+}
+
+var phoneTookReviews = func(device string) {
+	utils.NotifyRaw("corgi", fmt.Sprintf("%s now reviews pull requests without this Mac. To stop it: corgi agent reviews phone off %q", device, device))
 }
 
 func deviceNames(list []pairing.Device) []string {

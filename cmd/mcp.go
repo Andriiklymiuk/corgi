@@ -132,6 +132,7 @@ func newCorgiMCPServer(version string) *server.MCPServer {
 		server.WithTitle("Corgi"),
 		server.WithInstructions(mcpServerInstructions),
 		server.WithToolHandlerMiddleware(mcpResultGuard(mcpMaxEmittedChars())),
+		server.WithExtensions(mcpExtensionCapabilities),
 	)
 	registerMCPTools(s)
 	registerMCPResources(s)
@@ -270,7 +271,7 @@ func buildMCPTunnelConfig(provider, hostname, name string) (tunnel.Provider, *tu
 }
 
 func serveMCPStdio(s *server.MCPServer) {
-	if err := server.ServeStdio(s, server.WithWorkerPoolSize(1)); err != nil {
+	if err := serveStdioWithExtensions(s); err != nil {
 		fmt.Fprintln(os.Stderr, "mcp server error:", err)
 		exitProcess(1)
 	}
@@ -460,7 +461,7 @@ func serveMCPHTTP(s *server.MCPServer, addr, token string, opts mcpHTTPOpts) {
 	mux := http.NewServeMux()
 	origins := newOriginAllowlist(addr, opts.allowOrigins)
 	oa := mountMCPOAuth(mux, addr, token, deviceStore, opts, origins)
-	mux.Handle("/mcp", mcpEndpointGuard(origins, bearerAuthWithOAuth(token, httpSrv, deviceStore, oa)))
+	mux.Handle("/mcp", mcpEndpointGuard(origins, bearerAuthWithOAuth(token, newMCPExtensions(s).overHTTP(httpSrv), deviceStore, oa)))
 
 	// An idea page is open to whoever has its link (the share key rides in
 	// it), on this same port; building from it still needs the dashboard.
