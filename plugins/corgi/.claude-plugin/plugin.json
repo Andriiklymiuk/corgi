@@ -1,6 +1,6 @@
 {
   "name": "corgi",
-  "version": "2.73.2",
+  "version": "2.73.3",
   "description": "Skills for the corgi CLI: write corgi-compose.yml, run and debug a whole stack, ship tickets as draft pull requests, review pull requests, and keep an agent board.",
   "author": {
     "name": "Andrii Klymiuk",
