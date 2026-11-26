@@ -327,6 +327,7 @@ func (d *Daemon) startWatches(ctx context.Context) {
 			},
 			Asleep:    func(now time.Time) bool { return dayOff(spec, now) },
 			Elsewhere: func(e watch.Event) bool { return d.ownedElsewhere(spec, e) },
+			Own:       func(e watch.Event) { d.rememberOwnReviewPost(spec, e) },
 			Metered:   onMeteredLink}
 		d.watchers[spec.Workspace] = w
 		d.fixBusy[spec.Workspace] = make(chan struct{}, slotsOf(spec))
@@ -461,7 +462,6 @@ func (d *Daemon) watchSink(spec WatchSpec) watch.Sink {
 
 func (d *Daemon) sinkEvent(ctx context.Context, spec WatchSpec, e watch.Event) {
 	e = withoutSkippedRepos(spec, e)
-	d.rememberOwnReviewPost(spec, e)
 	d.appendWatchEvent(e)
 	if d.Events != nil {
 		d.Events.Append(spec.Workspace, events.Event{At: time.Now().UTC(), Kind: "watch", Reason: string(e.Kind) + " " + e.Ref, URL: e.URL})

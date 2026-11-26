@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -42,19 +43,42 @@ func chatVoice(as string, def *slackDefaults) string {
 	return as
 }
 
-func chatTarget(req chatRequest, state *watch.State, def *slackDefaults) (watch.SlackTarget, error) {
+type reviewPostFinder func(ref string) (watch.ChannelPost, bool)
+
+const replyForms = "a slack event key (slack:<channel>:<ts>), the link of the message, or the link of a pull request announced in the review channel"
+
+func replyTarget(key string, state *watch.State, find reviewPostFinder) (channel, thread string, err error) {
+	if ref := watch.PullRef(key); ref != "" {
+		if find != nil {
+			if post, ok := find(ref); ok {
+				return post.Channel, post.TS, nil
+			}
+		}
+		return "", "", fmt.Errorf("no review post is known for %s: pass the link of the message (Copy link in Slack) instead", ref)
+	}
+	if u, perr := url.Parse(key); perr == nil && u.Query().Get("thread_ts") != "" {
+		if msg, merr := watch.ParseSlackMessage(key); merr == nil {
+			return msg.Channel, u.Query().Get("thread_ts"), nil
+		}
+	}
+	msg, err := watch.ParseSlackMessage(key)
+	if err != nil {
+		return "", "", fmt.Errorf("--reply wants %s, got %q", replyForms, key)
+	}
+	if parent := state.Thread("slack:" + msg.Channel + ":" + msg.TS); parent != "" {
+		return msg.Channel, parent, nil
+	}
+	return msg.Channel, msg.TS, nil
+}
+
+func chatTarget(req chatRequest, state *watch.State, def *slackDefaults, find reviewPostFinder) (watch.SlackTarget, error) {
 	target := watch.SlackTarget{As: chatVoice(req.As, def)}
 	if key := strings.TrimSpace(req.Reply); key != "" {
-		parts := strings.Split(key, ":")
-		if len(parts) != 3 || parts[0] != "slack" {
-			return target, fmt.Errorf("--reply wants a slack event key (slack:<channel>:<ts>), got %q", key)
+		channel, thread, err := replyTarget(key, state, find)
+		if err != nil {
+			return target, err
 		}
-		target.Channel = parts[1]
-		if parent := state.Thread(key); parent != "" {
-			target.ThreadTS = parent
-		} else {
-			target.ThreadTS = parts[2]
-		}
+		target.Channel, target.ThreadTS = channel, thread
 		return target, nil
 	}
 	if to := strings.TrimSpace(req.To); to != "" {
@@ -65,7 +89,7 @@ func chatTarget(req chatRequest, state *watch.State, def *slackDefaults) (watch.
 		target.Channel = strings.TrimSpace(def.PostTo)
 		return target, nil
 	}
-	return target, fmt.Errorf("no target: --to '#channel', --reply <event key>, or postTo in the workspace's chat config")
+	return target, fmt.Errorf("no target: --to '#channel', --reply <event key or link>, or postTo in the workspace's chat config")
 }
 
 func slackDefaultsFor(dir, workspace string) *slackDefaults {
@@ -92,6 +116,12 @@ func chatPoster(dir, workspace string, state *watch.State) *watch.SlackPoster {
 }
 
 func runChatPost(req chatRequest) error {
+	_, err := sendChat(req)
+	return err
+}
+
+func sendChat(req chatRequest) (watch.SlackPosted, error) {
+	var posted watch.SlackPosted
 	dir := mustAgentDir()
 	if req.Workspace == "" {
 		req.Workspace, _ = currentWorkspaceID(dir)
@@ -99,40 +129,43 @@ func runChatPost(req chatRequest) error {
 	state := watch.LoadState(dir)
 	poster := chatPoster(dir, req.Workspace, state)
 
-	target, err := chatTarget(req, state, slackDefaultsFor(dir, req.Workspace))
+	find := func(ref string) (watch.ChannelPost, bool) {
+		return watch.NewestChannelPostNaming(dir, req.Workspace, ref)
+	}
+	target, err := chatTarget(req, state, slackDefaultsFor(dir, req.Workspace), find)
 	if err != nil {
-		return err
+		return posted, err
 	}
 	ctx := context.Background()
 	channel, err := poster.Resolve(ctx, target.Channel, target.As)
 	if err != nil {
-		return err
+		return posted, err
 	}
 	target.Channel = channel
 
 	out := map[string]any{}
 	if text := strings.TrimSpace(req.Text); text != "" {
-		posted, err := poster.Post(ctx, target, text)
+		posted, err = poster.Post(ctx, target, text)
 		if err != nil {
-			return err
+			return posted, err
 		}
 		out["channel"], out["ts"], out["permalink"], out["as"] = posted.Channel, posted.TS, posted.Permalink, posted.As
 		utils.Infof("posted as %s: %s\n", posted.As, posted.Permalink)
 	}
 	if emoji := strings.TrimSpace(req.React); emoji != "" {
 		if err := poster.React(ctx, target, emoji); err != nil {
-			return err
+			return posted, err
 		}
 		out["reacted"] = emoji
 		utils.Infof("reacted :%s:\n", strings.Trim(emoji, ":"))
 	}
 	if len(out) == 0 {
-		return fmt.Errorf("nothing to say: pass a message, or --react <emoji>")
+		return posted, fmt.Errorf("nothing to say: pass a message, or --react <emoji>")
 	}
 	if utils.JSONOutput {
 		utils.PrintJSON(out)
 	}
-	return nil
+	return posted, nil
 }
 
 func runChatEdit(req chatEditRequest) error {
@@ -191,6 +224,7 @@ be taken back, so it is never the accidental default.
 
   corgi agent chat post "deploy is out" --to '#backend'
   corgi agent chat post "on it" --reply slack:C0RE:1726000400.000100
+  corgi agent chat post "Fixed" --reply https://github.com/acme/api/pull/5
   corgi agent chat react slack:C0RE:1726000400.000100 white_check_mark
   corgi agent chat edit https://acme.slack.com/archives/C0RE/p1726000400000100 "on it - PR is up"`,
 }
@@ -252,7 +286,7 @@ try.
 func init() {
 	p := agentChatPostCmd.Flags()
 	p.String("to", "", "Channel to post in: #name, @handle for a direct message, or a channel id")
-	p.String("reply", "", "Event key to answer (slack:<channel>:<ts>); the reply lands in its thread")
+	p.String("reply", "", "Message to answer: its event key (slack:<channel>:<ts>), its link, or the link of a pull request announced in the review channel; the reply lands in its thread")
 	p.String("as", "", "Voice: bot or me")
 	p.String("react", "", "Also put this emoji on the message --reply names")
 	p.String("workspace", "", "Workspace whose token and defaults to use; omitted means the one you are in")

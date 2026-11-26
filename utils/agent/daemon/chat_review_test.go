@@ -51,3 +51,22 @@ func TestSkippedReposAreLeftToTheirOwner(t *testing.T) {
 		t.Fatalf("a post of skipped repos alone starts nothing: %q", why)
 	}
 }
+
+func TestMyOwnReviewPostIsRememberedByItsPullRequests(t *testing.T) {
+	d := testDaemon(t)
+	d.watchState = watch.LoadState(d.Dir)
+	spec := channelReviewSpec()
+	mine := channelPost("https://github.com/acme/api/pull/5", "https://github.com/acme/web/pull/9")
+	mine.Self = true
+
+	d.rememberOwnReviewPost(spec, mine)
+	d.rememberOwnReviewPost(spec, channelPost("https://github.com/acme/api/pull/7"))
+
+	got := watch.ChannelPostsNaming(d.Dir, "acme", []string{"acme/web#9"})
+	if len(got) != 1 || got[0].Channel != "C0RE" || got[0].TS != "1726000400.000100" {
+		t.Fatalf("my post is the thread Fixed goes into: %+v", got)
+	}
+	if theirs := watch.ChannelPostsNaming(d.Dir, "acme", []string{"acme/api#7"}); len(theirs) != 0 {
+		t.Fatalf("a colleague's post is not mine to answer Fixed in: %+v", theirs)
+	}
+}

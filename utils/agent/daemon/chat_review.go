@@ -69,11 +69,7 @@ func (d *Daemon) rememberOwnReviewPost(spec WatchSpec, e watch.Event) {
 	if !isChannelReview(spec, e) || !e.Self || len(e.Links) == 0 || len(parts) != 3 || d.watchState.Thread(e.Key) != "" {
 		return
 	}
-	var refs []string
-	for _, link := range e.Links {
-		refs = append(refs, watch.PullRef(link))
-	}
-	thread := watch.ChannelPost{Workspace: spec.Workspace, Channel: parts[1], TS: parts[2], Refs: refs, At: time.Now()}
+	thread := watch.ChannelPost{Workspace: spec.Workspace, Channel: parts[1], TS: parts[2], Refs: watch.PullRefsIn(e.Links), At: time.Now()}
 	if err := watch.RememberChannelPost(d.Dir, thread, time.Now()); err != nil {
 		utils.Infof("agent: review thread of %s not kept: %v\n", e.Ref, err)
 	}

@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -34,7 +35,23 @@ type announceOptions struct {
 	Edit      string
 }
 
-func runAnnounce(args []string, o announceOptions, post func(chatRequest) error, edit func(chatEditRequest) error) error {
+func rememberAnnounce(dir, workspace, channel, ts string, urls []string) {
+	refs := watch.PullRefsIn(urls)
+	if workspace == "" || channel == "" || ts == "" || len(refs) == 0 {
+		return
+	}
+	now := time.Now()
+	post := watch.ChannelPost{Workspace: workspace, Channel: channel, TS: ts, Refs: refs, At: now}
+	if err := watch.RememberChannelPost(dir, post, now); err != nil {
+		utils.Infof("the announce is posted, but its thread is not kept: %v\n", err)
+	}
+}
+
+func runAnnounce(args []string, o announceOptions, post func(chatRequest) (watch.SlackPosted, error), edit func(chatEditRequest) error) error {
+	dir := mustAgentDir()
+	if o.Workspace == "" {
+		o.Workspace, _ = currentWorkspaceID(dir)
+	}
 	if strings.TrimSpace(o.Edit) != "" {
 		if strings.TrimSpace(o.To) != "" {
 			return fmt.Errorf("--edit names the message, and so its channel: drop --to")
@@ -42,11 +59,13 @@ func runAnnounce(args []string, o announceOptions, post func(chatRequest) error,
 		if len(args) == 1 {
 			return fmt.Errorf("nothing to announce: pass the pull request URLs after the title")
 		}
-		return edit(chatEditRequest{Message: o.Edit, Text: announceText(args[0], args[1:]), As: o.As, Workspace: o.Workspace})
-	}
-	dir := mustAgentDir()
-	if o.Workspace == "" {
-		o.Workspace, _ = currentWorkspaceID(dir)
+		if err := edit(chatEditRequest{Message: o.Edit, Text: announceText(args[0], args[1:]), As: o.As, Workspace: o.Workspace}); err != nil {
+			return err
+		}
+		if msg, err := watch.ParseSlackMessage(o.Edit); err == nil {
+			rememberAnnounce(dir, o.Workspace, msg.Channel, msg.TS, args[1:])
+		}
+		return nil
 	}
 	channel := announceChannel(o.To, slackDefaultsFor(dir, o.Workspace))
 	if channel == "" {
@@ -59,7 +78,12 @@ func runAnnounce(args []string, o announceOptions, post func(chatRequest) error,
 	if len(args) == 1 {
 		return fmt.Errorf("nothing to announce: pass the pull request URLs after the title")
 	}
-	return post(chatRequest{Text: announceText(args[0], args[1:]), To: channel, As: o.As, Workspace: o.Workspace})
+	posted, err := post(chatRequest{Text: announceText(args[0], args[1:]), To: channel, As: o.As, Workspace: o.Workspace})
+	if err != nil {
+		return err
+	}
+	rememberAnnounce(dir, o.Workspace, posted.Channel, posted.TS, args[1:])
+	return nil
 }
 
 var agentChatAnnounceCmd = &cobra.Command{
@@ -89,7 +113,7 @@ lets only its author edit it, so --as names the voice that posted it.
 		o.As, _ = f.GetString("as")
 		o.Workspace, _ = f.GetString("workspace")
 		o.Edit, _ = f.GetString("edit")
-		return runAnnounce(args, o, runChatPost, runChatEdit)
+		return runAnnounce(args, o, sendChat, runChatEdit)
 	},
 }
 

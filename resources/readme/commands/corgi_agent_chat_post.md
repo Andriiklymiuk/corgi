@@ -14,7 +14,7 @@ corgi agent chat post <text> [flags]
       --as string          Voice: bot or me
   -h, --help               help for post
       --react string       Also put this emoji on the message --reply names
-      --reply string       Event key to answer (slack:<channel>:<ts>); the reply lands in its thread
+      --reply string       Message to answer: its event key (slack:<channel>:<ts>), its link, or the link of a pull request announced in the review channel; the reply lands in its thread
       --to string          Channel to post in: #name, @handle for a direct message, or a channel id
       --workspace string   Workspace whose token and defaults to use; omitted means the one you are in
 ```

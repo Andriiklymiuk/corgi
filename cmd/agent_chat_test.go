@@ -13,7 +13,7 @@ func TestChatTargetFromFlagsAndEvent(t *testing.T) {
 	state := watch.LoadState(t.TempDir())
 	state.SetThreadForTest("slack:C0RE:1726000400.000100", "1726000100.000100")
 
-	got, err := chatTarget(chatRequest{Reply: "slack:C0RE:1726000400.000100"}, state, nil)
+	got, err := chatTarget(chatRequest{Reply: "slack:C0RE:1726000400.000100"}, state, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -21,7 +21,7 @@ func TestChatTargetFromFlagsAndEvent(t *testing.T) {
 		t.Fatalf("a reply to a message in a thread goes to that thread: %+v", got)
 	}
 
-	got, err = chatTarget(chatRequest{Reply: "slack:C0RE:1726000900.000100"}, state, nil)
+	got, err = chatTarget(chatRequest{Reply: "slack:C0RE:1726000900.000100"}, state, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -29,15 +29,15 @@ func TestChatTargetFromFlagsAndEvent(t *testing.T) {
 		t.Fatalf("a reply to a top-level post opens a thread on it: %+v", got)
 	}
 
-	if _, err := chatTarget(chatRequest{Reply: "github:acme/api#1"}, state, nil); err == nil {
+	if _, err := chatTarget(chatRequest{Reply: "github:acme/api#1"}, state, nil, nil); err == nil {
 		t.Fatal("a key from another source is not a slack target")
 	}
 
-	if _, err := chatTarget(chatRequest{}, state, nil); err == nil || !strings.Contains(err.Error(), "--to") {
+	if _, err := chatTarget(chatRequest{}, state, nil, nil); err == nil || !strings.Contains(err.Error(), "--to") {
 		t.Fatalf("with no target and no config the error must name the flag: %v", err)
 	}
 
-	got, err = chatTarget(chatRequest{}, state, &slackDefaults{PostTo: "C0IN", ReplyAs: "me"})
+	got, err = chatTarget(chatRequest{}, state, &slackDefaults{PostTo: "C0IN", ReplyAs: "me"}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,7 +45,7 @@ func TestChatTargetFromFlagsAndEvent(t *testing.T) {
 		t.Fatalf("the workspace's own default target and voice: %+v", got)
 	}
 
-	got, err = chatTarget(chatRequest{As: "bot"}, state, &slackDefaults{PostTo: "C0IN", ReplyAs: "me"})
+	got, err = chatTarget(chatRequest{As: "bot"}, state, &slackDefaults{PostTo: "C0IN", ReplyAs: "me"}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,5 +96,38 @@ func TestChatEditChecksTheMessageBeforeAnyToken(t *testing.T) {
 	}
 	if found, _, err := agentChatCmd.Find([]string{"edit"}); err != nil || found != agentChatEditCmd {
 		t.Fatalf("chat edit is a subcommand: %v", err)
+	}
+}
+
+func TestAReplyMayNameThePullRequestOrTheMessageLink(t *testing.T) {
+	state := watch.LoadState(t.TempDir())
+	find := func(ref string) (watch.ChannelPost, bool) {
+		if ref == "acme/api#5" {
+			return watch.ChannelPost{Channel: "C0RE", TS: "1726000400.000100"}, true
+		}
+		return watch.ChannelPost{}, false
+	}
+
+	got, err := chatTarget(chatRequest{Reply: "https://github.com/acme/api/pull/5"}, state, nil, find)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Channel != "C0RE" || got.ThreadTS != "1726000400.000100" {
+		t.Fatalf("a pull request link answers in the thread of the post that announced it: %+v", got)
+	}
+
+	_, err = chatTarget(chatRequest{Reply: "https://github.com/acme/api/pull/6"}, state, nil, find)
+	if err == nil || !strings.Contains(err.Error(), "acme/api#6") || !strings.Contains(err.Error(), "link") {
+		t.Fatalf("an unknown pull request is refused and says what to pass instead: %v", err)
+	}
+
+	got, err = chatTarget(chatRequest{Reply: "https://acme.slack.com/archives/C0RE/p1726000400000100"}, state, nil, find)
+	if err != nil || got.Channel != "C0RE" || got.ThreadTS != "1726000400.000100" {
+		t.Fatalf("Copy link of the post is enough: %+v %v", got, err)
+	}
+
+	got, err = chatTarget(chatRequest{Reply: "https://acme.slack.com/archives/C0RE/p1726000900000100?thread_ts=1726000400.000100&cid=C0RE"}, state, nil, find)
+	if err != nil || got.ThreadTS != "1726000400.000100" {
+		t.Fatalf("the link of a reply answers in its thread, not under the reply: %+v %v", got, err)
 	}
 }

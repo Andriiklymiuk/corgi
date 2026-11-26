@@ -3,6 +3,8 @@ package cmd
 import (
 	"strings"
 	"testing"
+
+	"andriiklymiuk/corgi/utils/agent/watch"
 )
 
 func TestAnnounceText(t *testing.T) {
@@ -47,7 +49,10 @@ func TestAnnounceEditSendsTheBodyAFreshAnnounceWould(t *testing.T) {
 	}
 	var posted []chatRequest
 	var edited []chatEditRequest
-	post := func(r chatRequest) error { posted = append(posted, r); return nil }
+	post := func(r chatRequest) (watch.SlackPosted, error) {
+		posted = append(posted, r)
+		return watch.SlackPosted{Channel: "C0RE", TS: "1726000400.000100"}, nil
+	}
 	edit := func(r chatEditRequest) error { edited = append(edited, r); return nil }
 
 	if err := runAnnounce(args, announceOptions{To: "#reviews", As: "me", Workspace: "acme"}, post, edit); err != nil {
@@ -78,5 +83,39 @@ func TestAnnounceEditSendsTheBodyAFreshAnnounceWould(t *testing.T) {
 	}
 	if agentChatAnnounceCmd.Flags().Lookup("edit") == nil {
 		t.Fatal("announce has --edit")
+	}
+}
+
+func TestAnAnnounceIsRememberedAsTheReviewPostOfItsPullRequests(t *testing.T) {
+	t.Setenv("CORGI_DATA_DIR", t.TempDir())
+	dir := mustAgentDir()
+	args := []string{"[ABC-12] Phone field",
+		"https://github.com/acme/api/pull/5",
+		"https://gitlab.com/acme/svc/onboarding/-/merge_requests/12",
+	}
+	post := func(chatRequest) (watch.SlackPosted, error) {
+		return watch.SlackPosted{Channel: "C0RE", TS: "1726000400.000100"}, nil
+	}
+	edit := func(chatEditRequest) error { return nil }
+	if err := runAnnounce(args, announceOptions{To: "#reviews", Workspace: "acme"}, post, edit); err != nil {
+		t.Fatal(err)
+	}
+	for _, ref := range []string{"acme/api#5", "acme/svc/onboarding!12"} {
+		got := watch.ChannelPostsNaming(dir, "acme", []string{ref})
+		if len(got) != 1 || got[0].Channel != "C0RE" || got[0].TS != "1726000400.000100" {
+			t.Fatalf("the announce is the review post of %s, known without the watch seeing it: %+v", ref, got)
+		}
+	}
+
+	link := "https://acme.slack.com/archives/C0RE/p1726000400000100"
+	grown := append(args, "https://github.com/acme/web/pull/9")
+	if err := runAnnounce(grown, announceOptions{Edit: link, Workspace: "acme"}, post, edit); err != nil {
+		t.Fatal(err)
+	}
+	if got := watch.ChannelPostsNaming(dir, "acme", []string{"acme/web#9"}); len(got) != 1 || got[0].TS != "1726000400.000100" {
+		t.Fatalf("an edit that adds a pull request adds it to the same post: %+v", got)
+	}
+	if all := watch.ChannelPostsNaming(dir, "acme", []string{"acme/api#5"}); len(all) != 1 {
+		t.Fatalf("one post, not two: %+v", all)
 	}
 }

@@ -53,8 +53,11 @@ func RememberChannelPost(dir string, t ChannelPost, now time.Time) error {
 	defer reviewThreadsMu.Unlock()
 	var kept []ChannelPost
 	for _, old := range loadChannelPosts(dir) {
-		same := old.Workspace == t.Workspace && old.Channel == t.Channel && old.TS == t.TS
-		if same || now.Sub(old.At) > reviewThreadLife {
+		if old.Workspace == t.Workspace && old.Channel == t.Channel && old.TS == t.TS {
+			t.FixedAt = old.FixedAt
+			continue
+		}
+		if now.Sub(old.At) > reviewThreadLife {
 			continue
 		}
 		kept = append(kept, old)
@@ -94,4 +97,24 @@ func MarkChannelPostFixed(dir string, t ChannelPost, now time.Time) error {
 		}
 	}
 	return saveChannelPosts(dir, list)
+}
+
+func NewestChannelPostNaming(dir, workspace, ref string) (ChannelPost, bool) {
+	var newest ChannelPost
+	for _, t := range ChannelPostsNaming(dir, workspace, []string{ref}) {
+		if slackTSNewer(t.TS, newest.TS) {
+			newest = t
+		}
+	}
+	return newest, newest.TS != ""
+}
+
+func PullRefsIn(links []string) []string {
+	var refs []string
+	for _, link := range links {
+		if ref := PullRef(link); ref != "" {
+			refs = append(refs, ref)
+		}
+	}
+	return refs
 }

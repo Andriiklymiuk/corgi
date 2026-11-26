@@ -17,6 +17,7 @@ be taken back, so it is never the accidental default.
 
   corgi agent chat post "deploy is out" --to '#backend'
   corgi agent chat post "on it" --reply slack:C0RE:1726000400.000100
+  corgi agent chat post "Fixed" --reply https://github.com/acme/api/pull/5
   corgi agent chat react slack:C0RE:1726000400.000100 white_check_mark
   corgi agent chat edit https://acme.slack.com/archives/C0RE/p1726000400000100 "on it - PR is up"
 

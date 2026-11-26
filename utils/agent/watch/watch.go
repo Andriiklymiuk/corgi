@@ -613,6 +613,7 @@ type Watch struct {
 	// Metered says the link costs (a phone's hotspot): polls go three times slower.
 	Metered   func() bool
 	Elsewhere func(e Event) bool
+	Own       func(e Event)
 
 	unreachable map[string]bool
 }
@@ -690,6 +691,9 @@ func IsNetworkError(err error) bool {
 func (w *Watch) Handle(ctx context.Context, e Event) bool {
 	if e.Workspace == "" {
 		e.Workspace = w.Workspace
+	}
+	if e.Self && w.Own != nil {
+		w.Own(e)
 	}
 	if !w.Rules.Match(e) || (w.Elsewhere != nil && w.Elsewhere(e)) || !w.State.MarkSeen(e.Key) {
 		return false
