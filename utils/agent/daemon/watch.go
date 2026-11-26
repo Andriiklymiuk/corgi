@@ -554,10 +554,10 @@ func (d *Daemon) releaseHeld(spec WatchSpec, now time.Time) {
 		return
 	}
 	held := d.watchState.TakeHeld(spec.Workspace)
-	moved := watch.LoadStateLog(d.Dir)
+	src := heldSources{moved: watch.LoadStateLog(d.Dir), pulls: watch.LoadPullLog(d.Dir), done: watch.LoadDoneLog(d.Dir)}
 	kept := held[:0]
 	for _, n := range held {
-		if d.stillWorthRinging(n.Key, moved) {
+		if d.stillWorthRinging(n.Key, src) {
 			kept = append(kept, n)
 		}
 	}
@@ -571,7 +571,13 @@ func (d *Daemon) releaseHeld(spec WatchSpec, now time.Time) {
 	go d.notifyAttention(notifyTitlePrefix+spec.Workspace, body, spec.Workspace)
 }
 
-func (d *Daemon) stillWorthRinging(key string, moved *watch.StateLog) bool {
+type heldSources struct {
+	moved *watch.StateLog
+	pulls *watch.PullLog
+	done  *watch.DoneLog
+}
+
+func (d *Daemon) stillWorthRinging(key string, src heldSources) bool {
 	if key == "" {
 		return true
 	}
@@ -583,10 +589,10 @@ func (d *Daemon) stillWorthRinging(key string, moved *watch.StateLog) bool {
 		return true
 	}
 	current := e.State
-	if st, ok := moved.Get(key); ok {
+	if st, ok := src.moved.Get(key); ok {
 		current = st.Status
 	}
-	return watch.Settled(e, current) == ""
+	return watch.InboxHandled(e, current, src.pulls, d.watchState.Fixes, src.done) == ""
 }
 
 func (d *Daemon) retryDeferred(ctx context.Context, spec WatchSpec, now time.Time) {

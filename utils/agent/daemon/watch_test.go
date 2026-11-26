@@ -733,3 +733,38 @@ func TestATripCapEndsWithTheMonthAndIsSaidOnce(t *testing.T) {
 		t.Fatalf("a month-old trip holds nothing back: %q", got)
 	}
 }
+
+func TestTheMorningDropsHeldNotesARunOrAPersonAlreadyHandled(t *testing.T) {
+	d := dynDaemon(t)
+	d.loadWatchFiles()
+	notes := make(chan string, 8)
+	d.Notify = func(_, body string) { notes <- body }
+	spec := WatchSpec{Workspace: "acme", Dir: t.TempDir()}
+	at := time.Now().Add(-time.Hour)
+	fixed := watch.Event{Key: "k-fixed", Ref: "acme/api#12", Workspace: "acme", Kind: watch.KindPRReview, At: at}
+	marked := watch.Event{Key: "k-marked", Ref: "ABC-7", Workspace: "acme", Kind: watch.KindIssueComment, State: "In Progress", At: at}
+	open := watch.Event{Key: "k-open", Ref: "acme/web#3", Workspace: "acme", Kind: watch.KindPRReview, At: at}
+	for _, e := range []watch.Event{fixed, marked, open} {
+		d.appendWatchEvent(e)
+	}
+	d.watchState.HoldEvent("acme", fixed.Key, "Sam reviewed acme/api#12: one thing (fix starts once the comments settle)", at)
+	d.watchState.HoldEvent("acme", marked.Key, "Kim commented on ABC-7: compatibility", at)
+	d.watchState.HoldEvent("acme", open.Key, "Sam reviewed acme/web#3: two things", at)
+	d.watchState.Hold("acme", "fixed acme/api#12 - one thing", time.Now())
+	d.watchState.Fixes.StartFor(fixed, at.Add(time.Minute))
+	d.watchState.Fixes.Finish(fixed.Key, nil, "pushed", "", at.Add(2*time.Minute))
+	if err := watch.LoadDoneLog(d.Dir).MarkRef("ABC-7", time.Now(), "you"); err != nil {
+		t.Fatal(err)
+	}
+
+	d.releaseHeld(spec, time.Now())
+	select {
+	case body := <-notes:
+		if !strings.Contains(body, "2 while you were away") || !strings.Contains(body, "acme/web#3") ||
+			!strings.Contains(body, "fixed acme/api#12") || strings.Contains(body, "comments settle") || strings.Contains(body, "ABC-7") {
+			t.Fatalf("only the open review and the fixed line: %q", body)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("the open review is still delivered")
+	}
+}
