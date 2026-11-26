@@ -324,7 +324,9 @@ corgi agent doctor                                        # no âœ— - `security Â
 - `--pickup` / `--review-status` move the ticket as the run goes, so the
   board tells the team what the agent has.
 - A post of **your own** in the review channel is never a review for you; a
-  reply under it is feedback on your work. A merge waits for the forge's
+  reply under it is feedback on your work. Your answer goes in the same
+  thread: `corgi agent chat post "Fixed" --reply <pr url>` finds the post
+  from any pull request it names. A merge waits for the forge's
   approval and green checks (`--auto-merge`), never for a "LGTM" in Slack.
 - After every `corgi upd`: `corgi agent restart`, then `corgi agent track
   enable` once more - the hooks live in the Claude config and an upgrade

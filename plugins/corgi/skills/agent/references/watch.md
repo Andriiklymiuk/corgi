@@ -43,6 +43,7 @@ corgi agent watch auth slack --token xoxp-… --local          # the person runs
 corgi agent watch enable --mentions                           # notify: @me anywhere → phone
 corgi agent watch enable --review-channel '#code-review' --reply-as me   # teammates' review posts in; chat announce out
 corgi agent watch enable --review-replies --review-skip acme/infra  # answer a review post with one word: Approved + check mark, Some comments, Fixed; skip a repo its owner reviews
+corgi agent chat post "Fixed" --reply https://github.com/acme/api/pull/12   # one word in the thread of the review post naming that PR (yours via chat announce, or one the watch read); a Slack message link works too
 corgi agent watch enable --action fix --auto-for reviews --approve --trust @teammate   # reviews run on their own; only --trust people may start one from a mention
 ```
 

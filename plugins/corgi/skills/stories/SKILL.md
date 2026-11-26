@@ -980,7 +980,10 @@ nothing, and for re-run whose PRs all announced before. Re-run that opened a
 new PR for story already announced → edit that post, never a second one:
 `corgi agent chat announce --edit <post link> "<[KEY] story title>" <every pr-url, old + new>`
 (link = what first announce printed, or Slack's Copy link; same voice - Slack
-lets only author edit, refusal names `--as` to try).
+lets only author edit, refusal names `--as` to try). Later word on announced
+story (fix round pushed, question answered) goes in that post's thread, never
+second top-level message: `corgi agent chat post "<word>" --reply <pr-url>` -
+any PR of story finds post; "no review post is known" → pass message link.
 
 ---
 
