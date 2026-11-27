@@ -193,8 +193,8 @@ func TestSlackPosterUpdateRewritesTheMessageInPlace(t *testing.T) {
 		t.Fatalf("with a bot token stored the default voice is the bot, as for post: %s / %+v", c.auth, got)
 	}
 	want := map[string]any{"channel": "C0RE", "ts": "1726000400.000100", "text": "[ABC-12] Phone field\napi: https://github.com/acme/api/pull/5"}
-	if len(c.body) != len(want) {
-		t.Fatalf("chat.update gets the channel, the ts and the text, nothing else: %+v", c.body)
+	if blocks, ok := c.body["blocks"].([]any); !ok || len(blocks) != 0 || len(c.body) != len(want)+1 {
+		t.Fatalf("chat.update gets the channel, the ts, the text, and empty blocks so an old list goes: %+v", c.body)
 	}
 	for k, v := range want {
 		if c.body[k] != v {

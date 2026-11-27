@@ -11,7 +11,7 @@ var linkInText = regexp.MustCompile(`https?://\S+`)
 
 // PullLines is the shape a person posts by hand: the title, then the link
 // alone when there is one pull request, or one line per pull request named
-// by its repository when there are several.
+// by its repository, behind a list dot, when there are several.
 func PullLines(title string, urls []string) string {
 	links := make([]string, 0, len(urls))
 	for _, u := range urls {
@@ -29,9 +29,9 @@ func PullLines(title string, urls []string) string {
 	}
 	for _, u := range links {
 		if m := pullRepository.FindStringSubmatch(u); m != nil {
-			lines = append(lines, m[1]+": "+u)
+			lines = append(lines, bulletPrefix+m[1]+": "+u)
 		} else {
-			lines = append(lines, u)
+			lines = append(lines, bulletPrefix+u)
 		}
 	}
 	return strings.Join(lines, "\n")

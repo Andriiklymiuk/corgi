@@ -973,7 +973,7 @@ Never wrap in fenced code block: renders monospace, kills every link.
 announced ready): run
 `corgi agent chat announce "<[KEY] story title>" <pr-url> <pr-url> …` with every PR/MR
 this run opened (one call per story), bare URLs only. Posts title, then link
-alone for one PR or one `repo: link` line per PR for several, in workspace's review channel, in voice workspace configured; no
+alone for one PR or a dotted list, one `• repo: link` per PR, for several, in workspace's review channel, in voice workspace configured; no
 review channel configured → prints one line, posts nothing - don't work around
 that, never post with `chat post` yourself. Skip for story that opened
 nothing, and for re-run whose PRs all announced before. Re-run that opened a

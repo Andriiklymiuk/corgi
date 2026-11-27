@@ -98,7 +98,15 @@ func (p *SlackPoster) Post(ctx context.Context, target SlackTarget, text string)
 		Channel string `json:"channel"`
 		TS      string `json:"ts"`
 	}
-	if err := p.send(ctx, api, "chat.postMessage", target.Channel+"/"+target.ThreadTS, text, body, &res); err != nil {
+	if blocks := slackBulletListBlocks(text); blocks != nil {
+		body["blocks"] = blocks
+	}
+	err = p.send(ctx, api, "chat.postMessage", target.Channel+"/"+target.ThreadTS, text, body, &res)
+	if blocksRefused(err) {
+		delete(body, "blocks")
+		err = api.post(ctx, "chat.postMessage", body, &res)
+	}
+	if err != nil {
 		return SlackPosted{}, err
 	}
 	return SlackPosted{Channel: res.Channel, TS: res.TS, As: as,
@@ -113,17 +121,31 @@ func (p *SlackPoster) Update(ctx context.Context, msg SlackMessage, as, text str
 	if msg.Channel == "" || msg.TS == "" {
 		return SlackPosted{}, fmt.Errorf("edit: no message named: pass %s", slackMessageForms)
 	}
-	body := map[string]any{"channel": msg.Channel, "ts": msg.TS, "text": text}
+	// An edit that sends no blocks keeps the old ones, and so the old list.
+	blocks := slackBulletListBlocks(text)
+	if blocks == nil {
+		blocks = []map[string]any{}
+	}
+	body := map[string]any{"channel": msg.Channel, "ts": msg.TS, "text": text, "blocks": blocks}
 	var res struct {
 		Channel string `json:"channel"`
 		TS      string `json:"ts"`
 	}
-	if err := p.send(ctx, api, "chat.update", msg.Channel+"/"+msg.TS, "edit:"+voice+":"+text, body, &res); err != nil {
+	err = p.send(ctx, api, "chat.update", msg.Channel+"/"+msg.TS, "edit:"+voice+":"+text, body, &res)
+	if blocksRefused(err) {
+		body["blocks"] = []map[string]any{}
+		err = api.post(ctx, "chat.update", body, &res)
+	}
+	if err != nil {
 		return SlackPosted{}, p.editRefused(err, msg, voice)
 	}
 	channel, ts := firstNonBlank(res.Channel, msg.Channel), firstNonBlank(res.TS, msg.TS)
 	return SlackPosted{Channel: channel, TS: ts, As: voice,
 		Permalink: slackPermalink(firstNonBlank(msg.Team, p.Team), channel, ts, "")}, nil
+}
+
+func blocksRefused(err error) bool {
+	return strings.HasPrefix(slackErrorCode(err), "invalid_blocks")
 }
 
 func voiceName(as string) string {
